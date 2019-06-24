@@ -6,7 +6,7 @@
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<title>Openshift Letsencrypt certificates</title>
 	<meta name="description" content="">
-	<meta name="generator" content="Hugo 0.55.1" />
+	<meta name="generator" content="Hugo 0.54.0" />
 	<meta property="og:title" content="Openshift Letsencrypt certificates" />
 <meta property="og:description" content="Thanks to Tomáš Nožička developed openshift-acme as an ACME Controller for OpenShift and Kubernetes clusters. 
 It automatically provision certficates" />
@@ -56,23 +56,24 @@ if (!doNotTrack) {
         "@type" : "BlogPosting",
         "mainEntityOfPage": {
              "@type": "WebPage",
-             "@id": "https:\/\/devopstales.github.io\/"
+             "@id": "https://devopstales.github.io/"
         },
         "articleSection" : "cloud",
         "name" : "Openshift Letsencrypt certificates",
         "headline" : "Openshift Letsencrypt certificates",
-        "description" : "\x3cp\x3eThanks to Tomáš Nožička developed openshift-acme as an ACME Controller for OpenShift and Kubernetes clusters. \x3cbr\x3e\nIt automatically provision certficates\x3c\/p\x3e",
+        "description" : "<p>Thanks to Tomáš Nožička developed openshift-acme as an ACME Controller for OpenShift and Kubernetes clusters. <br>
+It automatically provision certficates</p>",
         "inLanguage" : "en-US",
-        "author" : "img\/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I\x27m working as a DevOps Engineer.Blaiserman",
-        "creator" : "img\/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I\x27m working as a DevOps Engineer.Blaiserman",
-        "publisher": "img\/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I\x27m working as a DevOps Engineer.Blaiserman",
-        "accountablePerson" : "img\/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I\x27m working as a DevOps Engineer.Blaiserman",
-        "copyrightHolder" : "img\/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I\x27m working as a DevOps Engineer.Blaiserman",
+        "author" : "img/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I&#39;m working as a DevOps Engineer.Blaiserman",
+        "creator" : "img/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I&#39;m working as a DevOps Engineer.Blaiserman",
+        "publisher": "img/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I&#39;m working as a DevOps Engineer.Blaiserman",
+        "accountablePerson" : "img/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I&#39;m working as a DevOps Engineer.Blaiserman",
+        "copyrightHolder" : "img/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I&#39;m working as a DevOps Engineer.Blaiserman",
         "copyrightYear" : "2019",
-        "datePublished": "2019-05-28 00:00:00 \x2b0000 UTC",
-        "dateModified" : "2019-05-28 00:00:00 \x2b0000 UTC",
-        "url" : "https:\/\/devopstales.github.io\/cloud\/openshift-letsencript\/",
-        "wordCount" : "103",
+        "datePublished": "2019-05-28 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2019-05-28 00:00:00 &#43;0000 UTC",
+        "url" : "https://devopstales.github.io/cloud/openshift-letsencript/",
+        "wordCount" : "135",
         "keywords" : [ "Openshift","Keycloak","CentOS","Blog" ]
     }
 </script>
@@ -127,9 +128,11 @@ if (!doNotTrack) {
 <li>
 <ul>
 <li><a href="#environment">Environment</a></li>
-<li><a href="#deploy-route-and-letsencrypt">Deploy route and letsencrypt</a></li>
+<li><a href="#deploy-route">Deploy route</a></li>
+<li><a href="#deploy-letsencrypt">Deploy letsencrypt</a></li>
 </ul></li>
 </ul></li>
+<li><a href="#demo">Demo</a></li>
 </ul>
 </nav>
 	</div>
@@ -146,9 +149,15 @@ It automatically provision certficates</p>
 192.168.1.43    openshift03 # worker node
 </code></pre>
 
-<h3 id="deploy-route-and-letsencrypt">Deploy route and letsencrypt</h3>
+<h3 id="deploy-route">Deploy route</h3>
 
-<pre><code>oc adm router letsencrypt --replicas=2 --ports=&quot;8080:8080,8443:8443&quot; --stats-port=1937 --selector=&quot;router=letsencrypt&quot; --labels=&quot;router=letsencrypt&quot;
+<pre><code>oc project default
+
+oc label node openshift02.mydomain.intra &quot;router=letsencrypt&quot;
+oc get node --show-labels
+
+oc adm policy add-scc-to-user hostnetwork -z router
+oc adm router router-letsencrypt --replicas=0 --ports=&quot;8080:8080,8443:8443&quot; --stats-port=1937 --selector=&quot;router=letsencrypt&quot; --labels=&quot;router=letsencrypt&quot;
 
 oc set env dc/router-letsencrypt \
 NAMESPACE_LABELS=&quot;router=letsencrypt&quot; \
@@ -157,19 +166,29 @@ ROUTER_SERVICE_HTTP_PORT=8080 \
 ROUTER_SERVICE_HTTPS_PORT=8443 \
 ROUTER_TCP_BALANCE_SCHEME=roundrobin
 
-oc label node openshift02.mydomain.intra &quot;router=letsencrypt&quot;
+oc set env dc/router NAMESPACE_LABELS=&quot;router != letsencrypt&quot;
 
-GIT_REPO=https://raw.githubusercontent.com/devopstales/openshift-examples
+oc scale dc/router-letsencrypt --replicas=3
+</code></pre>
+
+<h3 id="deploy-letsencrypt">Deploy letsencrypt</h3>
+
+<pre><code>GIT_REPO=https://raw.githubusercontent.com/devopstales/openshift-examples
 GIT_PATH=/master/letsencrypt
 oc new-project letsencrypt
 oc create -f$GIT_REPO/$GIT_PATH/{clusterrole,serviceaccount,imagestream,deployment}.yaml
 oc adm policy add-cluster-role-to-user openshift-acme -z openshift-acme
+</code></pre>
 
-oc patch route letsencrypt \
-    -p '{&quot;metadata&quot;:{&quot;annotations&quot;:{  &quot;kubernetes.io/tls-acme&quot; : &quot;true&quot;   }}}'
+<h1 id="demo">Demo</h1>
 
-oc new-project test
+<pre><code>oc new-project test
 oc label namespace test router=letsencrypt
+oc new-app centos/ruby-25-centos7~https://github.com/sclorg/ruby-ex.git
+oc expose svc/ruby-ex
+
+oc patch route ruby-ex \
+    -p '{&quot;metadata&quot;:{&quot;annotations&quot;:{  &quot;kubernetes.io/tls-acme&quot; : &quot;true&quot;   }}}'
 </code></pre>
 		</div>
 		
@@ -187,6 +206,9 @@ oc label namespace test router=letsencrypt
 <nav class="post-nav row clearfix">
 	<div class="post-nav__item post-nav__item--prev col-1-2">
 		<a class="post-nav__link" href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Openshift Error: HostAlreadyClaimed</p></a>
+	</div>
+	<div class="post-nav__item post-nav__item--next col-1-2">
+		<a class="post-nav__link" href="https://devopstales.github.io/cloud/grafana-loki/" rel="next"><span class="post-nav__caption">Next&thinsp;»</span><p class="post-nav__post-title">Grafana Loki</p></a>
 	</div>
 </nav>
 	
@@ -231,11 +253,11 @@ oc label namespace test router=letsencrypt
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog-install/">Install Graylog</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/grafana-loki/">Grafana Loki</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift-sso-2/">Openshift SSO with Gitlab</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-ceph-radosgw/">Install CEHP Radosgateway on Proxmox</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/install-prometheus-for-gitlab/">Install Prometheus for Gitlab</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/install-mattermost-for-gitlab/">Install mattermost for Gitlab</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gitlab-install/">Gitlab Install</a></li>
 		</ul>
 	</div>
 </div>
@@ -295,6 +317,8 @@ oc label namespace test router=letsencrypt
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello" title="Katello">Katello</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak" title="Keycloak">Keycloak</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging" title="Logging">Logging</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki" title="Loki">Loki</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost" title="Mattermost">Mattermost</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql" title="Mysql">Mysql</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon" title="Naemon">Naemon</a>
