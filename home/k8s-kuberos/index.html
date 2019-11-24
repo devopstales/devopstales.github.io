@@ -57,7 +57,7 @@ if (!doNotTrack) {
              "@type": "WebPage",
              "@id": "https:\/\/devopstales.github.io\/"
         },
-        "articleSection" : "Home",
+        "articleSection" : "home",
         "name" : "Kubectl authentication with OIDC",
         "headline" : "Kubectl authentication with OIDC",
         "description" : "\x3cp\x3eKuberos is an OIDC authentication helper for Kubernetes\x26rsquo; kubectl\x3c\/p\x3e",
@@ -71,7 +71,7 @@ if (!doNotTrack) {
         "datePublished": "2019-08-01 00:00:00 \x2b0000 UTC",
         "dateModified" : "2019-08-01 00:00:00 \x2b0000 UTC",
         "url" : "https:\/\/devopstales.github.io\/home\/k8s-kuberos\/",
-        "wordCount" : "112",
+        "wordCount" : "163",
         "keywords" : [ "Blog" ]
     }
 </script>
@@ -109,71 +109,91 @@ if (!doNotTrack) {
 		<header class="post__header">
 			<h1 class="post__title">Kubectl authentication with OIDC</h1><div class="post__meta meta">
 <svg class="icon icon-time" width="16" height="14" viewBox="0 0 16 16"><path d="m8-.0000003c-4.4 0-8 3.6-8 8 0 4.4000003 3.6 8.0000003 8 8.0000003 4.4 0 8-3.6 8-8.0000003 0-4.4-3.6-8-8-8zm0 14.4000003c-3.52 0-6.4-2.88-6.4-6.4000003 0-3.52 2.88-6.4 6.4-6.4 3.52 0 6.4 2.88 6.4 6.4 0 3.5200003-2.88 6.4000003-6.4 6.4000003zm.4-10.4000003h-1.2v4.8l4.16 2.5600003.64-1.04-3.6-2.1600003z"/></svg>
-<time class="post__meta-date meta-date" datetime="2019-08-01T00:00:00">August 01, 2019</time>
-<span class="post__meta-categories meta-categories">
-	<svg class="icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
-	<span class="meta-categories__list"><a class="meta-categories__link" href="https://devopstales.github.io/categories/sso" rel="category">SSO</a></span>
-</span></div>
+<time class="post__meta-date meta-date" datetime="2019-08-01T00:00:00">August 01, 2019</time></div>
 		</header>
 		
 <div class="post__toc toc">
 	<div class="toc__title">Page content</div>
 	<div class="toc__menu">
-		
+		<nav id="TableOfContents">
+<ul>
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#parst-of-the-openshift-series">Parst of the Openshift series</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
 	</div>
 </div>
 <div class="post__content clearfix">
 			<p>Kuberos is an OIDC authentication helper for Kubernetes&rsquo; kubectl</p>
 
+<h3 id="parst-of-the-openshift-series">Parst of the Openshift series</h3>
+
+<ul>
+<li>Part1: <a href="https://devopstales.github.io/cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
+<li>Part2: <a href="https://devopstales.github.io/cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part3: <a href="https://devopstales.github.io/cloud/k8s-ingress/">Install ingress to K8S</a></li>
+<li>Part4: <a href="https://devopstales.github.io/cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
+<li>Part5: <a href="https://devopstales.github.io/cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+<li>Part6: <a href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+<li>Part7: <a href="https://devopstales.github.io/cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+
+<li><p>Part8: <a href="https://devopstales.github.io/cloud/k8s-tillerless-helm/">Use Tillerless Helm with K8S</a></p>
+
 <pre><code>cat &gt;&gt;EOF&lt; values.yaml
 replicaCount: 1
 
 kuberos:
-  oidcClientURL: https://sso.mydomain.intra/auth/realms/mydomain
-  oidcClientID: mydomain
-  oidcSecret: ******************************
-  clusters:
-  - name: openshift
-    apiServer: https://192.168.1.41:6443
-    # `apiServer` is the url for kubectl
-    #   This is typically  https://api.fqdn
-    caCrt: |-
-      -----BEGIN CERTIFICATE-----
-      ...
-      -----END CERTIFICATE-----
-    # `caCrt` is the public / CA cert for the cluster
-    # cat /etc/kubernetes/pki/apiserver.crt
+oidcClientURL: https://sso.mydomain.intra/auth/realms/mydomain
+oidcClientID: mydomain
+oidcSecret: ******************************
+clusters:
+- name: openshift
+apiServer: https://192.168.1.41:6443
+# `apiServer` is the url for kubectl
+#   This is typically  https://api.fqdn
+caCrt: |-
+  -----BEGIN CERTIFICATE-----
+  ...
+  -----END CERTIFICATE-----
+# `caCrt` is the public / CA cert for the cluster
+# cat /etc/kubernetes/pki/apiserver.crt
 
 ingress:
-  enabled: true
-  annotations:
-    kubernetes.io/tls-acme: &quot;true&quot;
-    ingress.kubernetes.io/force-ssl-redirect: &quot;true&quot;
-  path: /
+enabled: true
+annotations:
+kubernetes.io/tls-acme: &quot;true&quot;
+ingress.kubernetes.io/force-ssl-redirect: &quot;true&quot;
+path: /
+hosts:
+- kubectl.openshift.mydomain.intra
+tls:
+- secretName: default-cert
   hosts:
     - kubectl.openshift.mydomain.intra
-  tls:
-    - secretName: default-cert
-      hosts:
-        - kubectl.openshift.mydomain.intra
 
 image:
-  repository: negz/kuberos
-  tag: ede4085
-  pullPolicy: IfNotPresent
+repository: negz/kuberos
+tag: ede4085
+pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP
-  port: 80
-  annotations: {}
-  # Add your service annotations here.
+type: ClusterIP
+port: 80
+annotations: {}
+# Add your service annotations here.
 
 resources: {}
 EOF
 </code></pre>
 
 <pre><code>helm install stable/kuberos --name kuberos --namespace kuberos -f values.yaml
-</code></pre>
+</code></pre></li>
+</ul>
 		</div>
 		
 	</article>
@@ -181,7 +201,7 @@ EOF
 	
 <nav class="post-nav row clearfix">
 	<div class="post-nav__item post-nav__item--prev col-1-2">
-		<a class="post-nav__link" href="https://devopstales.github.io/home/kubernetes-tillerless-helm/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Tillerless helm install</p></a>
+		<a class="post-nav__link" href="https://devopstales.github.io/home/k8s-tillerless-helm/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Tillerless helm install</p></a>
 	</div>
 	<div class="post-nav__item post-nav__item--next col-1-2">
 		<a class="post-nav__link" href="https://devopstales.github.io/home/s3cmd-with-radosgw/" rel="next"><span class="post-nav__caption">Next&thinsp;»</span><p class="post-nav__post-title">Install s3cmd with CEHP Radosgateway</p></a>
@@ -229,11 +249,11 @@ EOF
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift-kompose/">OpesShift: Run docker-compoe in Openshift</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/elasticsearch-backup/">How to backup Graylog&#39;s logs in elasticsearch</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-metallb/">Install MetalLB load balancer for Kubernetes</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/s3cmd-with-radosgw/">Install s3cmd with CEHP Radosgateway</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-kuberos/">Kubectl authentication with OIDC</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/install-squid/">Install Squid proxy</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift-gitlab-helm/">Installing GitLab on OpenShift</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-backup-error/">Solution for: Proxmox backup error due to iothread</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/foreman-pxe/">Install Foreman PXE boot</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/">Kubernetes Ceph RBD volume with CSI driver</a></li>
 		</ul>
 	</div>
 </div>
@@ -242,11 +262,13 @@ EOF
 	<h4 class="widget__title">Categories</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/cloud">Cloud</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/ansible">Ansible</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/ceph">Ceph</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/gitlab">Gitlab</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/kubernetes">Kubernetes</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/linux">Linux</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/monitoring">Monitoring</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/openshift">Openshift</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/sso">Sso</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/proxmox">Proxmox</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/categories/windows">Windows</a></li>
 		</ul>
 	</div>
@@ -269,6 +291,7 @@ EOF
 	<h4 class="widget__title">Tags</h4>
 	<div class="widget__content">
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa" title="2fa">2fa</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta" title="Alerta">Alerta</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible" title="Ansible">Ansible</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower" title="Ansible tower">Ansible tower</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx" title="Awx">Awx</a>
@@ -281,7 +304,10 @@ EOF
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker" title="Docker">Docker</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose" title="Docker compose">Docker compose</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch" title="Elasticsearch">Elasticsearch</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman" title="Foreman">Foreman</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp" title="Gcp">Gcp</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab" title="Gitlab">Gitlab</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform" title="Google cloud platform">Google cloud platform</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana" title="Grafana">Grafana</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog" title="Graylog">Graylog</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha" title="Ha">Ha</a>
