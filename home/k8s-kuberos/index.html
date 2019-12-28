@@ -4,10 +4,10 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>Kubectl authentication with OIDC</title>
+	<title>Kubectl authentication with Kuberos</title>
 	<meta name="description" content="">
 	<meta name="generator" content="Hugo 0.55.6" />
-	<meta property="og:title" content="Kubectl authentication with OIDC" />
+	<meta property="og:title" content="Kubectl authentication with Kuberos" />
 <meta property="og:description" content="Kuberos is an OIDC authentication helper for Kubernetes&rsquo; kubectl" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://devopstales.github.io/home/k8s-kuberos/" />
@@ -58,8 +58,8 @@ if (!doNotTrack) {
              "@id": "https:\/\/devopstales.github.io\/"
         },
         "articleSection" : "Home",
-        "name" : "Kubectl authentication with OIDC",
-        "headline" : "Kubectl authentication with OIDC",
+        "name" : "Kubectl authentication with Kuberos",
+        "headline" : "Kubectl authentication with Kuberos",
         "description" : "\x3cp\x3eKuberos is an OIDC authentication helper for Kubernetes\x26rsquo; kubectl\x3c\/p\x3e",
         "inLanguage" : "en-US",
         "author" : "img\/avatar1.jpgI love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I\x27m working as a DevOps Engineer.Blaiserman",
@@ -71,7 +71,7 @@ if (!doNotTrack) {
         "datePublished": "2019-08-01 00:00:00 \x2b0000 UTC",
         "dateModified" : "2019-08-01 00:00:00 \x2b0000 UTC",
         "url" : "https:\/\/devopstales.github.io\/home\/k8s-kuberos\/",
-        "wordCount" : "163",
+        "wordCount" : "209",
         "keywords" : [ "Blog" ]
     }
 </script>
@@ -107,7 +107,7 @@ if (!doNotTrack) {
 <main class="main content">
 	<article class="post">
 		<header class="post__header">
-			<h1 class="post__title">Kubectl authentication with OIDC</h1><div class="post__meta meta">
+			<h1 class="post__title">Kubectl authentication with Kuberos</h1><div class="post__meta meta">
 <svg class="icon icon-time" width="16" height="14" viewBox="0 0 16 16"><path d="m8-.0000003c-4.4 0-8 3.6-8 8 0 4.4000003 3.6 8.0000003 8 8.0000003 4.4 0 8-3.6 8-8.0000003 0-4.4-3.6-8-8-8zm0 14.4000003c-3.52 0-6.4-2.88-6.4-6.4000003 0-3.52 2.88-6.4 6.4-6.4 3.52 0 6.4 2.88 6.4 6.4 0 3.5200003-2.88 6.4000003-6.4 6.4000003zm.4-10.4000003h-1.2v4.8l4.16 2.5600003.64-1.04-3.6-2.1600003z"/></svg>
 <time class="post__meta-date meta-date" datetime="2019-08-01T00:00:00">August 01, 2019</time></div>
 		</header>
@@ -144,21 +144,56 @@ if (!doNotTrack) {
 
 <li><p>Part8: <a href="https://devopstales.github.io/cloud/k8s-tillerless-helm/">Use Tillerless Helm with K8S</a></p>
 
+<pre><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+...
+command:
+- /hyperkube
+- apiserver
+- --advertise-address=10.10.40.30
+...
+
+- --oidc-issuer-url=https://keycloak.mydomain.intra/auth/realms/mydomain
+- --oidc-client-id=k8s
+- --oidc-username-claim=email
+- --oidc-groups-claim=groups
+...
+
+systemctl restart docker kubelet
+</code></pre>
+
 <pre><code>cat &gt;&gt;EOF&lt; values.yaml
 replicaCount: 1
 
 kuberos:
-oidcClientURL: https://sso.mydomain.intra/auth/realms/mydomain
-oidcClientID: mydomain
-oidcSecret: ******************************
+oidcClientURL: https://keycloak.mydomain.intra/auth/realms/mydomain
+oidcClientID: k8s
+oidcSecret: 43219919-0904-4338-bc0f-c986e1891a7a
 clusters:
 - name: openshift
-apiServer: https://192.168.1.41:6443
+apiServer: https://192.168.0.106:6443
 # `apiServer` is the url for kubectl
 #   This is typically  https://api.fqdn
 caCrt: |-
   -----BEGIN CERTIFICATE-----
-  ...
+  MIIDZDCCAkygAwIBAgIIe/R9sc8oJiAwDQYJKoZIhvcNAQELBQAwFTETMBEGA1UE
+  AxMKa3ViZXJuZXRlczAeFw0xOTEyMjcxNzM3MzlaFw0yMDEyMjYxNzM3MzlaMBkx
+  FzAVBgNVBAMTDmt1YmUtYXBpc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+  MIIBCgKCAQEAzAg7MflA/HVTVcZPsGJH71cfcJ/U1CtEYbXfu/AQbhGg09XKmeK9
+  aGEK3kSgi/Hyoi7M+e/ntx1+Gp/jwc8kanMFRLgxdKCxxi4MOswZF/q2loUdNoE/
+  OQVPWQi8Hgznubw/0gINUkIq8mRx9Bb+RcRnJEfD3CXkxDhUNeCvvjeTrujguF0h
+  pgfzrLoc2kGdJYpHiLqow8jRq7XXk0RzZaqCQjAEZgqWamwbTTqFZh3v+1gF/2s0
+  EbFVVL2Ctu1dOGe1FkZxte7/Po1XBkPLQuRXbH3QRiJkPfyOW16T1nWk1QTcpCdH
+  HO/l+CY2nLPFZL1BM83QuVmPgR1T1p+5tQIDAQABo4GzMIGwMA4GA1UdDwEB/wQE
+  AwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATCBiAYDVR0RBIGAMH6CEms4cy5teWRv
+  bWFpbi5pbnRyYYIKa3ViZXJuZXRlc4ISa3ViZXJuZXRlcy5kZWZhdWx0ghZrdWJl
+  cm5ldGVzLmRlZmF1bHQuc3ZjgiRrdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0
+  ZXIubG9jYWyHBApgAAGHBMCoAGowDQYJKoZIhvcNAQELBQADggEBAJZ7jxPR72V6
+  PYL3SKCWaS+RgTuGuSm0pYu26cBmPOjsugd8DUrJ7+iAnKDHUmmw22sWheLLCokc
+  YU/AIfdbbsz0+f+/qthkO7zJmAJgdIAOMJ5MQCbxMBt+6L813r1R3QI7kAGxHvzV
+  loKJVIIHq/6K3gFEZDfo0myvNvtOIpBCeMnZRK+8hx3UNcHckZbhkan1Z1j9t9iw
+  b6Vv5jY1+9t2Iltd2wuNaUvHicx+3X6JPAqVR6H0jI3i+QSyT1EHXtBtbQBBpP4T
+  5WDz+9uDa1mIDHtww7DTnJwY+hGI7fVF2H7XQaM4xwhGnwIwbkSh45JWVtUEHMou
+  Q7T4bTyrwuQ=
   -----END CERTIFICATE-----
 # `caCrt` is the public / CA cert for the cluster
 # cat /etc/kubernetes/pki/apiserver.crt
@@ -166,15 +201,17 @@ caCrt: |-
 ingress:
 enabled: true
 annotations:
-kubernetes.io/tls-acme: &quot;true&quot;
+kubernetes.io/ingress.class: nginx
+nginx.ingress.kubernetes.io/proxy-buffer-size: &quot;64k&quot;
+cert-manager.io/cluster-issuer: ca-issuer
 ingress.kubernetes.io/force-ssl-redirect: &quot;true&quot;
 path: /
 hosts:
-- kubectl.openshift.mydomain.intra
+- kubectl.mydomain.intra
 tls:
 - secretName: default-cert
   hosts:
-    - kubectl.openshift.mydomain.intra
+    - kubectl.mydomain.intra
 
 image:
 repository: negz/kuberos
@@ -191,7 +228,7 @@ resources: {}
 EOF
 </code></pre>
 
-<pre><code>helm install stable/kuberos --name kuberos --namespace kuberos -f values.yaml
+<pre><code>helm upgrade --install kuberos stable/kuberos --namespace kuberos -f values.yaml
 </code></pre></li>
 </ul>
 		</div>
@@ -201,7 +238,7 @@ EOF
 	
 <nav class="post-nav row clearfix">
 	<div class="post-nav__item post-nav__item--prev col-1-2">
-		<a class="post-nav__link" href="https://devopstales.github.io/home/k8s-tillerless-helm/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Tillerless helm install</p></a>
+		<a class="post-nav__link" href="https://devopstales.github.io/home/k8s-tillerless-helm/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Tillerless helm2 install</p></a>
 	</div>
 	<div class="post-nav__item post-nav__item--next col-1-2">
 		<a class="post-nav__link" href="https://devopstales.github.io/home/s3cmd-with-radosgw/" rel="next"><span class="post-nav__caption">Next&thinsp;»</span><p class="post-nav__post-title">Install s3cmd with CEHP Radosgateway</p></a>
@@ -249,11 +286,11 @@ EOF
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift-secondard-router/">Openshift secondary route</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kind-install/">Starting local Kubernetes using kind</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/icinga2_director/">Install icinga director modules to Icingaweb2</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/icinga2_nrpe/">Install nrpe tp Icinga2</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/icinga2_add_host/">Add host to Icinga2</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rundeck-acl/">Configure Rundeck ACL</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/icinga2_install/">Install Icinga2</a></li>
 		</ul>
 	</div>
 </div>
@@ -313,7 +350,7 @@ EOF
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog" title="Graylog">Graylog</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha" title="Ha">Ha</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor" title="Harbor">Harbor</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm" title="Helm">Helm</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2" title="Helm2">Helm2</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp" title="Hp">Hp</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd" title="Httpd">Httpd</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga" title="Icinga">Icinga</a>
@@ -356,6 +393,7 @@ EOF
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro" title="Supermicro">Supermicro</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf" title="Telegraf">Telegraf</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu" title="Ubuntu">Ubuntu</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unify" title="Unify">Unify</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vault" title="Vault">Vault</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware" title="Vmware">Vmware</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly" title="Wildfly">Wildfly</a>
