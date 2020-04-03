@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2020-03-18T07:34:23+00:00</updated>
+    <updated>2020-04-03T15:43:02+00:00</updated>
     
     
     <author>
@@ -17,6 +17,484 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to install kubernetes with kubeadm in HA mode]]></title>
+            <link href="https://devopstales.github.io/home/k8s-kubeadm-ha/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-kubeadm-ha/?utm_source=atom_feed" rel="related" type="text/html" title="How to install kubernetes with kubeadm in HA mode" />
+                <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+                <link href="https://devopstales.github.io/cloud/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+                <link href="https://devopstales.github.io/cloud/k8s-local-pv/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
+                <link href="https://devopstales.github.io/home/k8s-local-pv/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
+            
+                <id>https://devopstales.github.io/home/k8s-kubeadm-ha/</id>
+            
+            
+            <published>2020-04-02T00:00:00+00:00</published>
+            <updated>2020-04-02T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I&rsquo;will show you how to install kubernetes in HA mode with kubeadm, keepaliwed and envoyproxy.</p>
+
+<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
+
+<ul>
+<li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
+<li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
+<!-- * Part3b: k8s-multiple-nginx-ingress -->
+<!-- * Part3c: k8s-traefik-ingress --></li>
+<li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
+<!-- local folder (+ autoprovisioning ) --></li>
+<li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+<li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+<li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+<li>Part5d: <a href="../../cloud/kk8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
+<!-- nfs as shared storage (need HA NFS) -->
+<!-- CEPH in Kubernetes with rook -->
+<!-- openEBS (+ PVresize) -->
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes vMware --></li>
+<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- istio-install.md --></li>
+<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- prometheus operator + grafana operator -->
+<!-- grafana loki -->
+<!-- logs to graylog --></li>
+</ul>
+
+<pre><code>172.17.8.100  # kubernetes cluster ip
+172.17.8.101  master01 # master node
+172.17.8.102  master02 # frontend node
+172.17.8.103  master03 # worker node
+
+# hardware requirement
+2 CPU
+4G RAM
+</code></pre>
+
+<h3 id="install-docker">Install Docker</h3>
+
+<pre><code>yum install -y -q yum-utils device-mapper-persistent-data lvm2
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+yum install -y -q docker-ce docker-compose
+
+echo '{
+  &quot;log-driver&quot;: &quot;json-file&quot;,
+  &quot;log-opts&quot;: {
+    &quot;max-size&quot;: &quot;100m&quot;
+  },
+  &quot;storage-driver&quot;: &quot;overlay2&quot;,
+  &quot;exec-opts&quot;: [&quot;native.cgroupdriver=systemd&quot;],
+  &quot;storage-opts&quot;: [
+    &quot;overlay2.override_kernel_check=true&quot;
+  ]
+}' &gt; /etc/docker/daemon.json
+
+systemctl enable docker
+systemctl start docker
+</code></pre>
+
+<h3 id="disable-swap">Disable swap</h3>
+
+<pre><code>free -h
+swapoff -a
+swapoff -a
+sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
+free -h
+</code></pre>
+
+<h3 id="configuuration">Configuuration</h3>
+
+<pre><code>cat &gt;&gt;/etc/sysctl.d/kubernetes.conf&lt;&lt;EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.ipv6.conf.all.disable_ipv6      = 1
+net.ipv6.conf.default.disable_ipv6  = 1
+EOF
+cat &gt;&gt;/etc/sysctl.d/ipv6.conf&lt;&lt;EOF
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+net.ipv6.conf.eth0.disable_ipv6 = 1
+EOF
+sysctl --system
+</code></pre>
+
+<h3 id="install-kubeadm">Install kubeadm</h3>
+
+<pre><code>[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+        https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+
+yum install epel-release -y
+yum install -y kubeadm kubelet kubectl keepalived
+</code></pre>
+
+<h3 id="configure-keepalived-on-first-master">Configure keepalived on first master</h3>
+
+<pre><code>touch /etc/keepalived/check_apiserver.sh
+chmod +x /etc/keepalived/check_apiserver.sh
+
+cat &lt;&lt;EOF &gt; /etc/keepalived/keepalived.conf
+! Configuration File for keepalived
+global_defs {
+    router_id k8s-node1
+    enable_script_security
+    script_user root
+}
+vrrp_script check_apiserver {
+    script &quot;/etc/keepalived/check_apiserver.sh&quot;
+    interval 5
+    weight -10
+    fall 2
+    rise 2
+}
+vrrp_instance VI_1 {
+    state BACKUP
+    interface enp0s8
+    mcast_src_ip 172.17.8.101
+    virtual_router_id 51
+    priority 150
+    advert_int 5
+    authentication {
+        auth_type PASS
+        auth_pass Password1
+    }
+    virtual_ipaddress {
+        172.17.8.100/24 brd 172.17.8.255 dev enp0s8
+    }
+    track_script {
+       check_apiserver
+    }
+}
+EOF
+
+systemctl start keepalived
+systemctl enable keepalived
+</code></pre>
+
+<h3 id="configure-envoy-on-first-master">Configure envoy on first master</h3>
+
+<pre><code>cat &lt;&lt;EOF &gt; /etc/kubernetes/envoy.yaml
+static_resources:
+  listeners:
+  - name: main
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 16443
+    filter_chains:
+    - filters:
+      - name: envoy.tcp_proxy
+        config:
+          stat_prefix: ingress_tcp
+          cluster: k8s
+
+  clusters:
+  - name: k8s
+    connect_timeout: 0.25s
+    type: strict_dns
+    lb_policy: round_robin
+    hosts:
+    - socket_address:
+        address: 172.17.8.101
+        port_value: 6443
+    - socket_address:
+        address: 172.17.8.102
+        port_value: 6443
+    - socket_address:
+        address: 172.17.8.103
+        port_value: 6443
+    health_checks:
+    - timeout: 1s
+      interval: 5s
+      unhealthy_threshold: 1
+      healthy_threshold: 1
+      http_health_check:
+        path: &quot;/healthz&quot;
+
+admin:
+  access_log_path: &quot;/dev/null&quot;
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 8001
+EOF
+</code></pre>
+
+<h3 id="create-loadbalancer-on-all-masters">Create loadbalancer on all masters</h3>
+
+<pre><code>
+cat&lt;&lt;EOF &gt; /etc/kubernetes/envoy.yaml
+static_resources:
+  listeners:
+  - name: main
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 16443
+    filter_chains:
+    - filters:
+      - name: envoy.tcp_proxy
+        config:
+          stat_prefix: ingress_tcp
+          cluster: k8s
+
+  clusters:
+  - name: k8s
+    connect_timeout: 0.25s
+    type: strict_dns # static
+    lb_policy: round_robin
+    hosts:
+    - socket_address:
+        address: 172.17.8.101
+        port_value: 6443
+    - socket_address:
+        address: 172.17.8.102
+        port_value: 6443
+    - socket_address:
+        address: 172.17.8.103
+        port_value: 6443
+    health_checks:
+    - timeout: 1s
+      interval: 5s
+      unhealthy_threshold: 1
+      healthy_threshold: 1
+      http_health_check:
+        path: &quot;/healthz&quot;
+
+admin:
+  access_log_path: &quot;/dev/null&quot;
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 8001
+EOF
+
+cat&lt;&lt;EOF &gt; /etc/kubernetes/docker-compose.yaml
+version: '3'
+services:
+    api-lb:
+        image: envoyproxy/envoy:latest
+        restart: always
+        network_mode: &quot;host&quot;
+        ports:
+            - 16443:16443
+            - 8001:8001
+        volumes:
+            - /etc/kubernetes/envoy.yaml:/etc/envoy/envoy.yaml
+EOF
+
+cd /etc/kubernetes/
+docker-compose pull
+docker-compose up -d
+docker-compose ps
+
+netstat -tulpn | grep 6443
+</code></pre>
+
+<h3 id="initialize-kubernetes-in-the-first-master">Initialize kubernetes in the first master</h3>
+
+<p>I have multiple interfaces in my masters so to use the correct one I need to add <code>--apiserver-advertise-address &quot;172.17.8.101&quot;</code> to my kubeadm commands and add <code>KUBELET_EXTRA_ARGS</code> for kubelet config.</p>
+
+<pre><code>echo 'KUBELET_EXTRA_ARGS=&quot;--node-ip=172.17.8.101&quot;' &gt; /etc/sysconfig/kubelet
+
+kubeadm config images pull --kubernetes-version 1.16.8
+kubeadm init --control-plane-endpoint &quot;172.17.8.100:16443&quot; --apiserver-advertise-address &quot;172.17.8.101&quot; --upload-certs --kubernetes-version 1.16.8 --pod-network-cidr=10.244.0.0/16
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+kubectl
+</code></pre>
+
+<h3 id="join-other-masters">Join other masters</h3>
+
+<pre><code>
+kubeadm config images pull --kubernetes-version 1.16.8
+
+echo 'KUBELET_EXTRA_ARGS=&quot;--node-ip=172.17.8.102&quot;' &gt; /etc/sysconfig/kubelet
+
+kubeadm join 172.17.8.100:16443 --token 3vqtop.z2kbok4o0wchu4ed \
+  --discovery-token-ca-cert-hash sha256:5840ee4de07bb296e2639669c17df7e3240271a1880115336ebc5b91fb8a3555 \
+  --control-plane --certificate-key dc99dc10a0269d1a3edfc2e318a78c6bbebdee8081b460535f699d210cec5dcb \
+  --apiserver-advertise-address &quot;172.17.8.102&quot;
+
+echo 'KUBELET_EXTRA_ARGS=&quot;--node-ip=172.17.8.103&quot;' &gt; /etc/sysconfig/kubelet
+
+kubeadm join 172.17.8.100:16443 --token 3vqtop.z2kbok4o0wchu4ed \
+  --discovery-token-ca-cert-hash sha256:5840ee4de07bb296e2639669c17df7e3240271a1880115336ebc5b91fb8a3555 \
+  --control-plane --certificate-key dc99dc10a0269d1a3edfc2e318a78c6bbebdee8081b460535f699d210cec5dcb \
+  --apiserver-advertise-address &quot;172.17.8.103&quot;
+</code></pre>
+
+<h3 id="fix-keepalibed-check-script-on-first-master">Fix keepalibed check script on first master</h3>
+
+<pre><code>echo '#!/bin/bash
+
+# if check error then repeat check for 12 times, else exit
+err=0
+for k in $(seq 1 12)
+do
+    check_code=$(curl -sk https://localhost:16443)
+    if [[ $check_code == &quot;&quot; ]]; then
+        err=$(expr $err + 1)
+        sleep 5
+        continue
+    else
+        err=0
+        break
+    fi
+done
+
+if [[ $err != &quot;0&quot; ]]; then
+    # if apiserver is down send SIG=1
+    echo 'apiserver error!'
+    exit 1
+else
+    # if apiserver is up send SIG=0
+    echo 'apiserver normal!'
+    exit 0
+fi' &gt; /etc/keepalived/check_apiserver.sh
+</code></pre>
+
+<h3 id="configure-keepalived-on-other-masters">Configure keepalived on other masters</h3>
+
+<pre><code>echo '#!/bin/bash
+
+# if check error then repeat check for 12 times, else exit
+err=0
+for k in $(seq 1 12)
+do
+    check_code=$(curl -sk https://localhost:16443)
+    if [[ $check_code == &quot;&quot; ]]; then
+        err=$(expr $err + 1)
+        sleep 5
+        continue
+    else
+        err=0
+        break
+    fi
+done
+
+if [[ $err != &quot;0&quot; ]]; then
+    # if apiserver is down send SIG=1
+    echo 'apiserver error!'
+    exit 1
+else
+    # if apiserver is up send SIG=0
+    echo 'apiserver normal!'
+    exit 0
+fi' &gt; /etc/keepalived/check_apiserver.sh
+
+chmod +x /etc/keepalived/check_apiserver.sh
+</code></pre>
+
+<pre><code>cat &lt;&lt;EOF &gt; /etc/keepalived/keepalived.conf
+! Configuration File for keepalived
+global_defs {
+    router_id k8s-node2
+    enable_script_security
+    script_user root
+}
+vrrp_script check_apiserver {
+    script &quot;/etc/keepalived/check_apiserver.sh&quot;
+    interval 5
+    weight -10
+    fall 2
+    rise 2
+}
+vrrp_instance VI_1 {
+    state BACKUP
+    interface enp0s8
+    mcast_src_ip 172.17.8.102
+    virtual_router_id 51
+    priority 100
+    advert_int 5
+    authentication {
+        auth_type PASS
+        auth_pass Password1
+    }
+    virtual_ipaddress {
+        172.17.8.100/24 brd 172.17.8.255 dev enp0s8
+    }
+    track_script {
+       check_apiserver
+    }
+}
+EOF
+
+systemctl start keepalived
+systemctl enable keepalived
+</code></pre>
+
+<pre><code>cat &lt;&lt;EOF &gt; /etc/keepalived/keepalived.conf
+! Configuration File for keepalived
+global_defs {
+    router_id k8s-node3
+    enable_script_security
+    script_user root
+}
+vrrp_script check_apiserver {
+    script &quot;/etc/keepalived/check_apiserver.sh&quot;
+    interval 5
+    weight -10
+    fall 2
+    rise 2
+}
+vrrp_instance VI_1 {
+    state BACKUP
+    interface enp0s8
+    mcast_src_ip 172.17.8.103
+    virtual_router_id 51
+    priority 50
+    advert_int 5
+    authentication {
+        auth_type PASS
+        auth_pass Password1
+    }
+    virtual_ipaddress {
+        172.17.8.100/24 brd 172.17.8.255 dev enp0s8
+    }
+    track_script {
+       check_apiserver
+    }
+}
+EOF
+
+systemctl start keepalived
+systemctl enable keepalived
+</code></pre>
+
+<pre><code>kubectl scale deploy/coredns  --replicas=3 -n kube-system
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -356,10 +834,10 @@ vagrant box add devopstales/photon3 package.box
             <link href="https://devopstales.github.io/home/openshift_4/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift_4/?utm_source=atom_feed" rel="related" type="text/html" title="OpenShift 4.2 with Red Hat CodeReady Containers" />
-                <link href="https://devopstales.github.io/home/openshift-secondard-router/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift secondary route" />
                 <link href="https://devopstales.github.io/cloud/openshift-secondard-router/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift secondary route" />
-                <link href="https://devopstales.github.io/cloud/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
+                <link href="https://devopstales.github.io/home/openshift-secondard-router/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift secondary route" />
                 <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
+                <link href="https://devopstales.github.io/cloud/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
             
                 <id>https://devopstales.github.io/home/openshift_4/</id>
             
@@ -506,10 +984,10 @@ INFO You can now run 'crc console' and use these credentials to access the OpenS
             <link href="https://devopstales.github.io/home/ceph_backup_benji/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/ceph_backup_benji/?utm_source=atom_feed" rel="related" type="text/html" title="CEPH backup with Benji" />
-                <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
-                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+                <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/cloud/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
             
                 <id>https://devopstales.github.io/home/ceph_backup_benji/</id>
             
@@ -734,8 +1212,8 @@ server=/qxyz.intra/192.168.122.1
                 <link href="https://devopstales.github.io/linux/pgbackrest_backup_to_s3/?utm_source=atom_feed" rel="related" type="text/html" title="pgBackRest Backup to S3" />
                 <link href="https://devopstales.github.io/home/pgbackrest_backup_server/?utm_source=atom_feed" rel="related" type="text/html" title="pgBackRest Backup server" />
                 <link href="https://devopstales.github.io/linux/pgbackrest_backup_server/?utm_source=atom_feed" rel="related" type="text/html" title="pgBackRest Backup server" />
-                <link href="https://devopstales.github.io/home/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
                 <link href="https://devopstales.github.io/linux/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
+                <link href="https://devopstales.github.io/home/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
             
                 <id>https://devopstales.github.io/home/pgbackrest_backup_to_s3/</id>
             
@@ -874,10 +1352,10 @@ sudo -iu postgres pgbackrest --stanza=postgresql1 restore
             <link href="https://devopstales.github.io/home/pgbackrest_backup_server/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/pgbackrest_backup_server/?utm_source=atom_feed" rel="related" type="text/html" title="pgBackRest Backup server" />
-                <link href="https://devopstales.github.io/home/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
                 <link href="https://devopstales.github.io/linux/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
-                <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
+                <link href="https://devopstales.github.io/home/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
                 <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
+                <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
             
                 <id>https://devopstales.github.io/home/pgbackrest_backup_server/</id>
             
@@ -1016,8 +1494,8 @@ sudo -iu postgres pgbackrest --stanza=postgresql1 restore
                 <link href="https://devopstales.github.io/linux/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
                 <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
                 <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
-                <link href="https://devopstales.github.io/linux/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
                 <link href="https://devopstales.github.io/home/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
+                <link href="https://devopstales.github.io/linux/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
             
                 <id>https://devopstales.github.io/home/postgresql_pgbackrest/</id>
             
@@ -1147,8 +1625,8 @@ P00   INFO: restore command end: completed successfully
             <link href="https://devopstales.github.io/home/mattermost-keycloak-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/sso/mattermost-keycloak-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Free sso for Mattermost Teams Edition" />
-                <link href="https://devopstales.github.io/linux/install-mattermost-for-gitlab/?utm_source=atom_feed" rel="related" type="text/html" title="Install mattermost for Gitlab" />
                 <link href="https://devopstales.github.io/home/install-mattermost-for-gitlab/?utm_source=atom_feed" rel="related" type="text/html" title="Install mattermost for Gitlab" />
+                <link href="https://devopstales.github.io/linux/install-mattermost-for-gitlab/?utm_source=atom_feed" rel="related" type="text/html" title="Install mattermost for Gitlab" />
             
                 <id>https://devopstales.github.io/home/mattermost-keycloak-sso/</id>
             
@@ -1253,8 +1731,8 @@ Set-ADUser $User.SamAccountName -employeeID $DATA
             <link href="https://devopstales.github.io/home/postgresql_pg_rewind/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/postgresql_pg_rewind/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL: pg_rewind" />
-                <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
                 <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
+                <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
                 <link href="https://devopstales.github.io/linux/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
                 <link href="https://devopstales.github.io/home/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
             
@@ -1339,8 +1817,8 @@ reply_time       | 2020-02-08 10:50:03.026266+01
             <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
-                <link href="https://devopstales.github.io/linux/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
                 <link href="https://devopstales.github.io/home/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
+                <link href="https://devopstales.github.io/linux/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
             
                 <id>https://devopstales.github.io/home/postgresql_replication/</id>
             
@@ -1469,8 +1947,8 @@ sudo -u postgres psql -x -c &quot;select * from pg_stat_replication&quot;
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -1638,8 +2116,8 @@ echo 8 &gt; /sys/module/zfs/parameters/zfs_vdev_async_write_min_active
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -1793,8 +2271,8 @@ testpvc   Bound     pvc-145c785e-ab83-11e7-9432-4201ac1fd019   50Gi       RWX   
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -1937,8 +2415,8 @@ EOF
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -2206,8 +2684,8 @@ spec:
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -2475,8 +2953,8 @@ kubectl port-forward -n loki-stack service/grafana 3000:80
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -2667,8 +3145,8 @@ kubectl get po -n nginx-example
                 <link href="https://devopstales.github.io/cloud/k8s-cert-manager/?utm_source=atom_feed" rel="related" type="text/html" title="Install cert-manager for Kubernetes" />
                 <link href="https://devopstales.github.io/cloud/kind-install/?utm_source=atom_feed" rel="related" type="text/html" title="Starting local Kubernetes using kind" />
                 <link href="https://devopstales.github.io/home/kind-install/?utm_source=atom_feed" rel="related" type="text/html" title="Starting local Kubernetes using kind" />
-                <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
+                <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
             
                 <id>https://devopstales.github.io/home/k8s-cert-manager/</id>
             
@@ -2683,8 +3161,8 @@ kubectl get po -n nginx-example
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -2937,8 +3415,8 @@ oc label namespace test router=public
             <link href="https://devopstales.github.io/home/kind-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/kind-install/?utm_source=atom_feed" rel="related" type="text/html" title="Starting local Kubernetes using kind" />
-                <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
+                <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/home/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
                 <link href="https://devopstales.github.io/cloud/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
             
@@ -4150,8 +4628,8 @@ tailf /var/log/squid/access.log
                 <link href="https://devopstales.github.io/cloud/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
                 <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
-                <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
+                <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
             
                 <id>https://devopstales.github.io/home/openshift-gitlab-helm/</id>
             
@@ -4825,8 +5303,8 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
                 <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
-                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
                 <link href="https://devopstales.github.io/cloud/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
             
                 <id>https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/</id>
             
@@ -4843,8 +5321,8 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -5118,8 +5596,8 @@ demo1-backup  demo-project-223110                      READY
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -5653,8 +6131,8 @@ endpoint = http://localhost/api
             <link href="https://devopstales.github.io/home/openshift-restrict-access/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-restrict-access/?utm_source=atom_feed" rel="related" type="text/html" title="Restrict access to OpenShift routes by IP address" />
-                <link href="https://devopstales.github.io/cloud/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/cloud/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/cloud/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
             
@@ -5718,10 +6196,10 @@ endpoint = http://localhost/api
             <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
-                <link href="https://devopstales.github.io/cloud/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
                 <link href="https://devopstales.github.io/home/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
-                <link href="https://devopstales.github.io/cloud/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
+                <link href="https://devopstales.github.io/cloud/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
                 <link href="https://devopstales.github.io/home/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
+                <link href="https://devopstales.github.io/cloud/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
             
                 <id>https://devopstales.github.io/home/openshift-kompose/</id>
             
@@ -5867,8 +6345,8 @@ curl -XGET 'localhost:9200/_snapshot/my_backup/_all?pretty'
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -6082,8 +6560,8 @@ s3cmd setpolicy ./bucket-policy.json s3://devopstales
                 <link href="https://devopstales.github.io/cloud/k8s-tillerless-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Tillerless helm2 install" />
                 <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
                 <link href="https://devopstales.github.io/home/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
-                <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
+                <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
             
                 <id>https://devopstales.github.io/home/k8s-tillerless-helm/</id>
             
@@ -6098,8 +6576,8 @@ s3cmd setpolicy ./bucket-policy.json s3://devopstales
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -6195,8 +6673,8 @@ export HELM_HOST=localhost:44134
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -6797,10 +7275,10 @@ firewall-cmd --reload
             <link href="https://devopstales.github.io/home/k8s-nginx-ingress/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
-                <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
                 <link href="https://devopstales.github.io/cloud/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
-                <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
+                <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
                 <link href="https://devopstales.github.io/home/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
+                <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
             
                 <id>https://devopstales.github.io/home/k8s-nginx-ingress/</id>
             
@@ -6815,8 +7293,8 @@ firewall-cmd --reload
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -6988,8 +7466,8 @@ token:      XXXXXXXXXXXXXXXXXXXXXXXXXX
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -7494,8 +7972,8 @@ api_url = https://sso.devopstales.intra/auth/realms/gitlab/protocol/openid-conne
                 <link href="https://devopstales.github.io/cloud/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
                 <link href="https://devopstales.github.io/home/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
                 <link href="https://devopstales.github.io/cloud/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
-                <link href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
                 <link href="https://devopstales.github.io/home/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
+                <link href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
             
                 <id>https://devopstales.github.io/home/openshift-add-node/</id>
             
@@ -8775,8 +9253,8 @@ systemctl start httpd
                 <link href="https://devopstales.github.io/cloud/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
                 <link href="https://devopstales.github.io/home/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
                 <link href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
-                <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
+                <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
             
                 <id>https://devopstales.github.io/home/openshift-letsencrypt/</id>
             
@@ -9995,8 +10473,8 @@ service nagios restart
             <link href="https://devopstales.github.io/home/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
-                <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
+                <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
             
@@ -10092,8 +10570,8 @@ systemctl enable goferd
             <link href="https://devopstales.github.io/home/k8s-copy-secret/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
-                <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
+                <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/k8s-helm-rbac/?utm_source=atom_feed" rel="related" type="text/html" title="RBAC permissions for Helm" />
                 <link href="https://devopstales.github.io/cloud/k8s-helm-rbac/?utm_source=atom_feed" rel="related" type="text/html" title="RBAC permissions for Helm" />
             
@@ -10212,8 +10690,8 @@ hammer content-view version promote \
             <link href="https://devopstales.github.io/home/awx-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/awx-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX" />
-                <link href="https://devopstales.github.io/linux/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
                 <link href="https://devopstales.github.io/home/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
+                <link href="https://devopstales.github.io/linux/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
             
                 <id>https://devopstales.github.io/home/awx-install/</id>
             
@@ -11672,8 +12150,8 @@ Then the poller will ativated.
             <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
-                <link href="https://devopstales.github.io/cloud/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
+                <link href="https://devopstales.github.io/cloud/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/cloud/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
             
@@ -12019,8 +12497,8 @@ docker push harbor.devopstales.intra/test/nginx:V2
                 <link href="https://devopstales.github.io/cloud/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
-                <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
+                <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
             
                 <id>https://devopstales.github.io/home/openshift-cert/</id>
             
@@ -12088,8 +12566,8 @@ ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/redeplo
             <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
-                <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
+                <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/cloud/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
             
@@ -12230,8 +12708,8 @@ oc aplay -f vmware-sc.yml
             <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
-                <link href="https://devopstales.github.io/cloud/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
+                <link href="https://devopstales.github.io/cloud/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/cloud/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
                 <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
             
@@ -12374,8 +12852,8 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
             <link href="https://devopstales.github.io/home/k8s-helm-rbac/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-helm-rbac/?utm_source=atom_feed" rel="related" type="text/html" title="RBAC permissions for Helm" />
-                <link href="https://devopstales.github.io/cloud/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
                 <link href="https://devopstales.github.io/home/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
+                <link href="https://devopstales.github.io/cloud/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
             
                 <id>https://devopstales.github.io/home/k8s-helm-rbac/</id>
             
@@ -12390,8 +12868,8 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
 
 <ul>
 <li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
-<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a>
-<!-- k8s-install-ha.md --></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
 <li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
@@ -12738,8 +13216,8 @@ master-restart controllers
             <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
-                <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
                 <link href="https://devopstales.github.io/cloud/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
+                <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
                 <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
             
@@ -14596,10 +15074,10 @@ df -hT
             <title type="html"><![CDATA[Use Ceph CephFS]]></title>
             <link href="https://devopstales.github.io/home/ceph-cephfs/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/cloud/install-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ceph cluster" />
                 <link href="https://devopstales.github.io/home/install-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ceph cluster" />
-                <link href="https://devopstales.github.io/home/ceph-block-device/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph Block Device" />
+                <link href="https://devopstales.github.io/cloud/install-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ceph cluster" />
                 <link href="https://devopstales.github.io/cloud/ceph-block-device/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph Block Device" />
+                <link href="https://devopstales.github.io/home/ceph-block-device/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph Block Device" />
                 <link href="https://devopstales.github.io/cloud/ceph-cephfs/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph CephFS" />
             
                 <id>https://devopstales.github.io/home/ceph-cephfs/</id>
@@ -14735,8 +15213,8 @@ kubectl config use-context work-dev
             <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
-                <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
+                <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
             
@@ -14883,8 +15361,8 @@ nano /etc/crontab
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
-                <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
+                <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
             
                 <id>https://devopstales.github.io/home/proxmox-backup-znapzend/</id>
             
