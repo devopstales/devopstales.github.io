@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<script type="application/ld+json">
+{
+    "@context" : "http://schema.org",
+    "@type" : "BlogPosting",
+    "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "https:\/\/devopstales.github.io\/"
+    },
+    "articleSection" : "cloud",
+    "name" : "Install OpenEBS for Kubernetes",
+    "headline" : "Install OpenEBS for Kubernetes",
+    "description" : "\x3cp\x3eOpenEBS is an open-source project for container-attached and container-native storage on Kubernetes.\x3c\/p\x3e",
+    "inLanguage" : "en-US",
+    "author" : "Blaiserman",
+    "creator" : "Blaiserman",
+    "publisher": "Blaiserman",
+    "accountablePerson" : "Blaiserman",
+    "copyrightHolder" : "Blaiserman",
+    "copyrightYear" : "2020",
+    "datePublished": "2020-05-20",
+    "dateModified" : "2020-05-20",
+    "url" : "https:\/\/devopstales.github.io\/cloud\/k8s-install-openebs\/",
+    "wordCount" : "783",
+    "keywords" : [ "kubernetes deployment", "kubernetes vs docker", "OpenEBS", "Blog" ]
+    
+}
+</script>
+<meta name="msvalidate.01" content="4E830BF9C048B3A327492699A61E741E" />
+<meta name="yandex-verification" content="96d0b6ba6c7aa697" />
+
+	<title>Install OpenEBS for Kubernetes - devopstales</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<meta property="og:title" content="Install OpenEBS for Kubernetes" />
+<meta property="og:description" content="OpenEBS is an open-source project for container-attached and container-native storage on Kubernetes." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://devopstales.github.io/cloud/k8s-install-openebs/" />
+<meta property="article:published_time" content="2020-05-20T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-05-20T00:00:00+00:00" />
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/style.css">
+	
+	<link rel="shortcut icon" href="https://devopstales.github.io/favicon.ico">
+		
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-135626110-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+				<div class="logo__title">devopstales</div>
+				<div class="logo__tagline">Blog about dev and ops stuff</div>
+			</a>
+		</div>
+		
+<nav class="menu">
+	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
+		<span class="menu__btn-title" tabindex="-1">Menu</span>
+	</button>
+	<ul class="menu__list">
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">home</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/linux/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Linux</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/windows/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Windows</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/monitoring/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">monitoring</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/cloud/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">cloud</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/sso/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">sso</span>
+				
+			</a>
+		</li>
+	</ul>
+</nav>
+
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Install OpenEBS for Kubernetes</h1>
+			<div class="post__meta meta">
+<div class="meta__item-datetime meta__item">
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2020-05-20T00:00:00Z">May 20, 2020</time>
+</div>
+
+<div class="meta__item-categories meta__item">
+	<svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
+	<span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
+	</span>
+</div></div>
+		</header>
+		<div class="content post__content clearfix">
+			<p>OpenEBS is an open-source project for container-attached and container-native storage on Kubernetes.</p>
+
+<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
+
+<ul>
+<li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
+<li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
+<!-- * Part3b: k8s-multiple-nginx-ingress -->
+<!-- * Part3c: k8s-traefik-ingress --></li>
+<li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
+<!-- local folder (+ autoprovisioning ) --></li>
+<li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+<li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+<li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
+<!-- CEPH in Kubernetes with rook --></li>
+<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes vMware --></li>
+<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- istio-install.md --></li>
+<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- prometheus operator + grafana operator -->
+<!-- grafana loki -->
+<!-- logs to graylog --></li>
+</ul>
+
+<p>On all host we have an unused unpartitioned disk called sdb.</p>
+
+<pre><code>lsblk
+
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda               8:0    0   80G  0 disk
+├─sda1            8:1    0    1G  0 part /boot
+└─sda2            8:2    0   79G  0 part
+  ├─centos-root 253:0    0   50G  0 lvm  /
+  ├─centos-swap 253:1    0    1G  0 lvm
+  └─centos-home 253:3    0   28G  0 lvm  /home
+sdb               8:16   0  100G  0 disk
+</code></pre>
+
+<h3 id="install-requirements">Install requirements</h3>
+
+<p>OpenEBS use iscsi for persisten volume sharing so we need  <code>iscsid</code>.</p>
+
+<h4 id="debian-ubuntu">Debian / Ubuntu</h4>
+
+<pre><code>apt-get install open-iscsi
+service open-iscsi enable
+service open-iscsi restart
+
+</code></pre>
+
+<h4 id="centos">CentOS</h4>
+
+<pre><code>yum install iscsi-initiator-utils -y
+systemctl enable iscsid
+systemctl start iscsid
+</code></pre>
+
+<h3 id="deploy-openebs-with-helm">Deploy OpenEBS with helm</h3>
+
+<p>OpenEBS is in the stable repo so we didn&rsquo;t need to add a separate helm repository for installing it. In my case I will use teh <code>openebs-system</code> namespace for the install.</p>
+
+<pre><code>kubectl create ns openebs-system
+helm upgrade --install openebs stable/openebs --version 1.7.0 --namespace=openebs-system
+</code></pre>
+
+<p>Wait for all the  pods are started.</p>
+
+<pre><code>kubectl get pods -n openebs-system
+
+NAME                                           READY     STATUS    RESTARTS   AGE
+openebs-admission-server-7b4859ccd5-bz4zt      1/1       Running   0          14m
+openebs-apiserver-556ffff45c-nk9x9             1/1       Running   5          15m
+openebs-localpv-provisioner-76b466d4b8-5tj4w   1/1       Running   0          15m
+openebs-ndm-f6cqz                              1/1       Running   0          15m
+openebs-ndm-operator-5f6c5497d7-chf6t          1/1       Running   1          15m
+openebs-ndm-qrmp9                              1/1       Running   0          15m
+openebs-ndm-stgml                              1/1       Running   0          15m
+openebs-provisioner-c9c7f9ff8-hn4bl            1/1       Running   0          15m
+openebs-snapshot-operator-6578d74b7-2wc97      2/2       Running   0          15m
+</code></pre>
+
+<p>Now verify if OpenEBS is installed successfully.</p>
+
+<pre><code>kubectl get blockdevice -n openebs-system
+
+NAME                                           NODENAME    SIZE         CLAIMSTATE   STATUS    AGE
+blockdevice-0c4e03f9e39a4092108215f19eca9da8   k8s-node1   1048576000   Unclaimed    Active    16m
+blockdevice-1aaa1142a7b9c65dfa32dec88fe1749b   k8s-node2   1048576000   Unclaimed    Active    16m
+blockdevice-5f728d1068c72337609fc1f88855b9bb   k8s-node3   1048576000   Unclaimed    Active    16m
+</code></pre>
+
+<pre><code>kubectl describe blockdevice blockdevice-0c4e03f9e39a4092108215f19eca9da8
+...
+  Devlinks:
+    Kind:  by-id
+    Links:
+      /dev/disk/by-id/ata-VBOX_HARDDISK_VBd4679835-eb798f2c
+      /dev/disk/by-id/lvm-pv-uuid-PWnLFv-b0jS-7CLZ-Cmym-0dia-RQkI-w0Hkam
+    Kind:  by-path
+    Links:
+      /dev/disk/by-path/pci-0000:00:01.1-ata-2.0
+  Filesystem:
+    Fs Type:  LVM2_member
+  Node Attributes:
+    Node Name:  k8s-node1
+  Partitioned:  No
+  Path:         /dev/sdb
+...
+</code></pre>
+
+<h4 id="verify-storageclasses">Verify StorageClasses:</h4>
+
+<pre><code>kubectl get sc
+
+NAME                        PROVISIONER                                                AGE
+openebs-device              openebs.io/local                                           64s
+openebs-hostpath            openebs.io/local                                           64s
+openebs-jiva-default        openebs.io/provisioner-iscsi                               64s
+openebs-snapshot-promoter   volumesnapshot.external-storage.k8s.io/snapshot-promoter   64s
+</code></pre>
+
+<h3 id="storage-engines">Storage engines</h3>
+
+<p>OpenEBS offers three storage engines:
+* Jiva
+* cStor
+* LocalPV</p>
+
+<p>Jiva is a light weight storage engine that is recommended to use for low capacity workloads. It is actually based on the same technology that powers Longhorn.</p>
+
+<pre><code>---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: demo-vol1-claim
+spec:
+  storageClassName: openebs-jiva-default
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4G
+</code></pre>
+
+<p>cStor requires raw disks. The snapshot and storage management features of the other cStor engine are more advanced than Jiva. For provisioning a cStor Volume, it requires a cStor Storage Pool and a StorageClass. cStor provides iSCSI targets, which are appropriate for RWO (ReadWriteOnce) access mode and is suitable for all types of databases. cStor supports thin provisioning by default.</p>
+
+<pre><code>cat stor-pool1-config.yaml
+---
+apiVersion: openebs.io/v1alpha1
+kind: StoragePoolClaim
+metadata:
+  name: cstor-disk-pool
+  annotations:
+    cas.openebs.io/config: |
+      - name: PoolResourceRequests
+        value: |-
+            memory: 500Mb
+      - name: PoolResourceLimits
+        value: |-
+            memory: 500Mb
+spec:
+  name: cstor-disk-pool
+  type: disk
+  poolSpec:
+    poolType: striped
+  blockDevices:
+    blockDeviceList:
+    - blockdevice-0c4e03f9e39a4092108215f19eca9da8
+    - blockdevice-1aaa1142a7b9c65dfa32dec88fe1749b
+    - blockdevice-5f728d1068c72337609fc1f88855b9bb
+</code></pre>
+
+<pre><code>kubectl apply -f stor-pool1-config.yaml
+
+kubectl get spc
+
+NAME              AGE
+cstor-disk-pool   20s
+
+kubectl get csp
+
+NAME                   ALLOCATED   FREE      CAPACITY   STATUS    TYPE      AGE
+cstor-disk-pool-cxm8   294K        100G      100G       Healthy   striped   27m
+cstor-disk-pool-r1hl   270K        100G      100G       Healthy   striped   27m
+cstor-disk-pool-t05z   92K         100G      100G       Healthy   striped   27m
+</code></pre>
+
+<pre><code>cat openebs-sc-rep3.yaml
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-cstore-default
+  annotations:
+    openebs.io/cas-type: cstor
+    cas.openebs.io/config: |
+      - name: StoragePoolClaim
+        value: &quot;cstor-disk-pool&quot;
+      - name: ReplicaCount
+        value: &quot;3&quot;
+    storageclass.kubernetes.io/is-default-class: &quot;true&quot;
+provisioner: openebs.io/provisioner-iscsi
+</code></pre>
+
+<pre><code>cat test-cs-pcv.yaml
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: test-cs-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3G
+</code></pre>
+
+<pre><code>kubectl apply -f openebs-sc-rep3.yaml
+kubectl apply -f test-cs-pcv.yaml
+</code></pre>
+
+<p>Local PV is based on Kubernetes local persistent volumes but it has a dynamic provisioner. It can store data either in a directory, or use disks; in the first case the hostpath can be shared by multiple persistent volumes, while when using disks each persistent volume requires a separate device. Local PV offers extremely high performance close to what you get by reading from and writing to the disk directly, but it doesn’t offer features such as replication, which are built in Jiva and cStor.</p>
+
+<pre><code>apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: &quot;hostpath&quot;
+      - name: BasePath
+        value: &quot;/mnt/openebs&quot;
+    openebs.io/cas-type: local
+  name: openebs-hostpath-mount
+provisioner: openebs.io/local
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+</code></pre>
+
+<h2 id="sources">Sources:</h2>
+
+<ul>
+<li><a href="https://vitobotta.com/2019/07/03/openebs-tips/">https://vitobotta.com/2019/07/03/openebs-tips/</a></li>
+</ul>
+		</div>
+		<footer class="post__footer">
+			
+<div class="post__tags tags clearfix">
+	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M32 19c0 1-1 2-1 2L21 31s-1 1-2 1-2-1-2-1L2 16c-1-1-1.4-2-1.4-2S0 12.5 0 11V3C0 1.5.8.8.8.8S1.5 0 3 0h8c1.5 0 3 .6 3 .6S15 1 16 2l15 15s1 1 1 2zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+	<ul class="tags__list">
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/centos/" rel="tag">CentOS</a></li>
+	</ul>
+</div>
+		</footer>
+	</article>
+</main>
+
+
+<nav class="post-nav flex">
+	<div class="post-nav__item post-nav__item--prev">
+		<a class="post-nav__link" href="https://devopstales.github.io/cloud/k8s-kubeadm-ha/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">How to install kubernetes with kubeadm in HA mode</p></a>
+	</div>
+	<div class="post-nav__item post-nav__item--next">
+		<a class="post-nav__link" href="https://devopstales.github.io/cloud/openshift-auto-approval-csr/" rel="next"><span class="post-nav__caption">Next&thinsp;»</span><p class="post-nav__post-title">How to Enable Auto Approval of CSR in Openshift v3.11</p></a>
+	</div>
+</nav>
+
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script type="application/javascript">
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "devopstales" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+
+			</div>
+			<aside class="sidebar"><div class="widget-search widget">
+	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
+		<label>
+			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
+		</label>
+		<input class="widget-search__submit" type="submit" value="Search">
+		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
+	</form>
+</div>
+<div class="widget-recent widget">
+	<h4 class="widget__title">Recent Posts</h4>
+	<div class="widget__content">
+		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift-auto-approval-csr/">How to Enable Auto Approval of CSR in Openshift v3.11</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-install-openebs/">Install OpenEBS for Kubernetes</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/foreman-sso/">Foreman openidc SSO with keycloak</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/chef-first-cookbook/">Install  Chef server</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/chef-server-install/">Install  Chef server</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-kubeadm-ha/">How to install kubernetes with kubeadm in HA mode</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-error-at-kubectl-logs/">K8s ERROR at kubectl logs</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/photon_basics/">PhotonOS Basics</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/protonos_vagrant_box/">Jow to create Vagrant box?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift_4/">OpenShift 4.2 with Red Hat CodeReady Containers</a></li>
+		</ul>
+	</div>
+</div>
+<div class="widget-taglist widget">
+	<h4 class="widget__title">Tags</h4>
+	<div class="widget__content">
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="alerta">alerta</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="CentOS">CentOS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="docker">docker</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="docker-compose">docker-compose</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="elasticsearch">elasticsearch</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="fedora">fedora</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="foreman">foreman</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="GCP">GCP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="Google Cloud Platform">Google Cloud Platform</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="Grafana">Grafana</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="httpd">httpd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="icinga">icinga</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="k8s">k8s</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="katello">katello</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="Logging">Logging</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="Loki">Loki</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="nextcloud">nextcloud</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="noSQL">noSQL</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="oauth2">oauth2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="openproject">openproject</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="opnsense">opnsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="Pfsense">Pfsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="postgresql">postgresql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="privacyidea">privacyidea</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/promatheus/" title="Promatheus">Promatheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="prometheus">prometheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="redmine">redmine</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="registry">registry</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="sonarqube">sonarqube</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="telegraf">telegraf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unify/" title="Unify">Unify</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vault/" title="vault">vault</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
+	</div>
+</div>
+<div class="widget-social widget">
+	<h4 class="widget-social__title widget__title">Social</h4>
+	<div class="widget-social__content widget__content">
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="Twitter" rel="noopener noreferrer" href="https://twitter.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-twitter" width="24" height="24" viewBox="0 0 384 312"><path d="m384 36.9c-14.1 6.3-29.3 10.5-45.2 12.4 16.3-9.7 28.8-25.2 34.6-43.6-15.2 9-32.1 15.6-50 19.1-14.4-15.2-34.9-24.8-57.5-24.8-43.5 0-78.8 35.3-78.8 78.8 0 6.2.7 12.2 2 17.9-65.5-3.3-123.5-34.6-162.4-82.3-6.7 11.6-10.6 25.2-10.6 39.6 0 27.3 13.9 51.4 35 65.6-12.9-.4-25.1-4-35.7-9.9v1c0 38.2 27.2 70 63.2 77.2-6.6 1.8-13.6 2.8-20.8 2.8-5.1 0-10-.5-14.8-1.4 10 31.3 39.1 54.1 73.6 54.7-27 21.1-60.9 33.7-97.8 33.7-6.4 0-12.6-.4-18.8-1.1 34.9 22.4 76.3 35.4 120.8 35.4 144.9 0 224.1-120 224.1-224.1 0-3.4-.1-6.8-.2-10.2 15.4-11.1 28.7-25 39.3-40.8z"/></svg>
+				<span>Twitter</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="GitHub" rel="noopener noreferrer" href="https://github.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-github" width="24" height="24" viewBox="0 0 384 374"><path d="m192 0c-106.1 0-192 85.8-192 191.7 0 84.7 55 156.6 131.3 181.9 9.6 1.8 13.1-4.2 13.1-9.2 0-4.6-.2-16.6-.3-32.6-53.4 11.6-64.7-25.7-64.7-25.7-8.7-22.1-21.3-28-21.3-28-17.4-11.9 1.3-11.6 1.3-11.6 19.3 1.4 29.4 19.8 29.4 19.8 17.1 29.3 44.9 20.8 55.9 15.9 1.7-12.4 6.7-20.8 12.2-25.6-42.6-4.8-87.5-21.3-87.5-94.8 0-20.9 7.5-38 19.8-51.4-2-4.9-8.6-24.3 1.9-50.7 0 0 16.1-5.2 52.8 19.7 15.3-4.2 31.7-6.4 48.1-6.5 16.3.1 32.7 2.2 48.1 6.5 36.7-24.8 52.8-19.7 52.8-19.7 10.5 26.4 3.9 45.9 1.9 50.7 12.3 13.4 19.7 30.5 19.7 51.4 0 73.7-44.9 89.9-87.7 94.6 6.9 5.9 13 17.6 13 35.5 0 25.6-.2 46.3-.2 52.6 0 5.1 3.5 11.1 13.2 9.2 76.2-25.5 131.2-97.3 131.2-182 0-105.9-86-191.7-192-191.7z"/></svg>
+				<span>GitHub</span>
+			</a>
+		</div>
+
+		
+	</div>
+</div>
+</aside>
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2020 devopstales.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+	</div>
+<script async defer src="https://devopstales.github.io/js/menu.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.6/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async></script>
+</body>
+</html>
