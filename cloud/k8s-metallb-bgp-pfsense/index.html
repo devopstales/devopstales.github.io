@@ -26,7 +26,7 @@
     "datePublished": "2020-08-18",
     "dateModified" : "2020-08-18",
     "url" : "https:\/\/devopstales.github.io\/cloud\/k8s-metallb-bgp-pfsense\/",
-    "wordCount" : "860",
+    "wordCount" : "924",
     "keywords" : [ "Kubernetes", "k8s", "Load Balancer", "BGP", "kubernetes deployment", "kubernetes ingress", "MetalLB", "Blog" ]
     
 }
@@ -247,9 +247,9 @@ if (!doNotTrack) {
 
 <p>Simple BGP config with Calico don’t require anything special. However, if you are using Calico’s <a href="https://docs.projectcalico.org/networking/bgp">external BGP peering capability</a> to advertise your cluster prefixes over BGP, and also want to use BGP in MetalLB, you will need to jump through some hoops.</p>
 
-<h3 id="configuring-pfsense-and-bgp">Configuring pfSense and BGP</h3>
+<h3 id="configuring-pfsense-and-openbgpd">Configuring pfSense and OpenBGPD</h3>
 
-<p>First we need to install OpenBGPD pcakage on pfSense. Go to <code>System &gt; Package Manager &gt; Available Packages</code> Then select OpenBGPD and Install it.</p>
+<p>First we need to install OpenBGPD pcakage on pfSense. Go to <code>System &gt; Package Manager &gt; Available Packages</code> Then select <code>OpenBGPD</code> and Install it.</p>
 
 <p>There is otger BGP compatible pckages in pfSense so make  sure you DO NOT have the Quagga_OSPF or FRR packages installed. They directly conflict with each other.</p>
 
@@ -290,6 +290,20 @@ neighbor 172.17.9.12 {
 <li><code>remote-as 64513</code> - Thi is the Autonomous System Number of the neighbors. Same for all Kubernetes Node.</li>
 <li><code>announce all</code> - We need our nodes to be able to announce to the router their service IP addresses.</li>
 </ul>
+
+<h3 id="configuring-pfsense-and-quagga-ospf">Configuring pfSense and Quagga_OSPF</h3>
+
+<p>If you prefer to use <code>Quagga_OSPF</code> Go to <code>System &gt; Package Manager &gt; Available Packages</code> Then select <code>Quagga_OSPF</code> and Install it.</p>
+
+<p>To configure BGP with <code>Quagga_OSPF</code>. Go to <code>Services &gt; Quagga OSPFd &gt; Raw config</code> Edit <code>SAVED bgpd.conf</code> the <code>save</code>.</p>
+
+<pre><code>router bgp 64512
+ bgp router-id 172.17.9.200
+ neighbor 172.17.9.10 remote-as 64513
+ neighbor 172.17.9.11 remote-as 64513
+ neighbor 172.17.9.12 remote-as 64513
+  network 10.25.0.0/22
+</code></pre>
 
 <h3 id="deploy-metallb">Deploy MetalLB</h3>
 
