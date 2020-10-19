@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2020-10-17T08:20:34+00:00</updated>
+    <updated>2020-10-19T11:32:42+00:00</updated>
     
     
     <author>
@@ -17,6 +17,564 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Configure K8S vSphere Cloud Provider]]></title>
+            <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure K8S vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/cloud/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/cloud/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+                <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+            
+                <id>https://devopstales.github.io/home/k8s-vmware/</id>
+            
+            
+            <published>2020-10-14T00:00:00+00:00</published>
+            <updated>2020-10-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how can you use vmware for persistent storagi on K8S.</p>
+
+<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
+
+<ul>
+<li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+<li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
+<!-- * Part3b: k8s-multiple-nginx-ingress -->
+<!-- * Part3c: k8s-contour-ingress --></li>
+<li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
+<!-- local folder (+ autoprovisioning ) --></li>
+<li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+<li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+<li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- istio-install.md --></li>
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
+<!-- grafana loki -->
+<!-- logs to graylog --></li>
+</ul>
+
+<h3 id="vsphere-configuration">vSphere Configuration</h3>
+
+<ul>
+<li>Create a folder for all the VMs in vCenter
+
+<ul>
+<li>In the navigator, select the data center</li>
+<li>Right-click and select the menu option to create the folder.</li>
+<li>Select: All vCenter Actions &gt; New VM and Template Folder.</li>
+<li>Move K8S vms to this folder</li>
+</ul></li>
+<li>The name of the virtual machine must match the name of the nodes for the K8S cluster.</li>
+</ul>
+
+<p><img src="/img/include/k8s-vmware.png" alt="Example image" /></p>
+
+<h3 id="set-up-the-govc-environment">Set up the GOVC environment:</h3>
+
+<pre><code># on deployer
+curl -LO https://github.com/vmware/govmomi/releases/download/v0.20.0/govc_linux_amd64.gz
+gunzip govc_linux_amd64.gz
+chmod +x govc_linux_amd64
+cp govc_linux_amd64 /usr/bin/govc
+echo &quot;export GOVC_URL='vCenter IP OR FQDN'&quot; &gt;&gt; /etc/profile
+echo &quot;export GOVC_USERNAME='vCenter User'&quot; &gt;&gt; /etc/profile
+echo &quot;export GOVC_PASSWORD='vCenter Password'&quot; &gt;&gt; /etc/profile
+echo &quot;export GOVC_INSECURE=1&quot; &gt;&gt; /etc/profile
+source /etc/profile
+</code></pre>
+
+<p>Add <code>disk.enableUUID=1</code> for all VM:</p>
+
+<pre><code>govc vm.info &lt;vm&gt;
+govc ls /Datacenter/kubernetes/&lt;vm-folder-name&gt;
+# example:
+govc ls /Datacenter/kubernetes/k8s-01
+
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='VM Path'
+# example:
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='/datacenter/kubernetes/k8s-01/k8s-m01'
+</code></pre>
+
+<p>VM Hardware should be at version 15 or higher. Upgrade if needed:</p>
+
+<pre><code>govc vm.option.info '/datacenter/kubernetes/k8s-01/k8s-m01' | grep HwVersion
+
+govc vm.upgrade -version=15 -vm '/datacenter/kubernetes/k8s-01/k8s-m01'
+</code></pre>
+
+<h3 id="create-the-required-roles">Create the required Roles</h3>
+
+<ul>
+<li>Navigate in the vSphere Client - Menu &gt; Administration &gt; Roles</li>
+<li>Add a new Role and select the permissions required. Repeat for each role.</li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th align="center">Roles</th>
+<th align="center">Privileges</th>
+<th align="center">Entities</th>
+<th align="center">Propagate to Children</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td align="center">vcp-manage-k8s-node-vms</td>
+<td align="center">Resource.AssignVMToPoolVirtualMachine.Config.AddExistingDisk, VirtualMachine.Config.AddNewDisk, VirtualMachine.Config.AddRemoveDevice, VirtualMachine.Config.RemoveDisk, VirtualMachine.Config.SettingsVirtualMachine.Inventory.Create, VirtualMachine.Inventory.Delete</td>
+<td align="center">Cluster, Hosts, VM Folder</td>
+<td align="center">Yes</td>
+</tr>
+
+<tr>
+<td align="center">vcp-manage-k8s-volumes</td>
+<td align="center">Datastore.AllocateSpace, Datastore.FileManagement (Low level file operations)</td>
+<td align="center">Datastore</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">vcp-view-k8s-spbm-profile</td>
+<td align="center">StorageProfile.View (Profile-driven storage view)</td>
+<td align="center">vCenter</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">Read-only (pre-existing default role)</td>
+<td align="center">System.Anonymous, System.Read, System.View</td>
+<td align="center">Datacenter, Datastore Cluster, Datastore Storage Folder</td>
+<td align="center">No</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="create-a-service-account">Create a service account</h3>
+
+<ul>
+<li>Create a vsphere user, or add a domain user, to provide access and assign the new roles to.</li>
+</ul>
+
+<h3 id="create-vsphere-conf">Create vsphere.conf</h3>
+
+<p>Create the vSphere configuration file in /etc/kubernetes/vcp/vsphere.conf - you’ll need to create the folder.</p>
+
+<pre><code>nano /etc/kubernetes/vcp/vsphere.conf
+[Global]
+user = &quot;k8s-user@vsphere.local&quot;
+password = &quot;password for k8s-user&quot;
+port = &quot;443&quot;
+insecure-flag = &quot;1&quot;
+
+[VirtualCenter &quot;10.0.1.200&quot;]
+datacenters = &quot;DC-1&quot;
+
+[Workspace]
+server = &quot;10.0.1.200&quot;
+datacenter = &quot;DC-1&quot;
+default-datastore = &quot;vsanDatastore&quot;
+resourcepool-path = &quot;ClusterNameHere/Resources&quot;
+folder = &quot;kubernetes&quot;
+
+[Disk]
+scsicontrollertype = pvscsi
+</code></pre>
+
+<h3 id="modify-the-kubelet-service">Modify the kubelet service</h3>
+
+<p>On master:</p>
+
+<pre><code>nano /etc/systemd/system/kubelet.service
+[Service]
+...
+ExecStart=/usr/bin/docker run \
+...
+        /hyperkube kubelet \
+...
+--cloud-provider=vsphere --cloud-config=/etc/kubernetes/vsphere.conf    
+</code></pre>
+
+<p>On worker:</p>
+
+<pre><code>nano /etc/systemd/system/kubelet.service
+[Service]
+...
+ExecStart=/usr/bin/docker run \
+...
+        /hyperkube kubelet \
+...
+--cloud-provider=vsphere  
+</code></pre>
+
+<h3 id="modify-container-manifests">Modify container manifests</h3>
+
+<p>Add following flags to the kubelet service configuration (usually in the systemd config file), as well as the controller-manager and api-server container manifest files on the master node (usually in /etc/kubernetes/manifests).</p>
+
+<pre><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+...
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+...
+    - --cloud-provider=vsphere
+    - --cloud-config=/etc/kubernetes/vsphere.conf
+    volumeMounts:
+    - mountPath: /etc/kubernetes/vcp
+      name: vcp
+      readOnly: true
+...
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/vcp
+      type: DirectoryOrCreate
+    name: vcp
+</code></pre>
+
+<p>Restart the services.</p>
+
+<pre><code>systemctl restart kubelet docker
+</code></pre>
+
+<h3 id="add-providerid">Add providerID</h3>
+
+<pre><code>kubectl get nodes -o json | jq '.items[]|[.metadata.name, .spec.providerID, .status.nodeInfo.systemUUID]'
+
+nano k8s-vmware-pacher.sh
+DATACENTER='&lt;Datacenter&gt;'
+FOLDER='&lt;vm-folder-name&gt;'
+for vm in $(govc ls /$DATACENTER/vm/$FOLDER ); do
+  MACHINE_INFO=$(govc vm.info -json -dc=$DATACENTER -vm.ipath=&quot;$vm&quot; -e=true)
+  # My VMs are created on vmware with upper case names, so I need to edit the names with awk
+  VM_NAME=$(jq -r ' .VirtualMachines[] | .Name' &lt;&lt;&lt; $MACHINE_INFO | awk '{print tolower($0)}')
+  # UUIDs come in lowercase, upper case then
+  VM_UUID=$( jq -r ' .VirtualMachines[] | .Config.Uuid' &lt;&lt;&lt; $MACHINE_INFO | awk '{print toupper($0)}')
+  echo &quot;Patching $VM_NAME with UUID:$VM_UUID&quot;
+  # This is done using dry-run to avoid possible mistakes, remove when you are confident you got everything right.
+  kubectl patch node $VM_NAME -p &quot;{\&quot;spec\&quot;:{\&quot;providerID\&quot;:\&quot;vsphere://$VM_UUID\&quot;}}&quot;
+done
+
+chmod +x openshift-vmware-pacher.sh
+./openshift-vmware-pacher.sh
+</code></pre>
+
+<h3 id="create-vsphere-storage-class">Create vSphere storage-class</h3>
+
+<pre><code>nano vmware-sc.yml
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: &quot;true&quot;
+  name: &quot;vsphere-standard&quot;
+provisioner: kubernetes.io/vsphere-volume
+parameters:
+    diskformat: zeroedthick
+    datastore: &quot;NFS&quot;
+reclaimPolicy: Delete
+
+kubectl aplay -f vmware-sc.yml
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install k8s with calico's eBPF mode]]></title>
+            <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+                <link href="https://devopstales.github.io/cloud/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/home/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
+                <link href="https://devopstales.github.io/cloud/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/k8s-calico-ebpf/</id>
+            
+            
+            <published>2020-10-13T00:00:00+00:00</published>
+            <updated>2020-10-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I&rsquo;will show you how to install kubernetes Without kube-proxy using calico&rsquo;s eBPF mode.</p>
+
+<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
+
+<ul>
+<li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+<li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
+<!-- * Part3b: k8s-multiple-nginx-ingress -->
+<!-- * Part3c: k8s-contour-ingress --></li>
+<li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
+<!-- local folder (+ autoprovisioning ) --></li>
+<li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+<li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+<li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- istio-install.md --></li>
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
+<!-- grafana loki -->
+<!-- logs to graylog --></li>
+</ul>
+
+<h3 id="wthat-is-kube-proxy">Wthat is kube-proxy</h3>
+
+<p>kube-proxy is a key component of any Kubernetes deployment.  Its role is to load-balance traffic to the pods. It listens to all the service requests coming through from kubernetes and creates entries in iptables for each of these service IPs to achieve proper routing to the pod. So kube-proxy adds iptables ruleset for each new service defined. As the number of services grow, this list is going to be huge. This potentially impact the performance because the iptables processing is sequential and wit every new line the list goes longer and longer. Kubernetes&rsquo;s solution for this problem was IPVS.</p>
+
+<h3 id="what-is-ipvs">What is IPVS?</h3>
+
+<p>IPVS (IP Virtual Server) is built on top of the Netfilter and implements transport-layer load balancing as part of the Linux kernel. It runs on a host and acts as a load balancer in front of a cluster of real servers. IPVS can direct requests for TCP- and UDP-based services to the real servers, and make services of the real servers appear as virtual services on a single IP address. Therefore, IPVS naturally supports Kubernetes Service. IPVS mode provides greater scale and performance vs iptables mode. However, it comes with some limitations. There is no option to install IPVS mode in kubeadm. <a href="../../cloud/k8s-ipvs/">In the previous post you can see ho you can do install.</a> The other solution is eBPF.</p>
+
+<h3 id="what-is-ebpf">What is eBPF ?</h3>
+
+<p>eBPF is a virtual machine embedded within the Linux kernel. It allows small programs to be loaded into the kernel, and attached to hooks, which are triggered when some event occurs. For example, when a network interface emits a packet.</p>
+
+<h3 id="requirements">Requirements</h3>
+
+<p>First you need a supported Linuy Distrubution:
+* Ubuntu 20.04.
+* Red Hat v8.2 with Linux kernel v4.18.0-193 or above (Red Hat have backported the required features to that build on CentOS 8 but not on 7)
+* Pre installed K8s cluster</p>
+
+<p>Verify that your cluster is ready for eBPF mode</p>
+
+<pre><code>mount | grep &quot;/sys/fs/bpf&quot;
+bpf on /sys/fs/bpf type bpf (rw,nosuid,nodev,noexec,relatime,mode=700)
+</code></pre>
+
+<h3 id="install-calico-with-operator">Install Calico With Operator</h3>
+
+<p>We need to change the <code>cidr</code> in <code>custom-resources.yaml</code> to match to our clusters <code>cdir</code>.</p>
+
+<pre><code>kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+
+wget https://docs.projectcalico.org/manifests/custom-resources.yaml
+nano custom-resources.yaml
+...
+cidr: 10.244.0.0/16
+
+
+kubectl create -f custom-resources.yaml
+watch kubectl get pods -n calico-system
+</code></pre>
+
+<h3 id="configure-calicoctl">Configure calicoctl</h3>
+
+<pre><code>export CALICO_DATASTORE_TYPE=kubernetes
+export CALICO_KUBECONFIG=~/.kube/config
+calicoctl get workloadendpoints
+calicoctl get nodes
+</code></pre>
+
+<p>Configure tigera-operator to communicate with kubernetes&rsquo;s api.</p>
+
+<pre><code>nano kubernetes-services-endpoint.yaml
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kubernetes-services-endpoint
+  namespace: tigera-operator
+data:
+  KUBERNETES_SERVICE_HOST: &quot;172.17.9.10&quot;
+  KUBERNETES_SERVICE_PORT: &quot;6443&quot;
+
+kubectl apply -f  kubernetes-services-endpoint.yaml
+kubectl delete pod -n tigera-operator -l k8s-app=tigera-operator
+watch kubectl get pods -n calico-system
+</code></pre>
+
+<h3 id="change-to-ebpf-mode">Change to eBPF mode</h3>
+
+<p>First we change kube-proxy&rsquo;s <code>nodeSelector</code> to a none existing node to disable <code>kube-proxy</code>, the patch calico to run in eBPF mode.</p>
+
+<pre><code>kubectl patch ds -n kube-system kube-proxy -p '{&quot;spec&quot;:{&quot;template&quot;:{&quot;spec&quot;:{&quot;nodeSelector&quot;:{&quot;non-calico&quot;: &quot;true&quot;}}}}}'
+calicoctl patch felixconfiguration default --patch='{&quot;spec&quot;: {&quot;bpfKubeProxyIptablesCleanupEnabled&quot;: false}}'
+calicoctl patch felixconfiguration default --patch='{&quot;spec&quot;: {&quot;bpfEnabled&quot;: true}}'
+calicoctl patch felixconfiguration default --patch='{&quot;spec&quot;: {&quot;bpfExternalServiceMode&quot;: &quot;DSR&quot;}}'
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install k8s with IPVS mode]]></title>
+            <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/cloud/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+                <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+                <link href="https://devopstales.github.io/cloud/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
+                <link href="https://devopstales.github.io/home/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/k8s-ipvs/</id>
+            
+            
+            <published>2020-10-13T00:00:00+00:00</published>
+            <updated>2020-10-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I&rsquo;will show you how to install kubernetes with kube-proxy IPVS mode.</p>
+
+<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
+
+<ul>
+<li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+<li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
+<!-- * Part3b: k8s-multiple-nginx-ingress -->
+<!-- * Part3c: k8s-contour-ingress --></li>
+<li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
+<!-- local folder (+ autoprovisioning ) --></li>
+<li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+<li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+<li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- istio-install.md --></li>
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
+<!-- grafana loki -->
+<!-- logs to graylog --></li>
+</ul>
+
+<h3 id="wthat-is-kube-proxy">Wthat is kube-proxy</h3>
+
+<p>kube-proxy is a key component of any Kubernetes deployment.  Its role is to load-balance traffic to the pods. It listens to all the service requests coming through from kubernetes and creates entries in iptables for each of these service IPs to achieve proper routing to the pod. So kube-proxy adds iptables ruleset for each new service defined. As the number of services grow, this list is going to be huge. This potentially impact the performance because the iptables processing is sequential and wit every new line the list goes longer and longer. Kubernetes&rsquo;s solution for this problem was IPVS.</p>
+
+<h3 id="what-is-ipvs">What is IPVS?</h3>
+
+<p>IPVS (IP Virtual Server) is built on top of the Netfilter and implements transport-layer load balancing as part of the Linux kernel. It runs on a host and acts as a load balancer in front of a cluster of real servers. IPVS can direct requests for TCP- and UDP-based services to the real servers, and make services of the real servers appear as virtual services on a single IP address. Therefore, IPVS naturally supports Kubernetes Service. IPVS mode provides greater scale and performance vs iptables mode.</p>
+
+<p>Installing Kubernetes with IPVS kube-proxy mode is a little bit hard because there in no built in option for theat in kubeadm. So we have two option. Createt a custom kubeadm.yaml or edit an installed cluster.</p>
+
+<h3 id="install-requirements">Install Requirements</h3>
+
+<pre><code>yum install ipset ipvsadm -y
+
+cat &gt; /etc/sysconfig/modules/ipvs.modules &lt;&lt;EOF
+#!/bin/bash
+modprobe -- ip_vs
+modprobe -- ip_vs_rr
+modprobe -- ip_vs_wrr
+modprobe -- ip_vs_sh
+modprobe -- nf_conntrack_ipv4
+EOF
+chmod 755 /etc/sysconfig/modules/ipvs.modules &amp;&amp; bash /etc/sysconfig/modules/ipvs.modules &amp;&amp; lsmod | grep -e ip_vs -e nf_conntrack_ipv4
+</code></pre>
+
+<h3 id="createt-a-custom-kubeadm-yaml">Createt a custom kubeadm.yaml</h3>
+
+<pre><code>kubeadm config print init-defaults &gt; kubeadm.yaml
+
+nano kubeadm.yaml
+...
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+mode: ipvs
+</code></pre>
+
+<h3 id="edit-running-cluster">Edit running cluster</h3>
+
+<pre><code>kubectl edit configmap kube-proxy -n kube-system
+...
+mode: ipvs
+</code></pre>
+
+<pre><code>kubectl get po -n kube-system
+kubectl delete po -n kube-system &lt;pod-name&gt;
+</code></pre>
+
+<pre><code>kubectl logs [kube-proxy pod] | grep &quot;Using ipvs Proxier&quot;
+</code></pre>
+
+<h3 id="test-ipvs-mode-is-running">Test IPVS mode is running</h3>
+
+<pre><code>ipvsadm -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -&gt; RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  10.96.0.1:443 rr
+  -&gt; 1.1.1.101:6443               Masq    1      0          0
+TCP  10.96.0.10:53 rr
+  -&gt; 10.244.0.2:53                Masq    1      0          0
+  -&gt; 10.244.2.8:53                Masq    1      0          0
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -87,14 +645,123 @@ apt update &amp;&amp; apt install unifi
     
         
         <entry>
+            <title type="html"><![CDATA[How to fixing filesystem corruption on a Kubernetes Ceph RBD PersistentVolume]]></title>
+            <link href="https://devopstales.github.io/home/openshift-rbd-fsck/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/openshift-rbd-fsck/?utm_source=atom_feed" rel="related" type="text/html" title="How to fixing filesystem corruption on a Kubernetes Ceph RBD PersistentVolume" />
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/cloud/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/cloud/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
+                <link href="https://devopstales.github.io/home/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
+            
+                <id>https://devopstales.github.io/home/openshift-rbd-fsck/</id>
+            
+            
+            <published>2020-10-10T00:00:00+00:00</published>
+            <updated>2020-10-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to fix a corruptid filesystem on Ceph RBD PersistentVolume uyed by Kubernetes.</p>
+
+<pre><code>oc describe po gitlab-ce-1-wl9wf
+...
+Events:
+  Type     Reason                  Age               From                                           Message
+  ----     ------                  ----              ----                                           -------
+  Normal   Scheduled               27s               default-scheduler                              Successfully assigned gitlab-prod/gitlab-ce-1-j7lph to k8sw09
+  Normal   SuccessfulAttachVolume  27s               attachdetach-controller                        AttachVolume.Attach succeeded for volume &quot;pvc-e27f498e-85cf-11e9-af1a-66934f1af826&quot;
+  Warning  FailedMount             2s (x6 over 19s)  kubelet, k8sw09  MountVolume.MountDevice failed for volume &quot;pvc-e27f498e-85cf-11e9-af1a-66934f1af826&quot; : rbd: failed to mount device /dev/rbd3 at /var/lib/origin/openshift.local.volumes/plugins/kubernetes.io/rbd/mounts/k8s-rbd-image-kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706 (fstype: ), error 'fsck' found errors on device /dev/rbd3 but could not correct them: fsck from util-linux 2.23.2
+/dev/rbd3: Superblock needs_recovery flag is clear, but journal has data.
+/dev/rbd3: Run journal anyway
+
+/dev/rbd3: UNEXPECTED INCONSISTENCY; RUN fsck MANUALLY.
+  (i.e., without -a or -p options)
+</code></pre>
+
+<p>Check the log on the worker. In my case this is k8sw09.</p>
+
+<pre><code>journalctl -u kubelet
+
+
+jan 08 15:44:58 k8sw09 origin-node[14927]: I0108 15:44:58.251201   14927 reconciler.go:252] operationExecutor.MountVolume started for volume &quot;pvc-e27f498e-85cf-11e9-af1a-66934f1af826&quot; (UniqueName: &quot;kubernetes.io/rbd/k8s-rbd:kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706&quot;) pod &quot;gitlab-ce-1-j7lph&quot; (UID: &quot;69151c2c-3223-11ea-9bcf-aa9884bf6706&quot;)
+jan 08 15:44:58 k8sw09 origin-node[14927]: I0108 15:44:58.251299   14927 operation_generator.go:489] MountVolume.WaitForAttach entering for volume &quot;pvc-e27f498e-85cf-11e9-af1a-66934f1af826&quot; (UniqueName: &quot;kubernetes.io/rbd/k8s-rbd:kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706&quot;) pod &quot;gitlab-ce-1-j7lph&quot; (UID: &quot;69151c2c-3223-11ea-9bcf-aa9884bf6706&quot;) DevicePath &quot;&quot;
+jan 08 15:44:58 k8sw09 origin-node[14927]: I0108 15:44:58.451965   14927 operation_generator.go:498] MountVolume.WaitForAttach succeeded for volume &quot;pvc-e27f498e-85cf-11e9-af1a-66934f1af826&quot; (UniqueName: &quot;kubernetes.io/rbd/k8s-rbd:kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706&quot;) pod &quot;gitlab-ce-1-j7lph&quot; (UID: &quot;69151c2c-3223-11ea-9bcf-aa9884bf6706&quot;) DevicePath &quot;/dev/rbd3&quot;
+jan 08 15:44:58 k8sw09 origin-node[14927]: E0108 15:44:58.498052   14927 nestedpendingoperations.go:267] Operation for &quot;\&quot;kubernetes.io/rbd/k8s-rbd:kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706&quot;&quot; failed. No retries permitted until 2020-01-08 15:47:00.498014981 +0100 CET m=+619493.508747496 (durationBeforeRetry 2m2s). Error: &quot;MountVolume.MountDevice failed for volume \&quot;pvc-e27f498e-85cf-11e9-af1a-66934f1af826\&quot; (UniqueName: \&quot;kubernetes.io/rbd/k8s-rbd:kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706\&quot;) pod \&quot;gitlab-ce-1-j7lph\&quot; (UID: \&quot;69151c2c-3223-11ea-9bcf-aa9884bf6706\&quot;) : rbd: failed to mount device /dev/rbd3 at /var/lib/origin/openshift.local.volumes/plugins/kubernetes.io/rbd/mounts/k8s-rbd-image-kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706 (fstype: ), error 'fsck' found errors on device /dev/rbd3 but could not correct them: fsck from util-linux 2.23.2\n/dev/rbd3: Superblock needs_recovery flag is clear, but journal has data.\n/dev/rbd3: Run journal anyway\n\n/dev/rbd3: UNEXPECTED INCONSISTENCY; RUN fsck MANUALLY.\n\t(i.e., without -a or -p options)\n.&quot;
+</code></pre>
+
+<p>We can see the problem is with <code>/dev/rbd3</code>. First check thi is the block device user for <code>pvc-e3042618-85cf-11e9-8762-aa9884bf6706</code> PersistenVolume.</p>
+
+<pre><code>sudo rbd showmapped | grep pvc-e3042618-85cf-11e9-8762-aa9884bf6706
+3  k8s-rbd kubernetes-dynamic-pvc-e3042618-85cf-11e9-8762-aa9884bf6706 -    /dev/rbd3
+</code></pre>
+
+<p>So let&rsquo;s try to use <code>fsck</code> on this disk.</p>
+
+<pre><code>sudo rbd unmap /dev/rbd3
+
+
+sudo fsck -fv /dev/rbd3
+fsck from util-linux 2.27.1
+e2fsck 1.42.13 (17-May-2015)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Unattached inode 303
+Connect to /lost+found&lt;y&gt;? yes
+Inode 303 ref count is 2, should be 1.  Fix&lt;y&gt;? yes
+Pass 5: Checking group summary information
+Block bitmap differences:  -(71680--73727) -(94208--95231)
+Fix&lt;y&gt;? yes
+
+/dev/rbd3: ***** FILE SYSTEM WAS MODIFIED *****
+
+         326 inodes used (0.50%, out of 65536)
+          35 non-contiguous files (10.7%)
+           0 non-contiguous directories (0.0%)
+             # of inodes with ind/dind/tind blocks: 0/0/0
+             Extent depth histogram: 311/7
+       63642 blocks used (24.28%, out of 262144)
+           0 bad blocks
+           1 large file
+
+         308 regular files
+           9 directories
+           0 character device files
+           0 block device files
+           0 fifos
+           1 link
+           0 symbolic links (0 fast symbolic links)
+           0 sockets
+------------
+         317 files
+</code></pre>
+
+<p>Then our pod is running again!</p>
+
+<pre><code>oc get po
+NAME                        READY     STATUS    RESTARTS   AGE
+gitlab-ce-1-j7lph           1/1       Running   0          28m
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
             <title type="html"><![CDATA[Install and use rancher helm-controller]]></title>
             <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
                 <link href="https://devopstales.github.io/cloud/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
                 <link href="https://devopstales.github.io/home/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
-                <link href="https://devopstales.github.io/cloud/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
                 <link href="https://devopstales.github.io/home/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
+                <link href="https://devopstales.github.io/cloud/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
             
                 <id>https://devopstales.github.io/home/k3s-helm-controller/</id>
             
@@ -181,8 +848,8 @@ spec:
                 <link href="https://devopstales.github.io/cloud/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
                 <link href="https://devopstales.github.io/cloud/k8s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K8S with CRI-O and kadalu" />
                 <link href="https://devopstales.github.io/home/k8s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K8S with CRI-O and kadalu" />
-                <link href="https://devopstales.github.io/cloud/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
                 <link href="https://devopstales.github.io/home/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
+                <link href="https://devopstales.github.io/cloud/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
             
                 <id>https://devopstales.github.io/home/k3s-crio/</id>
             
@@ -368,8 +1035,8 @@ spec:
             <link href="https://devopstales.github.io/home/k3s-fcos/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
-                <link href="https://devopstales.github.io/home/fcos-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Fedora CoreOS as a VM" />
                 <link href="https://devopstales.github.io/cloud/fcos-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Fedora CoreOS as a VM" />
+                <link href="https://devopstales.github.io/home/fcos-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Fedora CoreOS as a VM" />
                 <link href="https://devopstales.github.io/home/k8s-longhorn/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes project longhorn" />
                 <link href="https://devopstales.github.io/cloud/k8s-longhorn/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes project longhorn" />
             
@@ -453,8 +1120,8 @@ curl -sfL https://get.k3s.io | sh -
                 <link href="https://devopstales.github.io/cloud/k8s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K8S with CRI-O and kadalu" />
                 <link href="https://devopstales.github.io/cloud/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
                 <link href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
-                <link href="https://devopstales.github.io/home/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
                 <link href="https://devopstales.github.io/cloud/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
+                <link href="https://devopstales.github.io/home/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
             
                 <id>https://devopstales.github.io/home/k8s-crio/</id>
             
@@ -475,26 +1142,28 @@ curl -sfL https://get.k3s.io | sh -
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -802,8 +1471,8 @@ systemctl restart NetworkManager
                 <link href="https://devopstales.github.io/cloud/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
                 <link href="https://devopstales.github.io/home/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
                 <link href="https://devopstales.github.io/cloud/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
-                <link href="https://devopstales.github.io/home/k8s-longhorn/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes project longhorn" />
                 <link href="https://devopstales.github.io/cloud/k8s-longhorn/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes project longhorn" />
+                <link href="https://devopstales.github.io/home/k8s-longhorn/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes project longhorn" />
             
                 <id>https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/</id>
             
@@ -824,26 +1493,28 @@ systemctl restart NetworkManager
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -1082,8 +1753,8 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
             <link href="https://devopstales.github.io/home/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
-                <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/cloud/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/home/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/cloud/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
             
@@ -1152,11 +1823,11 @@ curl -k -H &quot;Authorization: Bearer `oc serviceaccounts get-token asb-client`
             <title type="html"><![CDATA[How to fix cluster-monitoring-operator in OpenShift 3.11]]></title>
             <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/cloud/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/home/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/cloud/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/cloud/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
-                <link href="https://devopstales.github.io/cloud/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/home/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/cloud/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
             
                 <id>https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/</id>
             
@@ -1231,8 +1902,8 @@ oc delete statefulset/prometheus-k8s
             
                 <link href="https://devopstales.github.io/home/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/cloud/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
-                <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/cloud/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
                 <link href="https://devopstales.github.io/cloud/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
             
                 <id>https://devopstales.github.io/home/how-to-fix-registry-console-ui-in-openshift-3-11/</id>
@@ -1518,10 +2189,10 @@ spec:
             <link href="https://devopstales.github.io/home/openshift-auto-approval-csr/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-auto-approval-csr/?utm_source=atom_feed" rel="related" type="text/html" title="How to Enable Auto Approval of CSR in Openshift v3.11" />
-                <link href="https://devopstales.github.io/cloud/openshift-secondary-router/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift secondary route" />
                 <link href="https://devopstales.github.io/home/openshift-secondary-router/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift secondary route" />
-                <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
+                <link href="https://devopstales.github.io/cloud/openshift-secondary-router/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift secondary route" />
                 <link href="https://devopstales.github.io/cloud/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
+                <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
             
                 <id>https://devopstales.github.io/home/openshift-auto-approval-csr/</id>
             
@@ -1596,10 +2267,10 @@ oc get csr -o name | xargs oc adm certificate approve
             <link href="https://devopstales.github.io/home/k8s-install-openebs/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
-                <link href="https://devopstales.github.io/home/k8s-kubeadm-ha/?utm_source=atom_feed" rel="related" type="text/html" title="How to install kubernetes with kubeadm in HA mode" />
                 <link href="https://devopstales.github.io/cloud/k8s-kubeadm-ha/?utm_source=atom_feed" rel="related" type="text/html" title="How to install kubernetes with kubeadm in HA mode" />
-                <link href="https://devopstales.github.io/cloud/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+                <link href="https://devopstales.github.io/home/k8s-kubeadm-ha/?utm_source=atom_feed" rel="related" type="text/html" title="How to install kubernetes with kubeadm in HA mode" />
                 <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+                <link href="https://devopstales.github.io/cloud/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
             
                 <id>https://devopstales.github.io/home/k8s-install-openebs/</id>
             
@@ -1620,26 +2291,28 @@ oc get csr -o name | xargs oc adm certificate approve
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -1959,8 +2632,8 @@ OIDC JWKs URL = https://keycloak.mydomain.intra/auth/realms/ssl-realm/protocol/o
                 <link href="https://devopstales.github.io/linux/chef-first-cookbook/?utm_source=atom_feed" rel="related" type="text/html" title="How to create your first Chef Cookbook" />
                 <link href="https://devopstales.github.io/home/chef-server-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install  Chef server" />
                 <link href="https://devopstales.github.io/linux/chef-server-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install  Chef server" />
-                <link href="https://devopstales.github.io/home/ansible-k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Kubernetes" />
                 <link href="https://devopstales.github.io/cloud/ansible-k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Kubernetes" />
+                <link href="https://devopstales.github.io/home/ansible-k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Kubernetes" />
             
                 <id>https://devopstales.github.io/home/chef-first-cookbook/</id>
             
@@ -2108,10 +2781,10 @@ knife cookbook list
             <link href="https://devopstales.github.io/home/chef-server-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/chef-server-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install  Chef server" />
-                <link href="https://devopstales.github.io/home/ansible-k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Kubernetes" />
                 <link href="https://devopstales.github.io/cloud/ansible-k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Kubernetes" />
-                <link href="https://devopstales.github.io/cloud/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
+                <link href="https://devopstales.github.io/home/ansible-k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Kubernetes" />
                 <link href="https://devopstales.github.io/home/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
+                <link href="https://devopstales.github.io/cloud/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
             
                 <id>https://devopstales.github.io/home/chef-server-install/</id>
             
@@ -2223,8 +2896,8 @@ knife client list
                 <link href="https://devopstales.github.io/cloud/k8s-kubeadm-ha/?utm_source=atom_feed" rel="related" type="text/html" title="How to install kubernetes with kubeadm in HA mode" />
                 <link href="https://devopstales.github.io/cloud/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
                 <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
-                <link href="https://devopstales.github.io/home/k8s-local-pv/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
                 <link href="https://devopstales.github.io/cloud/k8s-local-pv/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
+                <link href="https://devopstales.github.io/home/k8s-local-pv/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
             
                 <id>https://devopstales.github.io/home/k8s-kubeadm-ha/</id>
             
@@ -2245,26 +2918,28 @@ knife client list
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -2331,7 +3006,8 @@ sysctl --system
 
 <h3 id="install-kubeadm">Install kubeadm</h3>
 
-<pre><code>[kubernetes]
+<pre><code>cat &lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
 name=Kubernetes
 baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
 enabled=1
@@ -2759,8 +3435,8 @@ systemctl restart kubelet
             <link href="https://devopstales.github.io/home/photon_basics/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/photon_basics/?utm_source=atom_feed" rel="related" type="text/html" title="PhotonOS Basics" />
-                <link href="https://devopstales.github.io/cloud/protonos_vagrant_box/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Vagrant box?" />
                 <link href="https://devopstales.github.io/home/protonos_vagrant_box/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Vagrant box?" />
+                <link href="https://devopstales.github.io/cloud/protonos_vagrant_box/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Vagrant box?" />
             
                 <id>https://devopstales.github.io/home/photon_basics/</id>
             
@@ -3182,10 +3858,10 @@ INFO You can now run 'crc console' and use these credentials to access the OpenS
             <link href="https://devopstales.github.io/home/ceph_backup_benji/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/ceph_backup_benji/?utm_source=atom_feed" rel="related" type="text/html" title="CEPH backup with Benji" />
-                <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
-                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+                <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/cloud/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
             
                 <id>https://devopstales.github.io/home/ceph_backup_benji/</id>
             
@@ -3550,10 +4226,10 @@ sudo -iu postgres pgbackrest --stanza=postgresql1 restore
             <link href="https://devopstales.github.io/home/pgbackrest_backup_server/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/pgbackrest_backup_server/?utm_source=atom_feed" rel="related" type="text/html" title="pgBackRest Backup server" />
-                <link href="https://devopstales.github.io/home/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
                 <link href="https://devopstales.github.io/linux/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
-                <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
+                <link href="https://devopstales.github.io/home/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
                 <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
+                <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
             
                 <id>https://devopstales.github.io/home/pgbackrest_backup_server/</id>
             
@@ -3690,8 +4366,8 @@ sudo -iu postgres pgbackrest --stanza=postgresql1 restore
             <link href="https://devopstales.github.io/home/postgresql_pgbackrest/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/postgresql_pgbackrest/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL backup with pgBackRest" />
-                <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
                 <link href="https://devopstales.github.io/home/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
+                <link href="https://devopstales.github.io/linux/postgresql_replication/?utm_source=atom_feed" rel="related" type="text/html" title="PostgreSQL Streamin replication" />
                 <link href="https://devopstales.github.io/home/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
                 <link href="https://devopstales.github.io/linux/install-postgresql/?utm_source=atom_feed" rel="related" type="text/html" title="Install PostgreSQL" />
             
@@ -4151,26 +4827,28 @@ sudo -u postgres psql -x -c &quot;select * from pg_stat_replication&quot;
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -4389,26 +5067,28 @@ kubectl -n newprom cp ./* prometheus:/prometheus/
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -4544,26 +5224,28 @@ testpvc   Bound     pvc-145c785e-ab83-11e7-9432-4201ac1fd019   50Gi       RWX   
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -4688,26 +5370,28 @@ EOF
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -4957,26 +5641,28 @@ spec:
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -5130,8 +5816,8 @@ roleRef:
             <link href="https://devopstales.github.io/home/helm3-loki/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/helm3-loki/?utm_source=atom_feed" rel="related" type="text/html" title="Install Grafana Loki with Helm3" />
-                <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
                 <link href="https://devopstales.github.io/cloud/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
+                <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
                 <link href="https://devopstales.github.io/cloud/k8s-tillerless-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Tillerless helm2 install" />
                 <link href="https://devopstales.github.io/home/k8s-tillerless-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Tillerless helm2 install" />
             
@@ -5202,10 +5888,10 @@ kubectl port-forward -n loki-stack service/grafana 3000:80
             <link href="https://devopstales.github.io/home/k8s-velero-backup/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-velero-backup/?utm_source=atom_feed" rel="related" type="text/html" title="Backup your Kubernetes Cluster with Velero" />
-                <link href="https://devopstales.github.io/cloud/k8s-cert-manager/?utm_source=atom_feed" rel="related" type="text/html" title="Install cert-manager for Kubernetes" />
                 <link href="https://devopstales.github.io/home/k8s-cert-manager/?utm_source=atom_feed" rel="related" type="text/html" title="Install cert-manager for Kubernetes" />
-                <link href="https://devopstales.github.io/home/kind-install/?utm_source=atom_feed" rel="related" type="text/html" title="Starting local Kubernetes using kind" />
+                <link href="https://devopstales.github.io/cloud/k8s-cert-manager/?utm_source=atom_feed" rel="related" type="text/html" title="Install cert-manager for Kubernetes" />
                 <link href="https://devopstales.github.io/cloud/kind-install/?utm_source=atom_feed" rel="related" type="text/html" title="Starting local Kubernetes using kind" />
+                <link href="https://devopstales.github.io/home/kind-install/?utm_source=atom_feed" rel="related" type="text/html" title="Starting local Kubernetes using kind" />
             
                 <id>https://devopstales.github.io/home/k8s-velero-backup/</id>
             
@@ -5226,26 +5912,28 @@ kubectl port-forward -n loki-stack service/grafana 3000:80
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -5434,26 +6122,28 @@ kubectl get po -n nginx-example
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -5601,8 +6291,8 @@ Events:
                 <link href="https://devopstales.github.io/cloud/openshift-secondary-router/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift secondary route" />
                 <link href="https://devopstales.github.io/cloud/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
                 <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
-                <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
+                <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
             
                 <id>https://devopstales.github.io/home/openshift-secondary-router/</id>
             
@@ -5686,8 +6376,8 @@ oc label namespace test router=public
                 <link href="https://devopstales.github.io/cloud/kind-install/?utm_source=atom_feed" rel="related" type="text/html" title="Starting local Kubernetes using kind" />
                 <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
                 <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
-                <link href="https://devopstales.github.io/cloud/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
                 <link href="https://devopstales.github.io/home/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
+                <link href="https://devopstales.github.io/cloud/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
             
                 <id>https://devopstales.github.io/home/kind-install/</id>
             
@@ -6895,10 +7585,10 @@ tailf /var/log/squid/access.log
             <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
-                <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
-                <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
+                <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
+                <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
             
                 <id>https://devopstales.github.io/home/openshift-gitlab-helm/</id>
             
@@ -7222,8 +7912,8 @@ spec:
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-error/?utm_source=atom_feed" rel="related" type="text/html" title="Solution for: Proxmox backup error due to iothread" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
-                <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
+                <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
             
                 <id>https://devopstales.github.io/home/proxmox-backup-error/</id>
             
@@ -7570,10 +8260,10 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
             <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
-                <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
-                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+                <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/cloud/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
             
                 <id>https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/</id>
             
@@ -7596,26 +8286,28 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -7743,10 +8435,10 @@ raw-block-pvc   Bound     pvc-fd66b4d6-757d-22e9-8f9e-4f86e2356a59
             <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
-                <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
-                <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
+                <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/cloud/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
+                <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
             
                 <id>https://devopstales.github.io/home/who-mapping-rbd-device/</id>
             
@@ -7847,8 +8539,8 @@ demo1-backup  demo-project-223110                      READY
             <link href="https://devopstales.github.io/home/ansible-k8s-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/ansible-k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Kubernetes" />
-                <link href="https://devopstales.github.io/home/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
                 <link href="https://devopstales.github.io/cloud/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
+                <link href="https://devopstales.github.io/home/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
                 <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
             
@@ -7871,26 +8563,28 @@ demo1-backup  demo-project-223110                      READY
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -8400,10 +9094,10 @@ endpoint = http://localhost/api
             <link href="https://devopstales.github.io/home/openshift-restrict-access/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-restrict-access/?utm_source=atom_feed" rel="related" type="text/html" title="Restrict access to OpenShift routes by IP address" />
-                <link href="https://devopstales.github.io/cloud/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
-                <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
+                <link href="https://devopstales.github.io/cloud/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/cloud/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
+                <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
             
                 <id>https://devopstales.github.io/home/openshift-restrict-access/</id>
             
@@ -8600,8 +9294,8 @@ curl -XGET 'localhost:9200/_snapshot/my_backup/_all?pretty'
             <link href="https://devopstales.github.io/home/k8s-metallb/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-metallb/?utm_source=atom_feed" rel="related" type="text/html" title="Install MetalLB load balancer for Kubernetes" />
-                <link href="https://devopstales.github.io/home/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
                 <link href="https://devopstales.github.io/cloud/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
+                <link href="https://devopstales.github.io/home/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
                 <link href="https://devopstales.github.io/home/k8s-tillerless-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Tillerless helm2 install" />
                 <link href="https://devopstales.github.io/cloud/k8s-tillerless-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Tillerless helm2 install" />
             
@@ -8624,26 +9318,28 @@ curl -XGET 'localhost:9200/_snapshot/my_backup/_all?pretty'
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -8831,10 +9527,10 @@ s3cmd setpolicy ./bucket-policy.json s3://devopstales
             <link href="https://devopstales.github.io/home/k8s-tillerless-helm/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-tillerless-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Tillerless helm2 install" />
-                <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
                 <link href="https://devopstales.github.io/home/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
-                <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
+                <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
                 <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
+                <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
             
                 <id>https://devopstales.github.io/home/k8s-tillerless-helm/</id>
             
@@ -8855,26 +9551,28 @@ s3cmd setpolicy ./bucket-policy.json s3://devopstales
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -8928,10 +9626,10 @@ export HELM_HOST=localhost:44134
             <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
-                <link href="https://devopstales.github.io/home/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
                 <link href="https://devopstales.github.io/cloud/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
-                <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+                <link href="https://devopstales.github.io/home/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
                 <link href="https://devopstales.github.io/cloud/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+                <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
             
                 <id>https://devopstales.github.io/home/k8s-ceph/</id>
             
@@ -8952,26 +9650,28 @@ export HELM_HOST=localhost:44134
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -9550,8 +10250,8 @@ firewall-cmd --reload
                 <link href="https://devopstales.github.io/cloud/k8s-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes nginx ingress with helm" />
                 <link href="https://devopstales.github.io/home/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
                 <link href="https://devopstales.github.io/cloud/k8s-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
-                <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
                 <link href="https://devopstales.github.io/home/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
+                <link href="https://devopstales.github.io/cloud/k8s-copy-secret/?utm_source=atom_feed" rel="related" type="text/html" title="Copying Kubernetes Secrets Between Namespaces" />
             
                 <id>https://devopstales.github.io/home/k8s-nginx-ingress/</id>
             
@@ -9572,26 +10272,28 @@ firewall-cmd --reload
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -9745,26 +10447,28 @@ token:      XXXXXXXXXXXXXXXXXXXXXXXXXX
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -9862,8 +10566,8 @@ kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/62e44c867a2846
             <link href="https://devopstales.github.io/home/ansible-operator-overview/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
-                <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
+                <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
                 <link href="https://devopstales.github.io/cloud/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
             
@@ -10247,10 +10951,10 @@ api_url = https://sso.devopstales.intra/auth/realms/gitlab/protocol/openid-conne
             <link href="https://devopstales.github.io/home/openshift-add-node/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
-                <link href="https://devopstales.github.io/home/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
                 <link href="https://devopstales.github.io/cloud/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
-                <link href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
+                <link href="https://devopstales.github.io/home/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
                 <link href="https://devopstales.github.io/home/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
+                <link href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
             
                 <id>https://devopstales.github.io/home/openshift-add-node/</id>
             
@@ -12756,8 +13460,8 @@ service nagios restart
             <link href="https://devopstales.github.io/home/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-hostalreadyclaimed/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Error: HostAlreadyClaimed" />
-                <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
+                <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/cloud/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
             
@@ -12973,8 +13677,8 @@ hammer content-view version promote \
             <link href="https://devopstales.github.io/home/awx-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/awx-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX" />
-                <link href="https://devopstales.github.io/linux/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
                 <link href="https://devopstales.github.io/home/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
+                <link href="https://devopstales.github.io/linux/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
                 <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
             
@@ -14437,8 +15141,8 @@ Then the poller will ativated.
             <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
-                <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/cloud/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
+                <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/cloud/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
             
@@ -14553,8 +15257,8 @@ oc deploy gitlab-runner-template.yml
             <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
-                <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
+                <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
                 <link href="https://devopstales.github.io/cloud/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
             
@@ -14908,6 +15612,8 @@ ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/redeplo
 <li>The name of the virtual machine must match the name of the nodes for the OpenShift cluster.</li>
 </ul>
 
+<p><img src="/img/include/k8s-vmware.png" alt="Example image" /></p>
+
 <h3 id="set-up-the-govc-environment">Set up the GOVC environment:</h3>
 
 <pre><code># on deployer
@@ -14920,11 +15626,80 @@ echo &quot;export GOVC_USERNAME='vCenter User'&quot; &gt;&gt; /etc/profile
 echo &quot;export GOVC_PASSWORD='vCenter Password'&quot; &gt;&gt; /etc/profile
 echo &quot;export GOVC_INSECURE=1&quot; &gt;&gt; /etc/profile
 source /etc/profile
-
-govc vm.info &lt;vm&gt;
-govc ls /Datacenter/vm/&lt;vm-folder-name&gt;
-govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='VM Path'
 </code></pre>
+
+<p>Add <code>disk.enableUUID=1</code> for all VM:</p>
+
+<pre><code>govc vm.info &lt;vm&gt;
+govc ls /Datacenter/kubernetes/&lt;vm-folder-name&gt;
+# example:
+govc ls /Datacenter/kubernetes/okd-01
+
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='VM Path'
+# example:
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='/datacenter/kubernetes/okd-01/okd-m01'
+</code></pre>
+
+<p>VM Hardware should be at version 15 or higher. Upgrade if needed:</p>
+
+<pre><code>govc vm.option.info '/datacenter/kubernetes/okd-01/okd-m01' | grep HwVersion
+
+govc vm.upgrade -version=15 -vm '/datacenter/kubernetes/okd-01/okd-m01'
+</code></pre>
+
+<h3 id="create-the-required-roles">Create the required Roles</h3>
+
+<ul>
+<li>Navigate in the vSphere Client - Menu &gt; Administration &gt; Roles</li>
+<li>Add a new Role and select the permissions required. Repeat for each role.</li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th align="center">Roles</th>
+<th align="center">Privileges</th>
+<th align="center">Entities</th>
+<th align="center">Propagate to Children</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td align="center">vcp-manage-okd-node-vms</td>
+<td align="center">Resource.AssignVMToPoolVirtualMachine.Config.AddExistingDisk, VirtualMachine.Config.AddNewDisk, VirtualMachine.Config.AddRemoveDevice, VirtualMachine.Config.RemoveDisk, VirtualMachine.Config.SettingsVirtualMachine.Inventory.Create, VirtualMachine.Inventory.Delete</td>
+<td align="center">Cluster, Hosts, VM Folder</td>
+<td align="center">Yes</td>
+</tr>
+
+<tr>
+<td align="center">vcp-manage-okd-volumes</td>
+<td align="center">Datastore.AllocateSpace, Datastore.FileManagement (Low level file operations)</td>
+<td align="center">Datastore</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">vcp-view-okd-spbm-profile</td>
+<td align="center">StorageProfile.View (Profile-driven storage view)</td>
+<td align="center">vCenter</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">Read-only (pre-existing default role)</td>
+<td align="center">System.Anonymous, System.Read, System.View</td>
+<td align="center">Datacenter, Datastore Cluster, Datastore Storage Folder</td>
+<td align="center">No</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="create-a-service-account">Create a service account</h3>
+
+<ul>
+<li>Create a vsphere user, or add a domain user, to provide access and assign the new roles to.</li>
+</ul>
 
 <h3 id="configure-ansible-installer">Configure ansible installer</h3>
 
@@ -15148,8 +15923,8 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
             <link href="https://devopstales.github.io/home/k8s-helm-rbac/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/k8s-helm-rbac/?utm_source=atom_feed" rel="related" type="text/html" title="RBAC permissions for Helm" />
-                <link href="https://devopstales.github.io/home/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
                 <link href="https://devopstales.github.io/cloud/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
+                <link href="https://devopstales.github.io/home/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
             
                 <id>https://devopstales.github.io/home/k8s-helm-rbac/</id>
             
@@ -15170,26 +15945,28 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
 <li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
 <li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
 <!-- * Part3b: k8s-multiple-nginx-ingress -->
-<!-- * Part3c: k8s-traefik-ingress --></li>
+<!-- * Part3c: k8s-contour-ingress --></li>
 <li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
 <!-- local folder (+ autoprovisioning ) --></li>
 <li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
 <li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
 <li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a>
-<!-- CEPH in Kubernetes with rook --></li>
-<li>Part5d: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
-<!-- kubernetes vMware --></li>
-<li>Part6: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
-<li>Part7: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-<li>Part8: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-<li>Part9: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-<li>Part10: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
 <!-- istio-install.md --></li>
-<li>Part11: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
-<!-- prometheus operator + grafana operator -->
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog --></li>
 </ul>
@@ -15514,8 +16291,8 @@ master-restart controllers
             <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
-                <link href="https://devopstales.github.io/cloud/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
                 <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
+                <link href="https://devopstales.github.io/cloud/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
                 <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
             
@@ -15699,10 +16476,10 @@ master-restart controllers
             <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
-                <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/cloud/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
-                <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
+                <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
+                <link href="https://devopstales.github.io/cloud/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
             
                 <id>https://devopstales.github.io/home/openshift-ldap/</id>
             
@@ -17307,8 +18084,8 @@ oc delete  identity htpasswd_auth:user
                 <link href="https://devopstales.github.io/home/install-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ceph cluster" />
                 <link href="https://devopstales.github.io/cloud/install-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ceph cluster" />
                 <link href="https://devopstales.github.io/cloud/ceph-block-device/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph Block Device" />
-                <link href="https://devopstales.github.io/cloud/ceph-cephfs/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph CephFS" />
                 <link href="https://devopstales.github.io/home/ceph-cephfs/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph CephFS" />
+                <link href="https://devopstales.github.io/cloud/ceph-cephfs/?utm_source=atom_feed" rel="related" type="text/html" title="Use Ceph CephFS" />
             
                 <id>https://devopstales.github.io/home/ceph-block-device/</id>
             
@@ -17520,8 +18297,8 @@ kubectl config use-context work-dev
             <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
-                <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
+                <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
             
@@ -17572,11 +18349,11 @@ pve-zsync sync --source 107 --dest 192.168.10.50:tank --verbose --maxsnap 14 --n
             <title type="html"><![CDATA[Proxmox backup with sanoid]]></title>
             <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
+                <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
-                <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
+                <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
             
                 <id>https://devopstales.github.io/home/proxmox-backup-sanoid/</id>
             
@@ -17666,10 +18443,10 @@ nano /etc/crontab
             <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
-                <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
                 <link href="https://devopstales.github.io/cloud/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
-                <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
+                <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
+                <link href="https://devopstales.github.io/cloud/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
             
                 <id>https://devopstales.github.io/home/proxmox-backup-znapzend/</id>
             

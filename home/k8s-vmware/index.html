@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<script type="application/ld+json">
+{
+    "@context" : "http://schema.org",
+    "@type" : "BlogPosting",
+    "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "https:\/\/devopstales.github.io\/"
+    },
+    "articleSection" : "Home",
+    "name" : "Configure K8S vSphere Cloud Provider",
+    "headline" : "Configure K8S vSphere Cloud Provider",
+    "description" : "\x3cp\x3eIn this post I will show you how can you use vmware for persistent storagi on K8S.\x3c\/p\x3e",
+    "inLanguage" : "en-US",
+    "author" : "Blaiserman",
+    "creator" : "Blaiserman",
+    "publisher": "Blaiserman",
+    "accountablePerson" : "Blaiserman",
+    "copyrightHolder" : "Blaiserman",
+    "copyrightYear" : "2020",
+    "datePublished": "2020-10-14",
+    "dateModified" : "2020-10-14",
+    "url" : "https:\/\/devopstales.github.io\/home\/k8s-vmware\/",
+    "wordCount" : "712",
+    "keywords" : [ "kubernetes deployment", "vmware", "Blog" ]
+    
+}
+</script>
+<meta name="msvalidate.01" content="4E830BF9C048B3A327492699A61E741E" />
+<meta name="yandex-verification" content="96d0b6ba6c7aa697" />
+
+	<title>Configure K8S vSphere Cloud Provider - devopstales</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<meta property="og:title" content="Configure K8S vSphere Cloud Provider" />
+<meta property="og:description" content="In this post I will show you how can you use vmware for persistent storagi on K8S." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://devopstales.github.io/home/k8s-vmware/" />
+<meta property="article:published_time" content="2020-10-14T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-10-14T00:00:00+00:00" />
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/style.css">
+	
+	<link rel="shortcut icon" href="https://devopstales.github.io/favicon.ico">
+		
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-135626110-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+				<div class="logo__title">devopstales</div>
+				<div class="logo__tagline">Blog about dev and ops stuff</div>
+			</a>
+		</div>
+		
+<nav class="menu">
+	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
+		<span class="menu__btn-title" tabindex="-1">Menu</span>
+	</button>
+	<ul class="menu__list">
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">home</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/linux/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Linux</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/windows/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Windows</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/monitoring/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">monitoring</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/cloud/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">cloud</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/sso/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">sso</span>
+				
+			</a>
+		</li>
+	</ul>
+</nav>
+
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Configure K8S vSphere Cloud Provider</h1>
+			<div class="post__meta meta">
+<div class="meta__item-datetime meta__item">
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2020-10-14T00:00:00Z">October 14, 2020</time>
+</div>
+</div>
+		</header>
+		<div class="content post__content clearfix">
+			<p>In this post I will show you how can you use vmware for persistent storagi on K8S.</p>
+
+<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
+
+<ul>
+<li>Part1a: <a href="../../cloud/ansible-k8s-install/">Install K8S with ansible</a></li>
+<li>Part1b: <a href="../../cloud/k8s-install/">Install K8S with kubeadm</a></li>
+<li>Part1c: <a href="../../cloud/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb/">Intall metal-lb with K8S</a></li>
+<li>Part2: <a href="../../cloud/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+<li>Part3: <a href="../../cloud/k8s-nginx-ingress/">Install Nginx ingress to K8S</a>
+<!-- * Part3b: k8s-multiple-nginx-ingress -->
+<!-- * Part3c: k8s-contour-ingress --></li>
+<li>Part4: <a href="../../cloud/k8s-cert-manager/">Install cert-manager to K8S</a>
+<!-- local folder (+ autoprovisioning ) --></li>
+<li>Part5a: <a href="../../cloud/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+<li>Part5b: <a href="../../cloud/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+<li>Part5c: <a href="../../cloud/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+<li>Part5d: <a href="../../cloud/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+<li>Part5e: <a href="../../cloud/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+<li>Part5f: <a href="../../cloud/kk8s-vmware/">vSphere persistent storage for K8S</a>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... --></li>
+<li>Part6a: <a href="../../cloud/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+<li>Part6b: <a href="../../cloud/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+<li>Part7: <a href="../../cloud/k8s-helm-rbac/">Use Helm with K8S</a></li>
+<li>Part8: <a href="../../cloud/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+<li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+<li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+<li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a>
+<!-- istio-install.md --></li>
+<li>Part12: <a href="../../cloud/k8s-velero-backup/">Velero Backup for K8S</a>
+<!-- TICSK stack monitoring -->
+<!-- grafana loki -->
+<!-- logs to graylog --></li>
+</ul>
+
+<h3 id="vsphere-configuration">vSphere Configuration</h3>
+
+<ul>
+<li>Create a folder for all the VMs in vCenter
+
+<ul>
+<li>In the navigator, select the data center</li>
+<li>Right-click and select the menu option to create the folder.</li>
+<li>Select: All vCenter Actions &gt; New VM and Template Folder.</li>
+<li>Move K8S vms to this folder</li>
+</ul></li>
+<li>The name of the virtual machine must match the name of the nodes for the K8S cluster.</li>
+</ul>
+
+<p><img src="https://devopstales.github.io/img/include/k8s-vmware.png" alt="Example image" /></p>
+
+<h3 id="set-up-the-govc-environment">Set up the GOVC environment:</h3>
+
+<pre><code># on deployer
+curl -LO https://github.com/vmware/govmomi/releases/download/v0.20.0/govc_linux_amd64.gz
+gunzip govc_linux_amd64.gz
+chmod +x govc_linux_amd64
+cp govc_linux_amd64 /usr/bin/govc
+echo &quot;export GOVC_URL='vCenter IP OR FQDN'&quot; &gt;&gt; /etc/profile
+echo &quot;export GOVC_USERNAME='vCenter User'&quot; &gt;&gt; /etc/profile
+echo &quot;export GOVC_PASSWORD='vCenter Password'&quot; &gt;&gt; /etc/profile
+echo &quot;export GOVC_INSECURE=1&quot; &gt;&gt; /etc/profile
+source /etc/profile
+</code></pre>
+
+<p>Add <code>disk.enableUUID=1</code> for all VM:</p>
+
+<pre><code>govc vm.info &lt;vm&gt;
+govc ls /Datacenter/kubernetes/&lt;vm-folder-name&gt;
+# example:
+govc ls /Datacenter/kubernetes/k8s-01
+
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='VM Path'
+# example:
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='/datacenter/kubernetes/k8s-01/k8s-m01'
+</code></pre>
+
+<p>VM Hardware should be at version 15 or higher. Upgrade if needed:</p>
+
+<pre><code>govc vm.option.info '/datacenter/kubernetes/k8s-01/k8s-m01' | grep HwVersion
+
+govc vm.upgrade -version=15 -vm '/datacenter/kubernetes/k8s-01/k8s-m01'
+</code></pre>
+
+<h3 id="create-the-required-roles">Create the required Roles</h3>
+
+<ul>
+<li>Navigate in the vSphere Client - Menu &gt; Administration &gt; Roles</li>
+<li>Add a new Role and select the permissions required. Repeat for each role.</li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th align="center">Roles</th>
+<th align="center">Privileges</th>
+<th align="center">Entities</th>
+<th align="center">Propagate to Children</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td align="center">vcp-manage-k8s-node-vms</td>
+<td align="center">Resource.AssignVMToPoolVirtualMachine.Config.AddExistingDisk, VirtualMachine.Config.AddNewDisk, VirtualMachine.Config.AddRemoveDevice, VirtualMachine.Config.RemoveDisk, VirtualMachine.Config.SettingsVirtualMachine.Inventory.Create, VirtualMachine.Inventory.Delete</td>
+<td align="center">Cluster, Hosts, VM Folder</td>
+<td align="center">Yes</td>
+</tr>
+
+<tr>
+<td align="center">vcp-manage-k8s-volumes</td>
+<td align="center">Datastore.AllocateSpace, Datastore.FileManagement (Low level file operations)</td>
+<td align="center">Datastore</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">vcp-view-k8s-spbm-profile</td>
+<td align="center">StorageProfile.View (Profile-driven storage view)</td>
+<td align="center">vCenter</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">Read-only (pre-existing default role)</td>
+<td align="center">System.Anonymous, System.Read, System.View</td>
+<td align="center">Datacenter, Datastore Cluster, Datastore Storage Folder</td>
+<td align="center">No</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="create-a-service-account">Create a service account</h3>
+
+<ul>
+<li>Create a vsphere user, or add a domain user, to provide access and assign the new roles to.</li>
+</ul>
+
+<h3 id="create-vsphere-conf">Create vsphere.conf</h3>
+
+<p>Create the vSphere configuration file in /etc/kubernetes/vcp/vsphere.conf - you’ll need to create the folder.</p>
+
+<pre><code>nano /etc/kubernetes/vcp/vsphere.conf
+[Global]
+user = &quot;k8s-user@vsphere.local&quot;
+password = &quot;password for k8s-user&quot;
+port = &quot;443&quot;
+insecure-flag = &quot;1&quot;
+
+[VirtualCenter &quot;10.0.1.200&quot;]
+datacenters = &quot;DC-1&quot;
+
+[Workspace]
+server = &quot;10.0.1.200&quot;
+datacenter = &quot;DC-1&quot;
+default-datastore = &quot;vsanDatastore&quot;
+resourcepool-path = &quot;ClusterNameHere/Resources&quot;
+folder = &quot;kubernetes&quot;
+
+[Disk]
+scsicontrollertype = pvscsi
+</code></pre>
+
+<h3 id="modify-the-kubelet-service">Modify the kubelet service</h3>
+
+<p>On master:</p>
+
+<pre><code>nano /etc/systemd/system/kubelet.service
+[Service]
+...
+ExecStart=/usr/bin/docker run \
+...
+        /hyperkube kubelet \
+...
+--cloud-provider=vsphere --cloud-config=/etc/kubernetes/vsphere.conf    
+</code></pre>
+
+<p>On worker:</p>
+
+<pre><code>nano /etc/systemd/system/kubelet.service
+[Service]
+...
+ExecStart=/usr/bin/docker run \
+...
+        /hyperkube kubelet \
+...
+--cloud-provider=vsphere  
+</code></pre>
+
+<h3 id="modify-container-manifests">Modify container manifests</h3>
+
+<p>Add following flags to the kubelet service configuration (usually in the systemd config file), as well as the controller-manager and api-server container manifest files on the master node (usually in /etc/kubernetes/manifests).</p>
+
+<pre><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+...
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+...
+    - --cloud-provider=vsphere
+    - --cloud-config=/etc/kubernetes/vsphere.conf
+    volumeMounts:
+    - mountPath: /etc/kubernetes/vcp
+      name: vcp
+      readOnly: true
+...
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/vcp
+      type: DirectoryOrCreate
+    name: vcp
+</code></pre>
+
+<p>Restart the services.</p>
+
+<pre><code>systemctl restart kubelet docker
+</code></pre>
+
+<h3 id="add-providerid">Add providerID</h3>
+
+<pre><code>kubectl get nodes -o json | jq '.items[]|[.metadata.name, .spec.providerID, .status.nodeInfo.systemUUID]'
+
+nano k8s-vmware-pacher.sh
+DATACENTER='&lt;Datacenter&gt;'
+FOLDER='&lt;vm-folder-name&gt;'
+for vm in $(govc ls /$DATACENTER/vm/$FOLDER ); do
+  MACHINE_INFO=$(govc vm.info -json -dc=$DATACENTER -vm.ipath=&quot;$vm&quot; -e=true)
+  # My VMs are created on vmware with upper case names, so I need to edit the names with awk
+  VM_NAME=$(jq -r ' .VirtualMachines[] | .Name' &lt;&lt;&lt; $MACHINE_INFO | awk '{print tolower($0)}')
+  # UUIDs come in lowercase, upper case then
+  VM_UUID=$( jq -r ' .VirtualMachines[] | .Config.Uuid' &lt;&lt;&lt; $MACHINE_INFO | awk '{print toupper($0)}')
+  echo &quot;Patching $VM_NAME with UUID:$VM_UUID&quot;
+  # This is done using dry-run to avoid possible mistakes, remove when you are confident you got everything right.
+  kubectl patch node $VM_NAME -p &quot;{\&quot;spec\&quot;:{\&quot;providerID\&quot;:\&quot;vsphere://$VM_UUID\&quot;}}&quot;
+done
+
+chmod +x openshift-vmware-pacher.sh
+./openshift-vmware-pacher.sh
+</code></pre>
+
+<h3 id="create-vsphere-storage-class">Create vSphere storage-class</h3>
+
+<pre><code>nano vmware-sc.yml
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: &quot;true&quot;
+  name: &quot;vsphere-standard&quot;
+provisioner: kubernetes.io/vsphere-volume
+parameters:
+    diskformat: zeroedthick
+    datastore: &quot;NFS&quot;
+reclaimPolicy: Delete
+
+kubectl aplay -f vmware-sc.yml
+</code></pre>
+		</div>
+	</article>
+</main>
+
+
+<nav class="post-nav flex">
+	<div class="post-nav__item post-nav__item--prev">
+		<a class="post-nav__link" href="https://devopstales.github.io/home/k8s-calico-ebpf/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Install k8s with calico&#39;s eBPF mode</p></a>
+	</div>
+</nav>
+
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script type="application/javascript">
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "devopstales" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+
+			</div>
+			<aside class="sidebar"><div class="widget-search widget">
+	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
+		<label>
+			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
+		</label>
+		<input class="widget-search__submit" type="submit" value="Search">
+		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
+	</form>
+</div>
+<div class="widget-recent widget">
+	<h4 class="widget__title">Recent Posts</h4>
+	<div class="widget__content">
+		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-vmware/">Configure K8S vSphere Cloud Provider</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-calico-ebpf/">Install k8s with calico&#39;s eBPF mode</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/install-unifi-controller/">How to setup Unifi Controller on Debian 10</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift-rbd-fsck/">How to fixing filesystem corruption on a Kubernetes Ceph RBD PersistentVolume</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k3s-helm-controller/">Install and use rancher helm-controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k3s-crio/">Install K3S with CRI-O and kadalu</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-crio/">Install K8S with CRI-O and kadalu</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/fcos-install/">Install Fedora CoreOS as a VM</a></li>
+		</ul>
+	</div>
+</div>
+<div class="widget-taglist widget">
+	<h4 class="widget__title">Tags</h4>
+	<div class="widget__content">
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="alerta">alerta</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="calico">calico</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="CentOS">CentOS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="docker">docker</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="docker-compose">docker-compose</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="elasticsearch">elasticsearch</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="fedora">fedora</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora-coreos/" title="Fedora CoreOS">Fedora CoreOS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="foreman">foreman</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="GCP">GCP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="Google Cloud Platform">Google Cloud Platform</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="Grafana">Grafana</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="helm-controller">helm-controller</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="httpd">httpd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="icinga">icinga</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="k8s">k8s</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="katello">katello</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="Logging">Logging</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="loki">loki</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="nextcloud">nextcloud</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="noSQL">noSQL</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="oauth2">oauth2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="openproject">openproject</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="opnsense">opnsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="Pfsense">Pfsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="postgresql">postgresql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="privacyidea">privacyidea</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/promatheus/" title="Promatheus">Promatheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="Prometheus">Prometheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="Rancher">Rancher</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="redmine">redmine</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="registry">registry</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="sonarqube">sonarqube</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="telegraf">telegraf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unify/" title="Unify">Unify</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vault/" title="vault">vault</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
+	</div>
+</div>
+<div class="widget-social widget">
+	<h4 class="widget-social__title widget__title">Social</h4>
+	<div class="widget-social__content widget__content">
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="Twitter" rel="noopener noreferrer" href="https://twitter.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-twitter" width="24" height="24" viewBox="0 0 384 312"><path d="m384 36.9c-14.1 6.3-29.3 10.5-45.2 12.4 16.3-9.7 28.8-25.2 34.6-43.6-15.2 9-32.1 15.6-50 19.1-14.4-15.2-34.9-24.8-57.5-24.8-43.5 0-78.8 35.3-78.8 78.8 0 6.2.7 12.2 2 17.9-65.5-3.3-123.5-34.6-162.4-82.3-6.7 11.6-10.6 25.2-10.6 39.6 0 27.3 13.9 51.4 35 65.6-12.9-.4-25.1-4-35.7-9.9v1c0 38.2 27.2 70 63.2 77.2-6.6 1.8-13.6 2.8-20.8 2.8-5.1 0-10-.5-14.8-1.4 10 31.3 39.1 54.1 73.6 54.7-27 21.1-60.9 33.7-97.8 33.7-6.4 0-12.6-.4-18.8-1.1 34.9 22.4 76.3 35.4 120.8 35.4 144.9 0 224.1-120 224.1-224.1 0-3.4-.1-6.8-.2-10.2 15.4-11.1 28.7-25 39.3-40.8z"/></svg>
+				<span>Twitter</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="GitHub" rel="noopener noreferrer" href="https://github.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-github" width="24" height="24" viewBox="0 0 384 374"><path d="m192 0c-106.1 0-192 85.8-192 191.7 0 84.7 55 156.6 131.3 181.9 9.6 1.8 13.1-4.2 13.1-9.2 0-4.6-.2-16.6-.3-32.6-53.4 11.6-64.7-25.7-64.7-25.7-8.7-22.1-21.3-28-21.3-28-17.4-11.9 1.3-11.6 1.3-11.6 19.3 1.4 29.4 19.8 29.4 19.8 17.1 29.3 44.9 20.8 55.9 15.9 1.7-12.4 6.7-20.8 12.2-25.6-42.6-4.8-87.5-21.3-87.5-94.8 0-20.9 7.5-38 19.8-51.4-2-4.9-8.6-24.3 1.9-50.7 0 0 16.1-5.2 52.8 19.7 15.3-4.2 31.7-6.4 48.1-6.5 16.3.1 32.7 2.2 48.1 6.5 36.7-24.8 52.8-19.7 52.8-19.7 10.5 26.4 3.9 45.9 1.9 50.7 12.3 13.4 19.7 30.5 19.7 51.4 0 73.7-44.9 89.9-87.7 94.6 6.9 5.9 13 17.6 13 35.5 0 25.6-.2 46.3-.2 52.6 0 5.1 3.5 11.1 13.2 9.2 76.2-25.5 131.2-97.3 131.2-182 0-105.9-86-191.7-192-191.7z"/></svg>
+				<span>GitHub</span>
+			</a>
+		</div>
+
+		
+	</div>
+</div>
+</aside>
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2020 devopstales.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+	</div>
+<script async defer src="https://devopstales.github.io/js/menu.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.6/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async></script>
+</body>
+</html>

@@ -26,7 +26,7 @@
     "datePublished": "2019-04-16",
     "dateModified" : "2019-04-16",
     "url" : "https:\/\/devopstales.github.io\/cloud\/openshift-vmware\/",
-    "wordCount" : "436",
+    "wordCount" : "573",
     "keywords" : [ "ansible", "openshift 3.11", "openshift okd", "openshift tutorial", "openshift container platform", "rad hat openshift", "vmware", "Blog" ]
     
 }
@@ -185,6 +185,8 @@ if (!doNotTrack) {
 <li>The name of the virtual machine must match the name of the nodes for the OpenShift cluster.</li>
 </ul>
 
+<p><img src="https://devopstales.github.io/img/include/k8s-vmware.png" alt="Example image" /></p>
+
 <h3 id="set-up-the-govc-environment">Set up the GOVC environment:</h3>
 
 <pre><code># on deployer
@@ -197,11 +199,80 @@ echo &quot;export GOVC_USERNAME='vCenter User'&quot; &gt;&gt; /etc/profile
 echo &quot;export GOVC_PASSWORD='vCenter Password'&quot; &gt;&gt; /etc/profile
 echo &quot;export GOVC_INSECURE=1&quot; &gt;&gt; /etc/profile
 source /etc/profile
-
-govc vm.info &lt;vm&gt;
-govc ls /Datacenter/vm/&lt;vm-folder-name&gt;
-govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='VM Path'
 </code></pre>
+
+<p>Add <code>disk.enableUUID=1</code> for all VM:</p>
+
+<pre><code>govc vm.info &lt;vm&gt;
+govc ls /Datacenter/kubernetes/&lt;vm-folder-name&gt;
+# example:
+govc ls /Datacenter/kubernetes/okd-01
+
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='VM Path'
+# example:
+govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='/datacenter/kubernetes/okd-01/okd-m01'
+</code></pre>
+
+<p>VM Hardware should be at version 15 or higher. Upgrade if needed:</p>
+
+<pre><code>govc vm.option.info '/datacenter/kubernetes/okd-01/okd-m01' | grep HwVersion
+
+govc vm.upgrade -version=15 -vm '/datacenter/kubernetes/okd-01/okd-m01'
+</code></pre>
+
+<h3 id="create-the-required-roles">Create the required Roles</h3>
+
+<ul>
+<li>Navigate in the vSphere Client - Menu &gt; Administration &gt; Roles</li>
+<li>Add a new Role and select the permissions required. Repeat for each role.</li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th align="center">Roles</th>
+<th align="center">Privileges</th>
+<th align="center">Entities</th>
+<th align="center">Propagate to Children</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td align="center">vcp-manage-okd-node-vms</td>
+<td align="center">Resource.AssignVMToPoolVirtualMachine.Config.AddExistingDisk, VirtualMachine.Config.AddNewDisk, VirtualMachine.Config.AddRemoveDevice, VirtualMachine.Config.RemoveDisk, VirtualMachine.Config.SettingsVirtualMachine.Inventory.Create, VirtualMachine.Inventory.Delete</td>
+<td align="center">Cluster, Hosts, VM Folder</td>
+<td align="center">Yes</td>
+</tr>
+
+<tr>
+<td align="center">vcp-manage-okd-volumes</td>
+<td align="center">Datastore.AllocateSpace, Datastore.FileManagement (Low level file operations)</td>
+<td align="center">Datastore</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">vcp-view-okd-spbm-profile</td>
+<td align="center">StorageProfile.View (Profile-driven storage view)</td>
+<td align="center">vCenter</td>
+<td align="center">No</td>
+</tr>
+
+<tr>
+<td align="center">Read-only (pre-existing default role)</td>
+<td align="center">System.Anonymous, System.Read, System.View</td>
+<td align="center">Datacenter, Datastore Cluster, Datastore Storage Folder</td>
+<td align="center">No</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="create-a-service-account">Create a service account</h3>
+
+<ul>
+<li>Create a vsphere user, or add a domain user, to provide access and assign the new roles to.</li>
+</ul>
 
 <h3 id="configure-ansible-installer">Configure ansible installer</h3>
 
@@ -329,16 +400,16 @@ oc aplay -f vmware-sc.yml
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-vmware/">Configure K8S vSphere Cloud Provider</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-calico-ebpf/">Install k8s with calico&#39;s eBPF mode</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-ipvs/">Install k8s with IPVS mode</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/install-unifi-controller/">How to setup Unifi Controller on Debian 10</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift-rbd-fsck/">How to fixing filesystem corruption on a Kubernetes Ceph RBD PersistentVolume</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k3s-helm-controller/">Install and use rancher helm-controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k3s-crio/">Install K3S with CRI-O and kadalu</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-crio/">Install K8S with CRI-O and kadalu</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/fcos-install/">Install Fedora CoreOS as a VM</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/">Self-hosted Load Balancer for bare metal Kubernetes</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/how-to-fix-ansible-service-broker-in-openshift-3-11/">How to fix Ansible Service Broker in OpenShift 3.11</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/">How to fix cluster-monitoring-operator in OpenShift 3.11</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/how-to-fix-registry-console-ui-in-openshift-3-11/">How to fix registry console UI in OpenShift 3.11</a></li>
 		</ul>
 	</div>
 </div>
@@ -352,6 +423,7 @@ oc aplay -f vmware-sc.yml
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="calico">calico</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="CentOS">CentOS</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
@@ -386,9 +458,10 @@ oc aplay -f vmware-sc.yml
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="k8s">k8s</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="katello">katello</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="Logging">Logging</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="Loki">Loki</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="loki">loki</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
