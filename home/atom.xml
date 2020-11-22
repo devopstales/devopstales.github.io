@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2020-11-20T15:49:48+00:00</updated>
+    <updated>2020-11-22T09:36:19+00:00</updated>
     
     
     <author>
@@ -17,6 +17,407 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Azure Conainer Registry integration for AKS]]></title>
+            <link href="https://devopstales.github.io/home/aks-registry/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to AKS" />
+                <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+                <link href="https://devopstales.github.io/cloud/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
+                <link href="https://devopstales.github.io/cloud/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to AKS" />
+                <link href="https://devopstales.github.io/cloud/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+            
+                <id>https://devopstales.github.io/home/aks-registry/</id>
+            
+            
+            <published>2020-11-15T00:00:00+00:00</published>
+            <updated>2020-11-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can integrate Azure Container Registry to AKS (Azure Kubernetes Service) Cluster.</p>
+
+<h3 id="parst-of-the-aks-series">Parst of the AKS series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/AKS/">Install AKS Cluster</a></li>
+<li>Part2: <a href="../../cloud/aks-registry/">Integrate AKS with Registry</a></li>
+<li>Part3: <a href="../../cloud/aks-ingress-controller/">Install Ingresscontreoller To AKS</a></li>
+</ul>
+
+<h3 id="set-the-subscription">Set the subscription</h3>
+
+<pre><code>az login
+az account list
+az account set --subscription &lt;SUBSCRIPTION_ID&gt;
+</code></pre>
+
+<h3 id="creating-an-azure-resource-group">Creating an Azure Resource Group</h3>
+
+<pre><code>az group create --location &lt;REGION_NAME&gt; --name &lt;RESOURCE_GROUP_NAME&gt;
+</code></pre>
+
+<h3 id="provisioning-an-azure-container-registry">Provisioning an Azure Container Registry</h3>
+
+<pre><code>az acr create --name &lt;REGISTRY_NAME&gt; \
+--resource-group &lt;RESOURCE_GROUP_NAME&gt; \
+--sku Basic
+
+
+az ad sp create-for-rbac \
+  --scopes /subscriptions/&lt;SUBSCRIPTION_ID&gt;/resourcegroups/&lt;RESOURCE_GROUP_NAME&gt;/providers/Microsoft.ContainerRegistry/registries/&lt;REGISTRY_NAME&gt; \
+  --role Contributor \
+  --name &lt;SERVICE_PRINCIPAL_NAME&gt;
+
+docker login &lt;REGISTRY_NAME&gt; -u &lt;CLIENT_ID&gt;
+</code></pre>
+
+<h3 id="create-a-new-aks-cluster-with-acr-integration">Create a new AKS cluster with ACR integration</h3>
+
+<pre><code>az aks create -n &lt;KUBERNETS_CLUSTER_NAME&gt; \
+-g &lt;RESOURCE_GROUP_NAME&gt; \
+--generate-ssh-keys \
+--attach-acr &lt;REGISTRY_NAME&gt;
+</code></pre>
+
+<h3 id="configure-acr-integration-for-existing-aks-clusters">Configure ACR integration for existing AKS clusters</h3>
+
+<pre><code>az aks update -n &lt;KUBERNETS_CLUSTER_NAME&gt; \
+-g &lt;RESOURCE_GROUP_NAME&gt; \
+--attach-acr &lt;REGISTRY_NAME&gt;
+</code></pre>
+
+<h3 id="use-kubernetes-secret-for-registry-integration">Use Kubernetes Secret for registry integration</h3>
+
+<pre><code>ACR_NAME=&lt;REGISTRY_NAME&gt;
+ACR_UNAME=$(az acr credential show -n $ACR_NAME --query=&quot;username&quot; -o tsv)
+ACR_PASSWD=$(az acr credential show -n $ACR_NAME --query=&quot;passwords[0].value&quot; -o tsv)
+
+kubectl create secret docker-registry acr-secret \
+  --docker-server=$ACR_NAME \
+  --docker-username=$ACR_UNAME \
+  --docker-password=$ACR_PASSWD \
+  --docker-email=ignorethis@email.com
+</code></pre>
+
+<p>Use secret in Kubernetes</p>
+
+<pre><code>---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sample-pod
+spec:
+  containers:
+  - name: sample-pod-container
+    image: youruniquename.azurecr.io/sample-container:0.0.1
+  imagePullSecrets:
+  - name: acr-secret
+</code></pre>
+
+<h3 id="use-service-account-for-authentication">Use Service Account For authentication</h3>
+
+<pre><code>ACR_NAME=&lt;REGISTRY_NAME&gt;
+ACR_UNAME=$()
+ACR_PASSWD=$()
+
+kubectl create secret docker-registry acr-secret \
+  --docker-server=$ACR_NAME \
+  --docker-username=$ACR_UNAME \
+  --docker-password=$ACR_PASSWD \
+  --docker-email=ignorethis@email.com
+</code></pre>
+
+<p>Use ServiceAccount in Kubernetes</p>
+
+<pre><code>--docker-password=$ACR_PASSWD \
+--docker-email=ignorethis@email.com
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+name: SampleAccount
+namespace: default
+imagePullSecrets:
+- name: acr-secret
+---
+apiVersion: v1
+kind: Pod
+metadata:
+name: sample-pod
+spec:
+containers:
+- name: sample-pod-container
+  image: youracrname.azurecr.io/sample-container:0.0.1
+serviceAccountName: SampleAccount
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Ingress to AKS]]></title>
+            <link href="https://devopstales.github.io/home/aks-ingress-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
+                <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+                <link href="https://devopstales.github.io/cloud/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
+                <link href="https://devopstales.github.io/cloud/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to AKS" />
+                <link href="https://devopstales.github.io/cloud/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+            
+                <id>https://devopstales.github.io/home/aks-ingress-controller/</id>
+            
+            
+            <published>2020-11-15T00:00:00+00:00</published>
+            <updated>2020-11-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can Install Ingress to AKS (Azure Kubernetes Service) Cluster.</p>
+
+<h3 id="parst-of-the-aks-series">Parst of the AKS series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/AKS/">Install AKS Cluster</a></li>
+<li>Part2: <a href="../../cloud/aks-registry/">Integrate AKS with Registry</a></li>
+<li>Part3: <a href="../../cloud/aks-ingress-controller/">Install Ingresscontreoller To AKS</a></li>
+</ul>
+
+<h3 id="get-aks-credentials">Get AKS credentials</h3>
+
+<pre><code>az login
+az aks get-credentials --resource-group test-cluster --name test-cluster
+kubectl get nodes
+</code></pre>
+
+<h3 id="create-ingress-with-static-public-ip">Create ingress with static public ip</h3>
+
+<pre><code>az network public-ip create \
+--location &lt;REGION_NAME&gt; \
+--resource-group &lt;RESOURCE_GROUP_NAME&gt; \
+--name &lt;IP_NAME&gt; --sku Standard \
+--allocation-method static \
+--query publicIp.ipAddress -o tsv
+
+# 51.105.230.165
+</code></pre>
+
+<h3 id="deploy-nginx-ingress-controller-with-helm">Deploy nginx ingress controller with helm</h3>
+
+<pre><code>kubectl create namespace ingress
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+
+helm install &lt;INGERSS_NAME&gt; \
+ingress-nginx/ingress-nginx \
+--namespace ingress \
+--set controller.replicaCount=2 \
+--set controller.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux \
+--set defaultBackend.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux \
+--set controller.service.loadBalancerIP=&quot;51.105.230.165&quot;
+</code></pre>
+
+<pre><code>kubectl --namespace ingress get services -o wide -w nginx-ingress-controller
+kubectl get service -l app=nginx-ingress --namespace ingress
+</code></pre>
+
+<h3 id="create-an-ingress-controller-to-an-internal-virtual-network-in">Create an ingress controller to an internal virtual network in</h3>
+
+<p>By default, an NGINX ingress controller is created with a dynamic public IP address assignment. A common configuration requirement is to use an internal, private network and IP address. This approach allows you to restrict access to your services to internal users, with no external access. This example assigns 10.240.0.42 to the loadBalancerIP resource.</p>
+
+<pre><code>nano internal-ingress.yaml
+---
+controller:
+  service:
+    loadBalancerIP: 10.240.0.42
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: &quot;true&quot;
+</code></pre>
+
+<pre><code>helm install nginx-ingress \
+ingress-nginx/ingress-nginx \
+--namespace ingress \
+-f internal-ingress.yaml \
+--set controller.ingressClass=internal \
+--set controller.replicaCount=2 \
+--set controller.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux \
+--set defaultBackend.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux
+</code></pre>
+
+<p>Create an ingress route</p>
+
+<pre><code>apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: hello-world-ingress
+  namespace: ingress-basic
+  annotations:
+    kubernetes.io/ingress.class: internal
+...
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install AKS Cluster]]></title>
+            <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+                <link href="https://devopstales.github.io/home/jitsi-meet/?utm_source=atom_feed" rel="related" type="text/html" title="Install Jitsi meet" />
+                <link href="https://devopstales.github.io/home/jitsi-jibri/?utm_source=atom_feed" rel="related" type="text/html" title="Install recording fot Jitsi" />
+                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure K8S vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+            
+                <id>https://devopstales.github.io/home/aks/</id>
+            
+            
+            <published>2020-11-07T00:00:00+00:00</published>
+            <updated>2020-11-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can create an AKS (Azure Kubernetes Service) Cluster.</p>
+
+<h3 id="parst-of-the-aks-series">Parst of the AKS series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/AKS/">Install AKS Cluster</a></li>
+<li>Part2: <a href="../../cloud/aks-registry/">Integrate AKS with Registry</a></li>
+<li>Part3: <a href="../../cloud/aks-ingress-controller/">Install Ingresscontreoller To AKS</a></li>
+</ul>
+
+<h3 id="what-is-azure-kubernetes-service">What is Azure Kubernetes Service?</h3>
+
+<p>Azure Kubernetes Service (AKS) is a managed Kubernetes service that lets you quickly deploy and manage clusters.</p>
+
+<p>A Kubernetes cluster is divided into two components:</p>
+
+<ul>
+<li>Control plane nodes provide the core Kubernetes services and orchestration of application workloads.</li>
+<li>Nodes run your application workloads.</li>
+</ul>
+
+<p><img src="/img/include/aks-control-plane-and-nodes.png" alt="Example image" /></p>
+
+<p>When you create an AKS cluster, a control plane is automatically created and configured. This control plane is provided as a managed Azure resource abstracted from the user. There&rsquo;s no cost for the control plane, only the nodes that are part of the AKS cluster. The control plane and its resources reside only on the region where you created the cluster.</p>
+
+<h3 id="how-to-create-azure-kubernetes-cluster">How To Create Azure Kubernetes Cluster</h3>
+
+<p>There are 2 ways to deploy an Azure Kubernetes Cluster, which are using:</p>
+
+<ul>
+<li>Azure Portal</li>
+<li>Azure CLI</li>
+</ul>
+
+<p>I prefer to use the cli because it is easier to reproduce.</p>
+
+<h4 id="install-azure-cli">Install Azure CLI</h4>
+
+<pre><code># OSX
+brew update &amp;&amp; brew install azure-cli
+
+# Yum
+sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+
+sudo sh -c 'echo -e &quot;[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc&quot; &gt; /etc/yum.repos.d/azure-cli.repo'
+
+sudo yum install azure-cli
+
+# apt
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+sudo apt-get update
+sudo apt-get install ca-certificates curl apt-transport-https lsb-release gnupg
+
+curl -sL https://packages.microsoft.com/keys/microsoft.asc |
+    gpg --dearmor |
+    sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg &gt; /dev/null
+
+AZ_REPO=$(lsb_release -cs)
+echo &quot;deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main&quot; |
+    sudo tee /etc/apt/sources.list.d/azure-cli.list
+
+sudo apt-get update
+sudo apt-get install azure-cli
+</code></pre>
+
+<h4 id="set-the-subscription">Set the subscription</h4>
+
+<pre><code>az login
+az account list
+az account set --subscription &lt;SUBSCRIPTION_ID&gt;
+</code></pre>
+
+<h4 id="creating-an-azure-resource-group">Creating an Azure Resource Group</h4>
+
+<pre><code>az group create --location &lt;REGION_NAME&gt; --name &lt;RESOURCE_GROUP_NAME&gt;
+</code></pre>
+
+<h4 id="create-aks-cluster">Create AKS Cluster</h4>
+
+<pre><code># get available kubernetes versions
+az aks get-versions --location &lt;REGION_NAME&gt;
+
+az aks create --resource-group &lt;RESOURCE_GROUP_NAME&gt; \
+--name &lt;AKS_CLUSTER_NAME&gt; \
+--node-count 3 \
+--generate-ssh-keys \
+--kubernetes-version 1.17.0
+</code></pre>
+
+<h3 id="uses-availability-zones-for-aks-cluster">Uses availability zones for AKS Cluster</h3>
+
+<p>AKS clusters that are deployed using availability zones can distribute nodes across multiple zones within a single region. For example, a cluster in the East US 2 region can create nodes in all three availability zones in East US 2. This distribution of AKS cluster resources improves cluster availability as they&rsquo;re resilient to failure of a specific zone.</p>
+
+<p>KÉP: <a href="https://docs.microsoft.com/en-us/azure/aks/media/availability-zones/aks-availability-zones.png">https://docs.microsoft.com/en-us/azure/aks/media/availability-zones/aks-availability-zones.png</a></p>
+
+<pre><code># get available kubernetes versions
+az aks get-versions --location &lt;REGION_NAME&gt;
+
+az aks create --resource-group &lt;RESOURCE_GROUP_NAME&gt; \
+--name &lt;AKS_CLUSTER_NAME&gt; \
+--node-count 3 \
+--zones 1 2 3 \
+--vm-set-type VirtualMachineScaleSets \
+--load-balancer-sku standard \
+--generate-ssh-keys \
+--kubernetes-version 1.17.0
+</code></pre>
+
+<h4 id="get-kubeconfig-congig-of-the-cluster">Get Kubeconfig Congig of the Cluster</h4>
+
+<pre><code>az aks get-credentials --name &lt;AKS_CLUSTER_NAME&gt; \
+ --resource-group &lt;RESOURCE_GROUP_NAME&gt;
+
+kubectl get nodes
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -294,6 +695,7 @@ ldap_auth_method: bind
 # the add uncomment and configure this:
 #ldap_tls_key: /config/certs/meet.jit.si.key
 #ldap_tls_cert: /config/certs/meet.jit.si.crt
+
 #ldap_tls_check_peer: yes
 #ldap_tls_cacert_file: /etc/ssl/certs/ca-certificates.crt
 #ldap_tls_cacert_dir: /etc/ssl/certs
