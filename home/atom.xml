@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2020-11-27T07:43:13+00:00</updated>
+    <updated>2020-12-06T14:58:28+00:00</updated>
     
     
     <author>
@@ -17,6 +17,494 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[RKE2 The Secure Kubernetes Engine]]></title>
+            <link href="https://devopstales.github.io/home/rke2-airgap-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/rke2-airgap-install/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 The Secure Kubernetes Engine" />
+                <link href="https://devopstales.github.io/home/k8s-security/?utm_source=atom_feed" rel="related" type="text/html" title="Best Practices to keeping Kubernetes Clusters Secure" />
+                <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+                <link href="https://devopstales.github.io/home/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/rke2-airgap-install/</id>
+            
+            
+            <published>2020-11-25T00:00:00+00:00</published>
+            <updated>2020-11-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can install a secure Kubernetes Engine variant called RKE2 in a Air-Gap environment.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part1: <a href="../../cloud/krke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+</ul>
+
+<h3 id="what-is-rke2">What is RKE2</h3>
+
+<p>RKE2, also known as RKE Government, is Rancher&rsquo;s next-generation Kubernetes distribution. It is a fully conformant Kubernetes distribution that focuses on security and compliance within the U.S. Federal Government sector.</p>
+
+<h3 id="install-rke2-from-rpms">Install RKE2 from rpms</h3>
+
+<p>Not like K3S RKE2 offers an rpm repository. Of course in an Air-Gap environment you need an internal repository to sync the packages.</p>
+
+<pre><code>cat &lt;&lt; EOF &gt; /etc/yum.repos.d/rancher-rke2-1-18-latest.repo
+[rancher-rke2-common-latest]
+name=Rancher RKE2 Common Latest
+baseurl=https://rpm.rancher.io/rke2/latest/common/centos/7/noarch
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.rancher.io/public.key
+
+[rancher-rke2-1-18-latest]
+name=Rancher RKE2 1.18 Latest
+baseurl=https://rpm.rancher.io/rke2/latest/1.18/centos/7/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.rancher.io/public.key
+EOF
+
+yum -y install rke2-server nano
+</code></pre>
+
+<p>In an Air-Gap environment you cannot connect to the public internet so the containerd engine cannot connest to the registry. In this scenario yo have two options. Create an internal registry and upload all images or import images from tarball. In this demo I will use the second option.</p>
+
+<pre><code>mkdir -p /var/lib/rancher/rke2/agent/images/
+scp rke2-images.linux-amd64.tar masern01:/var/lib/rancher/rke2/agent/images/
+cd /var/lib/rancher/rke2/agent/images/
+</code></pre>
+
+<p>For RKE2 you didn&rsquo;t nee docker engine. The rpms will install all the necessary binaris to run a container.</p>
+
+<pre><code>echo 'PATH=$PATH:/usr/local/bin' &gt;&gt; /etc/profile
+echo 'PATH=$PATH:/var/lib/rancher/rke2/bin' &gt;&gt; /etc/profile
+source /etc/profile
+</code></pre>
+
+<pre><code>setenforce 1
+getenforce
+sed -i 's/=\(disabled\|permissive\)/=enforcing/g' /etc/sysconfig/selinux
+systemctl start firewalld
+systemctl enable firewalld
+</code></pre>
+
+<p>For the demo I will use <code>firewalld</code> to block all outgoing request from the server. This is how I emulate the Air-Gap environment.</p>
+
+<pre><code>firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -p tcp -m tcp --dport=443 -j DROP
+firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -p tcp -m tcp --dport=80 -j DROP
+firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -j ACCEPT
+firewall-cmd --reload
+</code></pre>
+
+<p>Enable hardened mode.</p>
+
+<pre><code>mkdir -p /etc/rancher/rke2
+cat &lt;&lt; EOF &gt;  /etc/rancher/rke2/config.yaml
+write-kubeconfig-mode: &quot;0644&quot;
+profile: &quot;cis-1.5&quot;
+EOF
+
+
+sudo cp -f /usr/share/rke2/rke2-cis-sysctl.conf /etc/sysctl.d/60-rke2-cis.conf
+sysctl -p /etc/sysctl.d/60-rke2-cis.conf
+
+useradd -r -c &quot;etcd user&quot; -s /sbin/nologin -M etcd
+</code></pre>
+
+<p>On my VM there is multiple network interface So I will configure what to use the kubernetes engine.</p>
+
+<pre><code>mkdir -p /var/lib/rancher/rke2/server/manifests/
+cat &lt;&lt; EOF &gt; /var/lib/rancher/rke2/server/manifests/rke2-canal-config.yml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-canal
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    flannel:
+      iface: &quot;enp0s8&quot;
+EOF
+</code></pre>
+
+<pre><code>systemctl enable rke2-server.service
+systemctl start rke2-server.service
+journalctl -u rke2-server -f
+
+
+mkdir ~/.kube
+ln -s /etc/rancher/rke2/rke2.yaml ~/.kube/config
+ln -s /var/lib/rancher/rke2/agent/etc/crictl.yaml /etc/crictl.yaml
+
+kubectl get node
+crictl ps
+crictl images
+
+kubectl edit psp global-restricted-psp
+# remove apparmor lines in annotation and save
+
+### Autodeploy folder
+/var/lib/rancher/rke2/server/manifests/
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Best Practices to keeping Kubernetes Clusters Secure]]></title>
+            <link href="https://devopstales.github.io/home/k8s-security/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-security/?utm_source=atom_feed" rel="related" type="text/html" title="Best Practices to keeping Kubernetes Clusters Secure" />
+                <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+                <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/home/k8s-install-openebs/?utm_source=atom_feed" rel="related" type="text/html" title="Install OpenEBS for Kubernetes" />
+                <link href="https://devopstales.github.io/home/k8s-kubeadm-ha/?utm_source=atom_feed" rel="related" type="text/html" title="How to install kubernetes with kubeadm in HA mode" />
+            
+                <id>https://devopstales.github.io/home/k8s-security/</id>
+            
+            
+            <published>2020-11-20T00:00:00+00:00</published>
+            <updated>2020-11-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Kubernetes offers rich configuration options, but defaults are usually the least secure. Most sysadmin didn&rsquo;t knows how to secure a kubernetes clyuster. So this is my Best Practice list to keeping Kubernetes Clusters Secure.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part1: <a href="../../cloud/krke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+</ul>
+
+<h3 id="use-firewalld">Use firewalld</h3>
+
+<p>In most tutorial the first thing in a Kubernets installation is to disable the firewall because is it easier than configure properly.</p>
+
+<pre><code># master
+firewall-cmd --permanent --add-port=6443/tcp
+firewall-cmd --permanent --add-port=2379-2380/tcp
+firewall-cmd --permanent --add-port=10250/tcp
+firewall-cmd --permanent --add-port=10251/tcp
+firewall-cmd --permanent --add-port=10252/tcp
+firewall-cmd --permanent --add-port=10255/tcp
+firewall-cmd --permanent --add-port=8472/udp
+firewall-cmd --add-masquerade --permanent
+firewall-cmd --permanent --add-port=30000-32767/tcp
+
+# worker
+firewall-cmd --permanent --add-port=10250/tcp
+firewall-cmd --permanent --add-port=10255/tcp
+firewall-cmd --permanent --add-port=8472/udp
+firewall-cmd --permanent --add-port=30000-32767/tcp
+firewall-cmd --add-masquerade --permanent
+
+# frontend
+firewall-cmd --permanent --add-port=10250/tcp
+firewall-cmd --permanent --add-port=10255/tcp
+firewall-cmd --permanent --add-port=8472/udp
+firewall-cmd --permanent --add-port=30000-32767/tcp
+firewall-cmd --add-masquerade --permanent
+firewall-cmd --permanent --zone=public --add-service=http
+firewall-cmd --permanent --zone=public --add-service=https
+</code></pre>
+
+<h3 id="pod-network-add-on">Pod network add-on</h3>
+
+<p>Several external projects provide Kubernetes Pod networks using CNI, some of which also support Network Policy. Use one of them.</p>
+
+<ul>
+<li>Calico</li>
+<li>Canal</li>
+<li>Weave Net</li>
+<li>Contiv</li>
+<li>Cillum</li>
+</ul>
+
+<p>See the list of available [[networking and network policy add-ons|<a href="https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy]">https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy]</a>].</p>
+
+<h3 id="using-rbac-authorization">Using RBAC Authorization</h3>
+
+<p>Role-based access control (RBAC) is a method of regulating access to computer or network resources based on the roles of individual users within your organization. For that you need to create <code>Role</code> or <code>ClusterRole</code> objects then assign that objects to a user wit <code>RoleBinding</code> or <code>ClusterRoleBinding</code>.</p>
+
+<pre><code>---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: $NAMESPACE
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: deployer-access
+  namespace: $NAMESPACE
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: deployer-access
+  namespace: $NAMESPACE
+rules:
+- apiGroups: [&quot;&quot;, &quot;extensions&quot;, &quot;apps&quot;]
+  resources: [&quot;*&quot;]
+  verbs: [&quot;*&quot;]
+- apiGroups: [&quot;batch&quot;]
+  resources:
+  - jobs
+  - cronjobs
+  verbs: [&quot;*&quot;]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: deployer
+  namespace: $NAMESPACE
+subjects:
+- kind: ServiceAccount
+  name: deployer
+  namespace: $NAMESPACE
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployer-access
+</code></pre>
+
+<h3 id="podsecuritypolicy">PodSecurityPolicy</h3>
+
+<p>At default configuration users in docker containers has the same UID and GUID pool than the users on the host system. So if an unprivileged user runs a container as root and mount the host&rsquo;s filesystem to this container it can do what avers it wants on your host. Docker has an option to change the id pool us the users in the containers but kubernetes dose not support it. The RBAC adds access to an apiGroup like create deployments but dose not allow to configure the options you can use in the deployment.</p>
+
+<p>A PodSecurityPolicy is a cluster-level resource for managing security aspects of a pod specification.</p>
+
+<p>PSPs allow you to control:</p>
+
+<ul>
+<li>The ability to run privileged containers and control privilege escalation</li>
+<li>Access to host filesystems</li>
+<li>Usage of volume types</li>
+<li>And a few other aspects including SELinux, AppArmor, sysctl, and seccomp profiles</li>
+</ul>
+
+<p>Pod Security Policies are implemented as an Admission Controller in Kubernetes. To enable PSPs in your cluster, make sure to include PodSecurityPolicy in the enable-admission-plugins list that is passed as a parameter to your Kubernetes API configuration:</p>
+
+<pre><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+...
+--enable-admission-plugins=...,PodSecurityPolicy
+...
+</code></pre>
+
+<h4 id="creating-pod-security-policies">Creating Pod Security Policies</h4>
+
+<pre><code>apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: restricted
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  defaultAllowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostPorts:
+    - min: 0
+      max: 0
+  seLinux:
+    rule: 'RunAsAny'
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+</code></pre>
+
+<h4 id="assigning-pod-security-policies">Assigning Pod Security Policies</h4>
+
+<pre><code>kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: psp:restricted
+rules:
+- apiGroups:
+  - extensions
+  resources:
+  - podsecuritypolicies
+  resourceNames:
+  - restricted # the psp we are giving access to
+  verbs:
+  - use
+---
+# This applies psp/restricted to all authenticated users
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: psp:restricted
+subjects:
+- kind: Group
+  name: system:authenticated # All authenticated users
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: psp:restricted # A references to the role above
+  apiGroup: rbac.authorization.k8s.io
+view raw
+</code></pre>
+
+<h3 id="audit-log">Audit Log</h3>
+
+<p>Usually it’s a best practice to enable audits in your cluster. Let’s go ahead and create a basic policy saved in our master.</p>
+
+<pre><code>mkdir -p /etc/kubernetes
+
+cat &gt; /etc/kubernetes/audit-policy.yaml &lt;&lt;EOF
+apiVersion: audit.k8s.io/v1beta1
+kind: Policy
+rules:
+# Do not log from kube-system accounts
+- level: None
+  userGroups:
+  - system:serviceaccounts:kube-system
+  - system:nodes
+- level: None
+  users:
+  - system:apiserver
+  - system:kube-scheduler
+  - system:volume-scheduler
+  - system:kube-controller-manager
+  - system:node
+# Don't log these read-only URLs.
+- level: None
+  nonResourceURLs:
+  - /healthz*
+  - /version
+  - /swagger*
+# limit level to Metadata so token is not included in the spec/status
+- level: Metadata
+  omitStages:
+  - RequestReceived
+  resources:
+  - group: authentication.k8s.io
+    resources:
+    - tokenreviews
+EOF
+
+mkdir -p /var/log/kubernetes/audit
+
+kube-apiserver --audit-log-path=/var/log/kubernetes/apiserver/audit.log \
+--audit-policy-file=/etc/kubernetes/audit-policies/policy.yaml
+</code></pre>
+
+<h2 id="image-security">Image security</h2>
+
+<p>Doesn&rsquo;t matter how secure is your kubernetes network or infrastructure is if you runs outdated unsecur images. You mast always update your base image, scan for known vulnerabilities. For applications use hardened base images and install as less components as you can. Some application for image scann:</p>
+
+<ul>
+<li>Anchore Engine</li>
+<li>Clair</li>
+</ul>
+
+<h3 id="find-the-right-baseimage">Find the right baseimage</h3>
+
+<p>I think the best choice for a base image is <code>Distroless</code>, which is set of images made by Google, that were created with intent to be secure. These images contain the bare minimum that&rsquo;s needed for your app.</p>
+
+<pre><code>FROM gcr.io/distroless/python3
+COPY --from=build-env /app /app
+WORKDIR /app
+CMD [&quot;hello.py&quot;, &quot;/etc&quot;]
+</code></pre>
+
+<h3 id="least-privileged-user">Least privileged user</h3>
+
+<p>Create a dedicated user and group on the image, with minimal permissions to run the application; use the same user to run this process. For example, Node.js image which has a built-in node generic user:</p>
+
+<pre><code>USER node
+CMD node index.js
+</code></pre>
+
+<h3 id="store-secret-in-etcd-encripted">Store secret in etcd encripted.</h3>
+
+<p>The Kubernetes&rsquo;s base secret store is not so secure because it stores the data as base64 encoded plain text in the etcd.</p>
+
+<p>The <code>kube-apiserver</code> process accepts an argument <code>--encryption-provider-config</code> that controls how API data is encrypted in etcd. An example configuration is provided below.</p>
+
+<pre><code>mkdir /etc/kubernetes/etcd-enc/
+
+head -c 32 /dev/urandom | base64
+
+nano /etc/kubernetes/etcd-enc/etcd-encription.yaml
+---
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+    - secrets
+    providers:
+    - identity: {}
+    - aesgcm:
+        keys:
+        - name: key1
+          secret: &lt;BASE 64 ENCODED SECRET&gt;
+</code></pre>
+
+<p>In this example key1 is the secret contains the encryption/decryption key.</p>
+
+<pre><code>nano kube-apiserver.yaml
+...
+    - --encryption-provider-config=/etc/kubernetes/etcd-enc/etcd-encription.yaml
+...
+    volumeMounts:
+...
+    - mountPath: /etc/kubernetes/etcd-enc
+      name: etc-kubernetes-etcd-enc
+      readOnly: true
+  hostNetwork: true
+...
+  - hostPath:
+      path: /etc/kubernetes/etcd-enc
+      type: DirectoryOrCreate
+    name: etc-kubernetes-etcd-enc
+status: {}
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -32,8 +520,8 @@
                 <id>https://devopstales.github.io/home/aks-registry/</id>
             
             
-            <published>2020-11-15T00:00:00+00:00</published>
-            <updated>2020-11-15T00:00:00+00:00</updated>
+            <published>2020-11-18T00:00:00+00:00</published>
+            <updated>2020-11-18T00:00:00+00:00</updated>
             
             
             <content type="html"><![CDATA[<p>In this pos I will show you how you can integrate Azure Container Registry to AKS (Azure Kubernetes Service) Cluster.</p>
@@ -167,11 +655,11 @@ serviceAccountName: SampleAccount
             <title type="html"><![CDATA[Install Ingress to AKS]]></title>
             <link href="https://devopstales.github.io/home/aks-ingress-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
                 <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
-                <link href="https://devopstales.github.io/cloud/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
                 <link href="https://devopstales.github.io/cloud/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to AKS" />
                 <link href="https://devopstales.github.io/cloud/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+                <link href="https://devopstales.github.io/home/jitsi-meet/?utm_source=atom_feed" rel="related" type="text/html" title="Install Jitsi meet" />
+                <link href="https://devopstales.github.io/home/jitsi-jibri/?utm_source=atom_feed" rel="related" type="text/html" title="Install recording fot Jitsi" />
             
                 <id>https://devopstales.github.io/home/aks-ingress-controller/</id>
             
