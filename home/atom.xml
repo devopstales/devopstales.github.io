@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2020-12-12T13:08:05+00:00</updated>
+    <updated>2020-12-13T10:41:32+00:00</updated>
     
     
     <author>
@@ -17,6 +17,190 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[RKE2 Image security Admission Controller]]></title>
+            <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/rke2-pod-security-policy/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Pod Security Policy" />
+                <link href="https://devopstales.github.io/home/admission-controllers/?utm_source=atom_feed" rel="related" type="text/html" title="Using Admission Controllers" />
+                <link href="https://devopstales.github.io/home/rke2-airgap-install/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 The Secure Kubernetes Engine" />
+                <link href="https://devopstales.github.io/cloud/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
+                <link href="https://devopstales.github.io/cloud/rke2-pod-security-policy/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Pod Security Policy" />
+            
+                <id>https://devopstales.github.io/home/image-security-admission-controller/</id>
+            
+            
+            <published>2020-12-13T00:00:00+00:00</published>
+            <updated>2020-12-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In a previous post we talked about <a href="https://devopstales.github.io/home/admission-controllers/">Admission Controllers</a>. In this post I will show you how to use an Admission Controller to test image vulnerabilities.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a>
+<!-- Network Policy --></li>
+<li>Part5: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
+</ul>
+
+<p>There is multiple tools to scan vulnerabilities, but less Admission Controller to use them. I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&rsquo;s <a href="https://devopstales.github.io/cloud/k3s-helm-controller/">Helm controller</a> what is preinstalled. Sadly anchore-enginn run as root so we need to use <a href="https://devopstales.github.io/home/rke2-pod-security-policy/">my predifinde PSP</a> to allow this.</p>
+
+<p>Then we can Deploy an Admission Controller to us this tool to automaticle scann any image deploy in the cluster and reject if is vulnerable. As I sad before there is multiple solution for this one is Anchore&rsquo;s own Admission Controller but I will use Banzaicloud&rsquo;s solution because this is more flexible.</p>
+
+<pre><code>nano /var/lib/rancher/rke2/server/manifests/10_image-security.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: securty-system
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: anchore-enginn
+  namespace: kube-system
+spec:
+  repo: &quot;https://charts.anchore.io&quot;
+  chart: anchore-engine
+  targetNamespace: securty-system
+  valuesContent: |-
+     postgresql:
+       postgresPassword: Password1
+       persistence:
+         size: 10Gi
+     anchoreGlobal:
+       defaultAdminPassword: Password1
+       defaultAdminEmail: devopstales@mydomain.intra
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: psp-rolebinding-securty-system
+  namespace: securty-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system-unrestricted-psp-role
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:serviceaccounts
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: anchore-policy-validator
+  namespace: kube-system
+spec:
+  repo: &quot;https://kubernetes-charts.banzaicloud.com&quot;
+  chart: anchore-policy-validator
+  targetNamespace: securty-system
+  valuesContent: |-
+    externalAnchore:
+      anchoreHost: &quot;http://anchore-enginn-anchore-engine-api:8228/v1/&quot;
+      anchoreUser: admin
+      anchorePass: Password1
+    rbac:
+      psp:
+        enabled: true
+</code></pre>
+
+<h3 id="test-the-admission-controller">Test the Admission Controller</h3>
+
+<pre><code>kubectl run --image=busybox -- sleep 3600
+Error from server: admission webhook &quot;pods.anchore-policy-validator.admission.banzaicloud.com&quot; denied the request: Image failed policy check: busybox
+</code></pre>
+
+<pre><code>kubectl describe audits busybox1
+Name:         busybox1
+Namespace:    
+Labels:       fakerelease=true
+Annotations:  &lt;none&gt;
+API Version:  security.banzaicloud.com/v1alpha1
+Kind:         Audit
+Metadata:
+  Creation Timestamp:  2020-11-29T10:20:41Z
+  Generation:          1
+  Managed Fields:
+    API Version:  security.banzaicloud.com/v1alpha1
+    Fields Type:  FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:labels:
+          .:
+          f:fakerelease:
+      f:spec:
+        .:
+        f:action:
+        f:image:
+        f:releaseName:
+        f:resource:
+        f:result:
+      f:status:
+        .:
+        f:state:
+    Manager:         anchore-image-validator
+    Operation:       Update
+    Time:            2020-11-29T10:20:41Z
+  Resource Version:  39174
+  Self Link:         /apis/security.banzaicloud.com/v1alpha1/audits/busybox1
+  UID:               1e90c8b0-fffa-45f6-a986-d9fd269f0a83
+Spec:
+  Action:  reject
+  Image:
+    Image Digest:  
+    Image Name:    
+    Image Tag:     
+    Last Updated:  
+  Release Name:    busybox1
+  Resource:        Pod
+  Result:
+    Image failed policy check: busybox
+Status:
+  State:  
+Events:   &lt;none&gt;
+</code></pre>
+
+<p>The default policy is deny All Image theat failed on policy check but we can white list a specific image or set <code>createPolicies</code> to <code>true</code> in Banzaicloud&rsquo;s Helm chart to create default AllowAll Policy.</p>
+
+<pre><code>kubectl apply -f - &lt;&lt; EOF
+apiVersion: security.banzaicloud.com/v1alpha1
+kind:  WhiteListItem
+metadata:
+  name: busybox1
+spec:
+  reason: testing
+  creator: devopstales-sa
+EOF
+</code></pre>
+
+<pre><code>kubectl run busybox1 --image=busybox -- sleep 3600
+pod/busybox1 created
+</code></pre>
+
+<pre><code>kubectl get whitelistitems -o wide -o=custom-columns=NAME:.metadata.name,CREATOR:.spec.creator,REASON:.spec.reason
+NAME       CREATOR          REASON
+busybox1   devopstales-sa   testing
+
+kubectl get audits -o wide -o=custom-columns=NAME:.metadata.name,RELEASE:.spec.releaseName,IMAGES:.spec.image,RESULT:.spec.result
+NAME       RELEASE    IMAGES                                                  RESULT
+busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [Image failed policy check: busybox]
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -42,10 +226,12 @@
 
 <ul>
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
-<li>Part2: <a href="../../cloud/krke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
 <li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/krke2-psp/">RKE2 Pod Security Policy</a>
-&lt;&ndash;! Network Policy &ndash;&gt;</li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a>
+<!-- Network Policy --></li>
+<li>Part5: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
 </ul>
 
 <h3 id="what-is-a-pod-security-policy">What is a Pod Security Policy?</h3>
@@ -230,10 +416,12 @@ rules:
 
 <ul>
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
-<li>Part2: <a href="../../cloud/krke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
 <li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/krke2-psp/">RKE2 Pod Security Policy</a>
-&lt;&ndash;! Network Policy &ndash;&gt;</li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a>
+<!-- Network Policy --></li>
+<li>Part5: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
 </ul>
 
 <h3 id="what-is-an-admission-controller">What is an Admission Controller</h3>
@@ -554,10 +742,12 @@ crictl pods - list pods
 
 <ul>
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
-<li>Part2: <a href="../../cloud/krke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
 <li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/krke2-psp/">RKE2 Pod Security Policy</a>
-&lt;&ndash;! Network Policy &ndash;&gt;</li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a>
+<!-- Network Policy --></li>
+<li>Part5: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
 </ul>
 
 <h3 id="what-is-rke2">What is RKE2</h3>
@@ -699,10 +889,12 @@ kubectl edit psp global-restricted-psp
 
 <ul>
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
-<li>Part2: <a href="../../cloud/krke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
 <li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/krke2-psp/">RKE2 Pod Security Policy</a>
-&lt;&ndash;! Network Policy &ndash;&gt;</li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a>
+<!-- Network Policy --></li>
+<li>Part5: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
 </ul>
 
 <h3 id="use-firewalld">Use firewalld</h3>
