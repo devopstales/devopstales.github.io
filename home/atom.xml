@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2020-12-13T10:41:32+00:00</updated>
+    <updated>2021-01-02T09:17:54+00:00</updated>
     
     
     <author>
@@ -17,6 +17,203 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[K0S The tiny Kubernetes]]></title>
+            <link href="https://devopstales.github.io/home/k0s/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
+                <link href="https://devopstales.github.io/home/rke2-pod-security-policy/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Pod Security Policy" />
+                <link href="https://devopstales.github.io/home/admission-controllers/?utm_source=atom_feed" rel="related" type="text/html" title="Using Admission Controllers" />
+                <link href="https://devopstales.github.io/home/rke2-airgap-install/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 The Secure Kubernetes Engine" />
+                <link href="https://devopstales.github.io/home/k8s-security/?utm_source=atom_feed" rel="related" type="text/html" title="Best Practices to keeping Kubernetes Clusters Secure" />
+            
+                <id>https://devopstales.github.io/home/k0s/</id>
+            
+            
+            <published>2020-12-15T00:00:00+00:00</published>
+            <updated>2020-12-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>We all know and love K3s, right?  It’s now time to discover a new distribution: <a href="https://k0sproject.io">k0s</a>.</p>
+
+<h3 id="what-s-k0s">What’s k0s ?</h3>
+
+<p>k0s is a brand new Kubernetes distribution. The current release is 0.8.0. It was published in December 2020.</p>
+
+<p>The latest k0s release:</p>
+
+<ul>
+<li>Ships a certified and (CIS-benchmarked) Kubernetes 1.19</li>
+<li>Uses containerd as the default container runtime</li>
+<li>Uses an in-cluster etcd by default and supports SQLite, MySQL (or any compatible), PostgreSQL</li>
+<li>Uses the Calico network plugin by default with network policies</li>
+<li>Enables the Pod Security Policies admission controller</li>
+<li>Uses DNS with CoreDNS</li>
+<li>Exposes cluster metrics via Metrics Server</li>
+<li>Allows the usage of Horizontal Pod Autoscaling (HPA)</li>
+</ul>
+
+<p>A lot of great features will come in future releases, among them:</p>
+
+<ul>
+<li>Micro VM runtimes (really looking forward to testing this one)</li>
+<li>Zero-downtime cluster upgrades</li>
+<li>Cluster backup and restore</li>
+<li>Air-Gap install</li>
+<li>FIPS 140-2 (coming soon)</li>
+</ul>
+
+<p>We’ll now see how to install k0s.</p>
+
+<h3 id="install-singel-master">Install singel master</h3>
+
+<p>k0s as a single binary acts as the process supervisor for all other control plane components. This means there&rsquo;s no container engine or kubelet running on controllers (by default). Which means there is no way for a cluster user to schedule workloads onto controller nodes.</p>
+
+<pre><code>curl -sSLf get.k0s.sh | sudo sh
+
+k0s version
+
+mkdir /etc/k0s
+k0s default-config &gt; /etc/k0s/k0s.yaml
+</code></pre>
+
+<h3 id="config">Config</h3>
+
+<p>In the config file <code>/etc/k0s/k0s.yaml</code> you can add helm charts thet will be installed at startup, like prometheus for monitoring or nginx ingress controller.</p>
+
+<pre><code>apiVersion: k0s.k0sproject.io/v1beta1
+kind: Cluster
+metadata:
+  name: k0s
+spec:
+  api:
+    address: 192.168.68.106
+    sans:
+    - my-k0s-control.my-domain.com
+  network:
+    podCIDR: 10.244.0.0/16
+    serviceCIDR: 10.96.0.0/12
+extensions:
+  helm:
+    repositories:
+    - name: prometheus-community
+      url: https://prometheus-community.github.io/helm-charts
+    charts:
+    - name: prometheus-stack
+      chartname: prometheus-community/prometheus
+      version: &quot;11.16.8&quot;
+      namespace: default
+</code></pre>
+
+<pre><code>cat &lt;&lt;EOF &gt; /etc/systemd/system/k0s.service
+[Unit]
+Description=&quot;k0s server&quot;
+After=network-online.target
+Wants=network-online.target
+ 
+[Service]
+Type=simple
+ExecStart=/usr/bin/k0s server -c /etc/k0s/k0s.yaml --enable-worker
+Restart=always
+EOF
+</code></pre>
+
+<pre><code>systemctl start k0s.service
+systemctl enable k0s.service
+journalctl -u k0s.service -f
+</code></pre>
+
+<pre><code>sudo curl --output /usr/local/sbin/kubectl -L &quot;https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl&quot;
+chmod +x /usr/local/sbin/kubectl
+mkdir ~/.kube
+cp /var/lib/k0s/pki/admin.conf ~/.kube/config
+
+kubectl get node
+kubectl get po -A
+</code></pre>
+
+<pre><code>kubectl run nginx --image=nginx -n default
+kubectl get po -A              
+</code></pre>
+
+<h3 id="check-tge-default-psp">Check tge default PSP</h3>
+
+<pre><code>NAME                PRIV    CAPS   SELINUX    RUNASUSER   FSGROUP    SUPGROUP   READONLYROOTFS   VOLUMES
+00-k0s-privileged   true    *      RunAsAny   RunAsAny    RunAsAny   RunAsAny   false            *
+99-k0s-restricted   false          RunAsAny   RunAsAny    RunAsAny   RunAsAny   false            configMap,downwardAPI,emptyDir,persistentVolumeClaim,projected,secret
+</code></pre>
+
+<pre><code>kubectl get psp 99-k0s-restricted -o yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  annotations:
+    k0s.k0sproject.io/last-applied-configuration: |
+      {&quot;apiVersion&quot;:&quot;policy/v1beta1&quot;,&quot;kind&quot;:&quot;PodSecurityPolicy&quot;,&quot;metadata&quot;:{&quot;annotations&quot;:null,&quot;name&quot;:&quot;99-k0s-restricted&quot;},&quot;spec&quot;:{&quot;allowPrivilegeEscalation&quot;:false,&quot;allowedCapabilities&quot;:[],&quot;fsGroup&quot;:{&quot;rule&quot;:&quot;RunAsAny&quot;},&quot;hostIPC&quot;:false,&quot;hostNetwork&quot;:false,&quot;hostPID&quot;:false,&quot;privileged&quot;:false,&quot;readOnlyRootFilesystem&quot;:false,&quot;runAsUser&quot;:{&quot;rule&quot;:&quot;RunAsAny&quot;},&quot;seLinux&quot;:{&quot;rule&quot;:&quot;RunAsAny&quot;},&quot;supplementalGroups&quot;:{&quot;rule&quot;:&quot;RunAsAny&quot;},&quot;volumes&quot;:[&quot;configMap&quot;,&quot;downwardAPI&quot;,&quot;emptyDir&quot;,&quot;persistentVolumeClaim&quot;,&quot;projected&quot;,&quot;secret&quot;]}}
+    k0s.k0sproject.io/stack-checksum: b0c62cb2696c6167d7a8289411b06f69
+  creationTimestamp: &quot;2020-12-14T17:39:37Z&quot;
+  labels:
+    k0s.k0sproject.io/stack: defaultpsp
+  managedFields:
+  - apiVersion: policy/v1beta1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:k0s.k0sproject.io/last-applied-configuration: {}
+          f:k0s.k0sproject.io/stack-checksum: {}
+        f:labels:
+          .: {}
+          f:k0s.k0sproject.io/stack: {}
+      f:spec:
+        f:allowPrivilegeEscalation: {}
+        f:fsGroup:
+          f:rule: {}
+        f:runAsUser:
+          f:rule: {}
+        f:seLinux:
+          f:rule: {}
+        f:supplementalGroups:
+          f:rule: {}
+        f:volumes: {}
+    manager: k0s
+    operation: Update
+    time: &quot;2020-12-14T17:39:37Z&quot;
+  name: 99-k0s-restricted
+  resourceVersion: &quot;245&quot;
+  selfLink: /apis/policy/v1beta1/podsecuritypolicies/99-k0s-restricted
+  uid: b59e0bfe-57c2-4b8b-a17b-baa9047a6fcb
+spec:
+  allowPrivilegeEscalation: false
+  fsGroup:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+</code></pre>
+
+<p>If you check the config file <code>/etc/k0s/k0s.yaml</code> you can see it use the 00-k0s-privileged PSP as default and 00-k0s-privileged dose not disable run as root by default. It&rsquo;s sad.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -5332,7 +5529,9 @@ mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
-kubectl
+kubectl get no
+
+kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
 </code></pre>
 
 <h3 id="join-other-masters">Join other masters</h3>
@@ -12707,7 +12906,7 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 
-kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/62e44c867a2846fefb68bd5f178daf4da3095ccb/Documentation/kube-flannel.yml
+kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
 </code></pre>
 
 <h3 id="join-workers-to-cluster">Join workers to cluster</h3>
