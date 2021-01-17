@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-01-15T14:49:46+00:00</updated>
+    <updated>2021-01-17T09:59:39+00:00</updated>
     
     
     <author>
@@ -17,6 +17,247 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes Policy]]></title>
+            <link href="https://devopstales.github.io/home/kubernetes-policy/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
+                <link href="https://devopstales.github.io/home/k8s-networkpolicy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Network Policy" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
+                <link href="https://devopstales.github.io/home/rke2-pod-security-policy/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Pod Security Policy" />
+                <link href="https://devopstales.github.io/home/admission-controllers/?utm_source=atom_feed" rel="related" type="text/html" title="Using Admission Controllers" />
+            
+                <id>https://devopstales.github.io/home/kubernetes-policy/</id>
+            
+            
+            <published>2021-01-15T00:00:00+00:00</published>
+            <updated>2021-01-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can enforce best practices on Kubernetes Clusters.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
+<!-- RBSC --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco --></li>
+</ul>
+
+<p>For a production ready  Kubernetes cluster it is very important to enforcing cluster-wide policies to restrict what a container is allowed to do. We do this wit PS in a previous pos. But how should we enforce our best practices to the cluster users?</p>
+
+<h3 id="opa">OPA</h3>
+
+<p>Open Policy Agent (OPA), is a policy engine for Cloud Native environments hosted by CNCF. It is a general purpose policy engine. OPA policies are written in a Domain Specific Language (DSL) called Rego.</p>
+
+<h3 id="opa-gatekeeper">OPA Gatekeeper</h3>
+
+<p>Gatekeeper is specifically built for Kubernetes Admission Control use case of OPA. It uses OPA internally, but specifically for the Kubernetes admission control. Compared to using OPA with its sidecar kube-mgmt (aka Gatekeeper v1.0), Gatekeeper is integrated with the OPA Constraint Framework to enforce CRD-based policies and allow declaratively configured policies to be reliably shareable.</p>
+
+<p>Install OPA Gatekeeper:</p>
+
+<pre><code>kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+</code></pre>
+
+<p>Now we need to create a policy template and a constraint that adds the variables to the template. If I want to create  a policy to enforce all image comes from Only gcr.io, I need this Template:</p>
+
+<pre><code>apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredregistry
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredRegistry
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            image:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredregistry
+        violation[{&quot;msg&quot;: msg, &quot;details&quot;: {&quot;Registry should be&quot;: required}}] {
+          input.review.object.kind == &quot;Pod&quot;
+          some i
+          image := input.review.object.spec.containers[i].image
+          required := input.parameters.registry
+          not startswith(image,required)
+          msg := sprintf(&quot;Forbidden registry: %v&quot;, [image])
+        }
+</code></pre>
+
+<p>This template defines which parameters you need to define as well as the actual Rego code that will do the validation. Fo the constraint we specify that we need this constraint applied to Pods only and we pass the registry name that we need the images to be pulled from.</p>
+
+<pre><code>apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredRegistry
+metadata:
+  name: images-must-come-from-gcr
+spec:
+  match:
+    kinds:
+      - apiGroups: [&quot;&quot;]
+        kinds: [&quot;Pod&quot;]
+  parameters:
+    registry: &quot;gcr.io/&quot;
+</code></pre>
+
+<p>Test the policy with an image from github:</p>
+
+<pre><code>kubectl run --generator=run-pod/v1 busybox1 --image=busybox -- sleep 3600
+
+message: 'admission webhook &quot;validation.gatekeeper.sh&quot; denied the request: [denied
+      by images-must-come-from-gcr] Forbidden registry: busybox'
+</code></pre>
+
+<p>Another great feature of OPA Gatekeeper is audit functionality, it enables periodic evaluations of replicated resources against the policies enforced in the cluster to detect pre-existing misconfigurations.</p>
+
+<p>Audit results are stored as violations listed in the status field of the failed constraint.</p>
+
+<pre><code>kubectl describe policystrictonly.constraints.gatekeeper.sh policy-strict-constraint
+</code></pre>
+
+<h3 id="opa-and-gatekeeper">OPA and Gatekeeper</h3>
+
+<p>You can deploy OPA kube-mgmt as both validating webhook as well as mutating webhook configurations. Whereas, Gatekeeper currently does not support mutating admission control scenarios.</p>
+
+<h3 id="kyverno">Kyverno</h3>
+
+<p>Kyverno is a policy engine designed for Kubernetes. With Kyverno, policies are managed as Kubernetes resources and no new language is required to write policies. This allows using familiar tools such as kubectl, git, and kustomize to manage policies. Kyverno policies can validate, mutate, and generate Kubernetes resources. The Kyverno CLI can be used to test policies and validate resources as part of a CI/CD pipeline. (Source: <a href="https://kyverno.io/">Kyverno</a> )</p>
+
+<p>Install kyverno:</p>
+
+<pre><code>helm repo add kyverno https://kyverno.github.io/kyverno/
+helm repo update
+helm install kyverno --namespace kyverno kyverno/kyverno --create-namespace
+</code></pre>
+
+<h4 id="validate-configurations">Validate configurations</h4>
+
+<p>Here is an example of a Kyverno policy that validates that images are only pulled from gcr.io:</p>
+
+<pre><code>apiVersion : kyverno.io/v1alpha1
+kind: Policy
+metadata:
+  name: check-registries
+spec:
+  rules:
+  - name: check-registries
+    resource:
+      kinds:
+      - Deployment
+      - StatefulSet
+    validate:
+      message: &quot;Registry is not allowed&quot;
+      pattern:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: &quot;*&quot;
+                # Check allowed registries
+                image: &quot;*/gcr.io/*&quot;
+</code></pre>
+
+<h4 id="mutate-configurations">Mutate Configurations</h4>
+
+<p>Kyverno supports two different ways to mutate configurations. The first approach is to use a JSON Patch:</p>
+
+<pre><code>apiVersion : kyverno.io/v1alpha1
+kind : Policy
+metadata :
+  name : policy-deployment
+spec :
+  rules:
+    - name: patch-add-label
+      resource:
+        kinds : 
+        - Deployment
+      mutate:
+        patches:
+        - path: /metadata/labels/isMutated
+          op: add
+          value: &quot;true&quot;
+</code></pre>
+
+<p>The other way to mutate resources based on conditionals that describes the desired state:</p>
+
+<pre><code>apiVersion: kyverno.io/v1alpha1
+kind: Policy
+metadata:
+  name: set-image-pull-policy
+spec:
+  rules:
+  - name: set-image-pull-policy
+    resource:
+      kinds:
+      - Deployment
+    mutate:
+      overlay:
+        spec:
+          template:
+            spec:
+              containers:
+                # if the image tag is latest, set the imagePullPolicy to Always
+                - (image): &quot;*:latest&quot;
+                  imagePullPolicy: &quot;Always&quot;
+</code></pre>
+
+<h4 id="generate-configurations">Generate Configurations</h4>
+
+<p>Policy rule can generates new configurations:</p>
+
+<pre><code>apiVersion: kyverno.io/v1alpha1
+kind: Policy
+metadata:
+  name: &quot;default&quot;
+spec:
+  rules:
+  - name: &quot;deny-all-traffic&quot;
+    resource: 
+      kinds:
+       - Namespace
+      name: &quot;*&quot;
+    generate: 
+      kind: NetworkPolicy
+      name: deny-all-traffic
+      data:
+        spec:
+        podSelector:
+          matchLabels: {}
+          matchExpressions: []
+        policyTypes: []
+        metadata:
+          annotations: {}
+          labels:
+            policyname: &quot;default&quot;
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -44,18 +285,19 @@
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
 <li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part6: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Kubernetes Policy -->
-<!-- 
-OPA VS PSP - https://cybersecurity.att.com/blogs/security-essentials/psps-vs-opa-gatekeeper-breaking-down-your-kubernetes-pod-security-optionscd
-OPA gatekeeper and gatekeeper-policy-manager
-network-policy vs Istio
-kurad
--->
-<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco --></li>
 </ul>
 
 <h3 id="network-policies">Network policies</h3>
@@ -461,18 +703,19 @@ spec:
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
 <li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part6: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Kubernetes Policy -->
-<!-- 
-OPA VS PSP - https://cybersecurity.att.com/blogs/security-essentials/psps-vs-opa-gatekeeper-breaking-down-your-kubernetes-pod-security-optionscd
-OPA gatekeeper and gatekeeper-policy-manager
-network-policy vs Istio
-kurad
--->
-<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco --></li>
 </ul>
 
 <p>There is multiple tools to scan vulnerabilities, but less Admission Controller to use them. I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&rsquo;s <a href="https://devopstales.github.io/cloud/k3s-helm-controller/">Helm controller</a> what is preinstalled. Sadly anchore-enginn run as root so we need to use <a href="https://devopstales.github.io/home/rke2-pod-security-policy/">my predifinde PSP</a> to allow this.</p>
@@ -653,18 +896,19 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
 <li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part6: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Kubernetes Policy -->
-<!-- 
-OPA VS PSP - https://cybersecurity.att.com/blogs/security-essentials/psps-vs-opa-gatekeeper-breaking-down-your-kubernetes-pod-security-optionscd
-OPA gatekeeper and gatekeeper-policy-manager
-network-policy vs Istio
-kurad
--->
-<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco --></li>
 </ul>
 
 <h3 id="what-is-a-pod-security-policy">What is a Pod Security Policy?</h3>
@@ -851,18 +1095,19 @@ rules:
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
 <li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part6: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Kubernetes Policy -->
-<!-- 
-OPA VS PSP - https://cybersecurity.att.com/blogs/security-essentials/psps-vs-opa-gatekeeper-breaking-down-your-kubernetes-pod-security-optionscd
-OPA gatekeeper and gatekeeper-policy-manager
-network-policy vs Istio
-kurad
--->
-<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco --></li>
 </ul>
 
 <h3 id="what-is-an-admission-controller">What is an Admission Controller</h3>
@@ -1185,18 +1430,19 @@ crictl pods - list pods
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
 <li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part6: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Kubernetes Policy -->
-<!-- 
-OPA VS PSP - https://cybersecurity.att.com/blogs/security-essentials/psps-vs-opa-gatekeeper-breaking-down-your-kubernetes-pod-security-optionscd
-OPA gatekeeper and gatekeeper-policy-manager
-network-policy vs Istio
-kurad
--->
-<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco --></li>
 </ul>
 
 <h3 id="what-is-rke2">What is RKE2</h3>
@@ -1340,18 +1586,19 @@ kubectl edit psp global-restricted-psp
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
 <li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part6: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Kubernetes Policy -->
-<!-- 
-OPA VS PSP - https://cybersecurity.att.com/blogs/security-essentials/psps-vs-opa-gatekeeper-breaking-down-your-kubernetes-pod-security-optionscd
-OPA gatekeeper and gatekeeper-policy-manager
-network-policy vs Istio
-kurad
--->
-<!-- Notary Admission Controller https://github.com/IBM/portieris --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
+<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco --></li>
 </ul>
 
 <h3 id="use-firewalld">Use firewalld</h3>
