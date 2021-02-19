@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-01-26T10:48:24+00:00</updated>
+    <updated>2021-02-19T17:16:42+00:00</updated>
     
     
     <author>
@@ -17,6 +17,84 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to use imagePullSecrets cluster-wide??]]></title>
+            <link href="https://devopstales.github.io/home/imagepullsecret-patcher/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/imagepullsecret-patcher/?utm_source=atom_feed" rel="related" type="text/html" title="How to use imagePullSecrets cluster-wide??" />
+                <link href="https://devopstales.github.io/home/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
+                <link href="https://devopstales.github.io/home/k8s-networkpolicy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Network Policy" />
+                <link href="https://devopstales.github.io/home/k0s/?utm_source=atom_feed" rel="related" type="text/html" title="K0S The tiny Kubernetes" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
+            
+                <id>https://devopstales.github.io/home/imagepullsecret-patcher/</id>
+            
+            
+            <published>2021-02-17T00:00:00+00:00</published>
+            <updated>2021-02-17T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use imagePullSecrets cluster-wide in Kubernetes.</p>
+
+<p>Kubernetes uses imagePullSecrets to authenticate to private container registris on a per Pod or per Namespace basis. To do that yo need to create a secret with the credentials:</p>
+
+<pre><code>kubectl create secret docker-registry image-pull-secret \
+  -n &lt;your-namespace&gt; \
+  --docker-server=&lt;your-registry-server&gt; \
+  --docker-username=&lt;your-name&gt; \
+  --docker-password=&lt;your-password&gt; \
+  --docker-email=&lt;your-email&gt;
+</code></pre>
+
+<p>Now we can use this image in a pod for download the docker image:</p>
+
+<pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+  namespace: private-registry-test
+spec:
+  containers:
+    - name: my-app
+      image: my-private-registry.intra/busybox:v1
+  imagePullSecrets:
+    - name: image-pull-secret
+</code></pre>
+
+<p>The other way is to add it to the default ServiceAccount in the namespace:</p>
+
+<pre><code>kubectl patch serviceaccount default \
+  -p &quot;{\&quot;imagePullSecrets\&quot;: [{\&quot;name\&quot;: \&quot;image-pull-secret\&quot;}]}&quot; \
+  -n &lt;your-namespace&gt;
+</code></pre>
+
+<p>I found a tool called imagepullsecret-patcher that do this on all of your namespace:</p>
+
+<pre><code>wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/master/deploy-example/kubernetes-manifest/2_deployment.yaml
+
+# Edit the downloaded file and chaneg the contant of the image-pull-secret-src
+
+cp 2_deployment.yaml imagepullsecret-patcher.yaml
+nano imagepullsecret-patcher.yaml
+kubectl aplly -f imagepullsecret-patcher
+</code></pre>
+
+<h3 id="openshift">Openshift</h3>
+
+<pre><code>oc secrets link default &lt;pull_secret_name&gt; --for=pull
+
+oc secrets link builder &lt;pull_secret_name&gt;
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
