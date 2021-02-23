@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-02-19T17:16:42+00:00</updated>
+    <updated>2021-02-23T20:39:55+00:00</updated>
     
     
     <author>
@@ -20,16 +20,169 @@
     
         
         <entry>
-            <title type="html"><![CDATA[How to use imagePullSecrets cluster-wide??]]></title>
-            <link href="https://devopstales.github.io/home/imagepullsecret-patcher/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            <title type="html"><![CDATA[Image Signature Verification with Connaisseur]]></title>
+            <link href="https://devopstales.github.io/home/k8s-connaisseur/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/cloud/imagepullsecret-patcher/?utm_source=atom_feed" rel="related" type="text/html" title="How to use imagePullSecrets cluster-wide??" />
+                <link href="https://devopstales.github.io/cloud/k8s-connaisseur/?utm_source=atom_feed" rel="related" type="text/html" title="Image Signature Verification with Connaisseur" />
                 <link href="https://devopstales.github.io/home/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
                 <link href="https://devopstales.github.io/home/k8s-networkpolicy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Network Policy" />
                 <link href="https://devopstales.github.io/home/k0s/?utm_source=atom_feed" rel="related" type="text/html" title="K0S The tiny Kubernetes" />
                 <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
             
-                <id>https://devopstales.github.io/home/imagepullsecret-patcher/</id>
+                <id>https://devopstales.github.io/home/k8s-connaisseur/</id>
+            
+            
+            <published>2021-02-22T00:00:00+00:00</published>
+            <updated>2021-02-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can deploy Connaisseur to Image Signature Verification into a Kubernetes cluster.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
+<!-- RBSC --></li>
+<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kurad -->
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
+
+<h3 id="what-is-connaisseur">What is Connaisseur?</h3>
+
+<p>Connaisseur is an admission controller for Kubernetes that integrates Image Signature Verification into a cluster, as a means to ensure that only valid images are being deployed.</p>
+
+<h3 id="notary">Notary</h3>
+
+<pre><code>apt install notary
+</code></pre>
+
+<pre><code>docker pull alpine
+docker tag alpine:latest devopstales/testimage:unsigned
+docker push devopstales/testimage:unsigned
+</code></pre>
+
+<pre><code>notary -s https://notary.docker.io -d ~/.docker/trust init -p docker.io/devopstales/testimage     
+Root key found, using: 31579f2a034add499da6e799bc9260d08a15ab1804298218f05f78d97a669f77
+Enter passphrase for root key with ID 31579f2: 
+Enter passphrase for new targets key with ID 42e49c6: 
+Repeat passphrase for new targets key with ID 42e49c6: 
+Enter passphrase for new snapshot key with ID 399243c: 
+Repeat passphrase for new snapshot key with ID 399243c: 
+Enter username: devopstales
+Enter password: 
+Auto-publishing changes to docker.io/devopstales/testimage
+Enter username: devopstales
+Enter password: 
+Successfully published changes for repository docker.io/devopstales/testimage
+
+
+export DOCKER_CONTENT_TRUST=1
+export DOCKER_CONTENT_TRUST_SERVER=https://notary.docker.io
+docker tag alpine:latest devopstales/testimage:signed
+docker push devopstales/testimage:signed
+</code></pre>
+
+<pre><code>$ find ~/.docker/trust/ | head
+/home/devopstales/.docker/trust/
+/home/devopstales/.docker/trust/private
+/home/devopstales/.docker/trust/private/1f4a9a0922605b3bc19c97e180d962d530721288f4fd0845ad0aa37ba4a6f95d.key
+/home/devopstales/.docker/trust/private/fe30e72f5976b2ae7d0d365f28dacfae9c71f11ad854065603ccc806900e84fa.key
+/home/devopstales/.docker/trust/private/3da0d27e2d3b964d238d1d184c7578b5f2737b918ec5b8265474e22b07b2ea22.key
+/home/devopstales/.docker/trust/private/root-priv.key
+/home/devopstales/.docker/trust/private/root-pub.pem
+/home/devopstales/.docker/trust/tuf
+/home/devopstales/.docker/trust/tuf/docker.io
+/home/devopstales/.docker/trust/tuf/docker.io/devopstales
+</code></pre>
+
+<pre><code>notary -s https://notary.docker.io -d ~/.docker/trust list docker.io/devopstales/testimage
+NAME     DIGEST                                                              SIZE (BYTES)    ROLE
+----     ------                                                              ------------    ----
+signed    4661fb57f7890b9145907a1fe2555091d333ff3d28db86c3bb906f6a2be93c87    528             targets/devopstales
+</code></pre>
+
+<h3 id="install-connaisseur">Install Connaisseur</h3>
+
+<pre><code># The installer use yq so we need to install it
+
+wget https://github.com/mikefarah/yq/releases/download/v4.2.0/yq_linux_amd64 -O /usr/bin/yq &amp;&amp;\
+    chmod +x /usr/bin/yq
+</code></pre>
+
+<pre><code># generate the public root cert
+
+cd ~/.docker/trust/private
+sed '/^role:\sroot$/d' $(grep -iRl &quot;role: root&quot; .) &gt; root-priv.key
+openssl ec -in root-priv.key -pubout -out root-pub.pem
+</code></pre>
+
+<pre><code>git clone https://github.com/sse-secure-systems/connaisseur.git
+cd
+nano helm/values.yaml
+...
+# the public part of the root key, for verifying notary's signatures
+  rootPubKey: |
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9m6WfwViwT8lYjLF6jAs1bvd1hPp
+    cRUmONP49JszW1X/6Q22DygylIJGyC8IXeb3zBWVMoYDxauiqrFomHUOEA==
+    -----END PUBLIC KEY-----
+
+make install
+</code></pre>
+
+<h3 id="test-the-image-signature-verification">Test the Image Signature Verification</h3>
+
+<pre><code>kubens default
+
+kubectl run unsigned --image=docker.io/devopstales/testimage:unsigned
+Error from server: admission webhook &quot;connaisseur-svc.connaisseur.svc&quot; denied the request: failed to verify signature of trust data.
+
+kubectl run signed --image=docker.io/devopstales/testimage:signed
+pod/signed created
+
+kubectl get po
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to use imagePullSecrets cluster-wide??]]></title>
+            <link href="https://devopstales.github.io/home/k8s-imagepullsecret-patcher/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-imagepullsecret-patcher/?utm_source=atom_feed" rel="related" type="text/html" title="How to use imagePullSecrets cluster-wide??" />
+                <link href="https://devopstales.github.io/home/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
+                <link href="https://devopstales.github.io/home/k8s-networkpolicy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Network Policy" />
+                <link href="https://devopstales.github.io/home/k0s/?utm_source=atom_feed" rel="related" type="text/html" title="K0S The tiny Kubernetes" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
+            
+                <id>https://devopstales.github.io/home/k8s-imagepullsecret-patcher/</id>
             
             
             <published>2021-02-17T00:00:00+00:00</published>
@@ -72,21 +225,27 @@ spec:
 
 <p>I found a tool called imagepullsecret-patcher that do this on all of your namespace:</p>
 
-<pre><code>wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/master/deploy-example/kubernetes-manifest/2_deployment.yaml
+<pre><code>wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/185aec934bd01fa9b6ade2c44624e5f2023e2784/deploy-example/kubernetes-manifest/1_rbac.yaml
+wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/master/deploy-example/kubernetes-manifest/2_deployment.yaml
 
-# Edit the downloaded file and chaneg the contant of the image-pull-secret-src
+kubectl create ns imagepullsecret-patcher
 
-cp 2_deployment.yaml imagepullsecret-patcher.yaml
-nano imagepullsecret-patcher.yaml
-kubectl aplly -f imagepullsecret-patcher
+# Edit the downloaded file and chaneg the contant of the image-pull-secret-src and the namespace if nececary
+
+nano 1_rbac.yaml
+nano 2_deployment.yaml
+kubectl apply -f 1_rbac.yaml
+kubectl apply -f 2_deployment.yaml
 </code></pre>
 
-<h3 id="openshift">Openshift</h3>
+<h3 id="test">test</h3>
 
-<pre><code>oc secrets link default &lt;pull_secret_name&gt; --for=pull
+<pre><code>kubectl create ns imagepullsecret-test
+kubectl get secret image-pull-secret -n imagepullsecret-test
+image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
+</code></pre>
 
-oc secrets link builder &lt;pull_secret_name&gt;
-</code></pre>]]></content>
+<p>The secret is automaticle created.</p>]]></content>
             
                  
                     
@@ -126,16 +285,24 @@ oc secrets link builder &lt;pull_secret_name&gt;
 <li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
 <li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
 <li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
 <!-- Vault operator
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 <!-- https://github.com/banzaicloud/dast-operator -->
 <!-- kurad -->
-<!-- sysdig falco --></li>
-</ul>
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
 
 <p>For a production ready  Kubernetes cluster it is very important to enforcing cluster-wide policies to restrict what a container is allowed to do. We do this wit PS in a previous pos. But how should we enforce our best practices to the cluster users?</p>
 
@@ -367,16 +534,24 @@ spec:
 <li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
 <li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
 <li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
 <!-- Vault operator
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 <!-- https://github.com/banzaicloud/dast-operator -->
 <!-- kurad -->
-<!-- sysdig falco --></li>
-</ul>
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
 
 <h3 id="network-policies">Network policies</h3>
 
@@ -785,16 +960,24 @@ spec:
 <li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
 <li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
 <li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
 <!-- Vault operator
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 <!-- https://github.com/banzaicloud/dast-operator -->
 <!-- kurad -->
-<!-- sysdig falco --></li>
-</ul>
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
 
 <p>There is multiple tools to scan vulnerabilities, but less Admission Controller to use them. I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&rsquo;s <a href="https://devopstales.github.io/cloud/k3s-helm-controller/">Helm controller</a> what is preinstalled. Sadly anchore-enginn run as root so we need to use <a href="https://devopstales.github.io/home/rke2-pod-security-policy/">my predifinde PSP</a> to allow this.</p>
 
@@ -978,16 +1161,24 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 <li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
 <li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
 <li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
 <!-- Vault operator
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 <!-- https://github.com/banzaicloud/dast-operator -->
 <!-- kurad -->
-<!-- sysdig falco --></li>
-</ul>
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
 
 <h3 id="what-is-a-pod-security-policy">What is a Pod Security Policy?</h3>
 
@@ -1177,16 +1368,24 @@ rules:
 <li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
 <li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
 <li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
 <!-- Vault operator
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 <!-- https://github.com/banzaicloud/dast-operator -->
 <!-- kurad -->
-<!-- sysdig falco --></li>
-</ul>
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
 
 <h3 id="what-is-an-admission-controller">What is an Admission Controller</h3>
 
@@ -1512,16 +1711,24 @@ crictl pods - list pods
 <li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
 <li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
 <li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
 <!-- Vault operator
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 <!-- https://github.com/banzaicloud/dast-operator -->
 <!-- kurad -->
-<!-- sysdig falco --></li>
-</ul>
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
 
 <h3 id="what-is-rke2">What is RKE2</h3>
 
@@ -1668,16 +1875,24 @@ kubectl edit psp global-restricted-psp
 <li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
 <li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
 <li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a>
-<!-- Notary Admission Controller https://github.com/IBM/portieris -->
+<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a>
+&lt;!&ndash; Notary Admission Controller
+<a href="https://github.com/IBM/portieris">https://github.com/IBM/portieris</a>
+<a href="https://github.com/IBM/portieris/blob/master/POLICIES.md">https://github.com/IBM/portieris/blob/master/POLICIES.md</a></li>
+</ul>
+
+<p><p><a href="https://github.com/sse-secure-systems/connaisseur">https://github.com/sse-secure-systems/connaisseur</a>
+&ndash;&gt;
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
 <!-- Vault operator
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 <!-- https://github.com/banzaicloud/dast-operator -->
 <!-- kurad -->
-<!-- sysdig falco --></li>
-</ul>
+<!-- sysdig falco -->
+<!-- https://keel.sh -->
+<!-- resource kvota --></p>
 
 <h3 id="use-firewalld">Use firewalld</h3>
 
@@ -10093,7 +10308,7 @@ multiauth {
       };
 </code></pre>
 
-<h3 id="configure-runceck-to-use-multibackend-config-file">Configure Runceck to use multibackend config file</h3>
+<h3 id="configure-rundeck-to-use-multibackend-config-file">Configure Rundeck to use multibackend config file</h3>
 
 <pre><code>nano /etc/rundeck/profile
 
@@ -10107,7 +10322,7 @@ export JAAS_CONF=&quot;/etc/rundeck/jaas-ldap.conf&quot;
 export LOGIN_MODULE=&quot;ldap&quot;
 </code></pre>
 
-<h3 id="configure-runceck-to-use-ldap-config-file">Configure Runceck to use LDAP config file</h3>
+<h3 id="configure-rundeck-to-use-ldap-config-file">Configure Rundeck to use LDAP config file</h3>
 
 <pre><code>nano /etc/rundeck/profile
 
