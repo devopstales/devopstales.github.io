@@ -26,7 +26,7 @@
     "datePublished": "2021-01-10",
     "dateModified" : "2021-01-10",
     "url" : "https:\/\/devopstales.github.io\/home\/k8s-networkpolicy\/",
-    "wordCount" : "647",
+    "wordCount" : "943",
     "keywords" : [ "devops", "tales", "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "NetworkPolicy", "Blog" ]
     
 }
@@ -148,22 +148,21 @@ if (!doNotTrack) {
 
 <ul>
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
-<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part3: <a href="../../cloud/rke2-cilium/">RKE2 Install With cilium</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
-<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
-<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part6: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part7: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part8: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
+<li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 </ul>
 
-<!-- Notary Admission Controller 
-https://github.com/IBM/portieris
-https://github.com/IBM/portieris/blob/master/POLICIES.md
-
-https://github.com/sse-secure-systems/connaisseur
--->
+<!-- admission-controller ami cseréli az imageben a repot !!!
+ -->
 
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
@@ -172,6 +171,8 @@ https://github.com/bitnami-labs/sealed-secrets -->
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 
 <!-- https://github.com/banzaicloud/dast-operator -->
+
+<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- kurad -->
 
@@ -204,27 +205,60 @@ metadata:
   name: deny-all
   namespace: monitoring
 spec:
-  podSelector: {}
   policyTypes:
   - Ingress
   - Egress
+  podSelector: {}
 </code></pre>
 
-<p>Since this resource defines both policyTypes ingress and egress, but doesn’t define any whitelist rules, it blocks all the pods in the monitoring namespace from communicating with each other. All <code>NetworkPolicy</code> is like a firewall rule. To select an aplication you need to use selectors of labels. To allow connections from the Ingress Controller:</p>
+<p>Since this resource defines both policyTypes ingress and egress, but doesn’t define any whitelist rules, it blocks all the pods in the monitoring namespace from communicating with each other. Note that this policy dose not allows connections to port 53 on any IP by default, to facilitate DNS lookups. So we need to whitelist dns. All <code>NetworkPolicy</code> is like a firewall rule. To select an aplication you need to use selectors of labels.</p>
+
+<pre><code># create label
+kubectl label namespace kube-system networking/namespace=kube-system
+</code></pre>
 
 <pre><code>apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: default-deny-all-egress
+spec:
+  policyTypes:
+  - Egress
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          networking/namespace: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+</code></pre>
+
+<p>To allow connections from the Ingress Controller:</p>
+
+<pre><code># create label
+kubectl label namespace nginx-ingress networking/namespace=ingress
+</code></pre>
+
+<pre><code>apiVersion: networking.k8s.io/v1n
+kind: NetworkPolicy
+metadata:
   name: allow-from-ingress
 spec:
+  policyTypes:
+  - Ingress
   ingress:
   - from:
     - namespaceSelector:
         matchLabels:
-          app.kubernetes.io/name: ingress-nginx
+          networking/namespace: ingress
   podSelector: {}
-  policyTypes:
-  - Ingress
 </code></pre>
 
 <p>We need to create allow rules to define what aplication can communicate with anathor aplication. To match network traffic by combining namespace and pod selectors, you can use a <code>NetworkPolicy</code> object similar to the following:</p>
@@ -235,9 +269,8 @@ metadata:
   name: alertmanager-mesh
   namespace: monitoring
 spec:
-  podSelector:
-    matchLabels:
-      app: alertmanager
+  policyTypes:
+  - Ingress
   ingress:
   - from:
     - podSelector:
@@ -249,11 +282,12 @@ spec:
     ports:
     - port: 9093
       protocol: tcp
-  policyTypes:
-  - Ingress
+  podSelector:
+    matchLabels:
+      app: alertmanager
 </code></pre>
 
-<p>Allow inbound tcp to port 9093 from only prometheus to node-exporter</p>
+<p>Allow inbound tcp to port 9093 from only prometheus to alertmanager</p>
 
 <pre><code>apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -261,6 +295,8 @@ metadata:
   name: prometheus
   namespace: monitoring
 spec:
+  policyTypes:
+  - Ingress
   podSelector:
     matchLabels:
       app: prometheus
@@ -273,8 +309,6 @@ spec:
     ports:
     - protocol: TCP
       port: 9090
-  policyTypes:
-  - Ingress
 </code></pre>
 
 <p>Allow inbound tcp to port 9090 from any source to prometheus.</p>
@@ -287,6 +321,8 @@ metadata:
   name: allow-egress-same-namespace
   namespace: default
 spec:
+  policyTypes:
+    - Egress
   podSelector:
     matchLabels:
       color: blue
@@ -306,28 +342,12 @@ kind: NetworkPolicy
 metadata:
   name: allow-same-namespace
 spec:
-  podSelector: {}
   policyTypes:
   - Ingress
+  podSelector: {}
   ingress:
   - from:
     - podSelector: {}
-</code></pre>
-
-<p>Another good practice is to define and apply a default NetworkPolicy to deny egress traffic outside of the cluster for application namespaces, then whitelist any external subnets for pods as needed.</p>
-
-<pre><code>apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: deny-external-egress
-  namespace: prod
-spec:
-  podSelector: {}
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - namespaceSelector: {}
 </code></pre>
 
 <p>For services that require egress to resources outside of the cluster, for example, a database whitelist the subnet that the network resource is on.</p>
@@ -338,17 +358,103 @@ metadata:
   name: customer-api-allow-web
   namespace: prod
 spec:
+  policyTypes:
+  - Egress
   podSelector:
     matchLabels:
       app: orders
-  policyTypes:
-  - Egress
   egress:
   - ports:
     - port: 3306
     to:
     - ipBlock:
         cidr: 172.16.32.0/27
+</code></pre>
+
+<h3 id="calico-networkpolicy">Calico NetworkPolicy</h3>
+
+<p>Calico network policy provides a richer set of policy capabilities than Kubernetes including:</p>
+
+<ul>
+<li>policy ordering/priority</li>
+<li>deny rules</li>
+<li>Protocols: TCP, UDP, ICMP, SCTP, UDPlite, ICMPv6, protocol numbers (1-255)</li>
+</ul>
+
+<p>Calico network policies apply to endpoints. In Kubernetes, each pod is a Calico endpoint. However, Calico can support other kinds of endpoints. There are two types of Calico endpoints: workload endpoints (such as a Kubernetes pod or OpenStack VM) and host endpoints (an interface or group of interfaces on a host).</p>
+
+<pre><code>kind: NetworkPolicy
+apiVersion: projectcalico.org/v3
+metadata:
+  name: allow-egress-same-namespace
+  namespace: default
+spec:
+  selector: color == 'red'
+  ingress:
+  - action: Allow
+    protocol: TCP
+    source:
+      selector: color == 'blue'
+    destination:
+      ports:
+        - 80
+</code></pre>
+
+<p>In the following example, incoming TCP traffic to any pods with label color: red is denied if it comes from a pod with color: blue.</p>
+
+<pre><code>apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: deny-blue
+spec:
+  selector: color == 'red'
+  ingress:
+  - action: Deny
+    protocol: TCP
+    source:
+      selector: color == 'blue'
+</code></pre>
+
+<p>Apply network policies in specific order:</p>
+
+<pre><code>apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: drop-other-ingress
+spec:
+  order: 20
+  ...deny policy rules here...
+
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-cluster-internal-ingress
+spec:
+  order: 10
+  ...allow policy rules here...
+</code></pre>
+
+<p>In the following example, incoming TCP traffic to an application is denied, and each connection attempt is logged to syslog:</p>
+
+<pre><code>apiVersion: projectcalico.org/v3
+kind: NetworkPolicy
+Metadata:
+  name: allow-tcp-6379
+  namespace: production
+Spec:
+  selector: role == 'database'
+  types:
+  - Ingress
+  - Egress
+  ingress:
+  - action: Log
+    protocol: TCP
+    source:
+      selector: role == 'frontend'
+  - action: Deny
+    protocol: TCP
+    source:
+      selector: role == 'frontend'
 </code></pre>
 
 <p>It is important to enforce separation of containers. As you can see you can create a <code>NetworkPolicy</code> for a specific namespace. So don&rsquo;t forget to create the default best practice Policies. In the next post will show you how you can automate the creation of the Default Policies for new namespaces.</p>
@@ -404,6 +510,9 @@ spec:
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller-v2/">RKE2 Image security Admission Controller V2</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-backup/">Backup your Kubernetes Cluster</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rke2-cilium/">RKE2 Install With cilium</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog_kafka/">Sending syslog via Kafka into Graylog</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-pfsense/">Analyzing PFsense logs in Graylog4</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-install/">Install Graylog4</a></li>
@@ -411,9 +520,6 @@ spec:
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-connaisseur/">Image Signature Verification Admission Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-policy/">Kubernetes Policy</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k0s/">K0S The tiny Kubernetes</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller/">RKE2 Image security Admission Controller</a></li>
 		</ul>
 	</div>
 </div>
@@ -435,6 +541,7 @@ spec:
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="cilium">cilium</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>

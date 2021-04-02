@@ -26,7 +26,7 @@
     "datePublished": "2020-11-25",
     "dateModified" : "2020-11-25",
     "url" : "https:\/\/devopstales.github.io\/home\/rke2-airgap-install\/",
-    "wordCount" : "441",
+    "wordCount" : "488",
     "keywords" : [ "devops", "tales", "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "rancher", "Blog" ]
     
 }
@@ -148,22 +148,21 @@ if (!doNotTrack) {
 
 <ul>
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
-<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part3: <a href="../../cloud/rke2-cilium/">RKE2 Install With cilium</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
-<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
-<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part6: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part7: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part8: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
+<li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 </ul>
 
-<!-- Notary Admission Controller 
-https://github.com/IBM/portieris
-https://github.com/IBM/portieris/blob/master/POLICIES.md
-
-https://github.com/sse-secure-systems/connaisseur
--->
+<!-- admission-controller ami cseréli az imageben a repot !!!
+ -->
 
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
@@ -172,6 +171,8 @@ https://github.com/bitnami-labs/sealed-secrets -->
 https://banzaicloud.com/docs/bank-vaults/installing/ -->
 
 <!-- https://github.com/banzaicloud/dast-operator -->
+
+<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- kurad -->
 
@@ -189,7 +190,7 @@ https://banzaicloud.com/docs/bank-vaults/installing/ -->
 
 <p>Not like K3S RKE2 offers an rpm repository. Of course in an Air-Gap environment you need an internal repository to sync the packages.</p>
 
-<pre><code>cat &lt;&lt; EOF &gt; /etc/yum.repos.d/rancher-rke2-1-18-latest.repo
+<pre><code class="language-bash">cat &lt;&lt; EOF &gt; /etc/yum.repos.d/rancher-rke2-1-18-latest.repo
 [rancher-rke2-common-latest]
 name=Rancher RKE2 Common Latest
 baseurl=https://rpm.rancher.io/rke2/latest/common/centos/7/noarch
@@ -210,19 +211,19 @@ yum -y install rke2-server nano
 
 <p>In an Air-Gap environment you cannot connect to the public internet so the containerd engine cannot connest to the registry. In this scenario yo have two options. Create an internal registry and upload all images or import images from tarball. In this demo I will use the second option.</p>
 
-<pre><code>mkdir -p /var/lib/rancher/rke2/agent/images/
+<pre><code class="language-bash">mkdir -p /var/lib/rancher/rke2/agent/images/
 scp rke2-images.linux-amd64.tar masern01:/var/lib/rancher/rke2/agent/images/
 cd /var/lib/rancher/rke2/agent/images/
 </code></pre>
 
 <p>For RKE2 you didn&rsquo;t nee docker engine. The rpms will install all the necessary binaris to run a container.</p>
 
-<pre><code>echo 'PATH=$PATH:/usr/local/bin' &gt;&gt; /etc/profile
+<pre><code class="language-bash">echo 'PATH=$PATH:/usr/local/bin' &gt;&gt; /etc/profile
 echo 'PATH=$PATH:/var/lib/rancher/rke2/bin' &gt;&gt; /etc/profile
 source /etc/profile
 </code></pre>
 
-<pre><code>setenforce 1
+<pre><code class="language-bash">setenforce 1
 getenforce
 sed -i 's/=\(disabled\|permissive\)/=enforcing/g' /etc/sysconfig/selinux
 systemctl start firewalld
@@ -231,7 +232,7 @@ systemctl enable firewalld
 
 <p>For the demo I will use <code>firewalld</code> to block all outgoing request from the server. This is how I emulate the Air-Gap environment.</p>
 
-<pre><code>firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -p tcp -m tcp --dport=443 -j DROP
+<pre><code class="language-bash">firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -p tcp -m tcp --dport=443 -j DROP
 firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -p tcp -m tcp --dport=80 -j DROP
 firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -j ACCEPT
 firewall-cmd --reload
@@ -239,10 +240,11 @@ firewall-cmd --reload
 
 <p>Enable hardened mode.</p>
 
-<pre><code>mkdir -p /etc/rancher/rke2
+<pre><code class="language-bash">mkdir -p /etc/rancher/rke2
 cat &lt;&lt; EOF &gt;  /etc/rancher/rke2/config.yaml
 write-kubeconfig-mode: &quot;0644&quot;
 profile: &quot;cis-1.5&quot;
+selinux: true
 EOF
 
 
@@ -254,7 +256,7 @@ useradd -r -c &quot;etcd user&quot; -s /sbin/nologin -M etcd
 
 <p>On my VM there is multiple network interface So I will configure what to use the kubernetes engine.</p>
 
-<pre><code>mkdir -p /var/lib/rancher/rke2/server/manifests/
+<pre><code class="language-bash">mkdir -p /var/lib/rancher/rke2/server/manifests/
 cat &lt;&lt; EOF &gt; /var/lib/rancher/rke2/server/manifests/rke2-canal-config.yml
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
@@ -266,9 +268,25 @@ spec:
     flannel:
       iface: &quot;enp0s8&quot;
 EOF
+
+cat &lt;&lt; EOF &gt; /var/lib/rancher/rke2/server/manifests/rke2-ingress-nginx-config.yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-ingress-nginx
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    controller:
+      metrics:
+        service:
+          annotations:
+            prometheus.io/scrape: &quot;true&quot;
+            prometheus.io/port: &quot;10254&quot;
+EOF
 </code></pre>
 
-<pre><code>systemctl enable rke2-server.service
+<pre><code class="language-bash">systemctl enable rke2-server.service
 systemctl start rke2-server.service
 journalctl -u rke2-server -f
 
@@ -276,6 +294,7 @@ journalctl -u rke2-server -f
 mkdir ~/.kube
 ln -s /etc/rancher/rke2/rke2.yaml ~/.kube/config
 ln -s /var/lib/rancher/rke2/agent/etc/crictl.yaml /etc/crictl.yaml
+chmod 600 ~/.kube/config
 
 kubectl get node
 crictl ps
@@ -339,6 +358,9 @@ kubectl edit psp global-restricted-psp
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller-v2/">RKE2 Image security Admission Controller V2</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-backup/">Backup your Kubernetes Cluster</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rke2-cilium/">RKE2 Install With cilium</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog_kafka/">Sending syslog via Kafka into Graylog</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-pfsense/">Analyzing PFsense logs in Graylog4</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-install/">Install Graylog4</a></li>
@@ -346,9 +368,6 @@ kubectl edit psp global-restricted-psp
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-connaisseur/">Image Signature Verification Admission Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-policy/">Kubernetes Policy</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k0s/">K0S The tiny Kubernetes</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller/">RKE2 Image security Admission Controller</a></li>
 		</ul>
 	</div>
 </div>
@@ -370,6 +389,7 @@ kubectl edit psp global-restricted-psp
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="cilium">cilium</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>

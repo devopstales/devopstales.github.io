@@ -26,8 +26,8 @@
     "datePublished": "2020-12-13",
     "dateModified" : "2020-12-13",
     "url" : "https:\/\/devopstales.github.io\/cloud\/image-security-admission-controller\/",
-    "wordCount" : "485",
-    "keywords" : [ "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "rancher", "Admission Controller", "Blog" ]
+    "wordCount" : "590",
+    "keywords" : [ "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "rancher", "Admission Controller", "anchore", "Blog" ]
     
 }
 </script>
@@ -153,22 +153,21 @@ if (!doNotTrack) {
 
 <ul>
 <li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
-<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part3: <a href="../../cloud/rke2-cilium/">RKE2 Install With cilium</a>
 <!-- RBSC --></li>
-<li>Part3: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
-<li>Part4: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-<li>Part5: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
-<li>Part6: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
-<li>Part7: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
-<li>Part8 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part6: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part7: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part8: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
+<li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 </ul>
 
-<!-- Notary Admission Controller 
-https://github.com/IBM/portieris
-https://github.com/IBM/portieris/blob/master/POLICIES.md
-
-https://github.com/sse-secure-systems/connaisseur
--->
+<!-- admission-controller ami cseréli az imageben a repot !!!
+ -->
 
 <!-- sealed secrets
 https://github.com/bitnami-labs/sealed-secrets -->
@@ -178,6 +177,8 @@ https://banzaicloud.com/docs/bank-vaults/installing/ -->
 
 <!-- https://github.com/banzaicloud/dast-operator -->
 
+<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
+
 <!-- kurad -->
 
 <!-- sysdig falco -->
@@ -186,11 +187,11 @@ https://banzaicloud.com/docs/bank-vaults/installing/ -->
 
 <!-- resource kvota -->
 
-<p>There is multiple tools to scan vulnerabilities, but less Admission Controller to use them. I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&rsquo;s <a href="https://devopstales.github.io/cloud/k3s-helm-controller/">Helm controller</a> what is preinstalled. Sadly anchore-enginn run as root so we need to use <a href="https://devopstales.github.io/home/rke2-pod-security-policy/">my predifinde PSP</a> to allow this.</p>
+<p>There is multiple tools to scan vulnerabilities, but less Admission Controller to use them. I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&rsquo;s <a href="https://devopstales.github.io/cloud/k3s-helm-controller/">Helm controller</a> what is preinstalled.</p>
 
-<p>Then we can Deploy an Admission Controller to us this tool to automaticle scann any image deploy in the cluster and reject if is vulnerable. As I sad before there is multiple solution for this one is Anchore&rsquo;s own Admission Controller but I will use Banzaicloud&rsquo;s solution because this is more flexible.</p>
+<p>Then we can Deploy an Admission Controller to us this tool to automaticle scann any image deploy in the cluster and reject if is vulnerable. As I sad before there is multiple solution for this. One is Anchore&rsquo;s own Admission Controller but I will use Banzaicloud&rsquo;s solution because this easier to deploy. Sadly anchore-image-validator run as root so we need to use <a href="https://devopstales.github.io/home/rke2-pod-security-policy/">my predifinde PSP</a> to allow this.</p>
 
-<pre><code>nano /var/lib/rancher/rke2/server/manifests/10_image-security.yaml
+<pre><code class="language-yaml">nano /var/lib/rancher/rke2/server/manifests/10_image-security.yaml
 ---
 apiVersion: v1
 kind: Namespace
@@ -246,15 +247,54 @@ spec:
     rbac:
       psp:
         enabled: true
+    createPolicies: true
 </code></pre>
+
+<p>During deploying this chart, it&rsquo;s creating predefined policy bundles and activates <code>AllowAll</code> by default if <code>createPolicies</code> flag is set.</p>
+
+<table>
+<thead>
+<tr>
+<th>Bundle Name</th>
+<th>Description</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Allow all and warn bundle</td>
+<td>Allow all images and warn if vulnerabilities are found</td>
+</tr>
+
+<tr>
+<td>Reject critical bundle</td>
+<td>Reject deploying images that contain <code>critical</code> vulnerabiliy</td>
+</tr>
+
+<tr>
+<td>Reject high bundle</td>
+<td>Reject deploying images that contain <code>high</code> vulnerabiliy</td>
+</tr>
+
+<tr>
+<td>Block root bundle</td>
+<td>Block deploying images that using <code>root</code> as effective user</td>
+</tr>
+
+<tr>
+<td>Deny all images</td>
+<td>Deny all imagest to deploy</td>
+</tr>
+</tbody>
+</table>
 
 <h3 id="test-the-admission-controller">Test the Admission Controller</h3>
 
-<pre><code>kubectl run --image=busybox -- sleep 3600
+<pre><code class="language-bash">kubectl run --image=busybox -- sleep 3600
 Error from server: admission webhook &quot;pods.anchore-policy-validator.admission.banzaicloud.com&quot; denied the request: Image failed policy check: busybox
 </code></pre>
 
-<pre><code>kubectl describe audits busybox1
+<pre><code class="language-yaml">kubectl describe audits busybox1
 Name:         busybox1
 Namespace:    
 Labels:       fakerelease=true
@@ -306,7 +346,7 @@ Events:   &lt;none&gt;
 
 <p>The default policy is deny All Image theat failed on policy check but we can white list a specific image or set <code>createPolicies</code> to <code>true</code> in Banzaicloud&rsquo;s Helm chart to create default AllowAll Policy.</p>
 
-<pre><code>kubectl apply -f - &lt;&lt; EOF
+<pre><code class="language-bash">kubectl apply -f - &lt;&lt; EOF
 apiVersion: security.banzaicloud.com/v1alpha1
 kind:  WhiteListItem
 metadata:
@@ -317,11 +357,11 @@ spec:
 EOF
 </code></pre>
 
-<pre><code>kubectl run busybox1 --image=busybox -- sleep 3600
+<pre><code class="language-bash">kubectl run busybox1 --image=busybox -- sleep 3600
 pod/busybox1 created
 </code></pre>
 
-<pre><code>kubectl get whitelistitems -o wide -o=custom-columns=NAME:.metadata.name,CREATOR:.spec.creator,REASON:.spec.reason
+<pre><code class="language-bash">kubectl get whitelistitems -o wide -o=custom-columns=NAME:.metadata.name,CREATOR:.spec.creator,REASON:.spec.reason
 NAME       CREATOR          REASON
 busybox1   devopstales-sa   testing
 
@@ -329,6 +369,8 @@ kubectl get audits -o wide -o=custom-columns=NAME:.metadata.name,RELEASE:.spec.r
 NAME       RELEASE    IMAGES                                                  RESULT
 busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [Image failed policy check: busybox]
 </code></pre>
+
+<p>You can find the config files in my github repo: <a href="https://github.com/devopstales/k8s_sec_lab">https://github.com/devopstales/k8s_sec_lab</a></p>
 		</div>
 		<footer class="post__footer">
 			
@@ -395,6 +437,9 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller-v2/">RKE2 Image security Admission Controller V2</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-backup/">Backup your Kubernetes Cluster</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rke2-cilium/">RKE2 Install With cilium</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog_kafka/">Sending syslog via Kafka into Graylog</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-pfsense/">Analyzing PFsense logs in Graylog4</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-install/">Install Graylog4</a></li>
@@ -402,9 +447,6 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-connaisseur/">Image Signature Verification Admission Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-policy/">Kubernetes Policy</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k0s/">K0S The tiny Kubernetes</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller/">RKE2 Image security Admission Controller</a></li>
 		</ul>
 	</div>
 </div>
@@ -426,6 +468,7 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="cilium">cilium</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
