@@ -26,8 +26,8 @@
     "datePublished": "2021-02-17",
     "dateModified" : "2021-02-17",
     "url" : "https:\/\/devopstales.github.io\/home\/k8s-imagepullsecret-patcher\/",
-    "wordCount" : "191",
-    "keywords" : [ "devops", "tales", "kubernetes deployment", "imagePullSecrets", "Dockerhub limit", "Blog" ]
+    "wordCount" : "279",
+    "keywords" : [ "devops", "tales", "kubernetes deployment", "imagePullSecrets", "Dockerhub limit", "Kyverno", "Blog" ]
     
 }
 </script>
@@ -146,7 +146,7 @@ if (!doNotTrack) {
 
 <p>Kubernetes uses imagePullSecrets to authenticate to private container registris on a per Pod or per Namespace basis. To do that yo need to create a secret with the credentials:</p>
 
-<pre><code>kubectl create secret docker-registry image-pull-secret \
+<pre><code class="language-bash">kubectl create secret docker-registry image-pull-secret \
   -n &lt;your-namespace&gt; \
   --docker-server=&lt;your-registry-server&gt; \
   --docker-username=&lt;your-name&gt; \
@@ -156,7 +156,7 @@ if (!doNotTrack) {
 
 <p>Now we can use this image in a pod for download the docker image:</p>
 
-<pre><code>apiVersion: v1
+<pre><code class="language-yaml">apiVersion: v1
 kind: Pod
 metadata:
   name: busybox
@@ -171,14 +171,14 @@ spec:
 
 <p>The other way is to add it to the default ServiceAccount in the namespace:</p>
 
-<pre><code>kubectl patch serviceaccount default \
+<pre><code class="language-bash">kubectl patch serviceaccount default \
   -p &quot;{\&quot;imagePullSecrets\&quot;: [{\&quot;name\&quot;: \&quot;image-pull-secret\&quot;}]}&quot; \
   -n &lt;your-namespace&gt;
 </code></pre>
 
 <p>I found a tool called imagepullsecret-patcher that do this on all of your namespace:</p>
 
-<pre><code>wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/185aec934bd01fa9b6ade2c44624e5f2023e2784/deploy-example/kubernetes-manifest/1_rbac.yaml
+<pre><code class="language-bash">wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/185aec934bd01fa9b6ade2c44624e5f2023e2784/deploy-example/kubernetes-manifest/1_rbac.yaml
 wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/master/deploy-example/kubernetes-manifest/2_deployment.yaml
 
 kubectl create ns imagepullsecret-patcher
@@ -193,12 +193,57 @@ kubectl apply -f 2_deployment.yaml
 
 <h3 id="test">test</h3>
 
-<pre><code>kubectl create ns imagepullsecret-test
+<pre><code class="language-bash">kubectl create ns imagepullsecret-test
 kubectl get secret image-pull-secret -n imagepullsecret-test
 image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 </code></pre>
 
 <p>The secret is automaticle created.</p>
+
+<h3 id="kyverno-policy">Kyverno policy</h3>
+
+<p>You can do the same thing with kyverno policy:</p>
+
+<pre><code class="language-yaml">apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sync-secret
+spec:
+  background: false
+  rules:
+  - name: sync-image-pull-secret
+    match:
+      resources:
+        kinds:
+        - Namespace
+    generate:
+      kind: Secret
+      name: image-pull-secret
+      namespace: &quot;{{request.object.metadata.name}}&quot;
+      synchronize: true
+      clone:
+        namespace: default
+        name: image-pull-secret
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mutate-imagepullsecret
+spec:
+  rules:
+    - name: mutate-imagepullsecret
+      match:
+        resources:
+          kinds:
+          - Pod
+      mutate:
+        patchStrategicMerge:
+          spec:
+            imagePullSecrets:
+            - name: image-pull-secret  ## imagePullSecret that you created with docker hub pro account
+            (containers):
+            - (image): &quot;*&quot; ## match all container images
+</code></pre>
 		</div>
 	</article>
 </main>
@@ -251,6 +296,7 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-vault/">Kubernetes and Vault integration</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller-v2/">RKE2 Image security Admission Controller V2</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-backup/">Backup your Kubernetes Cluster</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rke2-cilium/">RKE2 Install With cilium</a></li>
@@ -260,7 +306,6 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gns3-linux-install/">Install GNS3</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-connaisseur/">Image Signature Verification Admission Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-policy/">Kubernetes Policy</a></li>
 		</ul>
 	</div>
 </div>
@@ -302,6 +347,7 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="helm-controller">helm-controller</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
@@ -312,6 +358,7 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="jitsi">jitsi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8S">K8S</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
@@ -319,10 +366,12 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="Logging">Logging</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="Loki">Loki</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="mutating webhook">mutating webhook</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
@@ -363,7 +412,6 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vault/" title="vault">vault</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>

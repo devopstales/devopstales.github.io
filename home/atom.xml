@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-04-04T10:28:38+00:00</updated>
+    <updated>2021-04-07T09:29:46+00:00</updated>
     
     
     <author>
@@ -20,14 +20,321 @@
     
         
         <entry>
+            <title type="html"><![CDATA[Kubernetes and Vault integration]]></title>
+            <link href="https://devopstales.github.io/home/k8s-vault/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-vault/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes and Vault integration" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller-v2/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V2" />
+                <link href="https://devopstales.github.io/home/rke2-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With cilium" />
+                <link href="https://devopstales.github.io/home/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
+            
+                <id>https://devopstales.github.io/home/k8s-vault/</id>
+            
+            
+            <published>2021-04-07T00:00:00+00:00</published>
+            <updated>2021-04-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can integrate HashiCorp Vault to Kubernetes easily thanks to <a href="https://banzaicloud.com/products/bank-vaults/">Banzaicloud&rsquo;s Bank-Vaults</a>.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part2: <a href="../../cloud/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part3: <a href="../../cloud/rke2-cilium/">RKE2 Install With cilium</a>
+<!-- RBSC --></li>
+<li>Part4: <a href="../../cloud/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part5: <a href="../../cloud/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part6: <a href="../../cloud/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<li>Part7: <a href="../../cloud/k8s-admission-controllers/">Using Admission Controllers</a></li>
+<li>Part8: <a href="../../cloud/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
+<li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+</ul>
+
+<!-- admission-controller ami cseréli az imageben a repot !!!
+ -->
+
+<!-- sealed secrets
+https://github.com/bitnami-labs/sealed-secrets -->
+
+<!-- Vault operator
+https://banzaicloud.com/docs/bank-vaults/installing/ -->
+
+<!-- https://github.com/banzaicloud/dast-operator -->
+
+<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
+
+<!-- kurad -->
+
+<!-- sysdig falco -->
+
+<!-- https://keel.sh -->
+
+<!-- resource kvota -->
+
+<p>In a <a href="https://devopstales.github.io/cloud/k8s-security/">previous post</a> I talked about how Kubernetes cluster store the Kubernetes Secrets in the etcd as base64 encoded text and not encrypted. This is the reason why using an external secret store should be a good idea.</p>
+
+<h3 id="what-is-bank-vaults">What is Bank-Vaults</h3>
+
+<p>Bank-Vaults provides various tools for Hashicorp Vault to make its use easier. It is a wrapper for the official Vault client with automatic token renewal, built in Kubernetes support, and a dynamic database credential provider.</p>
+
+<h3 id="vhat-is-hashicorp-vault">Vhat is Hashicorp Vault</h3>
+
+<p>HashiCorp Vault is a secrets management solution that brokers access for both humans and machines, through programmatic access, to systems. Secrets can be stored, dynamically generated, and in the case of encryption, keys can be consumed as a service without the need to expose the underlying key materials.</p>
+
+<p><img src="/img/include/vault01.png" alt="Example image" /></p>
+
+<h3 id="install-bank-vaults-operator">Install Bank-Vaults Operator</h3>
+
+<p>Ther is a Kubernetes Helm chart to deploy the Banzai Cloud Vault Operator. We will use this for deploy the HashiCorp Vault in HA mode with etcd as storage backend. As a dependency the chart installs an etcd operator that runs as root so we need to use <a href="https://devopstales.github.io/home/rke2-pod-security-policy/">my predifinde PSP</a> to allow this.</p>
+
+<pre><code class="language-yaml">---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: psp-rolebinding-vault
+  namespace: vault
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system-unrestricted-psp-role
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:serviceaccounts
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: vault-operator
+  namespace: vault
+spec:
+  repo: &quot;https://kubernetes-charts.banzaicloud.com&quot;
+  chart: vault-operator
+  targetNamespace: vault
+  valuesContent: |-
+    etcd-operator:
+      enabled: &quot;true&quot;
+      etcdOperator:
+        commandArgs:
+          cluster-wide: &quot;true&quot;
+    psp:
+      enabled: true
+      vaultSA: &quot;vault&quot;
+</code></pre>
+
+<p>When the operator runs correctly we can deploy the CRD to create teh Vault cluster</p>
+
+<pre><code class="language-yaml">apiVersion: &quot;vault.banzaicloud.com/v1alpha1&quot;
+kind: &quot;Vault&quot;
+metadata:
+  name: &quot;vault&quot;
+spec:
+  size: 2
+  image: vault:1.6.2
+
+  # Specify the ServiceAccount where the Vault Pod and the Bank-Vaults configurer/unsealer is running
+  serviceAccount: vault
+
+  # Specify how many nodes you would like to have in your etcd cluster
+  # NOTE: -1 disables automatic etcd provisioning
+  etcdSize: 1
+
+  #resources:
+  # vault:
+  #    requests:
+  #      memory: &quot;256Mi&quot;
+  #      cpu: &quot;100m&quot;
+  #    limits:
+  #      memory: &quot;512Mi&quot;
+  #      cpu: &quot;250m&quot;
+
+  etcdPVCSpec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 1Gi
+
+  etcdAnnotations:
+    etcd.database.coreos.com/scope: clusterwide
+
+  etcdVersion: &quot;3.3.17&quot;
+
+  # Support for distributing the generated CA certificate Secret to other namespaces.
+  # Define a list of namespaces or use [&quot;*&quot;] for all namespaces.
+  caNamespaces:
+    - &quot;demo-app&quot;
+    - &quot;default&quot;
+
+  # Describe where you would like to store the Vault unseal keys and root token.
+  unsealConfig:
+    kubernetes:
+      secretNamespace: vault
+
+  # A YAML representation of a final vault config file.
+  # See https://www.vaultproject.io/docs/configuration/ for more information.
+  config:
+    storage:
+      etcd:
+        address: https://etcd-cluster:2379
+        ha_enabled: &quot;true&quot;
+        etcd_api: &quot;v3&quot;
+    listener:
+      tcp:
+        address: &quot;0.0.0.0:8200&quot;
+        tls_cert_file: /vault/tls/server.crt
+        tls_key_file: /vault/tls/server.key
+    api_addr: https://vault.vault:8200
+    telemetry:
+      statsd_address: localhost:9125
+    ui: true
+
+  externalConfig:
+    policies:
+      - name: allow_secrets
+        rules: path &quot;secret/*&quot; {
+                 capabilities = [&quot;create&quot;, &quot;read&quot;, &quot;update&quot;, &quot;delete&quot;, &quot;list&quot;]
+               }
+
+    # The auth block allows configuring Auth Methods in Vault.
+    # See https://www.vaultproject.io/docs/auth/index.html for more information.
+    auth:
+      - type: kubernetes
+        roles:
+          # Allow every pod in the default namespace to use the secret kv store
+          - name: default
+            bound_service_account_names: default
+            bound_service_account_namespaces: &quot;*&quot;
+            policies: allow_secrets
+            ttl: 1h
+
+    secrets:
+      - path: secret
+        type: kv
+        description: General secrets
+        options:
+          version: 2
+
+</code></pre>
+
+<h3 id="deploy-the-mutating-webhook">Deploy the mutating webhook</h3>
+
+<p>Banzaicloud created a mutating webhook to automate the injection of the secrets from Vault.</p>
+
+<pre><code class="language-yaml">---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: vault-secrets-webhook
+  namespace: vault
+spec:
+  repo: &quot;https://kubernetes-charts.banzaicloud.com&quot;
+  chart: vault-secrets-webhook
+  targetNamespace: vault
+</code></pre>
+
+<h3 id="install-vault-cli-and-create-secret">Install vault cli and create secret</h3>
+
+<pre><code class="language-bash">sudo yum install -y yum-utils
+# OR
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo 
+yum install -y vault
+</code></pre>
+
+<p>Configure the client to connect to the server:</p>
+
+<pre><code class="language-bash">export VAULT_TOKEN=$(kubectl get secrets vault-unseal-keys -o jsonpath={.data.vault-root} | base64 --decode)
+kubectl get secret vault-tls -o jsonpath=&quot;{.data.ca\.crt}&quot; | base64 --decode &gt; $PWD/vault-ca.crt
+export VAULT_CACERT=$PWD/vault-ca.crt
+export VAULT_ADDR=https://127.0.0.1:8200
+kubectl port-forward service/vault 8200 &amp;
+
+vault kv put secret/accounts/aws AWS_SECRET_ACCESS_KEY=s3cr3t
+</code></pre>
+
+<p>Now we start a container in the <code>demo-app</code> namespace and we us the <code>AWS_SECRET_ACCESS_KEY</code> variable from a secret stored in Vault.</p>
+
+<pre><code class="language-bash">nano 05_demo.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-secrets
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-secrets
+  template:
+    metadata:
+      labels:
+        app: hello-secrets
+      annotations:
+        vault.security.banzaicloud.io/vault-addr: &quot;https://vault.vault:8200&quot;
+        vault.security.banzaicloud.io/vault-tls-secret: &quot;vault-tls&quot;
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: nginx
+        image: nginxinc/nginx-unprivileged
+        command: [&quot;sh&quot;, &quot;-c&quot;, &quot;echo $AWS_SECRET_ACCESS_KEY &amp;&amp; echo going to sleep... &amp;&amp; sleep 10000&quot;]
+        env:
+        - name: AWS_SECRET_ACCESS_KEY
+          value: &quot;vault:secret/data/accounts/aws#AWS_SECRET_ACCESS_KEY&quot;
+</code></pre>
+
+<pre><code>kubectl apply -f 05_demo.yaml
+kubectl logs hello-secrets-676b67c659-fvk9d -n demo-app
+time=&quot;2021-04-05T08:45:11Z&quot; level=info msg=&quot;received new Vault token&quot; app=vault-env
+time=&quot;2021-04-05T08:45:11Z&quot; level=info msg=&quot;initial Vault token arrived&quot; app=vault-env
+time=&quot;2021-04-05T08:45:11Z&quot; level=info msg=&quot;spawning process: [sh -c echo $AWS_SECRET_ACCESS_KEY &amp;&amp; echo going to sleep... &amp;&amp; sleep 10000]&quot; app=vault-env
+time=&quot;2021-04-05T08:45:11Z&quot; level=info msg=&quot;renewed Vault token&quot; app=vault-env ttl=1h0m0s
+s3cr3t
+going to sleep...
+</code></pre>
+
+<hr />
+
+<ul>
+<li><a href="https://banzaicloud.com/blog/kubernetes-oidc/">https://banzaicloud.com/blog/kubernetes-oidc/</a></li>
+</ul>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
             <title type="html"><![CDATA[RKE2 Image security Admission Controller V2]]></title>
             <link href="https://devopstales.github.io/home/image-security-admission-controller-v2/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
                 <link href="https://devopstales.github.io/cloud/image-security-admission-controller-v2/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V2" />
                 <link href="https://devopstales.github.io/home/rke2-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With cilium" />
+                <link href="https://devopstales.github.io/home/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
                 <link href="https://devopstales.github.io/cloud/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
-                <link href="https://devopstales.github.io/home/rke2-pod-security-policy/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Pod Security Policy" />
             
                 <id>https://devopstales.github.io/home/image-security-admission-controller-v2/</id>
             
@@ -53,6 +360,7 @@
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -505,6 +813,23 @@ spec:
       Mode: breakglass
 </code></pre>
 
+<h3 id="check-the-config-of-anchore-server">Check the config of anchore server</h3>
+
+<pre><code class="language-bash">kubectl run -i -t anchorecli --image anchore/engine-cli --restart=Always \
+--env ANCHORE_CLI_URL=http://anchore-enginn-anchore-engine-api:8228 \
+--env ANCHORE_CLI_USER=admin \
+--env ANCHORE_CLI_PASS=Password1
+
+# check policys
+anchore-cli policy list
+
+anchore-cli image add nginx
+anchore-cli image list
+
+anchore-cli evaluate check alpine --policy testing_bundle
+anchore-cli evaluate check alpine --policy production_bundle
+</code></pre>
+
 <h3 id="test-the-admission-controller">Test the Admission Controller</h3>
 
 <pre><code class="language-bash">kubectl create ns testing
@@ -545,11 +870,11 @@ If you don't see a command prompt, try pressing enter.
             <title type="html"><![CDATA[Backup your Kubernetes Cluster]]></title>
             <link href="https://devopstales.github.io/home/k8s-backup/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/k8s-velero-backup/?utm_source=atom_feed" rel="related" type="text/html" title="Backup your Kubernetes Cluster with Velero" />
                 <link href="https://devopstales.github.io/cloud/k8s-backup/?utm_source=atom_feed" rel="related" type="text/html" title="Backup your Kubernetes Cluster" />
-                <link href="https://devopstales.github.io/home/rke2-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With cilium" />
-                <link href="https://devopstales.github.io/home/k8s-connaisseur/?utm_source=atom_feed" rel="related" type="text/html" title="Image Signature Verification Admission Controller" />
+                <link href="https://devopstales.github.io/home/k8s-velero-backup/?utm_source=atom_feed" rel="related" type="text/html" title="Backup your Kubernetes Cluster with Velero" />
                 <link href="https://devopstales.github.io/home/k8s-imagepullsecret-patcher/?utm_source=atom_feed" rel="related" type="text/html" title="How to use imagePullSecrets cluster-wide??" />
+                <link href="https://devopstales.github.io/home/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
+                <link href="https://devopstales.github.io/home/rke2-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With cilium" />
             
                 <id>https://devopstales.github.io/home/k8s-backup/</id>
             
@@ -575,6 +900,7 @@ If you don't see a command prompt, try pressing enter.
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -959,6 +1285,7 @@ that would belong to one cluster and accidently wouldnt join any other one.</p>
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -1890,6 +2217,7 @@ done
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -2051,7 +2379,7 @@ kubectl get po
 
 <p>Kubernetes uses imagePullSecrets to authenticate to private container registris on a per Pod or per Namespace basis. To do that yo need to create a secret with the credentials:</p>
 
-<pre><code>kubectl create secret docker-registry image-pull-secret \
+<pre><code class="language-bash">kubectl create secret docker-registry image-pull-secret \
   -n &lt;your-namespace&gt; \
   --docker-server=&lt;your-registry-server&gt; \
   --docker-username=&lt;your-name&gt; \
@@ -2061,7 +2389,7 @@ kubectl get po
 
 <p>Now we can use this image in a pod for download the docker image:</p>
 
-<pre><code>apiVersion: v1
+<pre><code class="language-yaml">apiVersion: v1
 kind: Pod
 metadata:
   name: busybox
@@ -2076,14 +2404,14 @@ spec:
 
 <p>The other way is to add it to the default ServiceAccount in the namespace:</p>
 
-<pre><code>kubectl patch serviceaccount default \
+<pre><code class="language-bash">kubectl patch serviceaccount default \
   -p &quot;{\&quot;imagePullSecrets\&quot;: [{\&quot;name\&quot;: \&quot;image-pull-secret\&quot;}]}&quot; \
   -n &lt;your-namespace&gt;
 </code></pre>
 
 <p>I found a tool called imagepullsecret-patcher that do this on all of your namespace:</p>
 
-<pre><code>wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/185aec934bd01fa9b6ade2c44624e5f2023e2784/deploy-example/kubernetes-manifest/1_rbac.yaml
+<pre><code class="language-bash">wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/185aec934bd01fa9b6ade2c44624e5f2023e2784/deploy-example/kubernetes-manifest/1_rbac.yaml
 wget https://raw.githubusercontent.com/titansoft-pte-ltd/imagepullsecret-patcher/master/deploy-example/kubernetes-manifest/2_deployment.yaml
 
 kubectl create ns imagepullsecret-patcher
@@ -2098,12 +2426,57 @@ kubectl apply -f 2_deployment.yaml
 
 <h3 id="test">test</h3>
 
-<pre><code>kubectl create ns imagepullsecret-test
+<pre><code class="language-bash">kubectl create ns imagepullsecret-test
 kubectl get secret image-pull-secret -n imagepullsecret-test
 image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 </code></pre>
 
-<p>The secret is automaticle created.</p>]]></content>
+<p>The secret is automaticle created.</p>
+
+<h3 id="kyverno-policy">Kyverno policy</h3>
+
+<p>You can do the same thing with kyverno policy:</p>
+
+<pre><code class="language-yaml">apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sync-secret
+spec:
+  background: false
+  rules:
+  - name: sync-image-pull-secret
+    match:
+      resources:
+        kinds:
+        - Namespace
+    generate:
+      kind: Secret
+      name: image-pull-secret
+      namespace: &quot;{{request.object.metadata.name}}&quot;
+      synchronize: true
+      clone:
+        namespace: default
+        name: image-pull-secret
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mutate-imagepullsecret
+spec:
+  rules:
+    - name: mutate-imagepullsecret
+      match:
+        resources:
+          kinds:
+          - Pod
+      mutate:
+        patchStrategicMerge:
+          spec:
+            imagePullSecrets:
+            - name: image-pull-secret  ## imagePullSecret that you created with docker hub pro account
+            (containers):
+            - (image): &quot;*&quot; ## match all container images
+</code></pre>]]></content>
             
                  
                     
@@ -2121,8 +2494,8 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
                 <link href="https://devopstales.github.io/cloud/kubernetes-policy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Policy" />
                 <link href="https://devopstales.github.io/home/k8s-networkpolicy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Network Policy" />
                 <link href="https://devopstales.github.io/home/image-security-admission-controller/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller" />
-                <link href="https://devopstales.github.io/home/rke2-pod-security-policy/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Pod Security Policy" />
                 <link href="https://devopstales.github.io/home/admission-controllers/?utm_source=atom_feed" rel="related" type="text/html" title="Using Admission Controllers" />
+                <link href="https://devopstales.github.io/home/rke2-pod-security-policy/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Pod Security Policy" />
             
                 <id>https://devopstales.github.io/home/kubernetes-policy/</id>
             
@@ -2148,6 +2521,7 @@ image-pull-secret   kubernetes.io/dockerconfigjson   1      9m35s
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -2183,12 +2557,12 @@ https://banzaicloud.com/docs/bank-vaults/installing/ -->
 
 <p>Install OPA Gatekeeper:</p>
 
-<pre><code>kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+<pre><code class="language-bash">kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
 </code></pre>
 
 <p>Now we need to create a policy template and a constraint that adds the variables to the template. If I want to create  a policy to enforce all image comes from Only gcr.io, I need this Template:</p>
 
-<pre><code>apiVersion: templates.gatekeeper.sh/v1beta1
+<pre><code class="language-yaml">apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8srequiredregistry
@@ -2219,7 +2593,7 @@ spec:
 
 <p>This template defines which parameters you need to define as well as the actual Rego code that will do the validation. Fo the constraint we specify that we need this constraint applied to Pods only and we pass the registry name that we need the images to be pulled from.</p>
 
-<pre><code>apiVersion: constraints.gatekeeper.sh/v1beta1
+<pre><code class="language-yaml">apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredRegistry
 metadata:
   name: images-must-come-from-gcr
@@ -2234,7 +2608,7 @@ spec:
 
 <p>Test the policy with an image from github:</p>
 
-<pre><code>kubectl run --generator=run-pod/v1 busybox1 --image=busybox -- sleep 3600
+<pre><code class="language-bash">kubectl run --generator=run-pod/v1 busybox1 --image=busybox -- sleep 3600
 
 message: 'admission webhook &quot;validation.gatekeeper.sh&quot; denied the request: [denied
       by images-must-come-from-gcr] Forbidden registry: busybox'
@@ -2244,7 +2618,7 @@ message: 'admission webhook &quot;validation.gatekeeper.sh&quot; denied the requ
 
 <p>Audit results are stored as violations listed in the status field of the failed constraint.</p>
 
-<pre><code>kubectl describe policystrictonly.constraints.gatekeeper.sh policy-strict-constraint
+<pre><code class="language-bash">kubectl describe policystrictonly.constraints.gatekeeper.sh policy-strict-constraint
 </code></pre>
 
 <h3 id="opa-and-gatekeeper">OPA and Gatekeeper</h3>
@@ -2257,7 +2631,7 @@ message: 'admission webhook &quot;validation.gatekeeper.sh&quot; denied the requ
 
 <p>Install kyverno:</p>
 
-<pre><code>helm repo add kyverno https://kyverno.github.io/kyverno/
+<pre><code class="language-bash">helm repo add kyverno https://kyverno.github.io/kyverno/
 helm repo update
 helm install kyverno --namespace kyverno kyverno/kyverno --create-namespace
 </code></pre>
@@ -2266,7 +2640,7 @@ helm install kyverno --namespace kyverno kyverno/kyverno --create-namespace
 
 <p>Here is an example of a Kyverno policy that validates that images are only pulled from gcr.io:</p>
 
-<pre><code>apiVersion : kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion : kyverno.io/v1alpha1
 kind: Policy
 metadata:
   name: check-registries
@@ -2293,7 +2667,7 @@ spec:
 
 <p>Kyverno supports two different ways to mutate configurations. The first approach is to use a JSON Patch:</p>
 
-<pre><code>apiVersion : kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion : kyverno.io/v1alpha1
 kind : Policy
 metadata :
   name : policy-deployment
@@ -2312,7 +2686,7 @@ spec :
 
 <p>The other way to mutate resources based on conditionals that describes the desired state:</p>
 
-<pre><code>apiVersion: kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion: kyverno.io/v1alpha1
 kind: Policy
 metadata:
   name: set-image-pull-policy
@@ -2337,7 +2711,7 @@ spec:
 
 <p>Policy rule can generates new configurations:</p>
 
-<pre><code>apiVersion: kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion: kyverno.io/v1alpha1
 kind: Policy
 metadata:
   name: &quot;default&quot;
@@ -2361,7 +2735,53 @@ spec:
           annotations: {}
           labels:
             policyname: &quot;default&quot;
-</code></pre>]]></content>
+</code></pre>
+
+<h3 id="policy-reports">Policy Reports</h3>
+
+<p>Kyverno policy reports provide information about policy execution and violations. Kyverno creates policy reports for each Namespace and a single cluster-level report for cluster resources.</p>
+
+<pre><code class="language-bash">$ kubectl get polr -A
+NAMESPACE     NAME                  PASS   FAIL   WARN   ERROR   SKIP   AGE
+default       polr-ns-default       338    2      0      0       0      28h
+flux-system   polr-ns-flux-system   135    5      0      0       0      28h
+
+$ kubectl get clusterpolicyreport -A
+NAME                  PASS   FAIL   WARN   ERROR   SKIP   AGE
+clusterpolicyreport   0      0      0      0       0      142m
+</code></pre>
+
+<pre><code class="language-bash">$ kubectl describe polr polr-ns-default | grep &quot;Status: \+fail&quot; -B10
+  Message:        validation error: Running as root is not allowed. The fields spec.securityContext.runAsNonRoot, spec.containers[*].securityContext.runAsNonRoot, and spec.initContainers[*].securityContext.runAsNonRoot must be `true`. Rule check-containers[0] failed at path /spec/securityContext/runAsNonRoot/. Rule check-containers[1] failed at path /spec/containers/0/securityContext/.
+  Policy:         require-run-as-non-root
+  Resources:
+    API Version:  v1
+    Kind:         Pod
+    Name:         add-capabilities-init-containers
+    Namespace:    default
+    UID:          1caec743-faed-4d5a-90f7-5f4630febd58
+  Rule:           check-containers
+  Scored:         true
+  Status:         fail
+--
+  Message:        validation error: Running as root is not allowed. The fields spec.securityContext.runAsNonRoot, spec.containers[*].securityContext.runAsNonRoot, and spec.initContainers[*].securityContext.runAsNonRoot must be `true`. Rule check-containers[0] failed at path /spec/securityContext/runAsNonRoot/. Rule check-containers[1] failed at path /spec/containers/0/securityContext/.
+  Policy:         require-run-as-non-root
+  Resources:
+    API Version:  v1
+    Kind:         Pod
+    Name:         sysctls
+    Namespace:    default
+    UID:          b98bdfb7-10e0-467f-a51c-ac8b75dc2e95
+  Rule:           check-containers
+  Scored:         true
+  Status:         fail
+</code></pre>
+
+<hr />
+
+<ul>
+<li><a href="https://github.com/fjogeleit/policy-reporter">https://github.com/fjogeleit/policy-reporter</a></li>
+</ul>]]></content>
             
                  
                     
@@ -2406,6 +2826,7 @@ spec:
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -2946,6 +3367,7 @@ spec:
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -3197,6 +3619,7 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -3413,6 +3836,7 @@ rules:
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -3765,6 +4189,7 @@ crictl pods - list pods
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -3956,6 +4381,7 @@ kubectl edit psp global-restricted-psp
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -4020,10 +4446,10 @@ firewall-cmd --permanent --zone=public --add-service=https
 <li>Canal</li>
 <li>Weave Net</li>
 <li>Contiv</li>
-<li>Cillum</li>
+<li>Cilium</li>
 </ul>
 
-<p>See the list of available [[networking and network policy add-ons|<a href="https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy]">https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy]</a>].</p>
+<p>See the list of available <a href="https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy">networking and network policy add-ons</a>.</p>
 
 <h3 id="using-rbac-authorization">Using RBAC Authorization</h3>
 
@@ -4225,6 +4651,7 @@ kube-apiserver --audit-log-path=/var/log/kubernetes/apiserver/audit.log \
 <ul>
 <li>Anchore Engine</li>
 <li>Clair</li>
+<li>trivy</li>
 </ul>
 
 <h3 id="find-the-right-baseimage">Find the right baseimage</h3>
@@ -18178,11 +18605,11 @@ application-host=127.0.0.1
             <title type="html"><![CDATA[SSO for hashicorp vault]]></title>
             <link href="https://devopstales.github.io/home/hashicorp-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/sso/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
                 <link href="https://devopstales.github.io/home/rundeck-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Rundeck SSO" />
                 <link href="https://devopstales.github.io/home/mod-auth-openidc/?utm_source=atom_feed" rel="related" type="text/html" title="Apaceh2 oauth plugin" />
                 <link href="https://devopstales.github.io/home/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
                 <link href="https://devopstales.github.io/home/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/home/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
             
                 <id>https://devopstales.github.io/home/hashicorp-sso/</id>
             
@@ -18244,6 +18671,11 @@ vault policy list
             <title type="html"><![CDATA[Install hashicorp vault]]></title>
             <link href="https://devopstales.github.io/home/hashicorp-vault/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/linux/hashicorp-vault/?utm_source=atom_feed" rel="related" type="text/html" title="Install hashicorp vault" />
+                <link href="https://devopstales.github.io/home/rundeck-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Rundeck SSO" />
+                <link href="https://devopstales.github.io/home/mod-auth-openidc/?utm_source=atom_feed" rel="related" type="text/html" title="Apaceh2 oauth plugin" />
+                <link href="https://devopstales.github.io/home/nagios-ncpa/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Cross Platform Agent" />
+                <link href="https://devopstales.github.io/home/nagios-nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Remote Plugin Executor" />
             
                 <id>https://devopstales.github.io/home/hashicorp-vault/</id>
             

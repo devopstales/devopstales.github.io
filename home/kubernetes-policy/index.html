@@ -26,8 +26,8 @@
     "datePublished": "2021-01-15",
     "dateModified" : "2021-01-15",
     "url" : "https:\/\/devopstales.github.io\/home\/kubernetes-policy\/",
-    "wordCount" : "786",
-    "keywords" : [ "devops", "tales", "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "NetworkPolicy", "OPA Gatekeeper", "Kyverno", "Blog" ]
+    "wordCount" : "978",
+    "keywords" : [ "devops", "tales", "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "NetworkPolicy", "OPA Gatekeeper", "Kyverno", "mutating webhook", "Admission Controller", "Blog" ]
     
 }
 </script>
@@ -159,6 +159,7 @@ if (!doNotTrack) {
 <li>Part9: <a href="../../cloud/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
+<li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
@@ -194,12 +195,12 @@ https://banzaicloud.com/docs/bank-vaults/installing/ -->
 
 <p>Install OPA Gatekeeper:</p>
 
-<pre><code>kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+<pre><code class="language-bash">kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
 </code></pre>
 
 <p>Now we need to create a policy template and a constraint that adds the variables to the template. If I want to create  a policy to enforce all image comes from Only gcr.io, I need this Template:</p>
 
-<pre><code>apiVersion: templates.gatekeeper.sh/v1beta1
+<pre><code class="language-yaml">apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8srequiredregistry
@@ -230,7 +231,7 @@ spec:
 
 <p>This template defines which parameters you need to define as well as the actual Rego code that will do the validation. Fo the constraint we specify that we need this constraint applied to Pods only and we pass the registry name that we need the images to be pulled from.</p>
 
-<pre><code>apiVersion: constraints.gatekeeper.sh/v1beta1
+<pre><code class="language-yaml">apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredRegistry
 metadata:
   name: images-must-come-from-gcr
@@ -245,7 +246,7 @@ spec:
 
 <p>Test the policy with an image from github:</p>
 
-<pre><code>kubectl run --generator=run-pod/v1 busybox1 --image=busybox -- sleep 3600
+<pre><code class="language-bash">kubectl run --generator=run-pod/v1 busybox1 --image=busybox -- sleep 3600
 
 message: 'admission webhook &quot;validation.gatekeeper.sh&quot; denied the request: [denied
       by images-must-come-from-gcr] Forbidden registry: busybox'
@@ -255,7 +256,7 @@ message: 'admission webhook &quot;validation.gatekeeper.sh&quot; denied the requ
 
 <p>Audit results are stored as violations listed in the status field of the failed constraint.</p>
 
-<pre><code>kubectl describe policystrictonly.constraints.gatekeeper.sh policy-strict-constraint
+<pre><code class="language-bash">kubectl describe policystrictonly.constraints.gatekeeper.sh policy-strict-constraint
 </code></pre>
 
 <h3 id="opa-and-gatekeeper">OPA and Gatekeeper</h3>
@@ -268,7 +269,7 @@ message: 'admission webhook &quot;validation.gatekeeper.sh&quot; denied the requ
 
 <p>Install kyverno:</p>
 
-<pre><code>helm repo add kyverno https://kyverno.github.io/kyverno/
+<pre><code class="language-bash">helm repo add kyverno https://kyverno.github.io/kyverno/
 helm repo update
 helm install kyverno --namespace kyverno kyverno/kyverno --create-namespace
 </code></pre>
@@ -277,7 +278,7 @@ helm install kyverno --namespace kyverno kyverno/kyverno --create-namespace
 
 <p>Here is an example of a Kyverno policy that validates that images are only pulled from gcr.io:</p>
 
-<pre><code>apiVersion : kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion : kyverno.io/v1alpha1
 kind: Policy
 metadata:
   name: check-registries
@@ -304,7 +305,7 @@ spec:
 
 <p>Kyverno supports two different ways to mutate configurations. The first approach is to use a JSON Patch:</p>
 
-<pre><code>apiVersion : kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion : kyverno.io/v1alpha1
 kind : Policy
 metadata :
   name : policy-deployment
@@ -323,7 +324,7 @@ spec :
 
 <p>The other way to mutate resources based on conditionals that describes the desired state:</p>
 
-<pre><code>apiVersion: kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion: kyverno.io/v1alpha1
 kind: Policy
 metadata:
   name: set-image-pull-policy
@@ -348,7 +349,7 @@ spec:
 
 <p>Policy rule can generates new configurations:</p>
 
-<pre><code>apiVersion: kyverno.io/v1alpha1
+<pre><code class="language-yaml">apiVersion: kyverno.io/v1alpha1
 kind: Policy
 metadata:
   name: &quot;default&quot;
@@ -373,6 +374,52 @@ spec:
           labels:
             policyname: &quot;default&quot;
 </code></pre>
+
+<h3 id="policy-reports">Policy Reports</h3>
+
+<p>Kyverno policy reports provide information about policy execution and violations. Kyverno creates policy reports for each Namespace and a single cluster-level report for cluster resources.</p>
+
+<pre><code class="language-bash">$ kubectl get polr -A
+NAMESPACE     NAME                  PASS   FAIL   WARN   ERROR   SKIP   AGE
+default       polr-ns-default       338    2      0      0       0      28h
+flux-system   polr-ns-flux-system   135    5      0      0       0      28h
+
+$ kubectl get clusterpolicyreport -A
+NAME                  PASS   FAIL   WARN   ERROR   SKIP   AGE
+clusterpolicyreport   0      0      0      0       0      142m
+</code></pre>
+
+<pre><code class="language-bash">$ kubectl describe polr polr-ns-default | grep &quot;Status: \+fail&quot; -B10
+  Message:        validation error: Running as root is not allowed. The fields spec.securityContext.runAsNonRoot, spec.containers[*].securityContext.runAsNonRoot, and spec.initContainers[*].securityContext.runAsNonRoot must be `true`. Rule check-containers[0] failed at path /spec/securityContext/runAsNonRoot/. Rule check-containers[1] failed at path /spec/containers/0/securityContext/.
+  Policy:         require-run-as-non-root
+  Resources:
+    API Version:  v1
+    Kind:         Pod
+    Name:         add-capabilities-init-containers
+    Namespace:    default
+    UID:          1caec743-faed-4d5a-90f7-5f4630febd58
+  Rule:           check-containers
+  Scored:         true
+  Status:         fail
+--
+  Message:        validation error: Running as root is not allowed. The fields spec.securityContext.runAsNonRoot, spec.containers[*].securityContext.runAsNonRoot, and spec.initContainers[*].securityContext.runAsNonRoot must be `true`. Rule check-containers[0] failed at path /spec/securityContext/runAsNonRoot/. Rule check-containers[1] failed at path /spec/containers/0/securityContext/.
+  Policy:         require-run-as-non-root
+  Resources:
+    API Version:  v1
+    Kind:         Pod
+    Name:         sysctls
+    Namespace:    default
+    UID:          b98bdfb7-10e0-467f-a51c-ac8b75dc2e95
+  Rule:           check-containers
+  Scored:         true
+  Status:         fail
+</code></pre>
+
+<hr />
+
+<ul>
+<li><a href="https://github.com/fjogeleit/policy-reporter">https://github.com/fjogeleit/policy-reporter</a></li>
+</ul>
 		</div>
 	</article>
 </main>
@@ -425,6 +472,7 @@ spec:
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-vault/">Kubernetes and Vault integration</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller-v2/">RKE2 Image security Admission Controller V2</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-backup/">Backup your Kubernetes Cluster</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rke2-cilium/">RKE2 Install With cilium</a></li>
@@ -434,7 +482,6 @@ spec:
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gns3-linux-install/">Install GNS3</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-connaisseur/">Image Signature Verification Admission Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-policy/">Kubernetes Policy</a></li>
 		</ul>
 	</div>
 </div>
@@ -476,6 +523,7 @@ spec:
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="helm-controller">helm-controller</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
@@ -486,6 +534,7 @@ spec:
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="jitsi">jitsi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8S">K8S</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
@@ -493,10 +542,12 @@ spec:
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="Logging">Logging</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="Loki">Loki</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="mutating webhook">mutating webhook</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
@@ -537,7 +588,6 @@ spec:
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vault/" title="vault">vault</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
