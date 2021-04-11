@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<script type="application/ld+json">
+{
+    "@context" : "http://schema.org",
+    "@type" : "BlogPosting",
+    "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "https:\/\/devopstales.github.io\/"
+    },
+    "articleSection" : "kubernetes",
+    "name" : "Ansible Operator Overview",
+    "headline" : "Ansible Operator Overview",
+    "description" : "\x3cp\x3eOperators make it easy to manage complex stateful applications on top of Kubernetes. In this pos I will show you how to read an ansible based Openshift operator.\x3c\/p\x3e",
+    "inLanguage" : "en-US",
+    "author" : "Blaiserman",
+    "creator" : "Blaiserman",
+    "publisher": "Blaiserman",
+    "accountablePerson" : "Blaiserman",
+    "copyrightHolder" : "Blaiserman",
+    "copyrightYear" : "2019",
+    "datePublished": "2019-07-10",
+    "dateModified" : "2019-07-10",
+    "url" : "https:\/\/devopstales.github.io\/kubernetes\/ansible-operator-overview\/",
+    "wordCount" : "858",
+    "keywords" : [ "ansible", "openshift 3.11", "openshift container platform", "rad hat openshift", "rad hat", "configuration management", "Blog" ]
+    
+}
+</script>
+<meta name="msvalidate.01" content="4E830BF9C048B3A327492699A61E741E" />
+<meta name="yandex-verification" content="96d0b6ba6c7aa697" />
+
+	<title>Ansible Operator Overview - devopstales</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<meta property="og:title" content="Ansible Operator Overview" />
+<meta property="og:description" content="Operators make it easy to manage complex stateful applications on top of Kubernetes. In this pos I will show you how to read an ansible based Openshift operator." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://devopstales.github.io/kubernetes/ansible-operator-overview/" />
+<meta property="article:published_time" content="2019-07-10T00:00:00+00:00" />
+<meta property="article:modified_time" content="2019-07-10T00:00:00+00:00" />
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/style.css">
+	
+	<link rel="shortcut icon" href="https://devopstales.github.io/favicon.ico">
+		
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-135626110-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+				<div class="logo__title">devopstales</div>
+				<div class="logo__tagline">Blog about dev and ops stuff</div>
+			</a>
+		</div>
+		
+<nav class="menu">
+	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
+		<span class="menu__btn-title" tabindex="-1">Menu</span>
+	</button>
+	<ul class="menu__list">
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">home</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/linux/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Linux</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/kubernetes/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Kubernetes</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/sso/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">sso</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/monitoring/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">monitoring</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/cloud/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">cloud</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/windows/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Windows</span>
+				
+			</a>
+		</li>
+	</ul>
+</nav>
+
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Ansible Operator Overview</h1>
+			<div class="post__meta meta">
+<div class="meta__item-datetime meta__item">
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2019-07-10T00:00:00Z">July 10, 2019</time>
+</div>
+
+<div class="meta__item-categories meta__item">
+	<svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
+	<span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/openshift/" rel="category">Openshift</a>
+	</span>
+</div></div>
+		</header>
+		<div class="content post__content clearfix">
+			<p>Operators make it easy to manage complex stateful applications on top of Kubernetes. In this pos I will show you how to read an ansible based Openshift operator.</p>
+
+<h3 id="parst-of-the-openshift-series">Parst of the Openshift series</h3>
+
+<ul>
+<li>Part1: <a href="../../kubernetes/ansible-openshift-install/">Install Opeshift</a></li>
+<li>Part2: <a href="../../kubernetes/openshift-auto-approval-csr/">How to Enable Auto Approval of CSR in Openshift v3.11</a></li>
+<li>Part3: <a href="../../kubernetes/openshift-add-node/">Add new workers to Openshift cluster</a></li>
+<li>Part4: <a href="../../kubernetes/openshift-cert/">Chane the certificates of the Openshift cluster</a></li>
+<li>Part5: <a href="../../kubernetes/openshift-ldap/">LDAP authentication for Openshift</a></li>
+<li>Part6: <a href="../../sso/openshift-sso/">Keycloak SSO authentication for Openshift</a></li>
+<li>Part7: <a href="../../sso/openshift-sso2/">Gitlab SSO authentication for Openshift</a></li>
+<li>Part8a: <a href="../../kubernetes/openshift-ceph/">Ceph persistent storage for Openshift</a></li>
+<li>Part8b: <a href="../../kubernetes/openshift-vmware/">vSphere persistent storage for Openshift</a></li>
+<li>Part9: <a href="../../kubernetes/openshift-helm/">Helm on Openshift</a></li>
+<li>Part10: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless Helm on Openshift</a></li>
+<li>Part11: <a href="../../kubernetes/openshift-extregistry/">Use external docker registry on Openshift</a></li>
+<li>Part12: <a href="../../kubernetes/openshift-secondary-router/">Secondary router on Openshift</a></li>
+<li>Part13a: <a href="../../kubernetes/openshift-letsencrypt/">Use Letsencrypt on Openshift</a></li>
+<li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
+<li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
+<li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+</ul>
+
+<h3 id="why-an-operator">Why an Operator?</h3>
+
+<p>Operators make it easy to manage complex stateful applications on top of Kubernetes. However writing an operator today can be difficult because of challenges such as using low level APIs, writing boilerplate, and a lack of modularity which leads to duplication.</p>
+
+<h3 id="what-is-an-ansible-operator">What is an Ansible Operator?</h3>
+
+<p>Ansible Operator is one of the available types of Operators that Operator SDK is able to generate. Operator SDK can create an operator using with Golang, Helm, or Ansible.
+It is a collection of building blocks from Operator SDK that enables Ansible to handle the reconciliation logic for an Operator.</p>
+
+<h3 id="how-ansible-operator-works">How Ansible Operator works?</h3>
+
+<p>We want to trigger this Ansible logic when a Custom Resource changes. The Ansible Operator uses a Watches file, written in YAML, which holds the mapping between Custom Resources and Ansible Roles/Playbooks. The Operator expects this mapping file in a predefined location: <code>/opt/ansible/watches.yaml</code></p>
+
+<p>Each mapping within the Watches file has mandatory fields:</p>
+
+<ul>
+<li>group: Group of the Custom Resource that you will be watching.</li>
+<li>version: Version of the Custom Resource that you will be watching.</li>
+<li>kind: Kind of the Custom Resource that you will be watching.</li>
+<li>role (default): Path to the Role that should be run by the Operator for a particular Group-Version-Kind (GVK). This field is mutually exclusive with the &ldquo;playbook&rdquo; field.</li>
+<li>playbook (optional): Path to the Playbook that should be run by the Operator.</li>
+</ul>
+
+<h3 id="initialize-new-operator-template">Initialize new operator template</h3>
+
+<pre><code># istall sdk client
+brew install operator-sdk
+
+# generate base temlate
+operator-sdk new memcached-operator --type=ansible --api-version=cache.example.com/v1alpha1 --kind=Memcached --skip-git-init
+cd memcached-operator
+</code></pre>
+
+<p>The sdk cli generated the base structure for all the componets. The main parts are the <code>watches.yaml</code> the Dockerfile in <code>build/Dockerfile</code> and the ansible role in <code>roles/</code><br> folder. Fore this tutorial I will use this role <a href="https://github.com/dymurray/memcached-operator-role">https://github.com/dymurray/memcached-operator-role</a>.<br>
+In the role we must use k8s ansible module to deploy kubernetes compnets to the cluster.<br></p>
+
+<pre><code>nano roles/memcached/tasks/main.yml
+---
+- name: start memcached
+  k8s:
+    definition:
+      kind: Deployment
+      apiVersion: apps/v1
+      metadata:
+        name: '{{ meta.name }}-memcached'
+        namespace: '{{ meta.namespace }}'
+      spec:
+        replicas: &quot;{{size}}&quot;
+        selector:
+          matchLabels:
+            app: memcached
+        template:
+          metadata:
+            labels:
+              app: memcached
+          spec:
+            containers:
+            - name: memcached
+              command:
+              - memcached
+              - -m=64
+              - -o
+              - modern
+              - -v
+              image: &quot;memcached:1.4.36-alpine&quot;
+              ports:
+                - containerPort: 11211
+</code></pre>
+
+<p>You can use variables in ansible Jinja temlate from the CR spec or from kubernetes enviroment like namespace: <code>{{ meta.namespace }}</code>.<br>
+Add default value to the <code>{{size}}</code> variable:</p>
+
+<pre><code>nano roles/memcached/defaults/main.yml
+---
+size: 1
+</code></pre>
+
+<h4 id="variable-sharing-example">Variable sharing Example</h4>
+
+<pre><code>apiVersion: &quot;foo.example.com/v1alpha1&quot;
+kind: &quot;Foo&quot;
+metadata:
+  name: &quot;example&quot;
+annotations:
+  ansible.operator-sdk/reconcile-period: &quot;30s&quot;
+  name: &quot;example&quot;
+spec:
+  message: &quot;Hello world 2&quot;
+  newParameter: &quot;newParam&quot;
+# associates GVK with Role
+role: /opt/ansible/roles/Foo
+</code></pre>
+
+<pre><code>- debug:
+    msg: &quot;message value from CR spec: {{ message }}&quot;
+
+- debug:
+    msg: &quot;newParameter value from CR spec: {{ new_parameter }}&quot;
+
+- debug:
+    msg: &quot;name: {{ meta.name }}, namespace: {{ meta.namespace }}&quot;
+</code></pre>
+
+<p>The Openshidt SDK created a simple Dockerfile in <code>build/Dockerfile</code> to run the newly created ansible role. We nead to build a docker image from this Dockerfile and use this image in our memcached-operator deployment.</p>
+
+<pre><code># buid image
+operator-sdk build memcached-operator:v0.0.1
+
+# Edit deploy/operator.yaml to use the newly created memcached-operator:v0.0.1 docker image
+sed -i 's|{{ REPLACE_IMAGE }}|memcached-operator:v0.0.1|g' deploy/operator.yaml
+
+# If we did not want to download the image (besause we build it on the worker or it is representid on all of my workes) we can disable image pulling.
+sed -i &quot;s|{{ pull_policy\|default('Always') }}|Never|g&quot; deploy/operator.yaml
+</code></pre>
+
+<h3 id="creating-the-operator-from-deploy-manifests">Creating the Operator from deploy manifests</h3>
+
+<pre><code>oc create -f deploy/crds/cache_v1alpha1_memcached_crd.yaml
+
+oc new-project tutorial
+oc create -f deploy/service_account.yaml
+oc create -f deploy/role.yaml
+oc create -f deploy/role_binding.yaml
+oc create -f deploy/operator.yaml
+
+oc get deployment
+</code></pre>
+
+<p>Now that we have deployed our Operator, let&rsquo;s create a CR and deploy an instance of memcached.
+There is a sample CR in the scaffolding created as part of the Operator SDK. Inspect <code>deploy/crds/cache_v1alpha1_memcached_cr.yaml</code>, and then use it to create a Memcached custom resource.</p>
+
+<pre><code>oc create -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
+
+
+
+$ oc get deployment
+NAME                 DESIRED CURRENT UP-TO-DATE AVAILABLE AGE
+memcached-operator   1       1       1          1         2m
+example-memcached    3       3       3          3         1m
+
+#Check the pods to confirm 3 replicas were created:
+
+$ oc get pods
+NAME                                READY STATUS   RESTARTS AGE
+example-memcached-6cc844747c-2hbln  1/1   Running  0        1m
+example-memcached-6cc844747c-54q26  1/1   Running  0        1m
+example-memcached-6cc844747c-7jfhc  1/1   Running  0        1m
+memcached-operator-68b5b558c5-dxjwh 1/1   Running  0        2m
+</code></pre>
+
+<h3 id="removing-memcached-from-the-cluster">Removing Memcached from the cluster</h3>
+
+<pre><code># First, delete the 'memcached' CR, which will remove the 4 Memcached pods and the associated deployment.
+oc delete -f deploy/crds/cache_v1alpha1_memcached_cr.yaml
+
+# Then, delete the memcached-operator deployment.
+oc delete -f deploy/operator.yaml
+</code></pre>
+		</div>
+		<footer class="post__footer">
+			
+<div class="post__tags tags clearfix">
+	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M32 19c0 1-1 2-1 2L21 31s-1 1-2 1-2-1-2-1L2 16c-1-1-1.4-2-1.4-2S0 12.5 0 11V3C0 1.5.8.8.8.8S1.5 0 3 0h8c1.5 0 3 .6 3 .6S15 1 16 2l15 15s1 1 1 2zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+	<ul class="tags__list">
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/openshift/" rel="tag">Openshift</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/operator/" rel="tag">Operator</a></li>
+	</ul>
+</div>
+		</footer>
+	</article>
+</main>
+
+
+<nav class="post-nav flex">
+	<div class="post-nav__item post-nav__item--prev">
+		<a class="post-nav__link" href="https://devopstales.github.io/kubernetes/openshift-add-node/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Openshift: Add Nodes to a Cluster</p></a>
+	</div>
+	<div class="post-nav__item post-nav__item--next">
+		<a class="post-nav__link" href="https://devopstales.github.io/kubernetes/k8s-install/" rel="next"><span class="post-nav__caption">Next&thinsp;»</span><p class="post-nav__post-title">Install kubernetes with kubeadm</p></a>
+	</div>
+</nav>
+
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script type="application/javascript">
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "devopstales" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+
+			</div>
+			<aside class="sidebar"><div class="widget-search widget">
+	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
+		<label>
+			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
+		</label>
+		<input class="widget-search__submit" type="submit" value="Search">
+		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
+	</form>
+</div>
+<div class="widget-recent widget">
+	<h4 class="widget__title">Recent Posts</h4>
+	<div class="widget__content">
+		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog_kafka/">Sending syslog via Kafka into Graylog</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-pfsense/">Analyzing PFsense logs in Graylog4</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog4-install/">Install Graylog4</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gns3-linux-install/">Install GNS3</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/container-runtimes/">Container runtimes</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/aks-registry/">Azure Conainer Registry integration for AKS</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/aks-ingress-controller/">Install Ingress to AKS</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/aks/">Install AKS Cluster</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/jitsi-jibri/">Install recording fot Jitsi</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/jitsi-meet/">Install Jitsi meet</a></li>
+		</ul>
+	</div>
+</div>
+<div class="widget-taglist widget">
+	<h4 class="widget__title">Tags</h4>
+	<div class="widget__content">
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/admission-controller/" title="Admission Controller">Admission Controller</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aks/" title="AKS">AKS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="alerta">alerta</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="calico">calico</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="Centos">Centos</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="cilium">cilium</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="docker">docker</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="docker-compose">docker-compose</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="elasticsearch">elasticsearch</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="fedora">fedora</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora-coreos/" title="Fedora CoreOS">Fedora CoreOS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="foreman">foreman</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="GCP">GCP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitops/" title="gitops">gitops</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gns3/" title="GNS3">GNS3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="Google Cloud Platform">Google Cloud Platform</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="Grafana">Grafana</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="helm-controller">helm-controller</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="httpd">httpd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="icinga">icinga</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="jitsi">jitsi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8S">K8S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="katello">katello</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="logging">logging</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="loki">loki</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="mutating webhook">mutating webhook</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="nextcloud">nextcloud</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="noSQL">noSQL</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/notary/" title="Notary">Notary</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="oauth2">oauth2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="openproject">openproject</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="opnsense">opnsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="Pfsense">Pfsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="postgresql">postgresql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="privacyidea">privacyidea</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/promatheus/" title="Promatheus">Promatheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="Prometheus">Prometheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="Rancher">Rancher</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="redmine">redmine</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="registry">registry</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rke2/" title="rke2">rke2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rsyslog/" title="rsyslog">rsyslog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="sonarqube">sonarqube</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/squid/" title="squid">squid</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="telegraf">telegraf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
+	</div>
+</div>
+<div class="widget-social widget">
+	<h4 class="widget-social__title widget__title">Social</h4>
+	<div class="widget-social__content widget__content">
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="Twitter" rel="noopener noreferrer" href="https://twitter.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-twitter" width="24" height="24" viewBox="0 0 384 312"><path d="m384 36.9c-14.1 6.3-29.3 10.5-45.2 12.4 16.3-9.7 28.8-25.2 34.6-43.6-15.2 9-32.1 15.6-50 19.1-14.4-15.2-34.9-24.8-57.5-24.8-43.5 0-78.8 35.3-78.8 78.8 0 6.2.7 12.2 2 17.9-65.5-3.3-123.5-34.6-162.4-82.3-6.7 11.6-10.6 25.2-10.6 39.6 0 27.3 13.9 51.4 35 65.6-12.9-.4-25.1-4-35.7-9.9v1c0 38.2 27.2 70 63.2 77.2-6.6 1.8-13.6 2.8-20.8 2.8-5.1 0-10-.5-14.8-1.4 10 31.3 39.1 54.1 73.6 54.7-27 21.1-60.9 33.7-97.8 33.7-6.4 0-12.6-.4-18.8-1.1 34.9 22.4 76.3 35.4 120.8 35.4 144.9 0 224.1-120 224.1-224.1 0-3.4-.1-6.8-.2-10.2 15.4-11.1 28.7-25 39.3-40.8z"/></svg>
+				<span>Twitter</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="GitHub" rel="noopener noreferrer" href="https://github.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-github" width="24" height="24" viewBox="0 0 384 374"><path d="m192 0c-106.1 0-192 85.8-192 191.7 0 84.7 55 156.6 131.3 181.9 9.6 1.8 13.1-4.2 13.1-9.2 0-4.6-.2-16.6-.3-32.6-53.4 11.6-64.7-25.7-64.7-25.7-8.7-22.1-21.3-28-21.3-28-17.4-11.9 1.3-11.6 1.3-11.6 19.3 1.4 29.4 19.8 29.4 19.8 17.1 29.3 44.9 20.8 55.9 15.9 1.7-12.4 6.7-20.8 12.2-25.6-42.6-4.8-87.5-21.3-87.5-94.8 0-20.9 7.5-38 19.8-51.4-2-4.9-8.6-24.3 1.9-50.7 0 0 16.1-5.2 52.8 19.7 15.3-4.2 31.7-6.4 48.1-6.5 16.3.1 32.7 2.2 48.1 6.5 36.7-24.8 52.8-19.7 52.8-19.7 10.5 26.4 3.9 45.9 1.9 50.7 12.3 13.4 19.7 30.5 19.7 51.4 0 73.7-44.9 89.9-87.7 94.6 6.9 5.9 13 17.6 13 35.5 0 25.6-.2 46.3-.2 52.6 0 5.1 3.5 11.1 13.2 9.2 76.2-25.5 131.2-97.3 131.2-182 0-105.9-86-191.7-192-191.7z"/></svg>
+				<span>GitHub</span>
+			</a>
+		</div>
+
+		
+	</div>
+</div>
+</aside>
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2021 devopstales.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+	</div>
+<script async defer src="https://devopstales.github.io/js/menu.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.6/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async></script>
+</body>
+</html>
