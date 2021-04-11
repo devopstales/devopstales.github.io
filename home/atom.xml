@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-04-07T09:33:20+00:00</updated>
+    <updated>2021-04-11T08:59:25+00:00</updated>
     
     
     <author>
@@ -17,6 +17,554 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[ArgoCD and kubeseal to encript secrets]]></title>
+            <link href="https://devopstales.github.io/home/argocd-image-updater/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encript secrets" />
+                <link href="https://devopstales.github.io/home/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
+                <link href="https://devopstales.github.io/cloud/argocd-image-updater/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encript secrets" />
+                <link href="https://devopstales.github.io/cloud/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encript secrets" />
+                <link href="https://devopstales.github.io/cloud/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/argocd-image-updater/</id>
+            
+            
+            <published>2021-04-11T00:00:00+00:00</published>
+            <updated>2021-04-11T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use Argo CD Image Updater to automate image update in Kubernetes.</p>
+
+<h3 id="parst-of-the-k8s-gitops-series">Parst of the K8S Gitops series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-gitops/">GitOps solutions for Kubernetes</a></li>
+<li>Part2: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part3: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- ArgoCD + Argo Rollouts for canary deploy -->
+<!-- ArgoCD notify
+https://blog.argoproj.io/notifications-for-argo-bb7338231604
+-->
+<!----------------------------------------------->
+<!-- Flux CD + SOPS for secrets
+https://www.youtube.com/watch?v=8pbdXAd-F44
+-->
+<!-- Flux CD auto image update
+https://particule.io/en/blog/flux-auto-image-update/
+-->
+<!-- Flux CD + flagger for canary deployment -->
+<!----------------------------------------------->
+<!-- Fleet --></li>
+</ul>
+
+<h3 id="what-is-argo-cd-image-updater">What is Argo CD Image Updater</h3>
+
+<p>A tool to automatically update the container images of Kubernetes workloads that are managed by Argo CD.</p>
+
+<h2 id="inatall-argo-cd-image-updater">Inatall Argo CD Image Updater</h2>
+
+<pre><code class="language-bash">VERSION=$(curl --silent &quot;https://api.github.com/repos/argoproj-labs/argocd-image-updater/releases/latest&quot; | grep '&quot;tag_name&quot;' | sed -E 's/.*&quot;([^&quot;]+)&quot;.*/\1/')
+
+wget https://github.com/argoproj-labs/argocd-image-updater/releases/download/$VERSION/argocd-image-updater_&quot;$VERSION&quot;_linux-amd64 -O /usr/local/bin/argocd-image-updater
+chmod 755 /usr/local/bin/argocd-image-updater
+
+argocd-image-updater version
+</code></pre>
+
+<h3 id="now-install-the-cluster-side-controller">Now install the cluster-side controller</h3>
+
+<pre><code class="language-bash">cd /opt
+git clone https://github.com/argoproj-labs/argocd-image-updater.git
+cd argocd-image-updater/manifests/
+kubectl apply -f install.yaml
+</code></pre>
+
+<h3 id="deploy-an-updatable-app">Deploy an updatable app</h3>
+
+<p>In order for Argo CD Image Updater to know which applications it should inspect for updating the workloads&rsquo; container images, the corresponding Kubernetes resource needs to be annotated. or its annotations, Argo CD Image Updater uses the following prefix: <code>argocd-image-updater.argoproj.io</code></p>
+
+<pre><code class="language-yaml">apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: gcr.io/heptio-images/ks-guestbook-demo:^0.1
+  name: guestbook
+  namespace: argocd
+spec:
+  destination:
+    namespace: guestbook-demo
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: helm-guestbook
+    repoURL: https://github.com/argoproj/argocd-example-apps
+    targetRevision: HEAD
+</code></pre>
+
+<p>Test the image for update:</p>
+
+<pre><code class="language-bash">argocd-image-updater test gcr.io/heptio-images/ks-guestbook-demo:0.1
+INFO[0000] getting image                                 image_name=heptio-images/ks-guestbook-demo registry=gcr.io
+INFO[0000] Fetching available tags and metadata from registry  image_name=heptio-images/ks-guestbook-demo
+INFO[0000] Found 2 tags in registry                      image_name=heptio-images/ks-guestbook-demo
+DEBU[0000] found 2 from 2 tags eligible for consideration  image=&quot;gcr.io/heptio-images/ks-guestbook-demo:0.1&quot;
+INFO[0000] latest image according to constraint is gcr.io/heptio-images/ks-guestbook-demo:0.2
+</code></pre>
+
+<p>Allow update of the image:</p>
+
+<pre><code class="language-yaml">apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: gcr.io/heptio-images/ks-guestbook-demo
+    argocd-image-updater.argoproj.io/write-back-method: argocd
+  name: guestbook
+  namespace: argocd
+spec:
+  destination:
+    namespace: guestbook-demo
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: helm-guestbook
+    repoURL: https://github.com/argoproj/argocd-example-apps
+    targetRevision: HEAD
+</code></pre>
+
+<p>The Argo CD Image Updater supports two distinct methods on how to update images of an application:</p>
+
+<ul>
+<li>imperative, via Argo CD API</li>
+<li>declarative, by pushing changes to a Git repository</li>
+</ul>
+
+<p>The write-back method is configured via an annotation on the Application resource:</p>
+
+<pre><code class="language-bash">argocd-image-updater.argoproj.io/write-back-method: &lt;argocd&gt;
+# argocd or git
+
+argocd-image-updater.argoproj.io/write-back-method: git:secret:argocd-image-updater/git-creds
+# add git credentials secret named git-creds
+
+argocd-image-updater.argoproj.io/git-branch: HEAD
+# Specifying a branch to commit to
+</code></pre>
+
+<p>At the gui you can see that the guestbook app is out of sync and can be updated.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[ArgoCD and kubeseal to encript secrets]]></title>
+            <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
+                <link href="https://devopstales.github.io/cloud/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encript secrets" />
+                <link href="https://devopstales.github.io/cloud/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
+                <link href="https://devopstales.github.io/home/k8s-vault/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes and Vault integration" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller-v2/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V2" />
+            
+                <id>https://devopstales.github.io/home/argocd-kubeseal/</id>
+            
+            
+            <published>2021-04-10T00:00:00+00:00</published>
+            <updated>2021-04-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use kubeseal with ArgoCD to protect secrets.</p>
+
+<h3 id="parst-of-the-k8s-gitops-series">Parst of the K8S Gitops series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-gitops/">GitOps solutions for Kubernetes</a></li>
+<li>Part2: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part3: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- ArgoCD + Argo Rollouts for canary deploy -->
+<!-- ArgoCD notify
+https://blog.argoproj.io/notifications-for-argo-bb7338231604
+-->
+<!----------------------------------------------->
+<!-- Flux CD + SOPS for secrets
+https://www.youtube.com/watch?v=8pbdXAd-F44
+-->
+<!-- Flux CD auto image update
+https://particule.io/en/blog/flux-auto-image-update/
+-->
+<!-- Flux CD + flagger for canary deployment -->
+<!----------------------------------------------->
+<!-- Fleet --></li>
+</ul>
+
+<h2 id="install-argocd">Install Argocd</h2>
+
+<pre><code class="language-bash">kubectl create namespace argocd
+kubectl apply -n argocd -f \
+https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# or in ha
+kubectl apply -n argocd -f \
+https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/ha/install.yaml
+</code></pre>
+
+<h3 id="install-argocd-cli">Install Argocd cli</h3>
+
+<pre><code class="language-bash">VERSION=$(curl --silent &quot;https://api.github.com/repos/argoproj/argo-cd/releases/latest&quot; | grep '&quot;tag_name&quot;' | sed -E 's/.*&quot;([^&quot;]+)&quot;.*/\1/')
+
+curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/$VERSION/argocd-linux-amd64
+
+chmod +x /usr/local/bin/argocd
+
+argocd version
+</code></pre>
+
+<h3 id="create-ingress-for-server">Create ingress for server</h3>
+
+<pre><code class="language-yaml">---
+piVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: argocd-server-http-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.class: &quot;nginx&quot;
+    nginx.ingress.kubernetes.io/force-ssl-redirect: &quot;true&quot;
+    nginx.ingress.kubernetes.io/backend-protocol: &quot;HTTPS&quot;
+    cert-manager.io/cluster-issuer: ca-issuer
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: argocd-server
+          servicePort: http
+    host: argocd.k8s.intra
+  tls:
+  - hosts:
+    - argocd.k8s.intra
+    secretName: https-argocd-secret # do not change, this is provided by Argo CD
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: argocd-server-grpc-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.class: &quot;nginx&quot;
+    nginx.ingress.kubernetes.io/backend-protocol: &quot;GRPC&quot;
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: argocd-server
+          servicePort: https
+    host: grpc-argocd.k8s.intra
+  tls:
+  - hosts:
+    - grpc-argocd.k8s.intra
+    secretName: argocd-secret # do not change, this is provided by Argo CD
+</code></pre>
+
+<h3 id="get-init-password">Get init password</h3>
+
+<pre><code class="language-bash">kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath=&quot;{.data.password}&quot; | base64 -d &amp;&amp; echo
+jMnyrjcdocMoqPfC
+
+argocd login argocd.k8s.intra
+WARNING: server certificate had error: x509: certificate signed by unknown authority. Proceed insecurely (y/n)? y
+WARN[0002] Failed to invoke grpc call. Use flag --grpc-web in grpc calls. To avoid this warning message, use flag --grpc-web. 
+Username: admin
+Password: 
+'admin:login' logged in successfully
+Context 'argocd.k8s.intra' updated
+
+argocd account update-password
+</code></pre>
+
+<h3 id="register-new-cluster">Register new cluster</h3>
+
+<p>By default Argocd register the cluster where running with a cluster admin service account. You can register different clusters with its kubectl configs. So you can create multiple service accounts with multiple privileges  and register them with its kubectl configs.</p>
+
+<pre><code class="language-bash">$ kubectx
+default
+
+$ argocd cluster add default
+INFO[0000] ServiceAccount &quot;argocd-manager&quot; already exists in namespace &quot;kube-system&quot; 
+INFO[0000] ClusterRole &quot;argocd-manager-role&quot; updated    
+INFO[0000] ClusterRoleBinding &quot;argocd-manager-role-binding&quot; updated 
+WARN[0000] Failed to invoke grpc call. Use flag --grpc-web in grpc calls. To avoid this warning message, use flag --grpc-web. 
+Cluster 'https://172.17.9.10:6443' added
+</code></pre>
+
+<h3 id="deploy-app-with-argocd">Deploy app with Argocd</h3>
+
+<pre><code class="language-bash">$ kubectl create ns guestbook-demo
+
+$ argocd app create 00-tools --repo https://github.com/devopstales/gitops-repo.git \
+--path 00_argocd/00_tools --dest-server https://kubernetes.default.svc --dest-namespace default
+
+$ argocd app create 01-guestbook --repo https://github.com/devopstales/gitops-repo.git \
+--path 00_argocd/01_guestbook --dest-server https://kubernetes.default.svc --dest-namespace guestbook-demo
+
+$ argocd app get 01-guestbook
+Name:               01-guestbook
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          guestbook-demo
+URL:                https://argocd.k8s.intra/applications/01-guestbook
+Repo:               https://github.com/devopstales/gitops-repo.git
+Target:             
+Path:               00_argocd/01_guestbook
+SyncWindow:         Sync Allowed
+Sync Policy:        &lt;none&gt;
+Sync Status:        OutOfSync from  (e8df0a5)
+Health Status:      Missing
+
+GROUP                      KIND         NAMESPACE       NAME                            STATUS     HEALTH   HOOK  MESSAGE
+                           Service      guestbook-demo  guestbook-ui                    OutOfSync  Missing        
+apps                       Deployment   guestbook-demo  guestbook-ui                    OutOfSync  Missing        
+rbac.authorization.k8s.io  RoleBinding  guestbook-demo  psp-rolebinding-guestbook-demo  OutOfSync  Missing   
+
+$ argocd app sync 01-guestbook
+
+</code></pre>
+
+<h2 id="install-kubeseal">Install kubeseal</h2>
+
+<pre><code class="language-bash">VERSION=$(curl --silent &quot;https://api.github.com/repos/bitnami-labs/sealed-secrets/releases/latest&quot; | grep '&quot;tag_name&quot;' | sed -E 's/.*&quot;([^&quot;]+)&quot;.*/\1/')
+
+wget https://github.com/bitnami-labs/sealed-secrets/releases/download/$VERSION/kubeseal-linux-amd64 -O /usr/local/bin/kubeseal
+chmod 755 /usr/local/bin/kubeseal
+kubeseal --version
+</code></pre>
+
+<h3 id="now-install-the-cluster-side-controller">Now install the cluster-side controller</h3>
+
+<pre><code class="language-bash">kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/$VERSION/controller.yaml
+</code></pre>
+
+<h3 id="create-a-sealed-secret">Create a sealed secret</h3>
+
+<p>Create a secret you want to encrypt:</p>
+
+<pre><code class="language-yaml">apiVersion: v1
+data:
+  secret: UzNDUjNUCg==
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: mysecret
+  namespace: demo-app
+</code></pre>
+
+<p>A secret in Kubernetes cluster is encoded in base64 but not encrypted! Theses data are &ldquo;only&rdquo; encoded so if a user have access to your secrets, he can simply base64 decode to see your sensitive data:</p>
+
+<pre><code class="language-base">echo &quot;UzNDUjNUCg==&quot; | base64 -d
+S3CR3T
+</code></pre>
+
+<p>Since the secrets aren&rsquo;t encrypted, it is unsecure to commit them to your Git repository.</p>
+
+<h3 id="use-kubeseal-to-encrypt-the-secret">Use kubeseal to Encrypt the secret</h3>
+
+<pre><code class="language-yaml">kubeseal --format yaml &lt;secret.yaml &gt;sealedsecret.yaml
+
+cat sealedsecret.yaml
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: mysecret
+  namespace: demo-app
+spec:
+  encryptedData:
+    secret: AgCZl5b75Lmr8z7Ppa5tNBPX4zWH2vset0GVKhNfTBRnAANDs9Gycrq5EfueE00PGX++v4VFKEwi9rNeAAvFkETges31Uhi4+Oym9CkV9rU2pHAvD4iZapt+fHSndMUY8vWT8GCYzrzSOFSRPKB4cdAy3JJ4f48SwxCFYXdJgl/6KiHkrk2AzxHKip3ryVjKY01E8cSpxw1Exv8RnEDD8D9hfb57fEIRRwMrIRUkg/jPOvf4YCHcjHiVLLP+MwutT1Jd65hjAx1WZFSjDRUj3rFfzsO6zAVxgx20WXtc3qMK9jMeeQaNbbAvdv3YuNsuxJIE8SFQFPfGop+QFefiyDGWTjzwHkeU65Ci1Nuj8pSS600ITyGdyNY4F3qjen1eBnMOaub5ZJqEmXyTQwSL/9R7UfoFqJCo4b36g2axacegqHtLL+U4wrHsDB9iQ/JrEAWj4l7s5bhOJbq0N8zLwZvEGXSoPs/4eBUxCuHayOCz6o8BY8Zsv1tDgQ+AXpvudXfzw02zH/DCr7Jg2CVXB8Qk2SUnC5rMzsvqcsYnHP25pxGh9qd3p8QXIjb+AttJUFkPGHlc/rY6sY4QJ6Qjlfv8VXArwrmnfkcZSfLDwyUOGcqZiho3+vGC4mjDcFgbEDbD3Emv/2jHimFBOv2eq9dMqvmZuzk4M4KCLYHqFuX+L/XM+mAnAxlCRrv6q6Hup26HuI84Hn2N
+  template:
+    metadata:
+      creationTimestamp: null
+      name: mysecret
+      namespace: demo-app
+</code></pre>
+
+<p><code>sealedsecret.yaml</code> is the file you need to store in git.</p>
+
+<pre><code class="language-bash">argocd app create 02-secret --repo https://github.com/devopstales/gitops-repo.git \
+--path 00_argocd/02_secret --dest-server https://kubernetes.default.svc --dest-namespace demo-app
+
+kubectl logs -n demo-app demo-app
+S3CR3T
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GitOps solutions for Kubernetes]]></title>
+            <link href="https://devopstales.github.io/home/k8s-gitops/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
+                <link href="https://devopstales.github.io/home/k8s-vault/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes and Vault integration" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller-v2/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V2" />
+                <link href="https://devopstales.github.io/home/k8s-backup/?utm_source=atom_feed" rel="related" type="text/html" title="Backup your Kubernetes Cluster" />
+                <link href="https://devopstales.github.io/home/rke2-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With cilium" />
+            
+                <id>https://devopstales.github.io/home/k8s-gitops/</id>
+            
+            
+            <published>2021-04-09T00:00:00+00:00</published>
+            <updated>2021-04-09T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will compare the GitOps tools for Kubernetes.</p>
+
+<h3 id="parst-of-the-k8s-gitops-series">Parst of the K8S Gitops series</h3>
+
+<ul>
+<li>Part1: <a href="../../cloud/k8s-gitops/">GitOps solutions for Kubernetes</a></li>
+<li>Part2: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part3: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- ArgoCD + Argo Rollouts for canary deploy -->
+<!-- ArgoCD notify
+https://blog.argoproj.io/notifications-for-argo-bb7338231604
+-->
+<!----------------------------------------------->
+<!-- Flux CD + SOPS for secrets
+https://www.youtube.com/watch?v=8pbdXAd-F44
+-->
+<!-- Flux CD auto image update
+https://particule.io/en/blog/flux-auto-image-update/
+-->
+<!-- Flux CD + flagger for canary deployment -->
+<!----------------------------------------------->
+<!-- Fleet --></li>
+</ul>
+
+<h2 id="what-is-gitops">What is gitops?</h2>
+
+<p>GitOps is a way to manage the state of systems, through definitions of the desired state stored in files in a version control system usually Git. With git versioning you can manage your workflow more sourly. If something gos wrong you can rollback easily. There is multiple tools for GitOps in Kubernetes:</p>
+
+<ul>
+<li>Argo CD</li>
+<li>Flux CD</li>
+<li>Racher Fleet</li>
+</ul>
+
+<h2 id="fluxcd">FluxCD</h2>
+
+<p>Flux is described as a GitOps operator for Kubernetes that synchronises the state of manifests in a Git repository to what is running in a cluster. It can watch one single remote repository per installation and it will be able to apply changes only in the namespaces in which its underlying service account has permissions to change.</p>
+
+<h3 id="fluxcd-installation">FluxCD Installation</h3>
+
+<pre><code class="language-bash">flux bootstrap git \
+  --url=ssh://git@&lt;host&gt;/&lt;org&gt;/&lt;repository&gt; \
+  --branch=&lt;my-branch&gt; \
+  --path=clusters/my-cluster
+</code></pre>
+
+<h3 id="fluxcd-conclusion">FluxCD Conclusion</h3>
+
+<p>Advantages:</p>
+
+<ul>
+<li>More security with the namespace based separation</li>
+<li>There is a built-in solution for secret management.</li>
+<li>flagger for canary deployment</li>
+</ul>
+
+<p>Disadvantage:</p>
+
+<ul>
+<li>Need to run multiple instance for different namespace control</li>
+<li>There is no User interface</li>
+</ul>
+
+<h2 id="argocd">ArgoCD</h2>
+
+<p>The basic principles of ArgoCD similar then FluxCD however, what makes it different is the capability to manage multi-tenant and multi-cluster deployments. It can use multiple git repository as source and can control multiple namespace or Kubernetes Cluster.</p>
+
+<h3 id="argocd-installation">ArgoCD Installation</h3>
+
+<pre><code class="language-bash">kubectl create namespace argocd
+kubectl apply -n argocd -f \
+https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+</code></pre>
+
+<h3 id="argocd-conclusion">ArgoCD Conclusion</h3>
+
+<p>Advantages:</p>
+
+<ul>
+<li>It has a nice modern web UI</li>
+<li>It can manage multiple source repository and destination namespace or Kubernetes Cluster.</li>
+<li>Multiple types of identity providers are supported (OIDC, SAML, LDAP. etc&hellip;)</li>
+<li>Configuration drift detection</li>
+<li>Argo Rollouts for canary deployment</li>
+</ul>
+
+<p>Disadvantage:</p>
+
+<ul>
+<li>There is no built-in solution for secret management</li>
+</ul>
+
+<h2 id="fleet">Fleet</h2>
+
+<p>Fleet is GitOps at scale. Fleet is designed to manage up to a million clusters. It&rsquo;s also lightweight enough that is works great for a single cluster too, but it really shines when you get to a large scale</p>
+
+<h3 id="fleet-installation">Fleet Installation</h3>
+
+<pre><code class="language-bash">helm -n fleet-system install --create-namespace --wait \
+    fleet-crd https://github.com/rancher/fleet/releases/download/v0.3.3/fleet-crd-0.3.3.tgz
+helm -n fleet-system install --create-namespace --wait \
+    fleet https://github.com/rancher/fleet/releases/download/v0.3.3/fleet-0.3.3.tgz
+</code></pre>
+
+<h3 id="fleet-conclusion">Fleet Conclusion</h3>
+
+<p>Advantages:</p>
+
+<ul>
+<li>Fleet is designed to manage many many clusters</li>
+</ul>
+
+<p>Disadvantage:</p>
+
+<ul>
+<li>There is no built-in solution for secret management</li>
+<li>There is no User interface</li>
+<li>There is no built-in solution for canary deployment</li>
+</ul>
+
+<hr />
+
+<ul>
+<li><a href="https://rancher.com/tags/gitops">https://rancher.com/tags/gitops</a></li>
+<li><a href="https://www.youtube.com/watch?v=8pbdXAd-F44">https://www.youtube.com/watch?v=8pbdXAd-F44</a></li>
+</ul>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -54,28 +602,40 @@
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <p>In a <a href="https://devopstales.github.io/cloud/k8s-security/">previous post</a> I talked about how Kubernetes cluster store the Kubernetes Secrets in the etcd as base64 encoded text and not encrypted. This is the reason why using an external secret store should be a good idea.</p>
 
@@ -361,28 +921,40 @@ going to sleep...
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <p>I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&rsquo;s <a href="https://devopstales.github.io/cloud/k3s-helm-controller/">Helm controller</a> what is preinstalled.</p>
 
@@ -901,28 +1473,40 @@ If you don't see a command prompt, try pressing enter.
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h2 id="backup-kubernetes-objects">Backup Kubernetes objects</h2>
 
@@ -1286,28 +1870,40 @@ that would belong to one cluster and accidently wouldnt join any other one.</p>
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h3 id="what-is-cilium">What is Cilium?</h3>
 
@@ -1776,7 +2372,7 @@ cp service-names-port-numbers.csv /etc/graylog/server/
 </code></pre>
 
 <p>Go to <code>celebro &gt; more &gt; index templates</code>
-Create new with name: <code>pfsense-custom</code> and copy the template from file <code>pfsense_custom_template_es6.json</code></p>
+Create new with name: <code>pfsense-custom</code> and copy the template from file <code>pfsense_custom_template_es7.json</code></p>
 
 <p>In Cerebro we stand on top of the pfsense index and unfold the options and select delete index.</p>
 
@@ -1890,7 +2486,7 @@ id: 5420</p>
 <h3 id="install-requirement">Install requirement</h3>
 
 <pre><code>yum install epel-release -y
-yum install java-1.8.0-openjdk-headless.x86_64 pwgen nano -y
+yum install java-1.8.0-openjdk-headless.x86_64 pwgen nano wget curl git -y
 java -version
 </code></pre>
 
@@ -1920,7 +2516,7 @@ sudo yum -y install elasticsearch
 
 sudo tee -a /etc/elasticsearch/elasticsearch.yml &gt; /dev/null &lt;&lt;EOT
 cluster.name: graylog
-action.auto_create_index: disable
+action.auto_create_index: .watches,.triggered_watches,.watcher-history-*
 EOT
 
 systemctl restart elasticsearch
@@ -2218,28 +2814,40 @@ done
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h3 id="what-is-connaisseur">What is Connaisseur?</h3>
 
@@ -2522,28 +3130,40 @@ spec:
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <p>For a production ready  Kubernetes cluster it is very important to enforcing cluster-wide policies to restrict what a container is allowed to do. We do this wit PS in a previous pos. But how should we enforce our best practices to the cluster users?</p>
 
@@ -2827,28 +3447,40 @@ clusterpolicyreport   0      0      0      0       0      142m
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h3 id="network-policies">Network policies</h3>
 
@@ -3368,28 +4000,40 @@ spec:
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <p>There is multiple tools to scan vulnerabilities, but less Admission Controller to use them. I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&rsquo;s <a href="https://devopstales.github.io/cloud/k3s-helm-controller/">Helm controller</a> what is preinstalled.</p>
 
@@ -3620,28 +4264,40 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h3 id="what-is-a-pod-security-policy">What is a Pod Security Policy?</h3>
 
@@ -3837,28 +4493,40 @@ rules:
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h3 id="what-is-an-admission-controller">What is an Admission Controller</h3>
 
@@ -4190,28 +4858,40 @@ crictl pods - list pods
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h3 id="what-is-rke2">What is RKE2</h3>
 
@@ -4382,28 +5062,40 @@ kubectl edit psp global-restricted-psp
 <li>Part10 <a href="../../cloud/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
 <li>Part11 <a href="../../cloud/k8s-backup">Backup your Kubernetes Cluster</a></li>
 <li>Part12 <a href="../../cloud/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part13: <a href="../../cloud/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a>
+<!-- flux -->
+<!-- keel --></li>
+<li>Part14: <a href="../../cloud/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux --></li>
 </ul>
 
 <!-- admission-controller ami cseréli az imageben a repot !!!
  -->
 
-<!-- sealed secrets
-https://github.com/bitnami-labs/sealed-secrets -->
-
-<!-- Vault operator
-https://banzaicloud.com/docs/bank-vaults/installing/ -->
-
-<!-- https://github.com/banzaicloud/dast-operator -->
-
-<!-- https://docs.securecodebox.io/docs/scanners/zap/ -->
-
-<!-- kurad -->
+<!-- https://github.com/banzaicloud/dast-operator
+https://docs.securecodebox.io/docs/scanners/zap/ -->
 
 <!-- sysdig falco -->
 
-<!-- https://keel.sh -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
 
 <!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
 
 <h3 id="use-firewalld">Use firewalld</h3>
 
