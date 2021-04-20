@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-04-11T09:47:42+00:00</updated>
+    <updated>2021-04-20T16:40:58+00:00</updated>
     
     
     <author>
@@ -17,6 +17,543 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install K3S with k3sup and Calico]]></title>
+            <link href="https://devopstales.github.io/home/k3sup-calico/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k3s-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and Cilium" />
+                <link href="https://devopstales.github.io/home/k3s-etcd-kube-vip/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and kube-vip" />
+                <link href="https://devopstales.github.io/kubernetes/k3sup-calico/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and Calico" />
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/home/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
+            
+                <id>https://devopstales.github.io/home/k3sup-calico/</id>
+            
+            
+            <published>2021-04-18T00:00:00+00:00</published>
+            <updated>2021-04-18T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to install K3S with k3sup and use Calico as networking.</p>
+
+<h3 id="parst-of-the-k3s-series">Parst of the K3S series</h3>
+
+<ul>
+<li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
+<li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
+<li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a>
+<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 --></li>
+<li>Part2b: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Calico</a></li>
+<li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
+<li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
+<!-- * K3D --></li>
+</ul>
+
+<h3 id="installing-k3sup">Installing k3sup</h3>
+
+<pre><code class="language-bash">curl -sLS https://get.k3sup.dev | sh
+sudo install k3sup /usr/local/bin/
+k3sup --help
+</code></pre>
+
+<pre><code class="language-bash">ssh-copy-id vagrant@172.17.8.101
+ssh-copy-id vagrant@172.17.8.102
+ssh-copy-id vagrant@172.17.8.103
+</code></pre>
+
+<h3 id="bootstrap-the-first-k3s-node">Bootstrap the first k3s node</h3>
+
+<pre><code class="language-bash">k3sup install \
+  --ip=172.17.8.101 \
+  --user=vagrant \
+  --sudo \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.10.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.8.101&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3s-ha
+</code></pre>
+
+<h3 id="install-calico-for-networking">Install calico for networking</h3>
+
+<pre><code class="language-bash">kubectx k3s-ha
+
+kubectl get no
+NAME        STATUS     ROLES                       AGE   VERSION
+k3s-node1   NotReady   control-plane,etcd,master   15m   v1.20.5+k3s1
+
+kubectl get po -A -o wide
+NAMESPACE     NAME                                      READY   STATUS    RESTARTS   AGE
+kube-system   coredns-854c77959c-zbgkt                  0/1     Pending   0          16m
+kube-system   local-path-provisioner-5ff76fc89d-btmx6   0/1     Pending   0          16m
+kube-system   metrics-server-86cbb8457f-n99rp           0/1     Pending   0          16m
+</code></pre>
+
+<pre><code class="language-bash">kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+kubectl create -f https://docs.projectcalico.org/manifests/custom-resources.yaml
+</code></pre>
+
+<pre><code class="language-bash">kubectl get po -A   
+NAMESPACE         NAME                                       READY   STATUS    RESTARTS   AGE
+calico-system     calico-kube-controllers-77c7dbc6d6-srss8   1/1     Running   0          90s
+calico-system     calico-node-zd7rg                          1/1     Running   0          90s
+calico-system     calico-typha-7b4c95fcd4-lw4wx              1/1     Running   0          90s
+kube-system       coredns-854c77959c-zbgkt                   1/1     Running   0          27m
+kube-system       local-path-provisioner-5ff76fc89d-btmx6    1/1     Running   0          27m
+kube-system       metrics-server-86cbb8457f-n99rp            1/1     Running   0          27m
+tigera-operator   tigera-operator-675ccbb69c-fv894           1/1     Running   0          10m
+</code></pre>
+
+<h3 id="bootstrap-the-other-k3s-nodes">Bootstrap the other k3s nodes</h3>
+
+<pre><code class="language-bash">k3sup join \
+  --ip 172.17.8.102 \
+  --user vagrant \
+  --sudo \
+  --k3s-channel stable \
+  --server \
+  --server-ip 172.17.8.101 \
+  --server-user vagrant \
+  --sudo \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.10.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.8.102&quot;
+  
+k3sup join \
+  --ip 172.17.8.103 \
+  --user vagrant \
+  --sudo \
+  --k3s-channel stable \
+  --server \
+  --server-ip 172.17.8.101 \
+  --server-user vagrant \
+  --sudo \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.10.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.8.103&quot;
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install K3S with k3sup and Cilium]]></title>
+            <link href="https://devopstales.github.io/home/k3s-cilium/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k3s-etcd-kube-vip/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and kube-vip" />
+                <link href="https://devopstales.github.io/kubernetes/k3s-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and Cilium" />
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/home/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
+                <link href="https://devopstales.github.io/kubernetes/k3s-etcd-kube-vip/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and kube-vip" />
+            
+                <id>https://devopstales.github.io/home/k3s-cilium/</id>
+            
+            
+            <published>2021-04-17T00:00:00+00:00</published>
+            <updated>2021-04-17T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to install K3S with k3sup and use Cilium as networking.</p>
+
+<h3 id="parst-of-the-k3s-series">Parst of the K3S series</h3>
+
+<ul>
+<li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
+<li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
+<li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a>
+<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 --></li>
+<li>Part2b: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Calico</a></li>
+<li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
+<li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
+<!-- * K3D --></li>
+</ul>
+
+<h3 id="installing-k3sup">Installing k3sup</h3>
+
+<pre><code class="language-bash">curl -sLS https://get.k3sup.dev | sh
+sudo install k3sup /usr/local/bin/
+k3sup --help
+</code></pre>
+
+<pre><code class="language-bash">ssh-copy-id vagrant@172.17.8.101
+ssh-copy-id vagrant@172.17.8.102
+ssh-copy-id vagrant@172.17.8.103
+</code></pre>
+
+<h3 id="bootstrap-the-first-k3s-node">Bootstrap the first k3s node</h3>
+
+<pre><code class="language-bash">k3sup install \
+  --ip=172.17.8.101 \
+  --user=vagrant \
+  --sudo \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.10.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.8.101&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3s-ha
+</code></pre>
+
+<h3 id="install-cilium-for-networking">Install cilium for networking</h3>
+
+<pre><code class="language-bash">kubectx k3s-ha
+
+kubectl get no
+NAME        STATUS     ROLES                       AGE   VERSION
+k3s-node1   NotReady   control-plane,etcd,master   15m   v1.20.5+k3s1
+
+kubectl get po -A -o wide
+NAMESPACE     NAME                                      READY   STATUS    RESTARTS   AGE
+kube-system   coredns-854c77959c-zbgkt                  0/1     Pending   0          16m
+kube-system   local-path-provisioner-5ff76fc89d-btmx6   0/1     Pending   0          16m
+kube-system   metrics-server-86cbb8457f-n99rp           0/1     Pending   0          16m
+</code></pre>
+
+<pre><code class="language-bash">tmux-cssh -u vagrant 172.17.8.101 172.17.8.102 172.17.8.103
+
+
+sudo mount bpffs -t bpf /sys/fs/bpf
+sudo bash -c 'cat &lt;&lt;EOF &gt;&gt; /etc/fstab
+none /sys/fs/bpf bpf rw,relatime 0 0
+EOF'
+
+exit
+</code></pre>
+
+<pre><code class="language-bash">helm repo add cilium https://helm.cilium.io/
+helm repo update
+
+kubectl create -n kube-system secret generic cilium-ipsec-keys \
+    --from-literal=keys=&quot;3 rfc4106(gcm(aes)) $(echo $(dd if=/dev/urandom count=20 bs=1 2&gt; /dev/null| xxd -p -c 64)) 128&quot;
+
+
+kubectl -n kube-system get secrets cilium-ipsec-keys
+</code></pre>
+
+<pre><code class="language-bash">nano values.yaml
+---
+kubeProxyReplacement: &quot;strict&quot;
+
+k8sServiceHost: 10.0.2.15
+k8sServicePort: 6443
+
+global:
+  encryption:
+    enabled: true
+    nodeEncryption: true
+
+hubble:
+  metrics:
+    #serviceMonitor:
+    #  enabled: true
+    enabled:
+    - dns:query;ignoreAAAA
+    - drop
+    - tcp
+    - flow
+    - icmp
+    - http
+
+  ui:
+    enabled: true
+    replicas: 1
+    ingress:
+      enabled: true
+      hosts:
+        - hubble.k3s.intra
+      annotations:
+        cert-manager.io/cluster-issuer: ca-issuer
+      tls:
+      - secretName: ingress-hubble-ui
+        hosts:
+        - hubble.k3s.intra
+
+  relay:
+    enabled: true
+
+
+operator:
+  replicas: 1
+
+ipam:
+  mode: &quot;cluster-pool&quot;
+  operator:
+    clusterPoolIPv4PodCIDR: &quot;10.43.0.0/16&quot;
+    clusterPoolIPv4MaskSize: 24
+    clusterPoolIPv6PodCIDR: &quot;fd00::/104&quot;
+    clusterPoolIPv6MaskSize: 120
+
+prometheus:
+  enabled: true
+  # Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.
+  port: 19090
+</code></pre>
+
+<pre><code class="language-bash">helm upgrade --install cilium cilium/cilium   --namespace kube-system -f values.yaml
+</code></pre>
+
+<pre><code class="language-bash">k get po -A   
+NAMESPACE     NAME                                      READY   STATUS    RESTARTS   AGE
+kube-system   cilium-operator-67895d78b7-vkgcs          1/1     Running   0          89s
+kube-system   cilium-zppdd                              1/1     Running   0          89s
+kube-system   coredns-854c77959c-b4gzq                  1/1     Running   0          40s
+kube-system   local-path-provisioner-5ff76fc89d-9xjgz   1/1     Running   0          40s
+kube-system   metrics-server-86cbb8457f-t4d6l           1/1     Running   0          40s
+</code></pre>
+
+<h3 id="enable-hubble-for-cluster-wide-visibility">Enable Hubble for Cluster-Wide Visibility</h3>
+
+<p>I configured an ingress with https in cilium helm chart but you can use port-forward instead of that.</p>
+
+<pre><code class="language-bash">kubectl port-forward -n kube-system svc/hubble-ui \
+--address 0.0.0.0 --address :: 12000:80
+</code></pre>
+
+<p>And then open <a href="http://localhost:12000/">http://localhost:12000/</a> to access the UI.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install K3S with k3sup and kube-vip]]></title>
+            <link href="https://devopstales.github.io/home/k3s-etcd-kube-vip/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/home/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
+                <link href="https://devopstales.github.io/kubernetes/k3s-etcd-kube-vip/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and kube-vip" />
+                <link href="https://devopstales.github.io/home/k3s-fcos/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S on Fedora CoreOS" />
+                <link href="https://devopstales.github.io/home/argocd-image-updater/?utm_source=atom_feed" rel="related" type="text/html" title="Argo CD Image Updater for automate image update" />
+            
+                <id>https://devopstales.github.io/home/k3s-etcd-kube-vip/</id>
+            
+            
+            <published>2021-04-16T00:00:00+00:00</published>
+            <updated>2021-04-16T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to install K3S with k3sup. I will use kube-vip for  High-Availability and load-balancing.</p>
+
+<h3 id="parst-of-the-k3s-series">Parst of the K3S series</h3>
+
+<ul>
+<li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
+<li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
+<li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a>
+<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 --></li>
+<li>Part2b: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Calico</a></li>
+<li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
+<li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
+<!-- * K3D --></li>
+</ul>
+
+<h3 id="the-infrastructure">The infrastructure</h3>
+
+<pre><code class="language-bash">k3s-node1:
+ip: 172.17.8.101
+etcd
+kube-vip
+
+k3s-node2:
+ip: 172.17.8.102
+etcd
+kube-vip
+
+k3s-node3:
+ip: 172.17.8.103
+etcd
+kube-vip
+</code></pre>
+
+<h3 id="what-is-k3sup">What is k3sup?</h3>
+
+<p>K3S dose not give you an rpm or deb installer option just a binary. To install you need to create the systemd service and configure it. For a big cluster 3 or 5 node it could be a pain. k3sup automates this tasks trout ssh. You need a passwordless ssh connection for all the nodes and the k3sup binary on your computer.</p>
+
+<h3 id="installing-k3sup">Installing k3sup</h3>
+
+<pre><code class="language-bash">curl -sLS https://get.k3sup.dev | sh
+sudo install k3sup /usr/local/bin/
+k3sup --help
+</code></pre>
+
+<pre><code class="language-bash">ssh-copy-id vagrant@172.17.8.101
+ssh-copy-id vagrant@172.17.8.102
+ssh-copy-id vagrant@172.17.8.103
+</code></pre>
+
+<h3 id="bootstrap-the-first-k3s-node">Bootstrap the first k3s node</h3>
+
+<pre><code class="language-bash">k3sup install \
+  --ip=172.17.8.101 \
+  --user=vagrant \
+  --sudo \
+  --tls-san=172.17.8.100 \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--no-deploy=traefik --no-deploy=servicelb --flannel-iface=enp0s8 --node-ip=172.17.8.101&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3s-ha
+</code></pre>
+
+<p>I used the <code>--tls-san</code> option to add the LoadBalancer&rsquo;s virtual ip to the cert, and a few extra option. I disabled the  traefik and the servicelb service because I will use nginx ingress controller and kube-vip as loadbalancer.  In my environment I used Vangrant to spin up the nodes.Vagrant creats multiple interfaces for the vm so I need to configure which of these will be used for the cluster: <code>--flannel-iface=enp0s8 --node-ip=172.17.8.101</code> Thanks to the <code>--cluster</code> k3sup will start an embedded etcd cluster in a container.</p>
+
+<h3 id="install-kube-vip-for-ha">Install kube-vip for HA</h3>
+
+<pre><code class="language-bash">kubectx k3s-ha
+
+kubectl get nodes
+
+kubectl apply -f https://kube-vip.io/manifests/rbac.yaml
+</code></pre>
+
+<p>ssh to the first host and generate the daemonset to run kube-vip:</p>
+
+<pre><code class="language-bash">ssh vagrant@172.17.8.101
+sudo su -
+
+ctr image pull docker.io/plndr/kube-vip:0.3.2
+alias kube-vip=&quot;ctr run --rm --net-host docker.io/plndr/kube-vip:0.3.2 vip /kube-vip&quot;
+
+kube-vip manifest daemonset \
+    --arp \
+    --interface enp0s8 \
+    --address 172.17.8.100 \
+    --controlplane \
+    --leaderElection \
+    --taint \
+    --inCluster | tee /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+
+exit
+</code></pre>
+
+<p>Test vip:</p>
+
+<pre><code class="language-bash">ping 172.17.8.100
+PING 172.17.8.100 (172.17.8.100) 56(84) bytes of data.
+64 bytes from 172.17.8.100: icmp_seq=1 ttl=64 time=1.06 ms
+64 bytes from 172.17.8.100: icmp_seq=2 ttl=64 time=0.582 ms
+64 bytes from 172.17.8.100: icmp_seq=3 ttl=64 time=0.773 ms
+</code></pre>
+
+<h3 id="bootstrap-the-other-k3s-nodes">Bootstrap the other k3s nodes</h3>
+
+<pre><code class="language-bash">k3sup join \
+  --ip 172.17.8.102 \
+  --user vagrant \
+  --sudo \
+  --k3s-channel stable \
+  --server \
+  --server-ip 172.17.8.101 \
+  --server-user vagrant \
+  --sudo \
+  --k3s-extra-args &quot;--no-deploy=traefik --no-deploy=servicelb --flannel-iface=enp0s8 --node-ip=172.17.8.102&quot;
+  
+k3sup join \
+  --ip 172.17.8.103 \
+  --user vagrant \
+  --sudo \
+  --k3s-channel stable \
+  --server \
+  --server-ip 172.17.8.101 \
+  --server-user vagrant \
+  --sudo \
+  --k3s-extra-args &quot;--no-deploy=traefik --no-deploy=servicelb --flannel-iface=enp0s8 --node-ip=172.17.8.103&quot;
+</code></pre>
+
+<h3 id="what-is-kube-vip">What is kube-vip</h3>
+
+<p>Kubernetes does not offer an implementation of network load-balancers (Services of type LoadBalancer) for bare metal clusters. The implementations of Network LB that Kubernetes does ship with are all glue code that calls out to various IaaS platforms (GCP, AWS, Azure…). If you’re not running on a supported IaaS platform (GCP, AWS, Azure…), LoadBalancers will remain in the &ldquo;pending&rdquo; state indefinitely when created. So I will use kube-vip to solve this problem.</p>
+
+<p>MetalLB is also a popular tool for on-premises Kubernetes networking, however its primary use-case is for advertising service LoadBalancers instead of advertising a stable IP for the control-plane. kube-vip handles both use-cases, and is under active development by its author, Dan.</p>
+
+<h3 id="install-kube-vip-as-network-loadbalancer">Install kube-vip as network LoadBalancer</h3>
+
+<pre><code class="language-bash">kubectl apply -f https://kube-vip.io/manifests/controller.yaml
+
+kubectl create configmap --namespace kube-system plndr --from-literal cidr-global=172.17.8.200/29
+
+wget https://kube-vip.io/manifests/kube-vip.yaml
+nano kube-vip.yaml
+...
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vip-role
+rules:
+  - apiGroups: [&quot;coordination.k8s.io&quot;]
+    resources: [&quot;leases&quot;]
+    verbs: [&quot;get&quot;, &quot;create&quot;, &quot;update&quot;, &quot;list&quot;, &quot;put&quot;]
+  - apiGroups: [&quot;&quot;]
+    resources: [&quot;configmaps&quot;, &quot;endpoints&quot;, &quot;services&quot;, &quot;services/status&quot;, &quot;nodes&quot;]
+    verbs: [&quot;list&quot;,&quot;get&quot;,&quot;watch&quot;, &quot;update&quot;]
+...
+
+kubectl apply -f kube-vip.yaml -n default
+</code></pre>
+
+<p>Create a test aplication with a LoadBalancer type service.</p>
+
+<pre><code>kubectl apply -f https://raw.githubusercontent.com/inlets/inlets-operator/master/contrib/nginx-sample-deployment.yaml -n default
+kubectl expose deployment nginx-1 --port=80 --type=LoadBalancer -n default
+</code></pre>
+
+<p>As you can see in the logs it creates the the VIP <code>172.17.8.202</code></p>
+
+<pre><code class="language-bash">kubectl logs kube-vip-cluster-79f767d56f-jkc7f
+
+time=&quot;2021-04-14T16:57:58Z&quot; level=info msg=&quot;Beginning cluster membership, namespace [default], lock name [plunder-lock], id [k8s-node3]&quot;
+I0414 16:57:58.813913       1 leaderelection.go:242] attempting to acquire leader lease  default/plunder-lock...
+I0414 16:57:58.857158       1 leaderelection.go:252] successfully acquired lease default/plunder-lock
+time=&quot;2021-04-14T16:57:58Z&quot; level=info msg=&quot;Beginning watching Kubernetes configMap [plndr]&quot;
+time=&quot;2021-04-14T16:57:58Z&quot; level=debug msg=&quot;ConfigMap [plndr] has been Created or modified&quot;
+time=&quot;2021-04-14T16:57:58Z&quot; level=debug msg=&quot;Found 0 services defined in ConfigMap&quot;
+time=&quot;2021-04-14T16:57:58Z&quot; level=debug msg=&quot;[STARTING] Service Sync&quot;
+time=&quot;2021-04-14T16:57:58Z&quot; level=debug msg=&quot;[COMPLETE] Service Sync&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=debug msg=&quot;ConfigMap [plndr] has been Created or modified&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=debug msg=&quot;Found 1 services defined in ConfigMap&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=debug msg=&quot;[STARTING] Service Sync&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;New VIP [172.17.8.202] for [nginx-1/7676b532-3004-4d41-9282-90765bc98d40] &quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;Starting kube-vip as a single node cluster&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;This node is assuming leadership of the cluster&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;Starting TCP Load Balancer for service [172.17.8.202:80]&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;Load Balancer [nginx-1-load-balancer] started&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;Broadcasting ARP update for 172.17.8.202 (08:00:27:93:fe:45) via enp0s8&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;Started Load Balancer and Virtual IP&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=debug msg=&quot;[COMPLETE] Service Sync&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=info msg=&quot;Beginning watching Kubernetes Endpoints for service [nginx-1]&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=debug msg=&quot;Endpoints for service [nginx-1] have  been Created or modified&quot;
+time=&quot;2021-04-14T16:59:55Z&quot; level=debug msg=&quot;Load-Balancer updated with [1] backends&quot;
+-&gt; Address: 10.42.1.2:80 
+</code></pre>
+
+<p>It is working on <code>172.17.8.202</code> but not perfect because it didn&rsquo;t write back to the api server so the service remain in the &ldquo;pending&rdquo; state.</p>
+
+<pre><code class="language-bash">kubectl get svc
+NAME         TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+kubernetes   ClusterIP      10.43.0.1       &lt;none&gt;        443/TCP        83m
+nginx-1      LoadBalancer   10.43.126.209   &lt;pending&gt;     80:31904/TCP   46m
+</code></pre>
+
+<p>kube-vip is good solution for High-Availability but for a network LoadBalancer you better to use MetalLB.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -6228,7 +6765,7 @@ var config = {
 
 <h3 id="set-up-the-govc-environment">Set up the GOVC environment:</h3>
 
-<pre><code># on deployer
+<pre><code class="language-bash"># on deployer
 curl -LO https://github.com/vmware/govmomi/releases/download/v0.20.0/govc_linux_amd64.gz
 gunzip govc_linux_amd64.gz
 chmod +x govc_linux_amd64
@@ -6242,7 +6779,7 @@ source /etc/profile
 
 <p>Add <code>disk.enableUUID=1</code> for all VM:</p>
 
-<pre><code>govc vm.info &lt;vm&gt;
+<pre><code class="language-bash">govc vm.info &lt;vm&gt;
 govc ls /Datacenter/kubernetes/&lt;vm-folder-name&gt;
 # example:
 govc ls /Datacenter/kubernetes/k8s-01
@@ -6254,7 +6791,7 @@ govc vm.change -e=&quot;disk.enableUUID=1&quot; -vm='/datacenter/kubernetes/k8s-
 
 <p>VM Hardware should be at version 15 or higher. Upgrade if needed:</p>
 
-<pre><code>govc vm.option.info '/datacenter/kubernetes/k8s-01/k8s-m01' | grep HwVersion
+<pre><code class="language-bash">govc vm.option.info '/datacenter/kubernetes/k8s-01/k8s-m01' | grep HwVersion
 
 govc vm.upgrade -version=15 -vm '/datacenter/kubernetes/k8s-01/k8s-m01'
 </code></pre>
@@ -6317,7 +6854,7 @@ govc vm.upgrade -version=15 -vm '/datacenter/kubernetes/k8s-01/k8s-m01'
 
 <p>Create the vSphere configuration file in /etc/kubernetes/vcp/vsphere.conf - you’ll need to create the folder.</p>
 
-<pre><code>nano /etc/kubernetes/vcp/vsphere.conf
+<pre><code class="language-bash">nano /etc/kubernetes/vcp/vsphere.conf
 [Global]
 user = &quot;k8s-user@vsphere.local&quot;
 password = &quot;password for k8s-user&quot;
@@ -6342,7 +6879,7 @@ scsicontrollertype = pvscsi
 
 <p>On master:</p>
 
-<pre><code>nano /etc/systemd/system/kubelet.service
+<pre><code class="language-bash">nano /etc/systemd/system/kubelet.service
 [Service]
 ...
 ExecStart=/usr/bin/docker run \
@@ -6354,7 +6891,7 @@ ExecStart=/usr/bin/docker run \
 
 <p>On worker:</p>
 
-<pre><code>nano /etc/systemd/system/kubelet.service
+<pre><code class="language-bash">nano /etc/systemd/system/kubelet.service
 [Service]
 ...
 ExecStart=/usr/bin/docker run \
@@ -6368,7 +6905,7 @@ ExecStart=/usr/bin/docker run \
 
 <p>Add following flags to the kubelet service configuration (usually in the systemd config file), as well as the controller-manager and api-server container manifest files on the master node (usually in /etc/kubernetes/manifests).</p>
 
-<pre><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+<pre><code class="language-bash">nano /etc/kubernetes/manifests/kube-apiserver.yaml
 ...
 spec:
   containers:
@@ -6391,12 +6928,12 @@ spec:
 
 <p>Restart the services.</p>
 
-<pre><code>systemctl restart kubelet docker
+<pre><code class="language-bash">systemctl restart kubelet docker
 </code></pre>
 
 <h3 id="add-providerid">Add providerID</h3>
 
-<pre><code>kubectl get nodes -o json | jq '.items[]|[.metadata.name, .spec.providerID, .status.nodeInfo.systemUUID]'
+<pre><code class="language-bash">kubectl get nodes -o json | jq '.items[]|[.metadata.name, .spec.providerID, .status.nodeInfo.systemUUID]'
 
 nano k8s-vmware-pacher.sh
 DATACENTER='&lt;Datacenter&gt;'
@@ -6418,7 +6955,7 @@ chmod +x openshift-vmware-pacher.sh
 
 <h3 id="create-vsphere-storage-class">Create vSphere storage-class</h3>
 
-<pre><code>nano vmware-sc.yml
+<pre><code class="language-bash">nano vmware-sc.yml
 ---
 kind: StorageClass
 apiVersion: storage.k8s.io/v1
@@ -7116,15 +7653,14 @@ echo &quot;PATH=$PATH:/usr/local/bin/&quot; &gt;&gt; /etc/profile
 
 <h3 id="parst-of-the-k3s-series">Parst of the K3S series</h3>
 
-<!-- * Part1a: <a href="../../kubernetes/k3s-install/">Install K3S with Docker</a> -->
-
 <ul>
+<li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
 <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
 <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a>
-<!-- * K3S calico -->
-<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-<!-- * K3S with external db - https://thenewstack.io/tutorial-install-a-highly-available-k3s-cluster-at-the-edge/k3 --></li>
-<li>Part5: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
+<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 --></li>
+<li>Part2b: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Calico</a></li>
+<li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
+<li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
 <!-- * K3D --></li>
 </ul>
 
@@ -7204,15 +7740,14 @@ spec:
 
 <h3 id="parst-of-the-k3s-series">Parst of the K3S series</h3>
 
-<!-- * Part1a: <a href="../../kubernetes/k3s-install/">Install K3S with Docker</a> -->
-
 <ul>
+<li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
 <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
 <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a>
-<!-- * K3S calico -->
-<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-<!-- * K3S with external db - https://thenewstack.io/tutorial-install-a-highly-available-k3s-cluster-at-the-edge/k3 --></li>
-<li>Part5: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
+<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 --></li>
+<li>Part2b: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Calico</a></li>
+<li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
+<li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
 <!-- * K3D --></li>
 </ul>
 
@@ -7393,15 +7928,14 @@ spec:
 
 <h3 id="parst-of-the-k3s-series">Parst of the K3S series</h3>
 
-<!-- * Part1a: <a href="../../kubernetes/k3s-install/">Install K3S with Docker</a> -->
-
 <ul>
+<li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
 <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
 <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a>
-<!-- * K3S calico -->
-<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-<!-- * K3S with external db - https://thenewstack.io/tutorial-install-a-highly-available-k3s-cluster-at-the-edge/k3 --></li>
-<li>Part5: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
+<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 --></li>
+<li>Part2b: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Calico</a></li>
+<li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
+<li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
 <!-- * K3D --></li>
 </ul>
 
@@ -22071,6 +22605,9 @@ openshift_master_overwrite_named_certificates=true
 openshift_hosted_router_certificate={&quot;certfile&quot;: &quot;/root/cert/MyCert.crt&quot;, &quot;keyfile&quot;: &quot;/root/cert/MyCert.key&quot;, &quot;cafile&quot;: &quot;/root/cert/ccca.pem&quot;}
 openshift_master_named_certificates=[{&quot;names&quot;: [&quot;master.openshit.devopstales.intra&quot;],&quot;certfile&quot;: &quot;/root/cert/MyCert.crt&quot;, &quot;keyfile&quot;: &quot;/root/cert/MyCert.key&quot;, &quot;cafile&quot;: &quot;/root/cert/ccca.pem&quot;}]
 
+openshift_redeploy_openshift_ca=true
+openshift_certificate_expiry_fail_on_warn=false
+
 # registry
 openshift_hosted_registry_routecertificates={&quot;certfile&quot;: &quot;/root/cert/MyCert.crt&quot;, &quot;keyfile&quot;: &quot;/root/cert/MyCert.key&quot;, &quot;cafile&quot;: &quot;/root/cert/ccca.pem&quot;}
 openshift_hosted_registry_routetermination=reencrypt
@@ -22080,8 +22617,12 @@ openshift_hosted_registry_routetermination=reencrypt
 
 <p>If your certificate is renewd you can cahge the certificate in the cluster with this playbooks.</p>
 
-<pre><code>ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/openshift-master/redeploy-openshift-ca.yml
+<pre><code>oc get csr | grep Pending | awk '{print $1}' | xargs oc adm certificate approve
+
 ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/redeploy-certificates.yml
+
+ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/openshift-master/redeploy-openshift-ca.yml
+ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/openshift-etcd/redeploy-ca.yml
 </code></pre>]]></content>
             
                  
