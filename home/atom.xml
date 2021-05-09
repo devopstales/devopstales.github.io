@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-05-05T15:43:43+00:00</updated>
+    <updated>2021-05-09T11:15:19+00:00</updated>
     
     
     <author>
@@ -17,6 +17,627 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Flux2 and Mozilla SOPS to encrypt secrets]]></title>
+            <link href="https://devopstales.github.io/home/gitops-flux2-sops/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/gitops-flux2-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 and kubeseal to encrypt secrets" />
+                <link href="https://devopstales.github.io/kubernetes/gitops-flux2-sops/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 and Mozilla SOPS to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/gitops-flux2/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 Install and Usage" />
+                <link href="https://devopstales.github.io/kubernetes/gitops-flux2-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 and kubeseal to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/argocd-image-updater/?utm_source=atom_feed" rel="related" type="text/html" title="Argo CD Image Updater for automate image update" />
+            
+                <id>https://devopstales.github.io/home/gitops-flux2-sops/</id>
+            
+            
+            <published>2021-05-08T00:00:00+00:00</published>
+            <updated>2021-05-08T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use Mozilla SOPS with Flux2 to protect secrets.</p>
+
+<h3 id="parst-of-the-k8s-gitops-series">Parst of the K8S Gitops series</h3>
+
+<ul>
+<li>Part1: <a href="../../kubernetes/k8s-gitops/">GitOps solutions for Kubernetes</a></li>
+<li>Part2: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part3: <a href="../../kubernetes/argocd-image-updater/">Argo CD Image Updater for automate image update</a>
+<!-- ArgoCD + Argo Rollouts for canary deploy -->
+<!-- ArgoCD notify
+https://blog.argoproj.io/notifications-for-argo-bb7338231604
+-->
+<!-----------------------------------------------></li>
+<li>Part4: <a href="../../kubernetes/gitops-flux2/">Flux2 Install and Usage</a></li>
+<li>Part5: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part6: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
+<!-- Flux CD auto image update
+https://particule.io/en/blog/flux-auto-image-update/
+-->
+<!-- Flux CD + flagger for canary deployment -->
+<!----------------------------------------------->
+<!-- Fleet --></li>
+</ul>
+
+<p>First you need to bootstrap the fluxcomponent as I showd in the <a href="../gitops-flux2/">previous post</a>.</p>
+
+<h2 id="install-ops-cli">Install OPS CLI</h2>
+
+<pre><code class="language-bash">VERSION=$(curl --silent &quot;https://api.github.com/repos/mozilla/sops/releases/latest&quot; | grep '&quot;tag_name&quot;' | sed -E 's/.*&quot;([^&quot;]+)&quot;.*/\1/')
+VERSION=${VERSION:1}
+
+wget https://github.com/mozilla/sops/releases/download/v$VERSION/sops-&quot;$VERSION&quot;-1.x86_64.rpm
+yum install -y sops-&quot;$VERSION&quot;-1.x86_64.rpm
+rm -f sops-&quot;$VERSION&quot;-1.x86_64.rpm
+</code></pre>
+
+<h3 id="generate-a-gpg-key">Generate a GPG key</h3>
+
+<p>Generate a GPG/OpenPGP key:</p>
+
+<pre><code class="language-bash">export KEY_NAME=&quot;cl1.mydomain.intra&quot;
+export KEY_COMMENT=&quot;flux secrets&quot;
+
+gpg --batch --full-generate-key &lt;&lt;EOF
+%no-protection
+Key-Type: 1
+Key-Length: 4096
+Subkey-Type: 1
+Subkey-Length: 4096
+Expire-Date: 0
+Name-Comment: ${KEY_COMMENT}
+Name-Real: ${KEY_NAME}
+EOF
+</code></pre>
+
+<p>The above configuration creates an rsa4096 key that does not expire. Retrieve the GPG key fingerprint:</p>
+
+<pre><code class="language-bash">gpg --list-secret-keys &quot;${KEY_NAME}&quot;
+
+sec   rsa4096 2020-09-06 [SC]
+      1F3D1CED2F865F5E59CA564553241F147E7C5FA4
+
+# Store the key fingerprint as an environment variable:
+export KEY_FP=1F3D1CED2F865F5E59CA564553241F147E7C5FA4
+</code></pre>
+
+<p>Export the public and private key from your local GPG keyring and create a Kubernetes secret named sops-gpg in the flux-system namespace:</p>
+
+<pre><code class="language-bash">gpg --export-secret-keys --armor &quot;${KEY_FP}&quot; |
+kubectl create secret generic sops-gpg \
+--namespace=flux-system \
+--from-file=sops.asc=/dev/stdin
+
+mkdir ./02_flux2/03_SOPS_demo/
+gpg --export-secret-keys --armor &quot;${KEY_FP}&quot; &gt; ./02_flux2/03_SOPS_demo/sops.pub.asc
+</code></pre>
+
+<p>It’s a good idea to back up this secret-key/K8s-Secret with a password manager or offline storage. Also consider deleting the secret decryption key from you machine:</p>
+
+<pre><code class="language-bash">gpg --delete-secret-keys &quot;${KEY_FP}&quot;
+</code></pre>
+
+<pre><code class="language-bash">git add -A
+git commit -m &quot;add sops config&quot;
+git push
+</code></pre>
+
+<h3 id="configure-in-cluster-secrets-decryption">Configure in-cluster secrets decryption</h3>
+
+<pre><code class="language-bash">nano 02_flux2/flux-system/gotk-sync.yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  ref:
+    branch: main
+  secretRef:
+    name: flux-system
+  url: ssh://git@github.com/devopstales/gitops-repo
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta1
+kind: Kustomization
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-gpg
+  interval: 10m0s
+  path: ./01_flux2
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  validation: client
+</code></pre>
+
+<p>Create a secret you want to encrypt:</p>
+
+<pre><code class="language-yaml">cp 01_flux2/02_secret/*.yaml 02_flux2/03_SOPS_demo/
+rm -f 02_flux2/03_SOPS_demo/sealedsecret.yaml
+
+nano 02_flux2/03_SOPS_demo/secret.yaml
+---
+apiVersion: v1
+data:
+  secret: UzNDUjNUCg==
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: mysecret
+  namespace: demo-app
+</code></pre>
+
+<p>ncrypt the secret with SOPS using your GPG key:</p>
+
+<pre><code class="language-bash">sops --encrypt --encrypted-regex '^(data|stringData)$' --pgp ${KEY_FP} \
+--in-place 02_flux2/03_SOPS_demo/secret.yaml
+</code></pre>
+
+<p>Check the result:</p>
+
+<pre><code class="language-yaml">cat 02_flux2/03_SOPS_demo/secret.yaml 
+apiVersion: v1
+data:
+    secret: ENC[AES256_GCM,data:RxdPIf8i5G+yjiT0,iv:A8iYsJ4hdd1MNZDAKQyD4L/b6Caa1TDn+MNKsFku3nc=,tag:QLN3Y6B/S87qzPYh2PATaQ==,type:str]
+kind: Secret
+metadata:
+    creationTimestamp: null
+    name: mysecret
+    namespace: demo-app
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age: []
+    lastmodified: &quot;2021-05-09T08:59:30Z&quot;
+    mac: ENC[AES256_GCM,data:2SwDXqI5R880Y/uf4yW6o3rraJ7WYQ5aIfKwIPEpss/evD15dfLulUUahN0bNmrwtSYuad0aXHopGfFsKEvxSVMx9UkPaAd0xVZHSj7aJ5Fi5D2De3Tw1yi8tuWjU8OMG81nIZkx6GdIa4yZlm+LEangYVIpzluWk6C7In8GNc8=,iv:9E0R+R6QjqCXBnzPlAzri/fYxEr0HPZ0FzQX5oddMZk=,tag:FEJknbbaqp402biU/hxUaA==,type:str]
+    pgp:
+        - created_at: &quot;2021-05-09T08:59:30Z&quot;
+          enc: |
+            -----BEGIN PGP MESSAGE-----
+
+            hQIMA1gFjmLlSkpZAQ//ZwU9ZEL2jDtmg8ZvJ4Wrnaa66Rjvnr/Uz9VOUxKZk1WJ
+            V6+Wa1Od80tODzr9gfmjHor0ZCbdJmPxf96z4MhcBNbo9oBr43GX2Wm67ijwIEdo
+            Wup2252ANsn1stZIk5krdlZVkRTW+GeAwEDHnW4zSOSVfc9Ad1SHGy1vgXM/i7Je
+            ttx3s/PZhPPZLUQ6SKQjEaf6Xod9nnLyqSb1SdB5idhBy/wV3nt08p/LJ8QVItzh
+            iFclOBRXeEQuYEt2O57Bo/kRGTaBjq6YE0KCbu7PMkm8gerZOyW2Od1maF4Bsjlz
+            c+qOaLjFOP4K/8OIDtzTOw9tXbQREWC9tl1ReadGHReTbdCs55msmMWscPJtq8wi
+            a3eMdLDwvJHhAERaJwvAa5Le6uIwr+lOEVzetj2ucK6LgVlTjgs9IPTMul4ASyji
+            tOtTUzXoEHu/wfGKP7QFDbROFBWalNBkSegdOQx+/GSLebfWY/HmTy+V7isRhoa3
+            iH4/hapCDUQVqwQSyvjpVUzoAsp9g7XaYITKGbSkIuUA3TI5aTp3SSF7sbNHdG8g
+            6i3jh4FxS9yzFgM7fGnlbHDta/DzyBQB5Z77cI8pJW9mri1/U6R63zJuDqSUvFlw
+            zf1zJwEV3xgwMog/7nx4aAItPBeqsT0pSYs5pQpciKgTJcCOTG8r6+3+cjckS/vS
+            XgH6CQtPyzD1JAVDz94n0RkZKC+TXUfLnRF0yLwaAeOJ9h6vFVnEggOIXiWF4Iy7
+            Ds1zIaq79+H/gWo0fGk2srKIHdcPZkQc7zAOqbO5X94fo0TtNx5y/QT6FUwUH4k=
+            =GMAU
+            -----END PGP MESSAGE-----
+          fp: FCF6E84DC263BDDB9A35D3C6DF8C27FF0C09F771
+    encrypted_regex: ^(data|stringData)$
+    version: 3.7.1
+</code></pre>
+
+<p>Upload files and test:</p>
+
+<pre><code class="language-bash">git add -A
+git commit -m &quot;sops demo&quot;
+git push
+
+kubectl logs -n demo-app2 demo-app
+S3CR3T
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Flux2 and kubeseal to encrypt secrets]]></title>
+            <link href="https://devopstales.github.io/home/gitops-flux2-kubeseal/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/gitops-flux2-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 and kubeseal to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/gitops-flux2/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 Install and Usage" />
+                <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/argocd-image-updater/?utm_source=atom_feed" rel="related" type="text/html" title="Argo CD Image Updater for automate image update" />
+                <link href="https://devopstales.github.io/home/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/gitops-flux2-kubeseal/</id>
+            
+            
+            <published>2021-05-07T00:00:00+00:00</published>
+            <updated>2021-05-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use kubeseal and Mozilla SOPS with Flux2 to protect secrets.</p>
+
+<h3 id="parst-of-the-k8s-gitops-series">Parst of the K8S Gitops series</h3>
+
+<ul>
+<li>Part1: <a href="../../kubernetes/k8s-gitops/">GitOps solutions for Kubernetes</a></li>
+<li>Part2: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part3: <a href="../../kubernetes/argocd-image-updater/">Argo CD Image Updater for automate image update</a>
+<!-- ArgoCD + Argo Rollouts for canary deploy -->
+<!-- ArgoCD notify
+https://blog.argoproj.io/notifications-for-argo-bb7338231604
+-->
+<!-----------------------------------------------></li>
+<li>Part4: <a href="../../kubernetes/gitops-flux2/">Flux2 Install and Usage</a></li>
+<li>Part5: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part6: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
+<!-- Flux CD auto image update
+https://particule.io/en/blog/flux-auto-image-update/
+-->
+<!-- Flux CD + flagger for canary deployment -->
+<!----------------------------------------------->
+<!-- Fleet --></li>
+</ul>
+
+<h2 id="install-kubeseal-cli">Install kubeseal cli</h2>
+
+<pre><code class="language-bash">VERSION=$(curl --silent &quot;https://api.github.com/repos/bitnami-labs/sealed-secrets/releases/latest&quot; | grep '&quot;tag_name&quot;' | sed -E 's/.*&quot;([^&quot;]+)&quot;.*/\1/')
+
+wget https://github.com/bitnami-labs/sealed-secrets/releases/download/$VERSION/kubeseal-linux-amd64 -O /usr/local/bin/kubeseal
+chmod 755 /usr/local/bin/kubeseal
+kubeseal --version
+</code></pre>
+
+<h3 id="deploy-sealed-secrets-with-a-helmrelease">Deploy sealed-secrets with a HelmRelease</h3>
+
+<pre><code class="language-bash">flux create source helm sealed-secrets \
+--interval=1h \
+--url=https://bitnami-labs.github.io/sealed-secrets
+
+flux create helmrelease sealed-secrets \
+--interval=1h \
+--release-name=sealed-secrets \
+--target-namespace=flux-system \
+--source=HelmRepository/sealed-secrets \
+--chart=sealed-secrets \
+--chart-version=&quot;&gt;=1.15.0-0&quot; \
+--crds=CreateReplace
+</code></pre>
+
+<p>At startup, the sealed-secrets controller generates a 4096-bit RSA key pair and persists the private and public keys as Kubernetes secrets in the flux-system namespace.</p>
+
+<pre><code class="language-bash">kubeseal --fetch-cert \
+--controller-name=sealed-secrets \
+--controller-namespace=flux-system \
+&gt; ../pub-sealed-secrets.pem
+</code></pre>
+
+<p>Generate a Kubernetes secret manifest with kubectl:</p>
+
+<pre><code class="language-bash">kubectl -n default create secret generic basic-auth \
+--from-literal=user=admin \
+--from-literal=password=change-me \
+--dry-run=client \
+-o yaml &gt; ../basic-auth.yaml
+</code></pre>
+
+<h3 id="create-a-sealed-secret">Create a sealed secret</h3>
+
+<p>Create a secret you want to encrypt:</p>
+
+<pre><code class="language-yaml">apiVersion: v1
+data:
+  secret: UzNDUjNUCg==
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: mysecret
+  namespace: demo-app
+</code></pre>
+
+<p>A secret in Kubernetes cluster is encoded in base64 but not encrypted! Theses data are &ldquo;only&rdquo; encoded so if a user have access to your secrets, he can simply base64 decode to see your sensitive data:</p>
+
+<pre><code class="language-base">echo &quot;UzNDUjNUCg==&quot; | base64 -d
+S3CR3T
+</code></pre>
+
+<p>Encrypt the secret with kubeseal:</p>
+
+<pre><code class="language-bash">mkdir ./01_flux2/02_secret/
+
+kubeseal --format yaml --cert=../../../pub-sealed-secrets.pem \
+&lt; secret.yaml &gt;sealedsecret.yaml
+rm -f secret.yaml
+
+git add -A
+git commit -m &quot;kubeseal&quot;
+git push
+
+kubectl logs -n demo-app demo-app
+S3CR3T
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Flux2 Install and Usage]]></title>
+            <link href="https://devopstales.github.io/home/gitops-flux2/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/gitops-flux2-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 and kubeseal to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/argocd-image-updater/?utm_source=atom_feed" rel="related" type="text/html" title="Argo CD Image Updater for automate image update" />
+                <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
+                <link href="https://devopstales.github.io/kubernetes/gitops-flux2/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 Install and Usage" />
+            
+                <id>https://devopstales.github.io/home/gitops-flux2/</id>
+            
+            
+            <published>2021-05-07T00:00:00+00:00</published>
+            <updated>2021-05-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use Install and Use the GitOps Tool Flux2.</p>
+
+<h3 id="parst-of-the-k8s-gitops-series">Parst of the K8S Gitops series</h3>
+
+<ul>
+<li>Part1: <a href="../../kubernetes/k8s-gitops/">GitOps solutions for Kubernetes</a></li>
+<li>Part2: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part3: <a href="../../kubernetes/argocd-image-updater/">Argo CD Image Updater for automate image update</a>
+<!-- ArgoCD + Argo Rollouts for canary deploy -->
+<!-- ArgoCD notify
+https://blog.argoproj.io/notifications-for-argo-bb7338231604
+-->
+<!-----------------------------------------------></li>
+<li>Part4: <a href="../../kubernetes/gitops-flux2/">Flux2 Install and Usage</a></li>
+<li>Part5: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part6: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
+<!-- Flux CD auto image update
+https://particule.io/en/blog/flux-auto-image-update/
+-->
+<!-- Flux CD + flagger for canary deployment -->
+<!----------------------------------------------->
+<!-- Fleet --></li>
+</ul>
+
+<h3 id="install-flux2-cli">Install Flux2 cli</h3>
+
+<pre><code class="language-bash">curl -s https://fluxcd.io/install.sh | sudo bash
+</code></pre>
+
+<h3 id="bootstrap-flux2-server-components">Bootstrap Flux2 Server components</h3>
+
+<p>Flux is installed in a GitOps way and its manifest will be pushed to the repository, so you will also need a GitHub account and a <a href="https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token">personal access token</a> that can create repositories (check all permissions under <code>repo</code>) to enable Flux do this.</p>
+
+<pre><code class="language-bash">export GITHUB_TOKEN=&lt;token&gt;
+export GITHUB_USER=devopstales
+
+flux check --pre
+
+flux bootstrap github \
+  --owner=$GITHUB_USER \
+  --repository=gitops-repo \
+  --branch=main \
+  --path=./01_flux2/ \
+  --personal
+</code></pre>
+
+<p>If you try to install in a secure Kubernetes cluster with runAsNonRoot psp the notification-controller and the source-controller can&rsquo;t start because it runs as root.</p>
+
+<pre><code class="language-yaml">nano rb.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: psp-rolebinding-flux-system
+  namespace: flux-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system-unrestricted-psp-role
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:serviceaccounts
+
+kubectl apply -f rb.yaml
+</code></pre>
+
+<p>With <code>--path</code> you can configure the directory which will be used to reconcile the target cluster.</p>
+
+<pre><code class="language-bash">./01_flux2/
+└── flux-system # &lt;- namespace dir generated by bootstrap
+    ├── gotk-components.yaml
+    ├── gotk-sync.yaml
+    ├── rb.yaml # &lt;- RoleBinding for psp created by me
+    └── kustomization.yaml
+</code></pre>
+
+<h3 id="deploy-application">Deploy application</h3>
+
+<p>Add an application to the cluster and upload to the git repository:</p>
+
+<pre><code class="language-bash">./01_flux2/
+├── 00_guestbook # &lt;- guestbook application
+│   ├── 00_ns.yaml
+│   ├── 01_rb.yaml
+│   ├── 02_guestbook-ui-svc.yaml
+│   └── 03_guestbook-ui-deployment.yaml
+└── flux-system # &lt;- namespace dir generated by bootstrap
+    ├── gotk-components.yaml
+    ├── gotk-sync.yaml
+    ├── rb.yaml # &lt;- RoleBinding for psp created by me
+    └── kustomization.yaml
+</code></pre>
+
+<h3 id="add-another-git-repository">Add another Git repository</h3>
+
+<p>We will be using a public repository github.com/stefanprodan/podinfo, podinfo is a tiny web application made with Go. Create a GitRepository manifest pointing to podinfo repository’s master branch:</p>
+
+<pre><code class="language-bash">mkdir ./01_flux2/01_podinfo
+
+flux create source git podinfo \
+  --url=https://github.com/stefanprodan/podinfo \
+  --branch=master \
+  --interval=30s \
+  --export &gt; ./01_flux2/01_podinfo/podinfo-source.yaml
+</code></pre>
+
+<pre><code class="language-yaml">cat 01_flux2/01_podinfo/podinfo-source.yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 30s
+  ref:
+    branch: master
+  url: https://github.com/stefanprodan/podinfo
+</code></pre>
+
+<pre><code class="language-bash">./01_flux2/
+├── 00_guestbook # &lt;- guestbook application
+│   ├── 00_ns.yaml
+│   ├── 01_rb.yaml
+│   ├── 02_guestbook-ui-svc.yaml
+│   └── 03_guestbook-ui-deployment.yaml
+├── 01_podinfo
+│   └── podinfo-source.yaml
+└── flux-system # &lt;- namespace dir generated by bootstrap
+    ├── gotk-components.yaml
+    ├── gotk-sync.yaml
+    ├── rb.yaml # &lt;- RoleBinding for psp created by me
+    └── kustomization.yaml
+</code></pre>
+
+<h3 id="kustomization">Kustomization</h3>
+
+<p>We will create a Flux Kustomization manifest for podinfo. This configures Flux to apply the kustomize directory located in the podinfo repository.</p>
+
+<pre><code class="language-bash">flux create kustomization podinfo \
+  --source=podinfo \
+  --path=&quot;./kustomize&quot; \
+  --prune=true \
+  --validation=client \
+  --interval=5m \
+  --export &gt; ./01_flux2/01_podinfo/podinfo-kustomization.yaml
+</code></pre>
+
+<pre><code class="language-yaml">cat ./01_flux2/01_podinfo/podinfo-kustomization.yaml
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta1
+kind: Kustomization
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 5m0s
+  path: ./kustomize
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  validation: client
+</code></pre>
+
+<pre><code class="language-bash">./01_flux2/
+├── 00_guestbook # &lt;- guestbook application
+│   ├── 00_ns.yaml
+│   ├── 01_rb.yaml
+│   ├── 02_guestbook-ui-svc.yaml
+│   └── 03_guestbook-ui-deployment.yaml
+├── 01_podinfo
+│   ├── podinfo-kustomization.yaml
+│   └── podinfo-source.yaml
+└── flux-system # &lt;- namespace dir generated by bootstrap
+    ├── gotk-components.yaml
+    ├── gotk-sync.yaml
+    ├── rb.yaml # &lt;- RoleBinding for psp created by me
+    └── kustomization.yaml
+</code></pre>
+
+<h3 id="manage-helm-releases">Manage Helm Releases</h3>
+
+<p>I usually use Ransher&rsquo;s helm operator but Flux has it&rsquo;s own. It has two part the <code>HelmRepository</code> and the <code>HelmRelease</code>:</p>
+
+<pre><code class="language-yaml">apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: chartmuseum
+  namespace: flux-system
+spec:
+  url: https://chartmuseum.github.io/charts
+  interval: 10m
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: chartmuseum
+  namespace: flux-system
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: chartmuseum
+      version: &quot;2.14.2&quot;
+      sourceRef:
+        kind: HelmRepository
+        name: chartmuseum
+        namespace: flux-system
+      interval: 1m
+  values:
+    env:
+      open:
+        AWS_SDK_LOAD_CONFIG: true
+        STORAGE: amazon
+        STORAGE_AMAZON_BUCKET: &quot;bucket-name&quot;
+        STORAGE_AMAZON_PREFIX: &quot;&quot;
+        STORAGE_AMAZON_REGION: &quot;region-name&quot;
+    serviceAccount:
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: &quot;role-arn&quot;
+    securityContext:
+      enabled: true
+      fsGroup: 65534
+</code></pre>
+
+<p>It is possible to define a list of ConfigMap and Secret resources from which to take values.</p>
+
+<pre><code class="language-yaml">spec:
+  valuesFrom:
+  - kind: ConfigMap
+    name: prod-env-values
+    valuesKey: values-prod.yaml
+  - kind: Secret
+    name: prod-tls-values
+    valuesKey: crt
+    targetPath: tls.crt
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -934,10 +1555,10 @@ nginx-1      LoadBalancer   10.43.126.209   &lt;pending&gt;     80:31904/TCP   4
             <title type="html"><![CDATA[Argo CD Image Updater for automate image update]]></title>
             <link href="https://devopstales.github.io/home/argocd-image-updater/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encript secrets" />
+                <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encrypt secrets" />
                 <link href="https://devopstales.github.io/home/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
                 <link href="https://devopstales.github.io/kubernetes/argocd-image-updater/?utm_source=atom_feed" rel="related" type="text/html" title="Argo CD Image Updater for automate image update" />
-                <link href="https://devopstales.github.io/kubernetes/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encript secrets" />
+                <link href="https://devopstales.github.io/kubernetes/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encrypt secrets" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
             
                 <id>https://devopstales.github.io/home/argocd-image-updater/</id>
@@ -959,10 +1580,10 @@ nginx-1      LoadBalancer   10.43.126.209   &lt;pending&gt;     80:31904/TCP   4
 <!-- ArgoCD notify
 https://blog.argoproj.io/notifications-for-argo-bb7338231604
 -->
-<!----------------------------------------------->
-<!-- Flux CD + SOPS for secrets
-https://www.youtube.com/watch?v=8pbdXAd-F44
--->
+<!-----------------------------------------------></li>
+<li>Part4: <a href="../../kubernetes/gitops-flux2/">Flux2 Install and Usage</a></li>
+<li>Part5: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part6: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
 <!-- Flux CD auto image update
 https://particule.io/en/blog/flux-auto-image-update/
 -->
@@ -1077,11 +1698,11 @@ argocd-image-updater.argoproj.io/git-branch: HEAD
     
         
         <entry>
-            <title type="html"><![CDATA[ArgoCD and kubeseal to encript secrets]]></title>
+            <title type="html"><![CDATA[ArgoCD and kubeseal to encrypt secrets]]></title>
             <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/home/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
-                <link href="https://devopstales.github.io/kubernetes/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encript secrets" />
+                <link href="https://devopstales.github.io/kubernetes/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encrypt secrets" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-gitops/?utm_source=atom_feed" rel="related" type="text/html" title="GitOps solutions for Kubernetes" />
                 <link href="https://devopstales.github.io/home/k8s-vault/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes and Vault integration" />
                 <link href="https://devopstales.github.io/home/image-security-admission-controller-v2/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V2" />
@@ -1105,10 +1726,10 @@ argocd-image-updater.argoproj.io/git-branch: HEAD
 <!-- ArgoCD notify
 https://blog.argoproj.io/notifications-for-argo-bb7338231604
 -->
-<!----------------------------------------------->
-<!-- Flux CD + SOPS for secrets
-https://www.youtube.com/watch?v=8pbdXAd-F44
--->
+<!-----------------------------------------------></li>
+<li>Part4: <a href="../../kubernetes/gitops-flux2/">Flux2 Install and Usage</a></li>
+<li>Part5: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part6: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
 <!-- Flux CD auto image update
 https://particule.io/en/blog/flux-auto-image-update/
 -->
@@ -1354,10 +1975,10 @@ S3CR3T
 <!-- ArgoCD notify
 https://blog.argoproj.io/notifications-for-argo-bb7338231604
 -->
-<!----------------------------------------------->
-<!-- Flux CD + SOPS for secrets
-https://www.youtube.com/watch?v=8pbdXAd-F44
--->
+<!-----------------------------------------------></li>
+<li>Part4: <a href="../../kubernetes/gitops-flux2/">Flux2 Install and Usage</a></li>
+<li>Part5: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part6: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
 <!-- Flux CD auto image update
 https://particule.io/en/blog/flux-auto-image-update/
 -->
