@@ -27,7 +27,7 @@
     "datePublished": "2021-06-15",
     "dateModified" : "2021-06-15",
     "url" : "https:\/\/devopstales.github.io\/kubernetes\/k8s-prometheus-stack\/",
-    "wordCount" : "351",
+    "wordCount" : "852",
     "keywords" : [ "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "promethsus", "noSQL", "loki", "grafana", "Blog" ]
     
 }
@@ -244,17 +244,25 @@ alertmanager:
               storage: 10Gi
   ingress:
     enabled: true
-    annotations: {}
+    annotations:
+      cert-manager.io/cluster-issuer: ca-issuer
     hosts:
-      - alertmanager.mydomain.intra
+      - alertmanager.k8s.intra
     paths:
     - /
+    pathType: ImplementationSpecific
     tls:
-    - secretName: internal-cert
+    - secretName: tls-alertmanager-cert
       hosts:
-      - alertmanager.mydomain.intra
+      - alertmanager.k8s.intra
 
 grafana:
+  rbac:
+    enable: true
+    pspEnabled: true
+    pspUseAppArmor: false
+  initChownData:
+    enabled: false
   enabled: true
   adminPassword: Password1
   plugins:
@@ -262,32 +270,27 @@ grafana:
   persistence:
     enabled: true
     size: 10Gi
-  additionalDataSources:
-  - name: Loki
-    access: proxy
-    basicAuth: false
-    editable: true
-    jsonData:
-        tlsSkipVerify: true
-    orgId: 1
-    type: loki
-    url: http://loki-stack.loki-stack:3100
-    version: 2
   ingress:
     enabled: true
-    annotations: {}
+    annotations:
+      cert-manager.io/cluster-issuer: ca-issuer
     hosts:
-      - grafana.mydomain.intra
+      - grafana.k8s.intra
     paths:
     - /
+    pathType: ImplementationSpecific
     tls:
-    - secretName: internal-cert
+    - secretName: tls-grafana-cert
       hosts:
-      - grafana.mydomain.intra
+      - grafana.k8s.intra
+
 
 prometheus:
   enabled: true
   prometheusSpec:
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    secrets: ['etcd-client-cert']
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -296,20 +299,286 @@ prometheus:
               storage: 10Gi
   ingress:
     enabled: true
-    annotations: {}
+    annotations:
+      cert-manager.io/cluster-issuer: ca-issuer
     hosts:
-      - prometheus.mydomain.intra
+      - prometheus.k8s.intra
     paths:
     - /
+    pathType: ImplementationSpecific
     tls:
-    - secretName: internal-cert
+    - secretName: tls-prometheus-cert
       hosts:
-      - prometheus.mydomain.intra
+      - prometheus.k8s.intra
+</code></pre>
+
+<p>There is a bug in the Grafana helm chart so it didn&rsquo;t sreate the psp correcly for the init container: <a href="https://github.com/grafana/helm-charts/issues/427">https://github.com/grafana/helm-charts/issues/427</a></p>
+
+<pre><code class="language-bash"># solution
+kubectl edit psp prometheus-grafana
+...
+  runAsUser:
+    rule: RunAsAny
+...
+
+kubectl get rs
+NAME                                             DESIRED   CURRENT   READY   AGE
+prometheus-grafana-74b5d957bc                    1         0         0       12m
+...
+
+kubectl delete rs prometheus-grafana-74b5d957bc
+</code></pre>
+
+<pre><code class="language-bash">#### grafana dashboards
+## RKE2
+# 14243
+## NGINX Ingress controller
+# 9614
+## cert-manager
+# 11001
+## longhorn
+# 13032
+### kyverno
+# https://raw.githubusercontent.com/kyverno/grafana-dashboard/master/grafana/dashboard.json
+### calico
+# 12175
+# 3244
+### cilium
+# 6658
+# 14500
+# 14502
+# 14501
 </code></pre>
 
 <pre><code class="language-bash">helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
 helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring -f values.yaml
+</code></pre>
+
+<p>For the proxy down status:</p>
+
+<pre><code class="language-bash">kubectl edit cm/kube-proxy -n kube-system
+...
+kind: KubeProxyConfiguration
+metricsBindAddress: 0.0.0.0:10249
+...
+</code></pre>
+
+<p>If you use rke2 you can configure this from the helm chart before first start:</p>
+
+<pre><code class="language-bash">cat &lt;&lt; EOF &gt; /var/lib/rancher/rke2/server/manifests/rke2-kube-proxy-config.yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-kube-proxy
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    metricsBindAddress: 0.0.0.0:10249
+EOF
+</code></pre>
+
+<p>For the controller-manager down status:</p>
+
+<pre><code class="language-bash">nano /etc/kubernetes/manifests/kube-controller-manager.yaml
+# OR
+nano /var/lib/rancher/rke2/agent/pod-manifests/kube-controller-manager.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  ...
+spec:
+  containers:
+  - command:
+    - kube-controller-manager
+    ...
+    - --address=0.0.0.0
+    ...
+    - --bind-address=&lt;your control-plane IP or 0.0.0.0&gt;
+    ...
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+       	host: 0.0.0.0
+    ...
+</code></pre>
+
+<p>For the kube-scheduler down status:</p>
+
+<pre><code class="language-bash">nano /etc/kubernetes/manifests/kube-scheduler.yaml
+# OR
+nano /var/lib/rancher/rke2/agent/pod-manifests/kube-scheduler.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  ...
+spec:
+  containers:
+  - command:
+    - kube-scheduler
+    - --address=0.0.0.0
+    - --bind-address=0.0.0.0
+    ...
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+       	host: 0.0.0.0
+    ...
+</code></pre>
+
+<p>For the etcd down status firs we need to create a secret to authenticate for the etcd:</p>
+
+<pre><code class="language-bash"># kubeadm
+kubectl -n monitoring create secret generic etcd-client-cert \
+--from-file=/etc/kubernetes/pki/etcd/ca.crt \
+--from-file=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+--from-file=/etc/kubernetes/pki/etcd/healthcheck-client.key
+
+# rancher
+kubectl -n monitoring create secret generic etcd-client-cert \
+--from-file=/var/lib/rancher/rke2/server/tls/etcd/server-ca.crt \
+--from-file=/var/lib/rancher/rke2/server/tls/etcd/server-client.crt \
+--from-file=/var/lib/rancher/rke2/server/tls/etcd/server-client.key
+</code></pre>
+
+<p>The we configure the prometheus to use it:</p>
+
+<pre><code class="language-yaml">nano values.yaml
+---
+...
+prometheus:
+  enabled: true
+  prometheusSpec:
+    secrets: ['etcd-client-cert']
+...
+kubeEtcd:
+  enabled: true
+  service:
+    port: 2379
+    targetPort: 2379
+    selector:
+      component: etcd
+  serviceMonitor:
+    interval: &quot;&quot;
+    scheme: https
+    insecureSkipVerify: true
+    serverName: &quot;&quot;
+    caFile: &quot;&quot;
+    certFile: &quot;&quot;
+    keyFile: &quot;&quot;
+    metricRelabelings: []
+    relabelings: []
+    caFile: /etc/prometheus/secrets/etcd-client-cert/server-ca.crt
+    certFile: /etc/prometheus/secrets/etcd-client-cert/server-client.crt
+    keyFile: /etc/prometheus/secrets/etcd-client-cert/server-client.key
+
+# for kubeadm
+#    caFile: /etc/prometheus/secrets/etcd-client-cert/ca.crt
+#    certFile: /etc/prometheus/secrets/etcd-client-cert/healthcheck-client.crt
+#    keyFile: /etc/prometheus/secrets/etcd-client-cert/healthcheck-client.key
+
+</code></pre>
+
+<h3 id="monitoring-nginx">Monitoring Nginx</h3>
+
+<pre><code class="language-yaml">cat &lt;&lt; EOF &gt; /var/lib/rancher/rke2/server/manifests/rke2-ingress-nginx-config.yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-ingress-nginx
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    controller:
+      metrics:
+	      enabled: true
+        service:
+          annotations:
+            prometheus.io/scrape: &quot;true&quot;
+            prometheus.io/port: &quot;10254&quot;
+        serviceMonitor:
+          enabled: true
+          namespace: &quot;monitoring&quot;
+EOF
+
+kaf /var/lib/rancher/rke2/server/manifests/rke2-ingress-nginx-config.yaml
+</code></pre>
+
+<h3 id="monitoring-core-dns">Monitoring Core-DNS</h3>
+
+<pre><code class="language-yaml">cat &lt;&lt; EOF &gt; default-network-dns-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-network-dns-policy
+  namespace: kube-system
+spec:
+  ingress:
+  - ports:
+    - port: 53
+      protocol: TCP
+    - port: 53
+      protocol: UDP
+    - port: 9153
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes:
+  - Ingress
+EOF
+
+kaf default-network-dns-policy.yaml
+</code></pre>
+
+<h3 id="monitor-cert-manager">Monitor cert-manager</h3>
+
+<pre><code class="language-yaml">nano 01-cert-managger.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-system
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: cert-manager
+  namespace: ingress-system
+spec:
+  repo: &quot;https://charts.jetstack.io&quot;
+  chart: cert-manager
+  targetNamespace: ingress-system
+  valuesContent: |-
+    installCRDs: true
+    clusterResourceNamespace: &quot;ingress-system&quot;
+    prometheus:
+      enabled: true
+      servicemonitor:
+        enabled: true
+        namespace: &quot;monitoring&quot;
+
+kubectl apply -f 01-cert-managger.yaml
+</code></pre>
+
+<h3 id="longhorn">Longhorn</h3>
+
+<pre><code class="language-yaml">apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: longhorn-prometheus-servicemonitor
+  namespace: monitoring
+  labels:
+    name: longhorn-prometheus-servicemonitor
+spec:
+  selector:
+    matchLabels:
+      app: longhorn-manager
+  namespaceSelector:
+    matchNames:
+    - longhorn-system
+  endpoints:
+  - port: manager
 </code></pre>
 
 <h3 id="logging">Logging</h3>
@@ -324,6 +593,13 @@ helm install loki-stack loki/loki-stack \
 --create-namespace \
 --namespace loki-stack \
 --set promtail.enabled=true,loki.persistence.enabled=true,loki.persistence.size=100Gi
+</code></pre>
+
+<p>Add datasource to grafana:</p>
+
+<pre><code>type: loki
+name: Loki
+url: http://loki-stack.loki-stack:3100
 </code></pre>
 		</div>
 		<footer class="post__footer">
