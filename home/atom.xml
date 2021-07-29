@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-07-27T11:55:48+00:00</updated>
+    <updated>2021-07-29T15:33:35+00:00</updated>
     
     
     <author>
@@ -17,6 +17,156 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Create a Helm reposirory with GitHub Pages]]></title>
+            <link href="https://devopstales.github.io/home/helm-repositoty/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/helm-repositoty/?utm_source=atom_feed" rel="related" type="text/html" title="Create a Helm reposirory with GitHub Pages" />
+                <link href="https://devopstales.github.io/home/helm3-loki/?utm_source=atom_feed" rel="related" type="text/html" title="Install Grafana Loki with Helm3" />
+                <link href="https://devopstales.github.io/home/k8s-error-at-kubectl-logs/?utm_source=atom_feed" rel="related" type="text/html" title="K8s ERROR at kubectl logs" />
+                <link href="https://devopstales.github.io/home/k8s-kuberos/?utm_source=atom_feed" rel="related" type="text/html" title="Kubectl authentication with Kuberos" />
+                <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
+            
+                <id>https://devopstales.github.io/home/helm-repositoty/</id>
+            
+            
+            <published>2021-07-25T00:00:00+00:00</published>
+            <updated>2021-07-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can host your own Helm repository with GitHub Pages.</p>
+
+<h2 id="create-a-new-github-repository">Create a new GitHub Repository</h2>
+
+<p>Log into GitHub and create a <a href="https://github.com/new">new repository</a> called helm-charts. I chose to hav a README file and an Apache2 licence in mye repository.</p>
+
+<p>Clone the repository to start working.</p>
+
+<pre><code>git clone git@github.com:devopstales/helm-charts.git
+cd helm-charts
+
+tree
+.
+├── LICENSE
+└── README.md
+</code></pre>
+
+<p>Create a hem chart in the repository:</p>
+
+<pre><code>mkdir charts
+helm create charts/chart1
+helm create charts/chart2
+
+tree
+.
+├── charts
+│   ├── chart1
+│   │   ├── charts
+│   │   ├── Chart.yaml
+│   │   ├── templates
+│   │   │   ├── deployment.yaml
+│   │   │   ├── _helpers.tpl
+│   │   │   ├── ingress.yaml
+│   │   │   ├── NOTES.txt
+│   │   │   ├── service.yaml
+│   │   │   └── tests
+│   │   │       └── test-connection.yaml
+│   │   └── values.yaml
+│   └── chart2
+│       ├── charts
+│       ├── Chart.yaml
+│       ├── templates
+│       │   ├── deployment.yaml
+│       │   ├── _helpers.tpl
+│       │   ├── ingress.yaml
+│       │   ├── NOTES.txt
+│       │   ├── service.yaml
+│       │   └── tests
+│       │       └── test-connection.yaml
+│       └── values.yaml
+├── LICENSE
+└── README.md
+</code></pre>
+
+<h3 id="push-to-github">Push to GitHub:</h3>
+
+<pre><code>echo &quot;.deploy&quot; &gt;&gt; .gitignore
+git add . --all
+git commit -m 'Initial Commit'
+git push origin main
+</code></pre>
+
+<p>Create brach for GitHub Pages and release:</p>
+
+<pre><code>git checkout --orphan gh-pages
+Switched to a new branch 'gh-pages'
+
+rm -rf charts
+git add . --all
+git commit -m 'initial gh-pages'
+git push origin gh-pages
+git checkout main
+</code></pre>
+
+<p>Next enable GitHub Pages i the repository settings. After a few minutes you should have a default rendering on your README.md at the provided URL.</p>
+
+<h2 id="use-chart-releaser">Use chart-releaser</h2>
+
+<p>Yo can create a chart Helm repository by usin the <code>helm package</code> and <code>helm repo</code> commands but you can simplify your life by using <code>chart-releaser</code>.</p>
+
+<h3 id="install-for-lnux">Install for Lnux:</h3>
+
+<pre><code>cd /tmp
+curl -sSL https://github.com/helm/chart-releaser/releases/download/v1.2.1/chart-releaser_1.2.1_linux_amd64.tar.gz | tar xzf -
+mv cr ~/bin/cr
+cr help
+</code></pre>
+
+<h2 id="install-for-mac-osx">Install for Mac osX:</h2>
+
+<pre><code>$ brew tap helm/tap
+$ brew install chart-releaser
+</code></pre>
+
+<h3 id="usage">Usage:</h3>
+
+<p>The <code>cr index</code> will create the appropriate <code>index.yaml</code> and <code>cr upload</code> will upload the packages to GitHub Releases. Fot theat you need a GitHub Token.
+In your browser go to your <a href="https://github.com/settings/tokens">github developer settings</a> and create a new personal access token and add full access to the repo.</p>
+
+<p>Create an environment variable for the token:</p>
+
+<pre><code>export CH_TOKEN=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sdf
+
+helm package charts/{chart1,chart2} --destination .deploy
+
+cr upload -o devopstales -r helm-charts -p .deploy
+git checkout gh-pages
+cr index -i ./index.yaml -p .deploy -o devopstales -r helm-charts -c https://devopstales.github.io/helm-charts/
+
+git add index.yaml
+git commit -m 'release 0.1.0'
+git push origin gh-pages
+</code></pre>
+
+<h3 id="update-the-readme-md-with-instructions-to-usage">Update the README.md with instructions to usage</h3>
+
+<pre><code>nano README.md
+git add README.md
+git commit -m 'update readme with instructions'
+git push origin gh-pages
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -122,6 +272,129 @@ kubectl delete pod -n kube-system core-dns-#########
 </code></pre>
 
 <p>It’s done! You can now reach that custom host from inside any pod on the cluster.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Subject Alternative Name in Active Dyrectory LDAPS Cerificate]]></title>
+            <link href="https://devopstales.github.io/home/msad-ldaps-subject-alternative-mame/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/home/msad-ldaps-subject-alternative-mame/</id>
+            
+            
+            <published>2021-07-22T00:00:00+00:00</published>
+            <updated>2021-07-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can configure custom Subject Alternative Name in Active Directory LDAPS certificate.</p>
+
+<h3 id="open-mmc">Open mmc</h3>
+
+<ul>
+<li><code>windows + r</code></li>
+<li>run <code>mmc</code></li>
+</ul>
+
+<p>![Example image](/img/include/ldapssan1</p>
+
+<ul>
+<li>Click <code>File / Add/Remove Snap-in..</code> or <code>ctrl + m</code></li>
+</ul>
+
+<p><img src="/img/include/ldapssan2.PNG" alt="Example image" />
+<img src="/img/include/ldapssan3.PNG" alt="Example image" /></p>
+
+<ul>
+<li>Add certificates</li>
+</ul>
+
+<p><img src="/img/include/ldapssan4.PNG" alt="Example image" />
+<img src="/img/include/ldapssan5.PNG" alt="Example image" /></p>
+
+<ul>
+<li>Add a nother certificates for service</li>
+</ul>
+
+<p><img src="/img/include/ldapssan6.PNG" alt="Example image" />
+<img src="/img/include/ldapssan5.PNG" alt="Example image" />
+<img src="/img/include/ldapssan7.PNG" alt="Example image" /></p>
+
+<ul>
+<li>Add Certificate Authoraty</li>
+</ul>
+
+<p><img src="/img/include/ldapssan5.PNG" alt="Example image" />
+<img src="/img/include/ldapssan8.PNG" alt="Example image" /></p>
+
+<h3 id="clone-template">Clone Template</h3>
+
+<ul>
+<li><code>Certificate Authoraty / Domain Controller / Certificate Template</code></li>
+</ul>
+
+<p><img src="/img/include/ldapssan9.PNG" alt="Example image" />
+<img src="/img/include/ldapssan10.PNG" alt="Example image" /></p>
+
+<ul>
+<li>Select <code>Domain Controller Template</code></li>
+<li>Right Click and <code>Duplicate template</code></li>
+</ul>
+
+<p><img src="/img/include/ldapssan11.PNG" alt="Example image" />
+<img src="/img/include/ldapssan12.PNG" alt="Example image" />
+<img src="/img/include/ldapssan22.PNG" alt="Example image" /></p>
+
+<ul>
+<li>the click <code>OK</code> and cluse the <code>Certificate Teplate Console</code></li>
+</ul>
+
+<h3 id="add-template-to-certificate-template-list">Add template to Certificate Template list</h3>
+
+<ul>
+<li>At <code>Certificate Authoraty / Domain Controller / Certificate Template</code></li>
+</ul>
+
+<p><img src="/img/include/ldapssan9.PNG" alt="Example image" /></p>
+
+<ul>
+<li>Rght click and select <code>Certificate Template to Issue</code> Add the new Template</li>
+</ul>
+
+<p><img src="/img/include/ldapssan13.PNG" alt="Example image" /></p>
+
+<h3 id="generate-certificate">Generate Certificate</h3>
+
+<ul>
+<li>Right click on <code>Certificates (Local Computer) / Personal / Certificate</code> and select <code>All Tasks / Request New Certificate</code></li>
+</ul>
+
+<p><img src="/img/include/ldapssan16.PNG" alt="Example image" />
+<img src="/img/include/ldapssan17.PNG" alt="Example image" />
+<img src="/img/include/ldapssan18.PNG" alt="Example image" />
+<img src="/img/include/ldapssan19.PNG" alt="Example image" />
+<img src="/img/include/ldapssan20.PNG" alt="Example image" /></p>
+
+<ul>
+<li>enroll</li>
+</ul>
+
+<p><img src="/img/include/ldapssan21.PNG" alt="Example image" /></p>
+
+<h4 id="change-certificate">Change Certificate</h4>
+
+<ul>
+<li>To activate the new certificate you need to restart the Domain Controller</li>
+</ul>]]></content>
             
                  
                     
