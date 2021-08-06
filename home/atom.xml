@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-08-04T16:27:03+00:00</updated>
+    <updated>2021-08-06T18:09:13+00:00</updated>
     
     
     <author>
@@ -486,7 +486,7 @@ kubectl delete pod -n kube-system core-dns-#########
 <li>run <code>mmc</code></li>
 </ul>
 
-<p>![Example image](/img/include/ldapssan1</p>
+<p><img src="/img/include/ldapssan1.PNG" alt="Example image" /></p>
 
 <ul>
 <li>Click <code>File / Add/Remove Snap-in..</code> or <code>ctrl + m</code></li>
@@ -12123,7 +12123,7 @@ systemctl restart NetworkManager
 
 <p>I found that the layer 2 mode of Metallb is not a practical solution for production scenarios as it is typically not acceptable to have failover-induced downtimes in the order of minutes.</p>
 
-<h3 id="what-does-the-full-setup-look-like">What does the full setup look like?</h3>
+<h3 id="how-does-the-full-setup-look-like">How does the full setup look like?</h3>
 
 <p>For this Demo I will use a pfsense in virtualbox and tree vm for kubernetes in the same host-only network.</p>
 
@@ -12187,7 +12187,7 @@ systemctl restart NetworkManager
 
 <p>No we need to configure BGP. Ther is a nice UI but I will use the Raw config for simplicity. Go to <code>Services &gt; OpenBGPD &gt; Raw config</code></p>
 
-<pre><code># This file was created by the package manager. Do not edit!
+<pre><code class="language-yaml"># This file was created by the package manager. Do not edit!
 
 AS 64512
 fib-update yes
@@ -12229,7 +12229,7 @@ neighbor 172.17.9.12 {
 
 <p>To configure BGP with <code>Quagga_OSPF</code>. Go to <code>Services &gt; Quagga OSPFd &gt; Raw config</code> Edit <code>SAVED bgpd.conf</code> the <code>save</code>.</p>
 
-<pre><code>router bgp 64512
+<pre><code class="language-bash">router bgp 64512
  bgp router-id 172.17.9.200
  neighbor 172.17.9.10 remote-as 64513
  neighbor 172.17.9.11 remote-as 64513
@@ -12239,15 +12239,15 @@ neighbor 172.17.9.12 {
 
 <h3 id="deploy-metallb">Deploy MetalLB</h3>
 
-<pre><code>kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
+<pre><code class="language-bash">kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml
 # On first install only
 kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey=&quot;$(openssl rand -base64 128)&quot;
 </code></pre>
 
-<p>Make a BGO config for MetalLB</p>
+<p>Make a BGP config for MetalLB</p>
 
-<pre><code>nano bgpconfig.yaml
+<pre><code class="language-yaml">nano bgpconfig.yaml
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -12271,7 +12271,7 @@ data:
 
 <p>Let’s create a demo application for testing.</p>
 
-<pre><code>nano test.yaml
+<pre><code class="language-yaml">nano test.yaml
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -12310,22 +12310,22 @@ spec:
     run: test-nginx
 </code></pre>
 
-<pre><code>kubectl apply -f bgpconfig.yaml
+<pre><code class="language-bash">kubectl apply -f bgpconfig.yaml
 kubectl apply -f test.yaml
 </code></pre>
 
 <p>After a few moments, you can run this command to get the IP address:</p>
 
-<pre><code>$ kubectl describe service test-nginx | grep &quot;LoadBalancer Ingress&quot;
+<pre><code class="language-bash">$ kubectl describe service test-nginx | grep &quot;LoadBalancer Ingress&quot;
 LoadBalancer Ingress:     10.25.0.11
 </code></pre>
 
 <p>Let&rsquo;s check the address in a browser. If pfSense is you default gateway it will work perfectly, but in my demo enviroment I need to create a route to pfSense for this network on my host machine:</p>
 
-<pre><code>sudo route add -net 10.25.0.0/22 gw 172.17.9.200
+<pre><code class="language-bash">sudo route add -net 10.25.0.0/22 gw 172.17.9.200
 </code></pre>
 
-<pre><code>route -n                                                                                                                     &lt;k8s:kubernetes-admin@kubernetes&gt;
+<pre><code class="language-bash">route -n
 Kernel IP routing table
 Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
 0.0.0.0         192.168.0.1     0.0.0.0         UG    600    0        0 wlan0
