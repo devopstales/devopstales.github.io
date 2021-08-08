@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-08-06T18:09:13+00:00</updated>
+    <updated>2021-08-08T11:34:05+00:00</updated>
     
     
     <author>
@@ -188,6 +188,405 @@ export KUBECONFIG=./kubeconfig.yaml
 
 kubectl get ns
 </code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Speed up docker pull with lazypull]]></title>
+            <link href="https://devopstales.github.io/home/lazyimage/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/lazyimage/?utm_source=atom_feed" rel="related" type="text/html" title="Speed up docker pull with lazypull" />
+                <link href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/home/k8s-longhorn/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes project longhorn" />
+                <link href="https://devopstales.github.io/home/k8s-connaisseur-v2/?utm_source=atom_feed" rel="related" type="text/html" title="Image Signature Verification Admission Controller V2" />
+            
+                <id>https://devopstales.github.io/home/lazyimage/</id>
+            
+            
+            <published>2021-08-02T00:00:00+00:00</published>
+            <updated>2021-08-02T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you the solutions to speed up the container downloads.</p>
+
+<p>According to Googles&rsquo;s analisys &ldquo;pulling packages accounts for 76% of container start time, but only 6.4% of that data is read&rdquo; This of course affecting various kinds of workloads on our Kubernetes clusters like cold-start of containers, serverless functions, build and CI/CD. In the community, workarounds are known but they still have unavoidable drawbacks. Let&rsquo;s check this workarounds:</p>
+
+<h3 id="background">Background</h3>
+
+<p>When you run a container the command will pull images from a repository if they are not already available locally. The image is downloaded but not in one big file then multiple smaller one. The runtime engin downloads this files simultaneously to speed up this process. In the background all part is a tar-file downloaded with wget the extracted.</p>
+
+<p>The AUFS storage driver is a common default in container runtime. The AUFS driver takes advantage of the AUFS file system’s layering and copy-on-write (COW) capabilities while also accessing the file system underlying AUFS directly. The driver creates a new directory in the underlying file system for each layer it stores. As a union file system it does not store data directly on disk, but instead uses another file system (e.g. ext4) as underlying storage. A union mount point provides a view of multiple directories in the underlying file system.</p>
+
+<p>Using a HelloBench tool that they wrote, the authors analyse 57 different container images pulled from the Docker Hub. Across these images there are 550 nodes and and 19 roots. They realized that the average uncompressed image is 15 x larger that the amount of image data needed for container startup.</p>
+
+<p>For solving this problem several solution have been proposed including <a href="https://cernvm.cern.ch/fs/">CernVM-FS</a>, <a href="https://stevelasker.blog/2019/10/29/azure-container-registry-teleportation/">Microsoft Teleportation</a>, <a href="https://github.com/google/crfs">Google CRFS</a> and <a href="https://d7y.io/en-us/">Dragonfly</a></p>
+
+<h3 id="standard-compatible-solution">Standard compatible solution</h3>
+
+<p>Containerd started <a href="https://github.com/containerd/stargz-snapshotter">Stargz Snapshotter</a> as a plugin to improve the pull performance. It enables to lazy pull container images leveraging <a href="https://github.com/google/crfs">stargz image format from Google</a>.</p>
+
+<p><img src="/img/include/lazypull1.png" alt="lazypull" /></p>
+
+<p>The lazy pull here means containerd doesn’t download the entire image on pull operation but fetches necessary contents on-demand. This shortens the container startup latency from tens of seconds into a few seconds at the best.</p>
+
+<p><img src="/img/include/lazypull2.png" alt="Benchmarking result from the project repository." /></p>
+
+<h3 id="quick-start">Quick start</h3>
+
+<p>Containerd supports lazy pulling since version 1.4. Stargz Snapshotter is the plugin that enables containerd to handle eStargz.</p>
+
+<pre><code class="language-bash">nano /etc/containerd/config.toml
+...
+[proxy_plugins]
+  [proxy_plugins.stargz]
+    type = &quot;snapshot&quot;
+    address = &quot;/run/containerd-stargz-grpc/containerd-stargz-grpc.sock&quot;
+
+# Use stargz snapshotter through CRI
+[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd]
+  snapshotter = &quot;stargz&quot;
+</code></pre>
+
+<pre><code class="language-bash">nerdctl --snapshotter=stargz run -it --rm docker.io/stargz-containers/fedora:30-esgz
+</code></pre>
+
+<p>CRI-O experimentally supports lazy pulling. The plugin that enables this is called <a href="https://github.com/containerd/stargz-snapshotter/blob/main/docs/INSTALL.md#whats-stargz-snapshotter-and-stargz-store">Additional Layer Store</a>.</p>
+
+<pre><code class="language-bash">nano /etc/containers/storage.conf
+# Additional Layer Store is supported only by overlay driver as of now 
+[storage]
+driver = &quot;overlay&quot;
+graphroot = &quot;/var/lib/containers/storage&quot;
+runroot = &quot;/run/containers/storage&quot;
+
+# Interact with Additional Layer Store over a directory
+[storage.options]
+additionallayerstores = [&quot;/path/to/additional/layer/store:ref&quot;]
+</code></pre>
+
+<p><img src="/img/include/lazypull3.png" alt="eStargz in container workflow" /></p>
+
+<h3 id="build-images">Build images</h3>
+
+<p>You can create an eStarge image using eStargz-aware image builders (e.g. <a href="https://github.com/GoogleContainerTools/kaniko">Kaniko</a>) or image converters (e.g. ctr-remote and nerdctl).</p>
+
+<p><a href="https://github.com/containerd/stargz-snapshotter/blob/main/docs/ctr-remote.md">ctr-remote</a> is a CLI for converting an OCI/Docker image into eStargz.</p>
+
+<pre><code class="language-bash">ctr-remote image pull docker.io/library/ubuntu:21.04
+ctr-remote image optimize --oci \
+    docker.io/library/ubuntu:21.04 docker.io/devopstales/ubuntu:21.04-esgz
+ctr-remote image push docker.io/devopstales/ubuntu:21.04-esgz
+</code></pre>
+
+<p>nerdctl supports creating eStargz images</p>
+
+<pre><code class="language-bash">nerdctl build -t docker.io/devopstales/foo:1 .
+nerdctl image convert --estargz --oci \
+    docker.io/devopstales/foo:1 docker.io/devopstales/foo:1-esgz
+nerdctl push docker.io/devopstales/foo:1-esgz
+</code></pre>
+
+<p><a href="https://github.com/GoogleContainerTools/kaniko">Kaniko</a> is an image builder runnable in containers and Kubernetes. Since v1.5.0, it experimentally supports building eStargz. 7</p>
+
+<pre><code class="language-bash">docker run --rm -e GGCR_EXPERIMENT_ESTARGZ=1 \
+    -v /tmp/context:/workspace \
+    -v ~/.docker/config.json:/kaniko/.docker/config.json:ro \
+    gcr.io/kaniko-project/executor:v1.6.0 \
+      --destination &quot;docker.io/devopstales/sample:esgz&quot;
+</code></pre>
+
+<h2 id="sources">Sources:</h2>
+
+<ul>
+<li><a href="https://medium.com/nttlabs/startup-containers-in-lightning-speed-with-lazy-image-distribution-on-containerd-243d94522361">https://medium.com/nttlabs/startup-containers-in-lightning-speed-with-lazy-image-distribution-on-containerd-243d94522361</a></li>
+<li><a href="https://medium.com/nttlabs/lazy-pulling-estargz-ef35812d73de">https://medium.com/nttlabs/lazy-pulling-estargz-ef35812d73de</a></li>
+</ul>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Image Signature Verification Admission Controller V2]]></title>
+            <link href="https://devopstales.github.io/home/k8s-connaisseur-v2/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k8s-connaisseur/?utm_source=atom_feed" rel="related" type="text/html" title="Image Signature Verification Admission Controller" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-connaisseur-v2/?utm_source=atom_feed" rel="related" type="text/html" title="Image Signature Verification Admission Controller V2" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller-v3/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V3" />
+                <link href="https://devopstales.github.io/home/continuous-image-security/?utm_source=atom_feed" rel="related" type="text/html" title="Continuous Image Security" />
+                <link href="https://devopstales.github.io/home/k8s-prometheus-stack/?utm_source=atom_feed" rel="related" type="text/html" title="K8S Logging And Monitoring" />
+            
+                <id>https://devopstales.github.io/home/k8s-connaisseur-v2/</id>
+            
+            
+            <published>2021-08-01T00:00:00+00:00</published>
+            <updated>2021-08-01T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can deploy Connaisseur 2.0 to Image Signature Verification into a Kubernetes cluster.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../kubernetes/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part2: <a href="../../kubernetes/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part3: <a href="../../kubernetes/rke2-cilium/">RKE2 Install With cilium</a></li>
+<li>Part4: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a>
+<!-- RBAC -->
+<!-- # Policy --></li>
+<li>Part5: <a href="../../kubernetes/rke2-psp/">RKE2 Pod Security Policy</a></li>
+<li>Part6: <a href="../../kubernetes/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part7: <a href="../../kubernetes/kubernetes-policy/">Kubernetes Cluster Policy</a>
+<!-- # Admission Controllers --></li>
+<li>Part8: <a href="../../kubernetes/admission-controllers/">Using Admission Controllers</a>
+<!-- ## Image Scan --></li>
+<li>Part9a: <a href="../../kubernetes/image-security-admission-controller">Image security Admission Controller</a></li>
+<li>Part9b: <a href="../../kubernetes/image-security-admission-controller-v2">Image security Admission Controller V2</a></li>
+<li>Part9c: <a href="../../kubernetes/image-security-admission-controller-v3">Image security Admission Controller V3</a>
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- # Scans & Monitoring --></li>
+<li>Part10: <a href="../../kubernetes/continuous-image-security/">Continuous Image security</a></li>
+<li>Part11: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a>
+<!-- DAST Exporter?? -->
+<!-- CIS Exporter
+https://github.com/ibrokethecloud/kube-bench-metrics --></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
+<li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
+<!-- # Secrets --></li>
+<li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
+<li>Part14b <a href="../../kubernetes/k8s-vault-v2">Kubernetes External Vault integration</a></li>
+<li>Part15a: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part15b: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part15c: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
+<!-- # Image -->
+<!-- keel --></li>
+<li>Part16: <a href="../../kubernetes/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux image update --></li>
+<li>Part17: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+</ul>
+
+<!-- admission-controller ami cseréli az imageben a repot !!!
+ -->
+
+<!-- sysdig falco -->
+
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+-->
+
+<!-- resource kvota -->
+
+<!-- Backup
+https://github.com/pieterlange/kube-backup 
+-->
+
+<!--
+https://medium.com/@beatrizmrg/network-security-for-microservices-with-ebpf-bis-478b40e7befa
+
+# container runetime
+https://www.ianlewis.org/en/container-runtimes-part-1-introduction-container-r
+http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
+-->
+
+<h3 id="what-is-connaisseur">What is Connaisseur?</h3>
+
+<p>Connaisseur is an admission controller for Kubernetes that integrates Image Signature Verification into a cluster, as a means to ensure that only valid images are being deployed.</p>
+
+<h3 id="notary">Notary</h3>
+
+<p>Notary is an open source signing solution for containers based on The Update Framework Notary uses TUFs’ roles and key hierarchy for signing of the images. There are five keys to sign the metadata files which lists all filenames in the collection, their sizes and respective hashes.</p>
+
+<pre><code class="language-bash">apt install notary
+</code></pre>
+
+<pre><code class="language-bash">docker pull alpine
+docker tag alpine:latest devopstales/testimage:unsigned
+docker push devopstales/testimage:unsigned
+</code></pre>
+
+<pre><code class="language-bash">notary -s https://notary.docker.io -d ~/.docker/trust init -p docker.io/devopstales/testimage     
+Root key found, using: 31579f2a034add499da6e799bc9260d08a15ab1804298218f05f78d97a669f77
+Enter passphrase for root key with ID 31579f2: 
+Enter passphrase for new targets key with ID 42e49c6: 
+Repeat passphrase for new targets key with ID 42e49c6: 
+Enter passphrase for new snapshot key with ID 399243c: 
+Repeat passphrase for new snapshot key with ID 399243c: 
+Enter username: devopstales
+Enter password: 
+Auto-publishing changes to docker.io/devopstales/testimage
+Enter username: devopstales
+Enter password: 
+Successfully published changes for repository docker.io/devopstales/testimage
+
+
+export DOCKER_CONTENT_TRUST=1
+export DOCKER_CONTENT_TRUST_SERVER=https://notary.docker.io
+docker tag alpine:latest devopstales/testimage:signed
+docker push devopstales/testimage:signed
+</code></pre>
+
+<pre><code class="language-bash">$ find ~/.docker/trust/ | head
+/home/devopstales/.docker/trust/
+/home/devopstales/.docker/trust/private
+/home/devopstales/.docker/trust/private/1f4a9a0922605b3bc19c97e180d962d530721288f4fd0845ad0aa37ba4a6f95d.key
+/home/devopstales/.docker/trust/private/fe30e72f5976b2ae7d0d365f28dacfae9c71f11ad854065603ccc806900e84fa.key
+/home/devopstales/.docker/trust/private/3da0d27e2d3b964d238d1d184c7578b5f2737b918ec5b8265474e22b07b2ea22.key
+/home/devopstales/.docker/trust/private/root-priv.key
+/home/devopstales/.docker/trust/private/root-pub.pem
+/home/devopstales/.docker/trust/tuf
+/home/devopstales/.docker/trust/tuf/docker.io
+/home/devopstales/.docker/trust/tuf/docker.io/devopstales
+</code></pre>
+
+<pre><code class="language-bash">notary -s https://notary.docker.io -d ~/.docker/trust list docker.io/devopstales/testimage
+NAME     DIGEST                                                              SIZE (BYTES)    ROLE
+----     ------                                                              ------------    ----
+signed    4661fb57f7890b9145907a1fe2555091d333ff3d28db86c3bb906f6a2be93c87    528             targets/devopstales
+</code></pre>
+
+<h3 id="install-connaisseur">Install Connaisseur</h3>
+
+<pre><code># The installer use yq so we need to install it
+
+wget https://github.com/mikefarah/yq/releases/download/v4.2.0/yq_linux_amd64 -O /usr/bin/yq &amp;&amp;\
+    chmod +x /usr/bin/yq
+</code></pre>
+
+<pre><code class="language-bash"># generate the public root cert
+
+cd ~/.docker/trust/private
+sed '/^role:\sroot$/d' $(grep -iRl &quot;role: root&quot; .) &gt; root-priv.key
+openssl ec -in root-priv.key -pubout -out root-pub.pem
+</code></pre>
+
+<pre><code class="language-yaml">git clone https://github.com/sse-secure-systems/connaisseur.git
+cd connaisseur
+nano helm/values.yaml
+...
+validators:
+...
+# static validator that allows each image
+- name: allow
+  type: static
+  approve: true
+# pre-configured nv1 validator for public notary from Docker Hub
+- name: dockerhub_basics
+  type: notaryv1
+  host: notary.docker.io
+  trust_roots:
+    # public key for official docker images (https://hub.docker.com/search?q=&amp;type=image&amp;image_filter=official)
+    # !if not needed feel free to remove the key!
+  - name: docker_official
+    key: |
+      -----BEGIN PUBLIC KEY-----
+      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOXYta5TgdCwXTCnLU09W5T4M4r9f
+      QQrqJuADP6U7g5r9ICgPSmZuRHP/1AYUfOQW3baveKsT969EfELKj1lfCA==
+      -----END PUBLIC KEY-----
+  # public key securesystemsengineering repo including Connaisseur images
+  # !this key is critical for Connaisseur!
+  - name: securesystemsengineering_official
+    key: |
+      -----BEGIN PUBLIC KEY-----
+      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsx28WV7BsQfnHF1kZmpdCTTLJaWe
+      d0CA+JOi8H4REuBaWSZ5zPDe468WuOJ6f71E7WFg3CVEVYHuoZt2UYbN/Q==
+      -----END PUBLIC KEY-----
+    # public key securesystemsengineering repo including devopstales images
+  - name: devopstales_official
+    key: |
+      -----BEGIN PUBLIC KEY-----
+      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9m6WfwViwT8lYjLF6jAs1bvd1hPp
+      cRUmONP49JszW1X/6Q22DygylIJGyC8IXeb3zBWVMoYDxauiqrFomHUOEA==
+      -----END PUBLIC KEY-----
+
+policy:
+- pattern: &quot;*:*&quot;
+- pattern: &quot;docker.io/library/*:*&quot;
+  validator: dockerhub_basics
+  with:
+    trust_root: docker_official
+- pattern: &quot;k8s.gcr.io/*:*&quot;
+  validator: allow
+- pattern: &quot;docker.io/securesystemsengineering/*:*&quot;
+  validator: dockerhub_basics
+  with:
+    trust_root: securesystemsengineering_official
+- pattern: &quot;docker.io/devopstales/*:*&quot;
+  validator: dockerhub_basics
+  with:
+    trust_root: devopstales_official
+
+</code></pre>
+
+<ul>
+<li>the <code>default</code> validator is used if no validator is specified in image policy</li>
+<li>type: supported validators (e.g. &ldquo;cosign&rdquo; or &ldquo;notaryv1&rdquo;) notaryv2 is not yet supported</li>
+<li>host: url of the notary server</li>
+<li>key: the public part of the root key, for verifying notary&rsquo;s signatures</li>
+</ul>
+
+<p>Then deploy the helm chart. This can take a few minutes.</p>
+
+<pre><code class="language-bash">helm install connaisseur helm --atomic --create-namespace --namespace connaisseur
+</code></pre>
+
+<pre><code class="language-bash">kubectl get all -n connaisseur
+NAME                                          READY   STATUS    RESTARTS   AGE
+pod/connaisseur-deployment-565d45bb74-ktbmb   1/1     Running   0          71s
+pod/connaisseur-deployment-565d45bb74-pfghx   1/1     Running   0          71s
+pod/connaisseur-deployment-565d45bb74-rcj44   1/1     Running   0          71s
+
+NAME                      TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE
+service/connaisseur-svc   ClusterIP   10.43.196.6   &lt;none&gt;        443/TCP   71s
+
+NAME                                     READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/connaisseur-deployment   3/3     3            3           71s
+
+NAME                                                DESIRED   CURRENT   READY   AGE
+replicaset.apps/connaisseur-deployment-565d45bb74   3         3         3       71s
+</code></pre>
+
+<h3 id="test-the-image-signature-verification">Test the Image Signature Verification</h3>
+
+<pre><code class="language-bash">kubens default
+
+kubectl run unsigned --image=docker.io/devopstales/testimage:unsigned
+Error from server: admission webhook &quot;connaisseur-svc.connaisseur.svc&quot; denied the request: Unable to find signed digest for image docker.io/devopstales/testimage:unsigned.
+
+kubectl run signed --image=docker.io/devopstales/testimage:signed
+pod/signed created
+
+kubectl get po
+</code></pre>
+
+<h3 id="final-words">Final words</h3>
+
+<p>Connaisseur is a grate tool and with the 2.0 it solved all of the 1.0&rsquo;s shortcomings:</p>
+
+<ul>
+<li>There is no option to whitelist images in a specific namespace.</li>
+<li>Connaisseur supports only one Notary server</li>
+<li>Connaisseur supports only one public key</li>
+</ul>]]></content>
             
                  
                     
@@ -860,7 +1259,8 @@ adldaps1.png</p></li>
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -1089,7 +1489,8 @@ spec:
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -1234,7 +1635,8 @@ spec:
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -1715,7 +2117,8 @@ url: http://loki-stack.loki-stack:3100
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -2022,7 +2425,8 @@ kubectl exec \
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -2394,7 +2798,8 @@ kubectl exec tiefighter &ndash; curl -s -XPOST deathstar.default.svc.cluster.loc
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -3410,7 +3815,8 @@ spec:
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -3575,7 +3981,8 @@ node-csr-f2J5HT9hg4CIKP0-0BtsEffBzg28VlUbesKJ4p_2mi0   47m   kubernetes.io/kube-
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -4934,7 +5341,8 @@ helm -n fleet-system install --create-namespace --wait \
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -5269,7 +5677,8 @@ going to sleep...
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -5837,7 +6246,8 @@ If you don't see a command prompt, try pressing enter.
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -6887,7 +7297,8 @@ done
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -6935,15 +7346,15 @@ http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
 
 <p>Notary is an open source signing solution for containers based on The Update Framework Notary uses TUFs’ roles and key hierarchy for signing of the images. There are five keys to sign the metadata files which lists all filenames in the collection, their sizes and respective hashes.</p>
 
-<pre><code>apt install notary
+<pre><code class="language-bash">apt install notary
 </code></pre>
 
-<pre><code>docker pull alpine
+<pre><code class="language-bash">docker pull alpine
 docker tag alpine:latest devopstales/testimage:unsigned
 docker push devopstales/testimage:unsigned
 </code></pre>
 
-<pre><code>notary -s https://notary.docker.io -d ~/.docker/trust init -p docker.io/devopstales/testimage     
+<pre><code class="language-bash">notary -s https://notary.docker.io -d ~/.docker/trust init -p docker.io/devopstales/testimage     
 Root key found, using: 31579f2a034add499da6e799bc9260d08a15ab1804298218f05f78d97a669f77
 Enter passphrase for root key with ID 31579f2: 
 Enter passphrase for new targets key with ID 42e49c6: 
@@ -6964,7 +7375,7 @@ docker tag alpine:latest devopstales/testimage:signed
 docker push devopstales/testimage:signed
 </code></pre>
 
-<pre><code>$ find ~/.docker/trust/ | head
+<pre><code class="language-bash">$ find ~/.docker/trust/ | head
 /home/devopstales/.docker/trust/
 /home/devopstales/.docker/trust/private
 /home/devopstales/.docker/trust/private/1f4a9a0922605b3bc19c97e180d962d530721288f4fd0845ad0aa37ba4a6f95d.key
@@ -6977,7 +7388,7 @@ docker push devopstales/testimage:signed
 /home/devopstales/.docker/trust/tuf/docker.io/devopstales
 </code></pre>
 
-<pre><code>notary -s https://notary.docker.io -d ~/.docker/trust list docker.io/devopstales/testimage
+<pre><code class="language-bash">notary -s https://notary.docker.io -d ~/.docker/trust list docker.io/devopstales/testimage
 NAME     DIGEST                                                              SIZE (BYTES)    ROLE
 ----     ------                                                              ------------    ----
 signed    4661fb57f7890b9145907a1fe2555091d333ff3d28db86c3bb906f6a2be93c87    528             targets/devopstales
@@ -6985,21 +7396,21 @@ signed    4661fb57f7890b9145907a1fe2555091d333ff3d28db86c3bb906f6a2be93c87    52
 
 <h3 id="install-connaisseur">Install Connaisseur</h3>
 
-<pre><code># The installer use yq so we need to install it
+<pre><code class="language-bash"># The installer use yq so we need to install it
 
 wget https://github.com/mikefarah/yq/releases/download/v4.2.0/yq_linux_amd64 -O /usr/bin/yq &amp;&amp;\
     chmod +x /usr/bin/yq
 </code></pre>
 
-<pre><code># generate the public root cert
+<pre><code class="language-bash"># generate the public root cert
 
 cd ~/.docker/trust/private
 sed '/^role:\sroot$/d' $(grep -iRl &quot;role: root&quot; .) &gt; root-priv.key
 openssl ec -in root-priv.key -pubout -out root-pub.pem
 </code></pre>
 
-<pre><code>git clone https://github.com/sse-secure-systems/connaisseur.git
-cd
+<pre><code class="language-yaml">git clone https://github.com/sse-secure-systems/connaisseur.git
+cd connaisseur
 nano helm/values.yaml
 ...
 # the public part of the root key, for verifying notary's signatures
@@ -7014,7 +7425,7 @@ make install
 
 <h3 id="test-the-image-signature-verification">Test the Image Signature Verification</h3>
 
-<pre><code>kubens default
+<pre><code class="language-bash">kubens default
 
 kubectl run unsigned --image=docker.io/devopstales/testimage:unsigned
 Error from server: admission webhook &quot;connaisseur-svc.connaisseur.svc&quot; denied the request: failed to verify signature of trust data.
@@ -7033,7 +7444,11 @@ kubectl get po
 <li>There is no option to whitelist images in a specific namespace.</li>
 <li>Connaisseur supports only one Notary server</li>
 <li>Connaisseur supports only one public key</li>
-</ul>]]></content>
+</ul>
+
+<h4 id="update">Update:</h4>
+
+<p><a href="/kubernetes/k8s-connaisseur-v2">Connaisseur 2.0</a> is released and solve all of this problems.</p>]]></content>
             
                  
                     
@@ -7221,7 +7636,8 @@ spec:
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -7554,7 +7970,8 @@ clusterpolicyreport   0      0      0      0       0      142m
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -8125,7 +8542,8 @@ spec:
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -8405,7 +8823,8 @@ busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [I
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -8650,7 +9069,8 @@ rules:
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -9035,7 +9455,8 @@ crictl pods - list pods
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -9267,7 +9688,8 @@ kubectl edit psp global-restricted-psp
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>

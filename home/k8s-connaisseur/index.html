@@ -28,7 +28,7 @@
     "datePublished": "2021-02-22",
     "dateModified" : "2021-02-22",
     "url" : "https:\/\/devopstales.github.io\/home\/k8s-connaisseur\/",
-    "wordCount" : "506",
+    "wordCount" : "525",
     "keywords" : [ "devops", "tales", "kubernetes deployment", "kubernetes vs docker", "Connaisseur", "Notary", "Blog" ]
     
 }
@@ -180,7 +180,8 @@ if (!doNotTrack) {
 <!-- DAST Exporter?? -->
 <!-- CIS Exporter
 https://github.com/ibrokethecloud/kube-bench-metrics --></li>
-<li>Part12 <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12a <a href="../../kubernetes/k8s-connaisseur">Image Signature Verification with Connaisseur</a></li>
+<li>Part12b <a href="../../kubernetes/k8s-connaisseur-v2">Image Signature Verification with Connaisseur 2.0</a></li>
 <li>Part13 <a href="../../kubernetes/k8s-backup">Backup your Kubernetes Cluster</a>
 <!-- # Secrets --></li>
 <li>Part14a <a href="../../kubernetes/k8s-vault">Kubernetes and Vault integration</a></li>
@@ -228,15 +229,15 @@ http://pouchcontainer.io/pouch/docs/features/pouch_with_runV.html
 
 <p>Notary is an open source signing solution for containers based on The Update Framework Notary uses TUFs’ roles and key hierarchy for signing of the images. There are five keys to sign the metadata files which lists all filenames in the collection, their sizes and respective hashes.</p>
 
-<pre><code>apt install notary
+<pre><code class="language-bash">apt install notary
 </code></pre>
 
-<pre><code>docker pull alpine
+<pre><code class="language-bash">docker pull alpine
 docker tag alpine:latest devopstales/testimage:unsigned
 docker push devopstales/testimage:unsigned
 </code></pre>
 
-<pre><code>notary -s https://notary.docker.io -d ~/.docker/trust init -p docker.io/devopstales/testimage     
+<pre><code class="language-bash">notary -s https://notary.docker.io -d ~/.docker/trust init -p docker.io/devopstales/testimage     
 Root key found, using: 31579f2a034add499da6e799bc9260d08a15ab1804298218f05f78d97a669f77
 Enter passphrase for root key with ID 31579f2: 
 Enter passphrase for new targets key with ID 42e49c6: 
@@ -257,7 +258,7 @@ docker tag alpine:latest devopstales/testimage:signed
 docker push devopstales/testimage:signed
 </code></pre>
 
-<pre><code>$ find ~/.docker/trust/ | head
+<pre><code class="language-bash">$ find ~/.docker/trust/ | head
 /home/devopstales/.docker/trust/
 /home/devopstales/.docker/trust/private
 /home/devopstales/.docker/trust/private/1f4a9a0922605b3bc19c97e180d962d530721288f4fd0845ad0aa37ba4a6f95d.key
@@ -270,7 +271,7 @@ docker push devopstales/testimage:signed
 /home/devopstales/.docker/trust/tuf/docker.io/devopstales
 </code></pre>
 
-<pre><code>notary -s https://notary.docker.io -d ~/.docker/trust list docker.io/devopstales/testimage
+<pre><code class="language-bash">notary -s https://notary.docker.io -d ~/.docker/trust list docker.io/devopstales/testimage
 NAME     DIGEST                                                              SIZE (BYTES)    ROLE
 ----     ------                                                              ------------    ----
 signed    4661fb57f7890b9145907a1fe2555091d333ff3d28db86c3bb906f6a2be93c87    528             targets/devopstales
@@ -278,21 +279,21 @@ signed    4661fb57f7890b9145907a1fe2555091d333ff3d28db86c3bb906f6a2be93c87    52
 
 <h3 id="install-connaisseur">Install Connaisseur</h3>
 
-<pre><code># The installer use yq so we need to install it
+<pre><code class="language-bash"># The installer use yq so we need to install it
 
 wget https://github.com/mikefarah/yq/releases/download/v4.2.0/yq_linux_amd64 -O /usr/bin/yq &amp;&amp;\
     chmod +x /usr/bin/yq
 </code></pre>
 
-<pre><code># generate the public root cert
+<pre><code class="language-bash"># generate the public root cert
 
 cd ~/.docker/trust/private
 sed '/^role:\sroot$/d' $(grep -iRl &quot;role: root&quot; .) &gt; root-priv.key
 openssl ec -in root-priv.key -pubout -out root-pub.pem
 </code></pre>
 
-<pre><code>git clone https://github.com/sse-secure-systems/connaisseur.git
-cd
+<pre><code class="language-yaml">git clone https://github.com/sse-secure-systems/connaisseur.git
+cd connaisseur
 nano helm/values.yaml
 ...
 # the public part of the root key, for verifying notary's signatures
@@ -307,7 +308,7 @@ make install
 
 <h3 id="test-the-image-signature-verification">Test the Image Signature Verification</h3>
 
-<pre><code>kubens default
+<pre><code class="language-bash">kubens default
 
 kubectl run unsigned --image=docker.io/devopstales/testimage:unsigned
 Error from server: admission webhook &quot;connaisseur-svc.connaisseur.svc&quot; denied the request: failed to verify signature of trust data.
@@ -327,10 +328,30 @@ kubectl get po
 <li>Connaisseur supports only one Notary server</li>
 <li>Connaisseur supports only one public key</li>
 </ul>
+
+<h4 id="update">Update:</h4>
+
+<p><a href="https://devopstales.github.io/kubernetes/k8s-connaisseur-v2">Connaisseur 2.0</a> is released and solve all of this problems.</p>
 		</div>
 	</article>
 </main>
 
+<div class=coffee_box>
+  <div class=coffee_box_wrapper>
+    <h3 class=coffee_box_heading>
+      Your support is our everlasting motivation,<br>
+      that cup of coffee is what keeps us going!
+    </h3>
+    <hr>
+    <p class=coffee_box_content>As we continue to grow, we would wish to reach and impact more people who visit and take advantage of the guides we have on our blog. This is a big task for us and we are so far extremely grateful for the kind people who have shown amazing support for our work over the time we have been online.
+    <p class=coffee_box_content>Thank You for your support as we work to give you the best of guides and articles. Click below to buy us a coffee.
+    <div class=coffee_box_img>
+      <a href=https://www.buymeacoffee.com/devopstales target=_blank>
+        <img src="https://devopstales.github.io/img/design/coffee-logo.png" alt="Coffee Box" >
+      </a>
+    </div>
+  </div>
+</div>
 
 
 <nav class="post-nav flex">
@@ -385,7 +406,7 @@ kubectl get po
             <li><a href="https://devopstales.github.io/series/k8s-network" class="text-uppercase">k8s-network (15)</a>
             </li>
             
-            <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (24)</a>
+            <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (26)</a>
             </li>
             
         </ul>
@@ -422,6 +443,8 @@ kubectl get po
 	<div class="widget__content">
 		<ul class="widget__list">
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/vcluster/">Kubernetes Multi-Tenancy With vCluster</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/lazyimage/">Speed up docker pull with lazypull</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-connaisseur-v2/">Image Signature Verification Admission Controller V2</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/helm-repositoty/">Create a Helm reposirory with GitHub Pages</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-custom-host/">Add a Custom Host to Kubernetes</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/msad-ldaps-subject-alternative-mame/">Subject Alternative Name in Active Dyrectory LDAPS Cerificate</a></li>
@@ -429,8 +452,6 @@ kubectl get po
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/msad-ldaps/">Active Directory Configure secure LDAPS</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/image-security-admission-controller-v3/">RKE2 Image security Admission Controller V3</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/continuous-image-security/">Continuous Image Security</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-vault-v2/">Kubernetes integration with external Vault</a></li>
 		</ul>
 	</div>
 </div>
