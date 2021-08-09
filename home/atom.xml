@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-08-08T11:34:05+00:00</updated>
+    <updated>2021-08-09T16:05:57+00:00</updated>
     
     
     <author>
@@ -17,6 +17,206 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Use Cilium BGP integration with OPNsense]]></title>
+            <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
+                <link href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
+                <link href="https://devopstales.github.io/home/lazyimage/?utm_source=atom_feed" rel="related" type="text/html" title="Speed up docker pull with lazypull" />
+                <link href="https://devopstales.github.io/home/k3s-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with k3sup and Cilium" />
+            
+                <id>https://devopstales.github.io/home/cilium-opnsense-bgp/</id>
+            
+            
+            <published>2021-08-05T00:00:00+00:00</published>
+            <updated>2021-08-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to install Cilium with BGP integration for Kubernetes.</p>
+
+<p>Cilium recently announced the release of 1.10 which allo to advertise routes to Service IPs via BGP, so we didn&rsquo;t need to install MetalLB.</p>
+
+<h3 id="how-does-the-full-setup-look-like">How does the full setup look like?</h3>
+
+<p>For this Demo I will use a pfsense in virtualbox and tree vm for kubernetes in the same host-only network.</p>
+
+<table>
+<thead>
+<tr>
+<th>vm</th>
+<th>nic</th>
+<th>ip</th>
+<th>mode</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>opnsense01</td>
+<td>em1</td>
+<td>192.168.0.200</td>
+<td>bridged</td>
+</tr>
+
+<tr>
+<td>opnsense01</td>
+<td>em2</td>
+<td>172.17.9.200</td>
+<td>host-only</td>
+</tr>
+
+<tr>
+<td>k8sm01</td>
+<td>enp0s8</td>
+<td>172.17.9.10</td>
+<td>host-only</td>
+</tr>
+
+<tr>
+<td>k8sm02</td>
+<td>enp0s8</td>
+<td>172.17.9.11</td>
+<td>host-only</td>
+</tr>
+
+<tr>
+<td>k8sm02</td>
+<td>enp0s8</td>
+<td>172.17.9.12</td>
+<td>host-only</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="install-gbp-to-opnsense">Install GBP to OPNsense</h3>
+
+<p>Go to <code>System &gt; Firmware &gt; Plugins</code> and install <code>os-frr</code></p>
+
+<h3 id="configure-gbp-on-opnsense">Configure GBP on OPNsense</h3>
+
+<p>Go tp <code>Routing &gt; General</code> and enable enable the plugin. Next go to <code>Routing &gt; GBP</code> and enble, then add AS Number.</p>
+
+<p><img src="/img/include/cilium-opnsense-bgp1.jpg" alt="Enable BGP" /></p>
+
+<h3 id="configure-neighbor">Configure Neighbor</h3>
+
+<p>Go to  <code>Routing &gt; GBP</code> the switch to the <code>Neighbor</code> tab and add the following three neighbors.</p>
+
+<p><img src="/img/include/cilium-opnsense-bgp2.jpg" alt="Neighbor" /></p>
+
+<p><img src="/img/include/cilium-opnsense-bgp3.jpg" alt="Neighbor" /></p>
+
+<p><img src="/img/include/cilium-opnsense-bgp4.PNG" alt="Neighbor" /></p>
+
+<h3 id="cilium-configuration">Cilium configuration</h3>
+
+<p>BGP support is enabled by providing the BGP configuration via a ConfigMap and by setting a few Helm values. Otherwise, BGP is disabled by default.</p>
+
+<pre><code class="language-bash">helm install cilium cilium/cilium \
+--version 1.10.3 \
+--set bgp.enabled=true \
+--set bgp.announce.loadbalancerIP=true
+</code></pre>
+
+<pre><code class="language-yaml">apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bgp-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    peers:
+    - peer-address: 172.17.9.200
+      peer-asn: 64512
+      my-asn: 64513
+    address-pools:
+    - name: default
+      protocol: bgp
+      addresses:
+      - 10.25.0.10-10.25.3.250
+</code></pre>
+
+<h3 id="demo-time">Demo Time</h3>
+
+<p>Let’s create a demo application for testing.</p>
+
+<pre><code class="language-yaml">nano test.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-nginx
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      run: test-nginx
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        run: test-nginx
+    spec:
+      containers:
+      - name: test-nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-nginx
+  namespace: default
+  labels:
+    run: test-nginx
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    protocol: TCP
+  selector:
+    run: test-nginx
+</code></pre>
+
+<pre><code class="language-bash">kubectl apply -f bgpconfig.yaml
+kubectl apply -f test.yaml
+</code></pre>
+
+<p>After a few moments, you can run this command to get the IP address:</p>
+
+<pre><code class="language-bash">$ kubectl describe service test-nginx | grep &quot;LoadBalancer Ingress&quot;
+LoadBalancer Ingress:     10.25.0.11
+</code></pre>
+
+<p>Let&rsquo;s check the address in a browser. If pfSense is you default gateway it will work perfectly, but in my demo enviroment I need to create a route to pfSense for this network on my host machine:</p>
+
+<pre><code class="language-bash">sudo route add -net 10.25.0.0/22 gw 172.17.9.200
+</code></pre>
+
+<pre><code class="language-bash">route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.0.1     0.0.0.0         UG    600    0        0 wlan0
+10.25.0.0       172.17.9.200    255.255.252.0   UG    0      0        0 vboxnet7
+172.17.9.0      0.0.0.0         255.255.255.0   U     0      0        0 vboxnet7
+</code></pre>
+
+<p><img src="/img/include/pfsense-bgp-kubernetes.png" alt="Demo" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -303,14 +503,7 @@ nerdctl push docker.io/devopstales/foo:1-esgz
     -v ~/.docker/config.json:/kaniko/.docker/config.json:ro \
     gcr.io/kaniko-project/executor:v1.6.0 \
       --destination &quot;docker.io/devopstales/sample:esgz&quot;
-</code></pre>
-
-<h2 id="sources">Sources:</h2>
-
-<ul>
-<li><a href="https://medium.com/nttlabs/startup-containers-in-lightning-speed-with-lazy-image-distribution-on-containerd-243d94522361">https://medium.com/nttlabs/startup-containers-in-lightning-speed-with-lazy-image-distribution-on-containerd-243d94522361</a></li>
-<li><a href="https://medium.com/nttlabs/lazy-pulling-estargz-ef35812d73de">https://medium.com/nttlabs/lazy-pulling-estargz-ef35812d73de</a></li>
-</ul>]]></content>
+</code></pre>]]></content>
             
                  
                     
