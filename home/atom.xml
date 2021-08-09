@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-08-09T16:05:57+00:00</updated>
+    <updated>2021-08-09T16:50:44+00:00</updated>
     
     
     <author>
@@ -17,6 +17,142 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Migrate Kubernetes from docker to containerd]]></title>
+            <link href="https://devopstales.github.io/home/migrate-docker-to-containerd/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/migrate-docker-to-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="Migrate Kubernetes from docker to containerd" />
+                <link href="https://devopstales.github.io/home/lazyimage/?utm_source=atom_feed" rel="related" type="text/html" title="Speed up docker pull with lazypull" />
+                <link href="https://devopstales.github.io/home/k8s-connaisseur-v2/?utm_source=atom_feed" rel="related" type="text/html" title="Image Signature Verification Admission Controller V2" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller-v3/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V3" />
+                <link href="https://devopstales.github.io/home/continuous-image-security/?utm_source=atom_feed" rel="related" type="text/html" title="Continuous Image Security" />
+            
+                <id>https://devopstales.github.io/home/migrate-docker-to-containerd/</id>
+            
+            
+            <published>2021-08-08T00:00:00+00:00</published>
+            <updated>2021-08-08T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can migrate your kubernetes cluster from docker to contanerd.</p>
+
+<h3 id="how-to-migrate">How to migrate</h3>
+
+<p>You have to be careful if you are on a single master node configuration. The cluster will be unavailable under the upgrade.</p>
+
+<pre><code class="language-bash">kubectl get nodes -o wide
+NAME    STATUS   ROLES                  AGE     VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION                             CONTAINER-RUNTIME
+k8s01   Ready    control-plane,master   78m     v1.20.4   10.65.79.164   &lt;none&gt;        CentOS Linux 8       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+k8s02   Ready    control-plane,master   64m     v1.20.4   10.65.79.131   &lt;none&gt;        CentOS Linux 8       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+k8s03   Ready    control-plane,master   4m16s   v1.20.4   10.65.79.244   &lt;none&gt;        CentOS Linux 8       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+</code></pre>
+
+<p>First we will cordon and drain the node:</p>
+
+<pre><code class="language-bash">kubectl cordon k8s01
+kubectl drain k8s01 --ignore-daemonsets
+</code></pre>
+
+<pre><code class="language-bash">kubectl get nodes
+NAME    STATUS                      ROLES                  AGE    VERSION
+k8s01   Ready,SchedulingDisabled    control-plane,master   83m    v1.20.4
+k8s02   Ready                       control-plane,master   69m    v1.20.4
+k8s03   Ready                       control-plane,master   9m30s  v1.20.4
+</code></pre>
+
+<p>Stop the kubelet sevice and remove docker:</p>
+
+<pre><code class="language-bash">sudo systemctl stop kubelet
+sudo systemctl status kubelet
+</code></pre>
+
+<pre><code class="language-bash">apt purge docker-ce docker-ce-cli
+OR
+yum remove docker-ce docker-ce-cli
+</code></pre>
+
+<p>Install and configure containerd:</p>
+
+<pre><code class="language-bash">## Install containerd
+sudo yum update -y &amp;&amp; sudo yum install -y containerd.io
+
+## Configure containerd
+sudo mkdir -p /etc/containerd
+sudo containerd config default &gt; /etc/containerd/config.toml
+</code></pre>
+
+<p>To use the <code>systemd</code> cgroup driver in <code>/etc/containerd/config.toml</code> with <code>runc</code>, set</p>
+
+<pre><code class="language-bash">nano /etc/containerd/config.toml
+systemd_cgroup = true
+
+# Restart containerd
+sudo systemctl restart containerd
+</code></pre>
+
+<pre><code class="language-bash">echo &quot;runtime-endpoint: unix:///run/containerd/containerd.sock&quot; &gt; /etc/crictl.yaml
+crictl ps
+</code></pre>
+
+<p>Change runtime in kubeadm config:</p>
+
+<pre><code class="language-bash">nano /var/lib/kubelet/kubeadm-flags.env
+# add the following flags to KUBELET_KUBEADM_ARGS variable
+KUBELET_KUBEADM_ARGS=&quot;... --container-runtime=remote --container-runtime-endpoint=/run/containerd/containerd.sock&quot;
+</code></pre>
+
+<p>Start kubelet:</p>
+
+<pre><code class="language-bash">sudo systemctl start kubelet
+</code></pre>
+
+<p>Check if the new runtime on the node:</p>
+
+<pre><code class="language-bash">kubectl describe node k8s01
+System Info:
+  Machine ID:                 21a5dd31f86c4
+  System UUID:                4227EF55-BA3BCCB57BCE
+  Boot ID:                    77229747-9ea581ec6773
+  Kernel Version:             4.18.0-240.15.1.el8_3.centos.plus.x86_64
+  OS Image:                   CentOS Linux 8
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  containerd://1.4.3
+  Kubelet Version:            v1.20.4
+  Kube-Proxy Version:         v1.20.4
+</code></pre>
+
+<p>Uncordon the node to mark it schedulable agen:</p>
+
+<pre><code class="language-bash">kubectl uncordon k8s01
+</code></pre>
+
+<p>Once you changed the runetime on all the nodes you are done.</p>
+
+<h3 id="debugging-tipps">Debugging tipps</h3>
+
+<p>Here are some usefull conmmands to debug:</p>
+
+<pre><code class="language-bash">journalctl -u kubelet
+
+journalctl -u containerd
+
+crictl --runtime-endpoint /run/containerd/containerd.sock ps
+
+kubectl describe node &lt;master_node_name&gt;
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -9386,7 +9522,7 @@ For the Runtime Specification they created the CRI (Container runtime Interface)
 
 <h3 id="install-and-configure-containerd-prerequisites">Install and configure Containerd prerequisites:</h3>
 
-<pre><code>cat &lt;&lt;EOF | sudo tee /etc/modules-load.d/containerd.conf
+<pre><code class="language-yaml">cat &lt;&lt;EOF | sudo tee /etc/modules-load.d/containerd.conf
 overlay
 br_netfilter
 EOF
@@ -9405,7 +9541,7 @@ EOF
 sudo sysctl --system
 </code></pre>
 
-<pre><code>### Install required packages
+<pre><code class="language-bash">### Install required packages
 sudo yum install -y yum-utils device-mapper-persistent-data lvm2
 
 ## Add docker repository
@@ -9423,21 +9559,21 @@ sudo containerd config default &gt; /etc/containerd/config.toml
 
 <p>To use the <code>systemd</code> cgroup driver in <code>/etc/containerd/config.toml</code> with <code>runc</code>, set</p>
 
-<pre><code>nano /etc/containerd/config.toml
+<pre><code class="language-bash">nano /etc/containerd/config.toml
 systemd_cgroup = true
 
 # Restart containerd
 sudo systemctl restart containerd
 </code></pre>
 
-<pre><code>free -h
+<pre><code class="language-bash">free -h
 swapoff -a
 swapoff -a
 sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
 free -h
 </code></pre>
 
-<pre><code>cat &lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
+<pre><code class="language-bash">cat &lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
 baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -9453,22 +9589,22 @@ yum install epel-release -y
 yum install -y kubeadm kubelet kubectl
 </code></pre>
 
-<pre><code>echo &quot;runtime-endpoint: unix:///run/containerd/containerd.sock&quot; &gt; /etc/crictl.yaml
+<pre><code class="language-bash">echo &quot;runtime-endpoint: unix:///run/containerd/containerd.sock&quot; &gt; /etc/crictl.yaml
 crictl ps
 </code></pre>
 
-<pre><code>systemctl enable kubelet.service
+<pre><code class="language-bash">systemctl enable kubelet.service
 kubeadm config images pull
 crictl images
-ubeadm init --pod-network-cidr=10.244.0.0/16
+kubeadm init --pod-network-cidr=10.244.0.0/16
 </code></pre>
 
-<pre><code>mkdir -p $HOME/.kube
+<pre><code class="language-bash">mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 </code></pre>
 
-<pre><code>kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+<pre><code class="language-bash">kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
 kubectl get node
 </code></pre>]]></content>
             
