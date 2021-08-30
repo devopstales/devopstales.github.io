@@ -28,8 +28,8 @@
     "datePublished": "2020-02-21",
     "dateModified" : "2020-02-21",
     "url" : "https://devopstales.github.io/home/pgbackrest_backup_to_s3/",
-    "wordCount" : "269",
-    "keywords" : [ "devops", "tales", "postgresql 12", "postgresql 11", "Blog" ]
+    "wordCount" : "271",
+    "keywords" : [ "devops", "tales", "postgresql 12", "postgresql 11", "pgsql", "backup", "pgBackRest", "Blog" ]
     
 }
 </script>
@@ -178,10 +178,10 @@ signature_v2 = False
 <p>Create bucket and folders</p>
 
 <pre><code>s3cmd mb --no-check-certificate s3://pgbackrest
-mkdir postgresql1
+mkdir postgresql12
 s3cmd cp postgresql1 --no-check-certificate s3://pgbackrest
-s3cmd ls --no-check-certificate s3://pgbackrest/postgresql1
-                       DIR   s3://pgbackrest/postgresql1/
+s3cmd ls --no-check-certificate s3://pgbackrest/postgresql12
+                       DIR   s3://pgbackrest/postgresql12/
 </code></pre>
 
 <h3 id="installation">Installation</h3>
@@ -197,7 +197,7 @@ yum install -y pgbackrest
 <pre><code>nano /etc/pgbackrest.conf
 
 [global]
-repo1-path=/postgresql1
+repo1-path=/postgresql12
 repo1-type=s3
 repo1-s3-endpoint=minio.mydomain.intra
 repo1-s3-port=9000
@@ -214,16 +214,16 @@ log-level-file=debug
 start-fast=y
 delta=y
 
-[postgresql1]
+[postgresql12]
 pg1-path=/var/lib/pgsql/12/data
 </code></pre>
 
-<h3 id="configure-postgresql-on-postgresql1">Configure PostgreSQL on postgresql1</h3>
+<h3 id="configure-postgresql-on-postgresql12-server">Configure PostgreSQL on postgresql12 server</h3>
 
 <pre><code>nano /var/lib/pgsql/12/data/postgresql.conf
 ...
 archive_mode = on
-archive_command = 'pgbackrest --stanza=postgresql1 archive-push %p'
+archive_command = 'pgbackrest --stanza=postgresql12 archive-push %p'
 ...
 
 systemctl restart postgresql12
@@ -233,17 +233,17 @@ systemctl restart postgresql12
 
 <p>Before we can start a backup we need to initialize the backup repository.</p>
 
-<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql1 stanza-create
-sudo -iu postgres pgbackrest --stanza=postgresql1 check
+<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql12 stanza-create
+sudo -iu postgres pgbackrest --stanza=postgresql12 check
 </code></pre>
 
-<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql1 --type=full backup
+<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql12 --type=full backup
 </code></pre>
 
 <h3 id="show-backup-information">Show backup information</h3>
 
-<pre><code>postgresql1 -iu postgres pgbackrest info
-stanza: postgresql1
+<pre><code>$ sudo -iu postgres pgbackrest info
+stanza: postgresql12
     status: ok
     cipher: none
 
@@ -259,16 +259,16 @@ stanza: postgresql1
 
 <h3 id="restore-a-backup">Restore a backup</h3>
 
-<p>The restore command can then be used on the postgresql1 host.</p>
+<p>The restore command can then be used on the postgresql host.</p>
 
 <pre><code>sudo systemctl stop postgresql12
 
-sudo -iu postgres pgbackrest --stanza=postgresql1 restore
+sudo -iu postgres pgbackrest --stanza=postgresql12 restore
 </code></pre>
 
 <p>Restore only test database:</p>
 
-<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql1 --delta --db-include=test restore
+<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql12 --delta --db-include=test restore
 </code></pre>
 		</div>
 	</article>

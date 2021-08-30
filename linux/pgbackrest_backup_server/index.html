@@ -28,8 +28,8 @@
     "datePublished": "2020-02-20",
     "dateModified" : "2020-02-20",
     "url" : "https://devopstales.github.io/linux/pgbackrest_backup_server/",
-    "wordCount" : "258",
-    "keywords" : [ "postgresql 12", "postgresql 11", "Blog" ]
+    "wordCount" : "261",
+    "keywords" : [ "postgresql 12", "postgresql 11", "pgsql", "backup", "pgBackRest", "Blog" ]
     
 }
 </script>
@@ -183,7 +183,7 @@ sudo -u postgres restorecon -R /var/lib/pgsql/.ssh
 sudo -u postgres ssh-copy-id -i /var/lib/pgsql/.ssh/id_rsa postgres@postgresql1
 </code></pre>
 
-<h3 id="configure-pgbackrest-on-postgresql1">Configure pgBackRest on postgresql1</h3>
+<h3 id="configure-pgbackrest-on-postgresql12-server">Configure pgBackRest on postgresql12 server</h3>
 
 <pre><code>nano /etc/pgbackrest.conf
 
@@ -194,11 +194,11 @@ process-max=2
 log-level-console=info
 log-level-file=debug
 
-[postgresql1]
+[postgresql12]
 pg1-path=/var/lib/pgsql/12/data
 </code></pre>
 
-<h3 id="configure-postgresql-on-postgresql1">Configure PostgreSQL on postgresql1</h3>
+<h3 id="configure-postgresql-on-postgresql12-server">Configure PostgreSQL on postgresql12 server</h3>
 
 <pre><code>nano /var/lib/pgsql/12/data/postgresql.conf
 ...
@@ -222,8 +222,8 @@ log-level-file=debug
 start-fast=y
 stop-auto=y
 
-[postgresql1]
-pg1-path=/var/lib/pgsql/11/data
+[postgresql12]
+pg1-path=/var/lib/pgsql/12/data
 pg1-host=postgresql1
 pg1-host-user=postgres
 </code></pre>
@@ -232,21 +232,21 @@ pg1-host-user=postgres
 
 <p>Before we can start a backup we need to initialize the backup repository on backup-server.</p>
 
-<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql1 stanza-create
+<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql12 stanza-create
 </code></pre>
 
 <p>Finally, check the configuration on all hosts.</p>
 
-<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql1 check
+<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql12 check
 </code></pre>
 
-<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql1 --type=full backup
+<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql12 --type=full backup
 </code></pre>
 
 <h3 id="show-backup-information">Show backup information</h3>
 
-<pre><code>postgresql1 -iu postgres pgbackrest info
-stanza: postgresql1
+<pre><code>$ sudo -iu postgres pgbackrest info
+stanza: postgresql12
     status: ok
     cipher: none
 
@@ -262,16 +262,16 @@ stanza: postgresql1
 
 <h3 id="restore-a-backup">Restore a backup</h3>
 
-<p>The restore command can then be used on the postgresql1 host.</p>
+<p>The restore command can then be used on the postgresql host.</p>
 
 <pre><code>sudo systemctl stop postgresql12
 
-sudo -iu postgres pgbackrest --stanza=postgresql1 restore
+sudo -iu postgres pgbackrest --stanza=postgresql12 restore
 </code></pre>
 
 <p>Restore only test database:</p>
 
-<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql1 --delta --db-include=test restore
+<pre><code>sudo -iu postgres pgbackrest --stanza=postgresql12 --delta --db-include=test restore
 </code></pre>
 		</div>
 		<footer class="post__footer">
@@ -282,6 +282,7 @@ sudo -iu postgres pgbackrest --stanza=postgresql1 restore
 		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/postgresql/" rel="tag">postgresql</a></li>
 		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/centos/" rel="tag">Centos</a></li>
 		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/debian/" rel="tag">Debian</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/backup/" rel="tag">Backup</a></li>
 	</ul>
 </div>
 		</footer>
