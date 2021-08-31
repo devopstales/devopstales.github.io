@@ -28,7 +28,7 @@
     "datePublished": "2020-11-20",
     "dateModified" : "2020-11-20",
     "url" : "https://devopstales.github.io/kubernetes/k8s-security/",
-    "wordCount" : "1251",
+    "wordCount" : "1336",
     "keywords" : [ "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "Best Practices", "calico", "Blog" ]
     
 }
@@ -242,7 +242,7 @@ https://github.com/pieterlange/kube-backup
 
 <p>In most tutorial the first thing in a Kubernets installation is to disable the firewall because is it easier than configure properly.</p>
 
-<pre><code># master
+<pre><code class="language-bash"># master
 firewall-cmd --permanent --add-port=6443/tcp
 firewall-cmd --permanent --add-port=2379-2380/tcp
 firewall-cmd --permanent --add-port=10250/tcp
@@ -270,6 +270,22 @@ firewall-cmd --permanent --zone=public --add-service=http
 firewall-cmd --permanent --zone=public --add-service=https
 </code></pre>
 
+<h3 id="enabling-signed-kubelet-serving-certificates">Enabling signed kubelet serving certificates</h3>
+
+<p>By default the kubelet serving certificate deployed by kubeadm is self-signed. This means a connection from external services like the <code>metrics-server</code> to a kubelet cannot be secured with TLS.</p>
+
+<p>To configure the kubelets in a new kubeadm cluster to obtain properly signed serving certificates you must pass the following minimal configuration to <code>kubeadm init</code>:</p>
+
+<pre><code class="language-bash">apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+serverTLSBootstrap: true
+</code></pre>
+
+<p>If you whant to know more about certificates and thear rotation chenck <a href="https://devopstales.github.io/kubernetes/k8s-cert/">my blog post</a>.</p>
+
 <h3 id="pod-network-add-on">Pod network add-on</h3>
 
 <p>Several external projects provide Kubernetes Pod networks using CNI, some of which also support Network Policy. Use one of them.</p>
@@ -288,7 +304,7 @@ firewall-cmd --permanent --zone=public --add-service=https
 
 <p>Role-based access control (RBAC) is a method of regulating access to computer or network resources based on the roles of individual users within your organization. For that you need to create <code>Role</code> or <code>ClusterRole</code> objects then assign that objects to a user wit <code>RoleBinding</code> or <code>ClusterRoleBinding</code>.</p>
 
-<pre><code>---
+<pre><code class="language-yaml">---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -348,7 +364,7 @@ roleRef:
 
 <p>Pod Security Policies are implemented as an Admission Controller in Kubernetes. To enable PSPs in your cluster, make sure to include PodSecurityPolicy in the enable-admission-plugins list that is passed as a parameter to your Kubernetes API configuration:</p>
 
-<pre><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+<pre><code class="language-bash">nano /etc/kubernetes/manifests/kube-apiserver.yaml
 ...
 --enable-admission-plugins=...,PodSecurityPolicy
 ...
@@ -356,7 +372,7 @@ roleRef:
 
 <h4 id="creating-pod-security-policies">Creating Pod Security Policies</h4>
 
-<pre><code>apiVersion: policy/v1beta1
+<pre><code class="language-yaml">apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
   name: restricted
@@ -403,7 +419,7 @@ spec:
 
 <h4 id="assigning-pod-security-policies">Assigning Pod Security Policies</h4>
 
-<pre><code>kind: ClusterRole
+<pre><code class="language-yaml">kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: psp:restricted
@@ -437,7 +453,7 @@ view raw
 
 <p>Usually it’s a best practice to enable audits in your cluster. Let’s go ahead and create a basic policy saved in our master.</p>
 
-<pre><code>mkdir -p /etc/kubernetes
+<pre><code class="language-yaml">mkdir -p /etc/kubernetes
 
 cat &gt; /etc/kubernetes/audit-policy.yaml &lt;&lt;EOF
 apiVersion: audit.k8s.io/v1beta1
@@ -491,7 +507,7 @@ kube-apiserver --audit-log-path=/var/log/kubernetes/apiserver/audit.log \
 
 <p>I think the best choice for a base image is <code>Distroless</code>, which is set of images made by Google, that were created with intent to be secure. These images contain the bare minimum that&rsquo;s needed for your app.</p>
 
-<pre><code>FROM gcr.io/distroless/python3
+<pre><code class="language-bash">FROM gcr.io/distroless/python3
 COPY --from=build-env /app /app
 WORKDIR /app
 CMD [&quot;hello.py&quot;, &quot;/etc&quot;]
@@ -501,7 +517,7 @@ CMD [&quot;hello.py&quot;, &quot;/etc&quot;]
 
 <p>Create a dedicated user and group on the image, with minimal permissions to run the application; use the same user to run this process. For example, Node.js image which has a built-in node generic user:</p>
 
-<pre><code>USER node
+<pre><code class="language-bash">USER node
 CMD node index.js
 </code></pre>
 
@@ -511,7 +527,7 @@ CMD node index.js
 
 <p>The <code>kube-apiserver</code> process accepts an argument <code>--encryption-provider-config</code> that controls how API data is encrypted in etcd. An example configuration is provided below.</p>
 
-<pre><code>mkdir /etc/kubernetes/etcd-enc/
+<pre><code class="language-yaml">mkdir /etc/kubernetes/etcd-enc/
 
 head -c 32 /dev/urandom | base64
 
@@ -532,7 +548,7 @@ resources:
 
 <p>In this example key1 is the secret contains the encryption/decryption key.</p>
 
-<pre><code>nano kube-apiserver.yaml
+<pre><code class="language-bash">nano kube-apiserver.yaml
 ...
     - --encryption-provider-config=/etc/kubernetes/etcd-enc/etcd-encription.yaml
 ...
@@ -556,13 +572,13 @@ status: {}
 
 <p>Create kube-bench job</p>
 
-<pre><code>kubectl apply -f https://raw.githubusercontent.com/aquasecurity/kube-bench/master/job.yaml
+<pre><code class="language-bash">kubectl apply -f https://raw.githubusercontent.com/aquasecurity/kube-bench/master/job.yaml
 kubectl get jobs --watch
 </code></pre>
 
 <p>Get job output from logs</p>
 
-<pre><code>kubectl logs $(kubectl get pods -l app=kube-bench -o name)
+<pre><code class="language-bash">kubectl logs $(kubectl get pods -l app=kube-bench -o name)
 </code></pre>
 		</div>
 		<footer class="post__footer">
