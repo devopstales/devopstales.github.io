@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-09-01T09:36:10+00:00</updated>
+    <updated>2021-09-01T16:54:15+00:00</updated>
     
     
     <author>
@@ -17,6 +17,161 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Understanding kubernetes networking: owerlay networks]]></title>
+            <link href="https://devopstales.github.io/home/kubernetes-networking-2/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/kubernetes-networking-1/?utm_source=atom_feed" rel="related" type="text/html" title="Understanding kubernetes networking: pods and services" />
+                <link href="https://devopstales.github.io/kubernetes/kubernetes-networking-2/?utm_source=atom_feed" rel="related" type="text/html" title="Understanding kubernetes networking: owerlay networks" />
+                <link href="https://devopstales.github.io/kubernetes/kubernetes-networking-1/?utm_source=atom_feed" rel="related" type="text/html" title="Understanding kubernetes networking: pods and services" />
+                <link href="https://devopstales.github.io/home/rke2-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With cilium" />
+                <link href="https://devopstales.github.io/home/k8s-security/?utm_source=atom_feed" rel="related" type="text/html" title="Best Practices to keeping Kubernetes Clusters Secure" />
+            
+                <id>https://devopstales.github.io/home/kubernetes-networking-2/</id>
+            
+            
+            <published>2021-08-31T00:00:00+00:00</published>
+            <updated>2021-08-31T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In my previous posts We check <a href="/kubernetes-networking-1/">how the pod networking</a> and <a href="/kubernetes-networking-1/">How Kubernetes use services for loadbalancing</a>. Now we check how the diferente Networking solutions works. How Theas solutins link the kubernetes nodes together.</p>
+
+<p>Kubernetes was built to run distributed systems over a cluster of machines. This meanns networking is a central point of all Kubernetes clusters. Kubernetes dose not hawe an includid network solution, you haw to chouse one. Withouth this solutions all host whou be a closed separated ecosistem. Many kubernetes deployment guides provide instructions for deploying a kubernetes networking (CNI) to your cluster. The most polular solutions are Calico, Flannel, Weave, and Cilium. Most time you simpli deploy a yaml or a helm chart, but we didn&rsquo;t undestand how theas solutions works. Understanding the Kubernetes networking model will allow you to easely troubleshoot your applications running on Kubernetes.</p>
+
+<h3 id="what-is-a-cni">What is a CNI?</h3>
+
+<p>The CNI (Container Network Interface) project describes the specifications to provide a generic plugin-based networking solution for linux containers. A CNI plugin is an executable and it&rsquo;s config that follows the CNI spec and we’ll discuss some plugins in the post below.</p>
+
+<h3 id="overlay-network">Overlay network</h3>
+
+<p>The concept of overlay networking has been around for a while, but has made a return to the spotlight with the rise of Docker and Kubernetes. It is  basicly a virtual network of nodes and logical links, which are built on top of an existing network. To solve this chelange the CNI plugins use two main aprouch VXLAN (Virtual Extensible LAN) and simple layer3 routing. The aim of an overlay network is to enable a new service or function without having to reconfigure the entire network design.</p>
+
+<h3 id="node-ipam-controller">Node IPAM Controller</h3>
+
+<p>All pods are required to have an IP address. it’s important to ensure that all pods across the entire cluster have a unique IP address. <code>kube-controller-manager</code> allocates each node a dedicated subnet (podCIDR) from the cluster CIDR (IP range for the cluster network) For example if the overlay network is <code>10.244.0.0/16</code> all the kubernetes hosts gets a <code>/24</code> segment so the master01 is <code>10.244.0.0/24</code> the master02 is <code>10.244.1.0/24</code> and so on. podCIDR for a node can be listed using the following command:
+cidr</p>
+
+<pre><code class="language-bash">$ kubectl get no &lt;nodeName&gt; -o json | jq '.spec.podCIDR'
+10.244.0.0/24
+</code></pre>
+
+<h3 id="flannel">Flannel</h3>
+
+<p>Flannel runs a small, single binary agent called flanneld on each host, and is responsible for allocating a subnet lease to each host out of a larger, preconfigured address space. Flannel uses either the Kubernetes API or etcd directly to store the network configuration, the allocated subnets, and any auxiliary data (such as the host&rsquo;s public IP). Packets are forwarded using one of several backend mechanisms including VXLAN and various cloud integrations. (Refer to <a href="https://github.com/flannel-io/flannel">Flannel</a>)</p>
+
+<p><img src="/img/include/flannel-01.png" alt="Flannel" /></p>
+
+<h3 id="calico">Calico</h3>
+
+<p>Calico originally used a pure 3-layer protocol to support multi-host network communication. On each host a vRouter propagates workload reachability information (routes) to the rest of the data center using BGP protocol. The pure Layer 3 approach avoids the packet encapsulation associated with the Layer 2 solution which simplifies diagnostics, reduces transport overhead and improves performance. Calico also implements VxLAN and the newer version use VxLAN as it&rsquo;s default soluton.</p>
+
+<p><img src="/img/include/calicodd.png" alt="Flannel" /></p>
+
+<h3 id="weave-net">Weave Net</h3>
+
+<p>Connectivity is set up by the weave-net binary by attaching pods to the weave Linux bridge. The bridge is, in turn, attached to the Open vSwitch’s kernel datapath which forwards the packets over the vxlan interface towards the target node.</p>
+
+<h3 id="cilium">Cilium</h3>
+
+<p>Cilium is one of the most advanced and powerful Kubernetes networking solutions. At its core, it utilizes the power of <a href="https://ebpf.io/">eBPF</a> to perform a wide range of functionality ranging from traffic filtering for NetworkPolicies all the way to CNI and <a href="https://k8s.networkop.co.uk/cni/cilium/">kube-proxy replacement</a>. BPF is basically the ability of an application developer to write a program, load that into the Linux kernel, then run it when certain events happen.</p>
+
+<p><img src="/img/include/ciliumart2.png" alt="Cilium" /></p>
+
+<p>| | Calico | Flannel | Weave | Cilium |
+|-|&mdash;&mdash;&ndash;|&mdash;&mdash;&mdash;|&mdash;&mdash;-|&mdash;&mdash;&ndash;|
+| Network Model | BGP or VxLAN | VxLAN or UDP Channel | VxLAN or UDP Channel | VXLAN or Geneve |
+| Encryption Channel |  |  |  |  |
+| NetworkPolicies |  |  |  |  |
+| kube-proxy replacement |  |  |  |  |
+| Egress Routing |  |  |  |  |</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Understanding kubernetes networking: pods and services]]></title>
+            <link href="https://devopstales.github.io/home/kubernetes-networking-1/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/kubernetes-networking-1/?utm_source=atom_feed" rel="related" type="text/html" title="Understanding kubernetes networking: pods and services" />
+                <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
+                <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
+                <link href="https://devopstales.github.io/home/rke2-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With cilium" />
+                <link href="https://devopstales.github.io/home/k8s-security/?utm_source=atom_feed" rel="related" type="text/html" title="Best Practices to keeping Kubernetes Clusters Secure" />
+            
+                <id>https://devopstales.github.io/home/kubernetes-networking-1/</id>
+            
+            
+            <published>2021-08-30T00:00:00+00:00</published>
+            <updated>2021-08-30T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this series I will attempt to demystify the Kubernetes networkiing layers. This first part will look at containers and pods.</p>
+
+<h3 id="what-is-a-pod">What is a pod?</h3>
+
+<p>A Pod is the atom of Kubernetes — the smallest deployable object for building applications.  A single Pod represents an applications in your cluster and encapsulates one or more containers. Containers that make up a pod are designed to be co-located and scheduled on the same machine. They share the same resources like ip, network and volumes. In Linux, each running process communicates within a <a href="https://en.wikipedia.org/wiki/Linux_namespaces">Linux namespace</a> that provides a logical networking stack. In essence, a pod is a representation of a Linux namespace that allow the containers to usa the same resources. Containers within a Pod all have the same IP address and port range. They can find each other via localhost since they reside in the same namespace. This means the containers in a pod can not us the same ports.</p>
+
+<p><img src="/img/include/kubernetes-network-1-1.png" alt="Pod Network" /></p>
+
+<p>Kubernetes creates a special container for each pod whose purpose is to provide a network interface for the other containers. This is the &ldquo;pause&rdquo; container.</p>
+
+<p><img src="/img/include/kubernetes-network-1-2.png" alt="Pod Network" /></p>
+
+<h3 id="pod-to-pod-communication">Pod-to-Pod communication</h3>
+
+<p>Every Pod has a real IP address and each Pod communicates with other Pods using that IP address. From the Pod’s perspective, it exists in its own Ethernet namespace that needs to communicate with other network namespaces on the same Node. Namespaces can be connected using a Linux Virtual Ethernet Device (veth) This setup can be replicated for as many Pods as we have on the machine. The default Gateway in this internal network is a Linux bridge. A bridge is a virtual Layer 2 networking device used to unite two or more network segments to connect networks together.</p>
+
+<p><img src="/img/include/kubernetes-network-1-3.gif" alt="Pod to Pod" /></p>
+
+<p>Bridges implement the ARP protocol to discover the link-layer MAC address associated with a given IP address.</p>
+
+<h4 id="what-is-a-service">What is a Service?</h4>
+
+<p>As we know containers are considered disposable. That means there is no guarantee that the pod&rsquo;s address won’t change the next time the pod is recreated. That is a common problem in cloud environments too, and it has a standard solution: run the traffic through a reverse-proxy. This proxy is represented by a Kubernetes resource type called a service.</p>
+
+<h3 id="pod-to-service-communication">Pod-to-Service communication</h3>
+
+<p>When creating a new Kubernetes Service, a new virtual IP is created on your behalf. Anywhere within the cluster, traffic addressed to this virtual IP will be routed or load-balanced to the Pod or Pods associated with the Service. Kubernetes use a networking framework built in to Linux kernel called <code>netfilter</code>.</p>
+
+<p><code>iptables</code> is a user-space utility program that allows a system administrator to configure the IP packet filter rules of the Linux kernel firewall, implemented as different <code>Netfilter</code> modules. In Kubernetes, <code>iptables</code> rules are configured by the <code>kube-proxy</code> controller that watches the Kubernetes API for changes. Creation of a service or change of the pod ip will trigger iptables rules update on the host. When a traffic destined for a Service’s virtual IP is detected the <code>kube-proxy</code> select a random pod ip from the set of available Pods and manipulate the <code>iptables</code> rules to change the destination ip in the package to it. This method is called destination nat. Thi the return path iptables again rewrites the IP header to replace the Pod IP with the Service’s IP.</p>
+
+<p><img src="/img/include/kubernetes-network-1-4.gif" alt="Pod to Service" /></p>
+
+<h3 id="ipvs">IPVS</h3>
+
+<p>Since verion 1.11 Kubernetes includes a second option for load balancing. IPVS (IP Virtual Server) is also built on top of <code>netfilter</code> and implements load balancing as part of the Linux kernel. IPVS can direct requests for TCP- and UDP-based services to the real servers, and make services of the real servers appear as virtual services on a single IP address. When creating a Service load balanced with IPVS, three things happen: a dummy IPVS interface is created on the Node, the Service’s IP address is bound to the dummy IPVS interface, and IPVS servers are created for each Service IP address.</p>
+
+<h3 id="ebpf">eBPF</h3>
+
+<p>Some Network plugin is Kubernetes can act as a replacement for <code>kube-proxy</code> like Calico and Cilium. They use eBPF as a solution to solve the load-balancing problem.</p>
+
+<h3 id="what-is-ebpf">What is eBPF?</h3>
+
+<p>eBPF is a virtual machine embedded within the Linux kernel. It allows small programs to be loaded into the kernel, and attached to hooks, which are triggered when some event occurs. This allows the behavior of the kernel to be (sometimes heavily) customized. While the eBPF virtual machine is the same for each type of hook, the capabilities of the hooks vary considerably. Since loading programs into the kernel could be dangerous; the kernel runs all programs through a very strict static verifier; the verifier sandboxes the program, ensuring it can only access allowed parts of memory and ensuring that it must terminate quickly.</p>
+
+<p>eBPF dataplane attaches eBPF programs to hooks on each bridge interface as well as your data and tunnel interfaces. This allows Calico or Cilium to spot workload packets early and handle them through a fast-path that bypasses iptables and other packet processing that the kernel would normally do.</p>
+
+<p><img src="/img/include/kubernetes-network-1-5.svg" alt="Calico Architecture" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
