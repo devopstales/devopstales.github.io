@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	
+<script type="application/ld+json">
+{
+    "@context" : "http://schema.org",
+    "@type" : "BlogPosting",
+    "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "https://devopstales.github.io/"
+    },
+    "articleSection" : "kubernetes",
+    "name" : "Hardening Kubernetes with seccomp",
+    "image": "https://devopstales.github.io/img/kubernetes.png",
+    "headline" : "Hardening Kubernetes with seccomp",
+    "description" : "In this post I will attempt to demystify the relationship of secomp and Kubernetes This first part will look at containers and pods.\n",
+    "inLanguage" : "en-US",
+    "author" : "Blaiserman",
+    "creator" : "Blaiserman",
+    "publisher": "Blaiserman",
+    "accountablePerson" : "Blaiserman",
+    "copyrightHolder" : "Blaiserman",
+    "copyrightYear" : "2021",
+    "datePublished": "2021-09-03",
+    "dateModified" : "2021-09-03",
+    "url" : "https://devopstales.github.io/kubernetes/k8s-secomp/",
+    "wordCount" : "1591",
+    "keywords" : [ "kubernetes deployment", "seccomp", "docker", "containerd", "CRI-O", "Kubernetes", "BPF", "Blog" ]
+    
+}
+</script>
+
+<meta name="msvalidate.01" content="4E830BF9C048B3A327492699A61E741E" />
+<meta name="yandex-verification" content="96d0b6ba6c7aa697" />
+
+	<title>Hardening Kubernetes with seccomp - devopstales</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<meta property="og:title" content="Hardening Kubernetes with seccomp" />
+<meta property="og:description" content="In this post I will attempt to demystify the relationship of secomp and Kubernetes This first part will look at containers and pods." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://devopstales.github.io/kubernetes/k8s-secomp/" />
+<meta property="article:published_time" content="2021-09-03T00:00:00+00:00" />
+<meta property="article:modified_time" content="2021-09-03T00:00:00+00:00" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-git-backup/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/firecracker-cri-o/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/gvisor-cri-o/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/firecracker-containerd/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/gvisor-containerd/" />
+
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/style.css">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/coffeebox.css"><link rel="stylesheet" href="https://devopstales.github.io/css/cookie.css">
+	<link rel="shortcut icon" href="https://devopstales.github.io/favicon.ico">
+		
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-135626110-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+        <meta name="twitter:image" content="https://devopstales.github.io/img/kubernetes.png">
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3398636867919740" crossorigin="anonymous"></script>
+        <script data-ad-client="ca-pub-3398636867919740" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+				<div class="logo__title">devopstales</div>
+				<div class="logo__tagline">Blog about dev and ops stuff</div>
+			</a>
+		</div>
+		
+<nav class="menu">
+	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
+		<span class="menu__btn-title" tabindex="-1">Menu</span>
+	</button>
+	<ul class="menu__list">
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">home</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/linux/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Linux</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/kubernetes/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Kubernetes</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/sso/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">sso</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/monitoring/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">monitoring</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/cloud/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">cloud</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/windows/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Windows</span>
+				
+			</a>
+		</li>
+	</ul>
+</nav>
+
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Hardening Kubernetes with seccomp</h1>
+			<div class="post__meta meta">
+<div class="meta__item-datetime meta__item">
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2021-09-03T00:00:00Z">September 03, 2021</time>
+</div>
+
+<div class="meta__item-categories meta__item">
+	<svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
+	<span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
+	</span>
+</div></div>
+		</header>
+		<div class="content post__content clearfix">
+			<p>In this post I will attempt to demystify the relationship of <code>secomp</code> and Kubernetes This first part will look at containers and pods.</p>
+
+<h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
+
+<ul>
+<li>Part1: <a href="../../kubernetes/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+<li>Part2: <a href="../../kubernetes/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+<li>Part3: <a href="../../kubernetes/rke2-cilium/">RKE2 Install With cilium</a></li>
+<li>Part4: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a>
+<!-- RBAC --></li>
+<li>Part6: <a href="../../kubernetes/k8s-secomp/">Hardening Kubernetes with seccomp</a></li>
+<li>Part7: <a href="../../kubernetes/rke2-psp/">RKE2 Pod Security Policy</a>
+<!-- # Policy --></li>
+<li>Part8: <a href="../../kubernetes/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<li>Part9: <a href="../../kubernetes/kubernetes-policy/">Kubernetes Cluster Policy</a>
+<!-- # Admission Controllers --></li>
+<li>Part10: <a href="../../kubernetes/admission-controllers/">Using Admission Controllers</a>
+<!-- ## Image Scan --></li>
+<li>Part11a: <a href="../../kubernetes/image-security-admission-controller/">Image security Admission Controller</a></li>
+<li>Part11b: <a href="../../kubernetes/image-security-admission-controller-v2/">Image security Admission Controller V2</a></li>
+<li>Part11c: <a href="../../kubernetes/image-security-admission-controller-v3/">Image security Admission Controller V3</a>
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- # Scans & Monitoring --></li>
+<li>Part12: <a href="../../kubernetes/continuous-image-security/">Continuous Image security</a></li>
+<li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a>
+<!-- kyverno logs and monitoring -->
+<!-- DAST Exporter?? -->
+<!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
+<!-- # Image Signature Verification --></li>
+<li>Part14a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
+<li>Part14b <a href="../../kubernetes/k8s-connaisseur-v2/">Image Signature Verification with Connaisseur 2.0</a></li>
+<li>Part14c <a href="../../kubernetes/k8s-kyverno-cosign/">Image Signature Verification with Kyverno</a>
+<!-- # Backup --></li>
+<li>Part15a <a href="../../kubernetes/k8s-backup/">Backup your Kubernetes Cluster</a></li>
+<li>Part15b <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a>
+<!-- # Secrets --></li>
+<li>Part16a <a href="../../kubernetes/k8s-vault/">Kubernetes and Vault integration</a></li>
+<li>Part16b <a href="../../kubernetes/k8s-vault-v2/">Kubernetes External Vault integration</a></li>
+<li>Part17a: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+<li>Part17b: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+<li>Part17c: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a>
+<!-- # Image Update -->
+<!-- keel --></li>
+<li>Part18: <a href="../../kubernetes/argocd-image-updater/">ArgoCD auto image updater</a>
+<!-- flux image update --></li>
+<li>Part19: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a>
+<!-- # Image registry security --></li>
+<li>Part20: <a href="../../kubernetes/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
+<li>Part21: <a href="../../kubernetes/kyverno-image-mirror/">Automatically change registry in pod definition</a></li>
+</ul>
+
+<!-- sysdig falco -->
+
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+https://github.com/weaveworks/kured
+-->
+
+<!-- resource kvota -->
+
+<!-- start ADDS-->
+
+<p><p><ins class="adsbygoogle"
+     style="display:block; text-align:center;"
+     data-ad-layout="in-article"
+     data-ad-format="fluid"
+     data-ad-client="ca-pub-3398636867919740"
+     data-ad-slot="4704035022"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end ADDS--></p>
+
+<p>With Kubernetes version v1.22 there is a new alpha feature that provides a way to use the <code>RuntimeDefault</code> as the defaut seccomp profile insted of <code>Unconfined</code>. By default, when Kubernetes makes a new container it creates with <code>Unconfined</code> seccomp profile. This means that seccomp filtering is disabled.</p>
+
+<h3 id="wthat-is-seccomp-profile">Wthat is seccomp profile?</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Seccomp">Seccomp (Secure Computing)</a> is a feature in the Linux kernel. It allow to create profiles to filter <a href="https://en.wikipedia.org/wiki/System_call">system calls</a>. Usage of seccomp profiles on containers reduces the chance that a Linux kernel vulnerability will be exploited. All container runtimes ship with a default seccomp profile. The problem come when we using Kubernetes, beasuse Kubernetes use <code>Unconfined</code> as default and disables seccomp filtering.</p>
+
+<p>For example Docker&rsquo;s default seccomp profile disables approximately 44 system calls of the 300+ currently availble.</p>
+
+<h3 id="test-secomp-profile">Test Secomp profile.</h3>
+
+<p>For the test I will use <code>amicontained</code> to inspection tool. First test in a simple docker.</p>
+
+<pre><code class="language-bash">ocker run --rm -it r.j3ss.co/amicontained bash
+Container Runtime: docker
+Has Namespaces:
+	pid: true
+	user: false
+AppArmor Profile: docker-default (enforce)
+Capabilities:
+	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+Seccomp: filtering
+Blocked Syscalls (60):
+	SYSLOG SETPGID SETSID USELIB USTAT SYSFS VHANGUP PIVOT_ROOT _SYSCTL ACCT SETTIMEOFDAY MOUNT UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME IOPL IOPERM CREATE_MODULE INIT_MODULE DELETE_MODULE GET_KERNEL_SYMS QUERY_MODULE QUOTACTL NFSSERVCTL GETPMSG PUTPMSG AFS_SYSCALL TUXCALL SECURITY LOOKUP_DCOOKIE CLOCK_SETTIME VSERVER MBIND SET_MEMPOLICY GET_MEMPOLICY KEXEC_LOAD ADD_KEY REQUEST_KEY KEYCTL MIGRATE_PAGES UNSHARE MOVE_PAGES PERF_EVENT_OPEN FANOTIFY_INIT NAME_TO_HANDLE_AT OPEN_BY_HANDLE_AT SETNS PROCESS_VM_READV PROCESS_VM_WRITEV KCMP FINIT_MODULE KEXEC_FILE_LOAD BPF USERFAULTFD PKEY_MPROTECT PKEY_ALLOC PKEY_FREE
+Looking for Docker.sock
+</code></pre>
+
+<p>As you can see with the default Docker secom profile 60 Syscalls are being blocked. Now test wit default Kubernetes config on docker.</p>
+
+<pre><code class="language-bash">kubectl run -it bash --image=r.j3ss.co/amicontained --restart=Never bash
+Container Runtime: docker
+Has Namespaces:
+ pid: true
+ user: false
+AppArmor Profile: unconfined
+Capabilities:
+ BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+Seccomp: disabled
+Blocked Syscalls (21):
+ MSGRCV SYSLOG SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
+Looking for Docker.sock
+</code></pre>
+
+<p>In the output above you can see that seccomp is disabled and that 21 syscalls are being blocked. Now test wit default Kubernetes config on rke2 (containerd).</p>
+
+<pre><code class="language-bash">kubectl run -it bash --image=r.j3ss.co/amicontained --restart=Never bash
+Container Runtime: kube
+Has Namespaces:
+	pid: true
+	user: false
+AppArmor Profile: system_u:system_r:container_t:s0:c575,c847
+Capabilities:
+	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+Seccomp: disabled
+Blocked Syscalls (22):
+	SYSLOG SETPGID SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
+Looking for Docker.sock
+pod default/bash terminated (Error)
+</code></pre>
+
+<p>The <code>containerd</code> is similar then docker so lets test with <code>CRI-O</code>.</p>
+
+<pre><code class="language-bash">kubectl run -it bash --image=bash --restart=Never bash
+# apk add curl
+# curl -LO k8s.work/amicontained
+# chmod +x amicontained
+# ./amicontained
+Container Runtime: kube
+Has Namespaces:
+	pid: true
+	user: false
+AppArmor Profile: system_u:system_r:spc_t:s0
+Capabilities:
+	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service
+Seccomp: disabled
+Blocked Syscalls (22):
+	MSGRCV SYSLOG SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
+Looking for Docker.sock
+</code></pre>
+
+<h3 id="enable-runtimedefault-seccomp-profile">Enable RuntimeDefault seccomp profile</h3>
+
+<p>Enable in local kubelet config:</p>
+
+<pre><code class="language-bash">nano /var/lib/kubelet/config.yaml
+...
+--feature-gates=&quot;...,SeccompDefault=true&quot;
+--seccomp-default RuntimeDefault
+
+systemctl restart kubelet
+</code></pre>
+
+<p>Enable in running kubelet config:</p>
+
+<pre><code class="language-bash">kubectl edit cm kubelet-config-1.22 -n kub-system
+...
+- --feature-gates=&quot;...,SeccompDefault=true&quot;
+- --seccomp-default RuntimeDefault
+</code></pre>
+
+<p>Then test:</p>
+
+<pre><code class="language-bash">kubectl run -it bash --image=r.j3ss.co/amicontained --restart=Never bash
+Container Runtime: docker
+Has Namespaces:
+ pid: true
+ user: false
+AppArmor Profile: unconfined
+Capabilities:
+ BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+Seccomp: filtering
+Blocked Syscalls (61):
+ MSGRCV PTRACE SYSLOG SETSID USELIB USTAT SYSFS VHANGUP PIVOT_ROOT _SYSCTL ACCT SETTIMEOFDAY MOUNT UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME IOPL IOPERM CREATE_MODULE INIT_MODULE DELETE_MODULE GET_KERNEL_SYMS QUERY_MODULE QUOTACTL NFSSERVCTL GETPMSG PUTPMSG AFS_SYSCALL TUXCALL SECURITY LOOKUP_DCOOKIE CLOCK_SETTIME VSERVER MBIND SET_MEMPOLICY GET_MEMPOLICY KEXEC_LOAD ADD_KEY REQUEST_KEY KEYCTL MIGRATE_PAGES UNSHARE MOVE_PAGES PERF_EVENT_OPEN FANOTIFY_INIT NAME_TO_HANDLE_AT OPEN_BY_HANDLE_AT SETNS PROCESS_VM_READV PROCESS_VM_WRITEV KCMP FINIT_MODULE KEXEC_FILE_LOAD BPF USERFAULTFD PKEY_MPROTECT PKEY_ALLOC PKEY_FREE
+Looking for Docker.sock
+</code></pre>
+
+<h3 id="customizing-a-profile">Customizing a Profile</h3>
+
+<p>One way to write <code>seccomp</code> filter is to use Berkeley packet filter (BPF) language. Using this language isn&rsquo;t really simple or convenient. We can write JSON that is compiled into profile by <code>libseccomp</code>.</p>
+
+<p>A basic seccomp has three key elements: the <code>defaultAction</code>, the <code>architectures</code> (or <code>archMap</code>) and the <code>syscalls</code>:</p>
+
+<pre><code class="language-json">mkdir /var/lib/kubelet/seccomp
+nano /var/lib/kubelet/seccomp/sample.json
+{
+    &quot;defaultAction&quot;: &quot;SCMP_ACT_ERRNO&quot;,
+    &quot;architectures&quot;: [
+        &quot;SCMP_ARCH_X86_64&quot;,
+        &quot;SCMP_ARCH_X86&quot;,
+        &quot;SCMP_ARCH_X32&quot;
+    ],
+    &quot;syscalls&quot;: [
+        {
+            &quot;names&quot;: [
+                &quot;arch_prctl&quot;,
+                &quot;sched_yield&quot;,
+                &quot;futex&quot;,
+                &quot;write&quot;,
+                &quot;mmap&quot;,
+                &quot;exit_group&quot;,
+                &quot;madvise&quot;,
+                &quot;rt_sigprocmask&quot;,
+                &quot;getpid&quot;,
+                &quot;gettid&quot;,
+                &quot;tgkill&quot;,
+                &quot;rt_sigaction&quot;,
+                &quot;read&quot;,
+                &quot;getpgrp&quot;
+            ],
+            &quot;action&quot;: &quot;SCMP_ACT_ALLOW&quot;,
+   &quot;args&quot;: [],
+   &quot;comment&quot;: &quot;&quot;,
+   &quot;includes&quot;: {},
+   &quot;excludes&quot;: {}
+        }
+    ]
+}
+</code></pre>
+
+<p>The <code>defaultAction</code> is <code>SCMP_ACT_ERRNO</code> which will block the execution of any system call. The we list the <code>syscalls</code> what we want to whitelist.</p>
+
+<h3 id="the-different-types-of-actions">The different types of actions</h3>
+
+<p>Below is a list of all the different types of actions and what they do:</p>
+
+<pre><code class="language-bash">SCMP_ACT_KILL_THREAD (or SCMP_ACT_KILL)
+Does not execute the syscall and terminate the thread that attempted making the call. Note that depending on the application being enforced (i.e. multi-threading) and its error handling, syscalls blocked using this action may do so silently which may result in side effects on the overall application.
+
+SCMP_ACT_TRAP
+Does not execute the syscall. The kernel will send a thread-directed SIGSYS signal to the thread that attempted making the call.
+
+SCMP_ACT_ERRNO
+Does not execute the syscall, returns error instead. Note that depending on the error handling of the application being enforced, syscalls blocked using this action may do so silently which may result in side effects on the overall application.
+
+SCMP_ACT_TRACE
+The decision on whether or not to execute the syscall will come from a tracer. If no tracer is present behaves like SECCOMP_RET_ERRNO.
+This can be used to automate profile generation and also can be used to change the syscall being made. Not recommended when trying to enforce seccomp to line of business applications.
+
+SCMP_ACT_ALLOW
+Executes the syscall.
+
+SCMP_ACT_LOG (since Linux 4.14)
+Executes the syscall. Useful for running seccomp in &quot;complain-mode&quot;, logging the syscalls that are mapped (or catch-all) and not blocking their execution. It can be used together with other action types to provide an allow and deny list approach.
+
+SCMP_ACT_KILL_PROCESS (since Linux 4.14)
+Does not execute the syscall and terminates the entire process with a core dump. Very useful when automating the profile generation.
+</code></pre>
+
+<h3 id="configure-on-a-pod">Configure on a pod</h3>
+
+<p>With Kubernetes version v1.19 Seccomp Profile for a Container is GA. The sintax looks like this:</p>
+
+<pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: some-pod
+  labels:
+    app: some-pod
+spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost
+      localhostProfile: sample.json
+  containers:
+    ...
+</code></pre>
+
+<p>Valid options for <code>type</code> include <code>RuntimeDefault</code>, <code>Unconfined</code>, and <code>Localhost</code>. Here is an example that sets the Seccomp profile to the node&rsquo;s container runtime default profile:</p>
+
+<pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: some-pod
+  labels:
+    app: some-pod
+spec:
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    ...
+</code></pre>
+
+<p>This Configuration is the same then setting <code>SeccompDefault=true</code> in kubelet config.</p>
+
+<h3 id="add-audit-profile">Add audit profile</h3>
+
+<p>Since linux kernel 4.14 it is now possible to define parts of your profile to run in audit mode, logging into syslog all the system calls you want without blocking them. To do that you can use the action SCMT_ACT_LOG:</p>
+
+<pre><code class="language-json">nano /var/lib/kubelet/seccomp/audit.json
+{
+    &quot;defaultAction&quot;: &quot;SCMP_ACT_LOG&quot;,
+    &quot;architectures&quot;: [
+        &quot;SCMP_ARCH_X86_64&quot;,
+        &quot;SCMP_ARCH_X86&quot;,
+        &quot;SCMP_ARCH_X32&quot;
+    ],
+    &quot;syscalls&quot;: [
+        {
+            &quot;names&quot;: [
+                &quot;arch_prctl&quot;,
+                &quot;sched_yield&quot;,
+                &quot;futex&quot;,
+                &quot;write&quot;,
+                &quot;mmap&quot;,
+                &quot;exit_group&quot;,
+                &quot;madvise&quot;,
+                &quot;rt_sigprocmask&quot;,
+                &quot;getpid&quot;,
+                &quot;gettid&quot;,
+                &quot;tgkill&quot;,
+                &quot;rt_sigaction&quot;,
+                &quot;read&quot;,
+                &quot;getpgrp&quot;
+            ],
+            &quot;action&quot;: &quot;SCMP_ACT_ALLOW&quot;
+        },
+        {
+            &quot;names&quot;: [
+                &quot;add_key&quot;,
+                &quot;keyctl&quot;,
+                &quot;ptrace&quot;
+            ],
+            &quot;action&quot;: &quot;SCMP_ACT_ERRNO&quot;
+        }
+    ]
+}
+</code></pre>
+
+<pre><code class="language-bash">~ $ tail /var/log/syslog
+
+Nov 25 19:38:18 kernel: [461698.749294] audit: ... syscall=21 compat=0 ip=0x7ff8f8412d5b code=0x7ffc0000    # access
+Nov 25 19:38:18 kernel: [461698.749306] audit: ... syscall=257 compat=0 ip=0x7ff8f8412ec8 code=0x7ffc0000   # openat
+Nov 25 19:38:18 kernel: [461698.749315] audit: ... syscall=5 compat=0 ip=0x7ff8f8412c99 code=0x7ffc0000     # fstat
+Nov 25 19:38:18 kernel: [461698.749317] audit: ... syscall=9 compat=0 ip=0x7ff8f84130e6 code=0x7ffc0000     # mmap
+Nov 25 19:38:18 kernel: [461698.749323] audit: ... syscall=3 compat=0 ip=0x7ff8f8412d8b code=0x7ffc0000     # close
+</code></pre>
+
+<h3 id="set-capabilities-for-a-container">Set capabilities for a Container</h3>
+
+<p>With version 1.22 you should be able to change the sysctl in the security context of your pod manifests, allowing containers that are running as unprivileged users to bind low ports.</p>
+
+<pre><code class="language-yaml">securityContext:
+     sysctls:
+     - name: net.ipv4.ip_unprivileged_port_start
+          value: &quot;1&quot;
+</code></pre>
+
+<h3 id="final-words">Final Words</h3>
+
+<p>Whatever you define in your seccomp profile, the kernel will enforce it. Even if that is not what you want. For example, if you block access to calls such as exit or exit_group your container may not be able to exit and it could trap the container in an exit loop indefinitely. Leading to high CPU usage of your cluster.</p>
+		</div>
+		<footer class="post__footer">
+			
+<div class="post__tags tags clearfix">
+	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M32 19c0 1-1 2-1 2L21 31s-1 1-2 1-2-1-2-1L2 16c-1-1-1.4-2-1.4-2S0 12.5 0 11V3C0 1.5.8.8.8.8S1.5 0 3 0h8c1.5 0 3 .6 3 .6S15 1 16 2l15 15s1 1 1 2zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+	<ul class="tags__list">
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/docker/" rel="tag">docker</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/containerd/" rel="tag">containerd</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/cri-o/" rel="tag">CRI-O</a></li>
+	</ul>
+</div>
+		</footer>
+	</article>
+</main>
+
+<div class=coffee_box>
+  <div class=coffee_box_wrapper>
+    <h3 class=coffee_box_heading>
+      Your support is our everlasting motivation,<br>
+      that cup of coffee is what keeps us going!
+    </h3>
+    <hr>
+    <p class=coffee_box_content>As we continue to grow, we would wish to reach and impact more people who visit and take advantage of the guides we have on our blog. This is a big task for us and we are so far extremely grateful for the kind people who have shown amazing support for our work over the time we have been online.
+    <p class=coffee_box_content>Thank You for your support as we work to give you the best of guides and articles. Click below to buy us a coffee.
+    <div class=coffee_box_img>
+      <a href=https://www.buymeacoffee.com/devopstales target=_blank>
+        <img src="https://devopstales.github.io/img/design/coffee-logo.png" alt="Coffee Box" >
+      </a>
+    </div>
+  </div>
+</div>
+
+
+<nav class="post-nav flex">
+	<div class="post-nav__item post-nav__item--prev">
+		<a class="post-nav__link" href="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Understanding kubernetes networking: owerlay networks</p></a>
+	</div>
+</nav>
+
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3398636867919740"
+     crossorigin="anonymous"></script>
+
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-3398636867919740"
+     data-ad-slot="3800291125"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+
+<script src="https://utteranc.es/client.js"
+        repo="devopstales/devopstales.github.io"
+        issue-term="url"
+        label="utteranc"
+        theme="github-light"
+        crossorigin="anonymous"
+        async>
+</script>
+
+
+			</div>
+			<aside class="sidebar"><div class="widget-search widget">
+	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
+		<label>
+			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
+		</label>
+		<input class="widget-search__submit" type="submit" value="Search">
+		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
+	</form>
+</div>
+
+<div class="widget-recent widget">
+
+    <h4 class="widget__title">Blog Series</h4>
+
+    <div class="panel-body">
+        <ul class="nav nav-pills nav-stacked">
+            
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (11)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-gitops" class="text-uppercase">k8s-gitops (6)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-network" class="text-uppercase">k8s-network (18)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (37)</a>
+            </li>
+            
+        </ul>
+    </div>
+</div>
+
+
+<div class="widget-social widget">
+	<h4 class="widget-social__title widget__title">Social</h4>
+	<div class="widget-social__content widget__content">
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="Twitter" rel="noopener noreferrer" href="https://twitter.com/_devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-twitter" width="24" height="24" viewBox="0 0 384 312"><path d="m384 36.9c-14.1 6.3-29.3 10.5-45.2 12.4 16.3-9.7 28.8-25.2 34.6-43.6-15.2 9-32.1 15.6-50 19.1-14.4-15.2-34.9-24.8-57.5-24.8-43.5 0-78.8 35.3-78.8 78.8 0 6.2.7 12.2 2 17.9-65.5-3.3-123.5-34.6-162.4-82.3-6.7 11.6-10.6 25.2-10.6 39.6 0 27.3 13.9 51.4 35 65.6-12.9-.4-25.1-4-35.7-9.9v1c0 38.2 27.2 70 63.2 77.2-6.6 1.8-13.6 2.8-20.8 2.8-5.1 0-10-.5-14.8-1.4 10 31.3 39.1 54.1 73.6 54.7-27 21.1-60.9 33.7-97.8 33.7-6.4 0-12.6-.4-18.8-1.1 34.9 22.4 76.3 35.4 120.8 35.4 144.9 0 224.1-120 224.1-224.1 0-3.4-.1-6.8-.2-10.2 15.4-11.1 28.7-25 39.3-40.8z"/></svg>
+				<span>Twitter</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="GitHub" rel="noopener noreferrer" href="https://github.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-github" width="24" height="24" viewBox="0 0 384 374"><path d="m192 0c-106.1 0-192 85.8-192 191.7 0 84.7 55 156.6 131.3 181.9 9.6 1.8 13.1-4.2 13.1-9.2 0-4.6-.2-16.6-.3-32.6-53.4 11.6-64.7-25.7-64.7-25.7-8.7-22.1-21.3-28-21.3-28-17.4-11.9 1.3-11.6 1.3-11.6 19.3 1.4 29.4 19.8 29.4 19.8 17.1 29.3 44.9 20.8 55.9 15.9 1.7-12.4 6.7-20.8 12.2-25.6-42.6-4.8-87.5-21.3-87.5-94.8 0-20.9 7.5-38 19.8-51.4-2-4.9-8.6-24.3 1.9-50.7 0 0 16.1-5.2 52.8 19.7 15.3-4.2 31.7-6.4 48.1-6.5 16.3.1 32.7 2.2 48.1 6.5 36.7-24.8 52.8-19.7 52.8-19.7 10.5 26.4 3.9 45.9 1.9 50.7 12.3 13.4 19.7 30.5 19.7 51.4 0 73.7-44.9 89.9-87.7 94.6 6.9 5.9 13 17.6 13 35.5 0 25.6-.2 46.3-.2 52.6 0 5.1 3.5 11.1 13.2 9.2 76.2-25.5 131.2-97.3 131.2-182 0-105.9-86-191.7-192-191.7z"/></svg>
+				<span>GitHub</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="DockerHub" rel="noopener noreferrer" href="https://hub.docker.com/u/devopstales" target="_blank">
+				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.82 17.275c-.684 0-1.304-.56-1.304-1.24s.56-1.243 1.305-1.243c.748 0 1.31.56 1.31 1.242s-.622 1.24-1.305 1.24zm16.012-6.763c-.135-.992-.75-1.8-1.56-2.42l-.315-.25-.254.31c-.494.56-.69 1.553-.63 2.295.06.562.24 1.12.554 1.554-.254.13-.568.25-.81.377-.57.187-1.124.25-1.68.25H.097l-.06.37c-.12 1.182.06 2.42.562 3.54l.244.435v.06c1.5 2.483 4.17 3.6 7.078 3.6 5.594 0 10.182-2.42 12.357-7.633 1.425.062 2.864-.31 3.54-1.676l.18-.31-.3-.187c-.81-.494-1.92-.56-2.85-.31l-.018.002zm-8.008-.992h-2.428v2.42h2.43V9.518l-.002.003zm0-3.043h-2.428v2.42h2.43V6.48l-.002-.003zm0-3.104h-2.428v2.42h2.43v-2.42h-.002zm2.97 6.147H13.38v2.42h2.42V9.518l-.007.003zm-8.998 0H4.383v2.42h2.422V9.518l-.01.003zm3.03 0h-2.4v2.42H9.84V9.518l-.015.003zm-6.03 0H1.4v2.42h2.428V9.518l-.03.003zm6.03-3.043h-2.4v2.42H9.84V6.48l-.015-.003zm-3.045 0H4.387v2.42H6.8V6.48l-.016-.003z"/></svg>
+				<span>DockerHub</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="ArtifactHub" rel="noopener noreferrer" href="https://artifacthub.io/packages/search?user=devopstales" target="_blank">
+				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.82 17.275c-.684 0-1.304-.56-1.304-1.24s.56-1.243 1.305-1.243c.748 0 1.31.56 1.31 1.242s-.622 1.24-1.305 1.24zm16.012-6.763c-.135-.992-.75-1.8-1.56-2.42l-.315-.25-.254.31c-.494.56-.69 1.553-.63 2.295.06.562.24 1.12.554 1.554-.254.13-.568.25-.81.377-.57.187-1.124.25-1.68.25H.097l-.06.37c-.12 1.182.06 2.42.562 3.54l.244.435v.06c1.5 2.483 4.17 3.6 7.078 3.6 5.594 0 10.182-2.42 12.357-7.633 1.425.062 2.864-.31 3.54-1.676l.18-.31-.3-.187c-.81-.494-1.92-.56-2.85-.31l-.018.002zm-8.008-.992h-2.428v2.42h2.43V9.518l-.002.003zm0-3.043h-2.428v2.42h2.43V6.48l-.002-.003zm0-3.104h-2.428v2.42h2.43v-2.42h-.002zm2.97 6.147H13.38v2.42h2.42V9.518l-.007.003zm-8.998 0H4.383v2.42h2.422V9.518l-.01.003zm3.03 0h-2.4v2.42H9.84V9.518l-.015.003zm-6.03 0H1.4v2.42h2.428V9.518l-.03.003zm6.03-3.043h-2.4v2.42H9.84V6.48l-.015-.003zm-3.045 0H4.387v2.42H6.8V6.48l-.016-.003z"/></svg>
+				<span>ArtifactHUB</span>
+			</a>
+		</div>
+		
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="helm-charts" rel="noopener noreferrer" href="https://devopstales.github.io/helm-charts/" target="_blank">
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.82 17.275c-.684 0-1.304-.56-1.304-1.24s.56-1.243 1.305-1.243c.748 0 1.31.56 1.31 1.242s-.622 1.24-1.305 1.24zm16.012-6.763c-.135-.992-.75-1.8-1.56-2.42l-.315-.25-.254.31c-.494.56-.69 1.553-.63 2.295.06.562.24 1.12.554 1.554-.254.13-.568.25-.81.377-.57.187-1.124.25-1.68.25H.097l-.06.37c-.12 1.182.06 2.42.562 3.54l.244.435v.06c1.5 2.483 4.17 3.6 7.078 3.6 5.594 0 10.182-2.42 12.357-7.633 1.425.062 2.864-.31 3.54-1.676l.18-.31-.3-.187c-.81-.494-1.92-.56-2.85-.31l-.018.002zm-8.008-.992h-2.428v2.42h2.43V9.518l-.002.003zm0-3.043h-2.428v2.42h2.43V6.48l-.002-.003zm0-3.104h-2.428v2.42h2.43v-2.42h-.002zm2.97 6.147H13.38v2.42h2.42V9.518l-.007.003zm-8.998 0H4.383v2.42h2.422V9.518l-.01.003zm3.03 0h-2.4v2.42H9.84V9.518l-.015.003zm-6.03 0H1.4v2.42h2.428V9.518l-.03.003zm6.03-3.043h-2.4v2.42H9.84V6.48l-.015-.003zm-3.045 0H4.387v2.42H6.8V6.48l-.016-.003z"/></svg>
+				<span>helm-charts</span>
+			</a>
+		</div>
+		
+	</div>
+</div>
+<div class="widget-recent widget">
+	<h4 class="widget__title">Recent Posts</h4>
+	<div class="widget__content">
+		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-secomp/">Hardening Kubernetes with seccomp</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-networking-2/">Understanding kubernetes networking: owerlay networks</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-networking-1/">Understanding kubernetes networking: pods and services</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/firecracker-cri-o/">How to deploy CRI-O with Firecracker?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gvisor-cri-o/">How to deploy CRI-O with gVisor?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/firecracker-containerd/">How to deploy containerd with Firecracker?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gvisor-containerd/">How to deploy containerd with gVisor?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kata-container-containerd/">How to deploy containerd with kata containers?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-kyverno-cosign/">Image Signature Verification with Kyverno</a></li>
+		</ul>
+	</div>
+</div>
+<div class="widget-taglist widget">
+	<h4 class="widget__title">Tags</h4>
+	<div class="widget__content">
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/active-directory/" title="Active Directory">Active Directory</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/admission-controller/" title="Admission Controller">Admission Controller</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aks/" title="AKS">AKS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="alerta">alerta</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/almalinux/" title="AlmaLinux">AlmaLinux</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="Calico">Calico</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="Centos">Centos</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="Cilium">Cilium</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/container-runtimes/" title="Container runtimes">Container runtimes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/coredns/" title="CoreDNS">CoreDNS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cosign/" title="Cosign">Cosign</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="docker">docker</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="docker-compose">docker-compose</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ebpf/" title="ebpf">ebpf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="elasticsearch">elasticsearch</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="fedora">fedora</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora-coreos/" title="Fedora CoreOS">Fedora CoreOS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/firecracker/" title="Firecracker">Firecracker</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/flannel/" title="Flannel">Flannel</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="foreman">foreman</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="GCP">GCP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitops/" title="gitops">gitops</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gke/" title="GKE">GKE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gns3/" title="GNS3">GNS3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="Google Cloud Platform">Google Cloud Platform</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="grafana">grafana</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gvisor/" title="gvisor">gvisor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="helm-controller">helm-controller</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="httpd">httpd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="icinga">icinga</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="jitsi">jitsi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8S">K8S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kata-container/" title="kata-container">kata-container</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="katello">katello</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="logging">logging</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="loki">loki</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="mutating webhook">mutating webhook</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nerdctl/" title="nerdctl">nerdctl</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="nextcloud">nextcloud</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="noSQL">noSQL</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/notary/" title="Notary">Notary</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="oauth2">oauth2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="openproject">openproject</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="OPNsense">OPNsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="Pfsense">Pfsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="postgresql">postgresql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="privacyidea">privacyidea</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="Prometheus">Prometheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="rancher">rancher</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="redmine">redmine</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="registry">registry</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rke2/" title="rke2">rke2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rsyslog/" title="rsyslog">rsyslog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="sonarqube">sonarqube</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/squid/" title="squid">squid</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="telegraf">telegraf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
+	</div>
+</div>
+</aside>
+		</div>
+		<footer class="footer">
+        <script data-name="BMC-Widget" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"
+             data-id="devopstales" data-description="Support me on Buy me a coffee!"
+             data-message="Thank you for visiting. You can now buy me a coffee!"
+             data-color="#FF813F" data-position="right" data-x_margin="18" data-y_margin="48">
+        </script>
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2021 devopstales.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+
+	</div>
+<script async defer src="https://devopstales.github.io/js/menu.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.6/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async></script>
+<div class="cookie-container" style="justify-content: space-between;">
+  <div class="cookie-consent-text">
+    This website makes use of third-party cookies.
+     <a href="https://devopstales.github.io/privacy-policy/">Learn More</a>
+  </div>
+  <div class="cookie-consent-button">
+    <button class="cookie-btn">
+      Okay
+    </button>
+  </div>
+</div>
+<script src="https://devopstales.github.io/js/cookie.js"></script>
+</body>
+</html>
