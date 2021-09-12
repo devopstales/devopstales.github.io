@@ -28,7 +28,7 @@
     "datePublished": "2021-05-24",
     "dateModified" : "2021-05-24",
     "url" : "https://devopstales.github.io/kubernetes/rke2-cilium/",
-    "wordCount" : "1174",
+    "wordCount" : "1155",
     "keywords" : [ "kubernetes deployment", "kubernetes vs docker", "Kubernetes Secuity", "best Practices", "rancher", "cilium", "ebpf", "Blog" ]
     
 }
@@ -412,6 +412,78 @@ EOF
 <pre><code class="language-bash">exclude=rke2-*
 </code></pre>
 
+<h3 id="cilium-prerequisites">Cilium Prerequisites</h3>
+
+<p>Ensure the eBFP filesystem is mounted (which should already be the case on RHEL 8.3):</p>
+
+<pre><code class="language-bash">mount | grep /sys/fs/bpf
+# if present should output, e.g. &quot;none on /sys/fs/bpf type bpf&quot;...
+</code></pre>
+
+<p>If that&rsquo;s not the case, mount it using the commands down here:</p>
+
+<pre><code class="language-bash">sudo mount bpffs -t bpf /sys/fs/bpf
+sudo bash -c 'cat &lt;&lt;EOF &gt;&gt; /etc/fstab
+none /sys/fs/bpf bpf rw,relatime 0 0
+EOF'
+</code></pre>
+
+<h3 id="deploy-cilium">Deploy Cilium</h3>
+
+<p>Cilium’s eBPF kube-proxy replacement currently cannot be used with Transparent Encryption.</p>
+
+<pre><code class="language-yaml">cat &lt;&lt; EOF &gt;  /var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-cilium
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    cilium:
+      kubeProxyReplacement: &quot;strict&quot;
+      k8sServiceHost: 10.0.2.15
+      k8sServicePort: 6443
+      operator:
+        replicas: 1
+      encryption:
+        enabled: false
+        type: wireguard
+      l7Proxy: false
+      hubble:
+        metrics:
+          enabled:
+          - dns:query;ignoreAAAA
+          - drop
+          - tcp
+          - flow
+          - icmp
+          - http
+        relay:
+          enabled: true
+        ui:
+          enabled: true
+          replicas: 1
+          ingress:
+            enabled: true
+            hosts:
+              - hubble.k8s.intra
+            annotations:
+              cert-manager.io/cluster-issuer: ca-issuer
+            tls:
+            - secretName: ingress-hubble-ui-tls
+              hosts:
+              - hubble.k8s.intra
+      prometheus:
+        enabled: true
+        # Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.
+        port: 19090
+        # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
+        #serviceMonitor:
+        #  enabled: true
+EOF
+</code></pre>
+
 <h2 id="starting-rke2">Starting RKE2</h2>
 
 <p>Enable the <code>rke2-server</code> service and start it:</p>
@@ -442,83 +514,6 @@ crictl images
 <pre><code class="language-bash">kubectl get nodes
 NAME                    STATUS   ROLES         AGE     VERSION
 k8s.mydomain.intra   NotReady   etcd,master   2m4s   v1.18.16+rke2r1
-</code></pre>
-
-<h3 id="cilium-prerequisites">Cilium Prerequisites</h3>
-
-<p>Ensure the eBFP filesystem is mounted (which should already be the case on RHEL 8.3):</p>
-
-<pre><code class="language-bash">mount | grep /sys/fs/bpf
-# if present should output, e.g. &quot;none on /sys/fs/bpf type bpf&quot;...
-</code></pre>
-
-<p>If that&rsquo;s not the case, mount it using the commands down here:</p>
-
-<pre><code class="language-bash">sudo mount bpffs -t bpf /sys/fs/bpf
-sudo bash -c 'cat &lt;&lt;EOF &gt;&gt; /etc/fstab
-none /sys/fs/bpf bpf rw,relatime 0 0
-EOF'
-</code></pre>
-
-<pre><code class="language-bash">kubectl create -n kube-system secret generic cilium-ipsec-keys     --from-literal=keys=&quot;3 rfc4106(gcm(aes)) $(echo $(dd if=/dev/urandom count=20 bs=1 2&gt; /dev/null| xxd -p -c 64)) 128&quot;
-</code></pre>
-
-<pre><code class="language-bash">kubectl get endpoints kubernetes -o wide
-NAME         ENDPOINTS        AGE
-kubernetes   10.0.2.15:6443   86m
-</code></pre>
-
-<h3 id="deploy-cilium">Deploy Cilium</h3>
-
-<pre><code class="language-yaml">cat &lt;&lt; EOF &gt;  /var/lib/rancher/rke2/server/manifests/rke2-cilium.yaml
-apiVersion: helm.cattle.io/v1
-kind: HelmChartConfig
-metadata:
-  name: rke2-cilium
-  namespace: kube-system
-spec:
-  valuesContent: |-
-    cilium:
-      k8sServiceHost: 10.0.2.15
-      k8sServicePort: 6443
-      operator:
-        replicas: 1
-      global:
-        encryption:
-          enabled: true
-          nodeEncryption: true
-      hubble:
-        metrics:
-          enabled:
-          - dns:query;ignoreAAAA
-          - drop
-          - tcp
-          - flow
-          - icmp
-          - http
-        relay:
-          enabled: true
-        ui:
-          enabled: true
-          replicas: 1
-          ingress:
-            enabled: true
-            hosts:
-              - hubble.k8s.intra
-            annotations:
-              cert-manager.io/cluster-issuer: ca-issuer
-            tls:
-            - secretName: ingress-hubble-ui
-              hosts:
-              - hubble.k8s.intra
-      prometheus:
-        enabled: true
-        # Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.
-        port: 19090
-        # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
-        #serviceMonitor:
-        #  enabled: true
-EOF
 </code></pre>
 
 <h3 id="deploy-demo-app">Deploy demo app</h3>
@@ -691,7 +686,7 @@ kubectl exec tiefighter -- curl -s -XPOST deathstar.default.svc.cluster.local/v1
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="calico">calico</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="Calico">Calico</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="Centos">Centos</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>

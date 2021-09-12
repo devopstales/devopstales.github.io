@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-09-06T19:01:46+00:00</updated>
+    <updated>2021-09-12T10:22:38+00:00</updated>
     
     
     <author>
@@ -36,7 +36,7 @@
             <updated>2021-09-03T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>In this post I will attempt to demystify the relationship of <code>seccomp</code> and Kubernetes This first part will look at containers and pods.</p>
+            <content type="html"><![CDATA[<p>In this post I will attempt to demystify the relationship of <code>secccd omp</code> and Kubernetes This first part will look at containers and pods.</p>
 
 <h3 id="parst-of-the-k8s-security-series">Parst of the K8S Security series</h3>
 
@@ -229,6 +229,39 @@ Looking for Docker.sock
 <h3 id="customizing-a-profile">Customizing a Profile</h3>
 
 <p>One way to write <code>seccomp</code> filter is to use Berkeley packet filter (BPF) language. Using this language isn&rsquo;t really simple or convenient. We can write JSON that is compiled into profile by <code>libseccomp</code>.</p>
+
+<p>If you were to create a profile to allow a container to execute a ping against a website, you can use <code>strace</code> command to find the syscalls it makes:</p>
+
+<pre><code class="language-bash">strace -fqc ping -c 20 www.google.com% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 29.55    0.000078           4        20        11 openat
+ 14.02    0.000037           9         4         4 socket
+ 11.74    0.000031           3        12           mprotect
+  6.06    0.000016           2         7           read
+  5.68    0.000015           1        17           mmap
+  5.68    0.000015           3         5           capget
+  4.92    0.000013          13         1           munmap
+  3.79    0.000010           1         9           fstat
+  3.41    0.000009           9         1           write
+  3.41    0.000009           1         9           close
+  2.65    0.000007           2         3           brk
+  2.65    0.000007           4         2           prctl
+  2.27    0.000006           3         2           getuid
+  1.52    0.000004           4         1           setuid
+  1.52    0.000004           4         1           capset
+  1.14    0.000003           3         1           geteuid
+  0.00    0.000000           0         9         9 access
+  0.00    0.000000           0         1           execve
+  0.00    0.000000           0         3           fcntl
+  0.00    0.000000           0         1           arch_prctl
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.000264                   109        24 total
+</code></pre>
+
+<p>A nothe solution is a tool called <a href="https://github.com/pjbgf/zaz">zaz</a> created by <a href="https://github.com/pjbgf">Paulo Gomes</a> That generate a seccomp prifile for you with the minimum system calls:</p>
+
+<pre><code class="language-bash">zaz seccomp docker alpine &quot;ping -c5 8.8.8.8&quot;
+</code></pre>
 
 <p>A basic seccomp has three key elements: the <code>defaultAction</code>, the <code>architectures</code> (or <code>archMap</code>) and the <code>syscalls</code>:</p>
 
@@ -6655,6 +6688,78 @@ EOF
 <pre><code class="language-bash">exclude=rke2-*
 </code></pre>
 
+<h3 id="cilium-prerequisites">Cilium Prerequisites</h3>
+
+<p>Ensure the eBFP filesystem is mounted (which should already be the case on RHEL 8.3):</p>
+
+<pre><code class="language-bash">mount | grep /sys/fs/bpf
+# if present should output, e.g. &quot;none on /sys/fs/bpf type bpf&quot;...
+</code></pre>
+
+<p>If that&rsquo;s not the case, mount it using the commands down here:</p>
+
+<pre><code class="language-bash">sudo mount bpffs -t bpf /sys/fs/bpf
+sudo bash -c 'cat &lt;&lt;EOF &gt;&gt; /etc/fstab
+none /sys/fs/bpf bpf rw,relatime 0 0
+EOF'
+</code></pre>
+
+<h3 id="deploy-cilium">Deploy Cilium</h3>
+
+<p>Cilium’s eBPF kube-proxy replacement currently cannot be used with Transparent Encryption.</p>
+
+<pre><code class="language-yaml">cat &lt;&lt; EOF &gt;  /var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-cilium
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    cilium:
+      kubeProxyReplacement: &quot;strict&quot;
+      k8sServiceHost: 10.0.2.15
+      k8sServicePort: 6443
+      operator:
+        replicas: 1
+      encryption:
+        enabled: false
+        type: wireguard
+      l7Proxy: false
+      hubble:
+        metrics:
+          enabled:
+          - dns:query;ignoreAAAA
+          - drop
+          - tcp
+          - flow
+          - icmp
+          - http
+        relay:
+          enabled: true
+        ui:
+          enabled: true
+          replicas: 1
+          ingress:
+            enabled: true
+            hosts:
+              - hubble.k8s.intra
+            annotations:
+              cert-manager.io/cluster-issuer: ca-issuer
+            tls:
+            - secretName: ingress-hubble-ui-tls
+              hosts:
+              - hubble.k8s.intra
+      prometheus:
+        enabled: true
+        # Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.
+        port: 19090
+        # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
+        #serviceMonitor:
+        #  enabled: true
+EOF
+</code></pre>
+
 <h2 id="starting-rke2">Starting RKE2</h2>
 
 <p>Enable the <code>rke2-server</code> service and start it:</p>
@@ -6685,83 +6790,6 @@ crictl images
 <pre><code class="language-bash">kubectl get nodes
 NAME                    STATUS   ROLES         AGE     VERSION
 k8s.mydomain.intra   NotReady   etcd,master   2m4s   v1.18.16+rke2r1
-</code></pre>
-
-<h3 id="cilium-prerequisites">Cilium Prerequisites</h3>
-
-<p>Ensure the eBFP filesystem is mounted (which should already be the case on RHEL 8.3):</p>
-
-<pre><code class="language-bash">mount | grep /sys/fs/bpf
-# if present should output, e.g. &quot;none on /sys/fs/bpf type bpf&quot;...
-</code></pre>
-
-<p>If that&rsquo;s not the case, mount it using the commands down here:</p>
-
-<pre><code class="language-bash">sudo mount bpffs -t bpf /sys/fs/bpf
-sudo bash -c 'cat &lt;&lt;EOF &gt;&gt; /etc/fstab
-none /sys/fs/bpf bpf rw,relatime 0 0
-EOF'
-</code></pre>
-
-<pre><code class="language-bash">kubectl create -n kube-system secret generic cilium-ipsec-keys     --from-literal=keys=&quot;3 rfc4106(gcm(aes)) $(echo $(dd if=/dev/urandom count=20 bs=1 2&gt; /dev/null| xxd -p -c 64)) 128&quot;
-</code></pre>
-
-<pre><code class="language-bash">kubectl get endpoints kubernetes -o wide
-NAME         ENDPOINTS        AGE
-kubernetes   10.0.2.15:6443   86m
-</code></pre>
-
-<h3 id="deploy-cilium">Deploy Cilium</h3>
-
-<pre><code class="language-yaml">cat &lt;&lt; EOF &gt;  /var/lib/rancher/rke2/server/manifests/rke2-cilium.yaml
-apiVersion: helm.cattle.io/v1
-kind: HelmChartConfig
-metadata:
-  name: rke2-cilium
-  namespace: kube-system
-spec:
-  valuesContent: |-
-    cilium:
-      k8sServiceHost: 10.0.2.15
-      k8sServicePort: 6443
-      operator:
-        replicas: 1
-      global:
-        encryption:
-          enabled: true
-          nodeEncryption: true
-      hubble:
-        metrics:
-          enabled:
-          - dns:query;ignoreAAAA
-          - drop
-          - tcp
-          - flow
-          - icmp
-          - http
-        relay:
-          enabled: true
-        ui:
-          enabled: true
-          replicas: 1
-          ingress:
-            enabled: true
-            hosts:
-              - hubble.k8s.intra
-            annotations:
-              cert-manager.io/cluster-issuer: ca-issuer
-            tls:
-            - secretName: ingress-hubble-ui
-              hosts:
-              - hubble.k8s.intra
-      prometheus:
-        enabled: true
-        # Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.
-        port: 19090
-        # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
-        #serviceMonitor:
-        #  enabled: true
-EOF
 </code></pre>
 
 <h3 id="deploy-demo-app">Deploy demo app</h3>
@@ -10651,6 +10679,11 @@ systemctl start cerebro
 
 <h3 id="import-index-template-for-elasticsearch-7-x">Import index template for elasticsearch 7.x</h3>
 
+<p>Go to <code>celebro &gt; more &gt; index templates</code>
+Create new with name: <code>pfsense-custom</code> and copy the template from file <code>pfsense_custom_template_es7.json</code></p>
+
+<p>In Cerebro we stand on top of the pfsense index and unfold the options and select delete index.</p>
+
 <pre><code>systemctl stop graylog-server.service
 
 git clone https://github.com/devopstales/pfsense-graylog.git
@@ -10658,16 +10691,17 @@ cd pfsense-graylog/service-names-port-numbers/
 cp service-names-port-numbers.csv /etc/graylog/server/
 </code></pre>
 
-<p>Go to <code>celebro &gt; more &gt; index templates</code>
-Create new with name: <code>pfsense-custom</code> and copy the template from file <code>pfsense_custom_template_es7.json</code></p>
-
-<p>In Cerebro we stand on top of the pfsense index and unfold the options and select delete index.</p>
-
 <h3 id="geoip-database">Geoip database</h3>
 
 <pre><code>wget -t0 -c http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
 tar -xvf GeoLite2-City.tar.gz
 cp GeoLite2-City_*/GeoLite2-City.mmdb /etc/graylog/server
+
+# OR
+yum install geoipupdate
+geoipupdate -d /usr/share/GeoIP/
+
+
 
 systemctl start graylog-server.service
 </code></pre>
