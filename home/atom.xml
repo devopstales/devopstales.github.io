@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-09-22T11:04:12+00:00</updated>
+    <updated>2021-09-26T07:40:57+00:00</updated>
     
     
     <author>
@@ -267,6 +267,213 @@ minikube config set memory 16384
 minikube start --driver hyperv
 minikube config set driver hyperv
 </code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances]]></title>
+            <link href="https://devopstales.github.io/home/pfsense-ha-ipsec/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/linux/pfsense-ha-ipsec/?utm_source=atom_feed" rel="related" type="text/html" title="HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances" />
+                <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
+                <link href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
+                <link href="https://devopstales.github.io/home/pfsense-usg/?utm_source=atom_feed" rel="related" type="text/html" title="Pfsese USG S2S VPN" />
+                <link href="https://devopstales.github.io/home/pfsense-telegraf/?utm_source=atom_feed" rel="related" type="text/html" title="Install telegraf on pfsense" />
+            
+                <id>https://devopstales.github.io/home/pfsense-ha-ipsec/</id>
+            
+            
+            <published>2021-09-18T00:00:00+00:00</published>
+            <updated>2021-09-18T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will setup an IPSec dynamic route-based vpn tunnel between two pfSense Appliances.</p>
+
+<h3 id="the-architecture">The Architecture</h3>
+
+<pre><code class="language-bash"> ------ WAN1 -----
+ |               |
+PF1 -- WAN2 -- PF2
+ |               |
+LAN             LAN
+
+WAN1: 192.168.0.0/24       (Bridge)
+WAN2: 192.168.0/24         (Host Only)
+PF1 - LAN: 192.168.57.0/24 (Host Only)
+PF2 - LAN: 192.168.58.0/24 (Host Only)
+</code></pre>
+
+<pre><code class="language-bash">pfsense1:
+WAN1: 192.168.0.52
+WAN2: 192.168.56.52
+LAN:  192.168.57.52
+IPSEC-VTI-IP1: 10.10.10.1
+IPSEC-VTI-IP2: 10.10.10.5
+
+pfsense2:
+WAN1: 192.168.0.53  /24
+WAN2: 192.168.56.53 /24
+LAN:  192.168.58.53 /24
+IPSEC-VTI-IP1: 10.10.10.2
+IPSEC-VTI-IP2: 10.10.10.6
+</code></pre>
+
+<h3 id="firewall-rules-for-ipsec">Firewall rules For IPSEC</h3>
+
+<p><a href="https://docs.netgate.com/pfsense/en/latest/book/ipsec/ipsec-and-firewall-rules.html">https://docs.netgate.com/pfsense/en/latest/book/ipsec/ipsec-and-firewall-rules.html</a></p>
+
+<blockquote>
+<p>When an IPsec tunnel is configured, pfSense® automatically adds hidden firewall rules to allow UDP
+ports 500 and 4500, and the ESP protocol from the Remote gateway IP address destined to the Interface
+IP address specified in the tunnel configuration.</p>
+</blockquote>
+
+<p>UDP Port 4500 is only required for NAT Traversal if the pfSense Applicance doesn’t have a public IP and is behind a NAT device.</p>
+
+<h3 id="ipsec-s2s-vpn">IPSEC S2S VPN</h3>
+
+<p>On the two WAN interfaces of the firewalls I will create two IPSEC S2S VPN with Routed IPsec (VTI). First we must configure on each site the <strong>PSec Phase 1</strong> for boat the VPNs.</p>
+
+<p><strong>Site A</strong>
+<img src="/img/include/pfsense_ha_ipsec_1.png" alt="Site A Phase 1" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_5.png" alt="Site A Phase 1" /></p>
+
+<p><strong>Site B</strong>
+<img src="/img/include/pfsense_ha_ipsec_2.png" alt="Site B Phase 1" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_6.png" alt="Site B Phase 1" /></p>
+
+<p>Now after we finished configure the Phase 1 on each site we add an IPSec Phase 2 on each site. I will use <strong>Mode Routed (VTI).</strong> In this mode we must create a transit network <strong>with a subnet mask of /30</strong>.</p>
+
+<p><strong>Site A</strong>
+<img src="/img/include/pfsense_ha_ipsec_3.png" alt="Site A Phase 2" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_7.png" alt="Site A Phase 2" /></p>
+
+<p><strong>Site B</strong>
+<img src="/img/include/pfsense_ha_ipsec_4.png" alt="Site B Phase 2" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_8.png" alt="Site B Phase 2" /></p>
+
+<h3 id="create-virtual-inteface-for-the-routed-vti">Create Virtual inteface for the Routed (VTI)</h3>
+
+<p>Go to <strong>Interfaces -&gt; Assignement</strong> Assign and enable the new ipsec interfaces:</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_9.png" alt="Add interace" /></p>
+
+<p>Enable Interface but do not configure the ip. It will be automatically assigned by th VPN.</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_10.png" alt="Enable interace" /></p>
+
+<p>As you cans see the ip is automaticle assined to the interfaces:</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_11.png" alt="Interface status" /></p>
+
+<p>To see if the tunnel is up and running go to <strong>Status -&gt; IPSec</strong> in the menu. As you can see the connection between both peers is established.</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_12.png" alt="IPSEC status" /></p>
+
+<h3 id="add-firewall-rules-for-the-ipsec">Add firewall rules for the IPSEC</h3>
+
+<p>One last thing we must configure on each site that traffic can flow from the remote site to the local site are the IPSec Firewall Rules .</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_13.png" alt="IPSEC firewall rules" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_14.png" alt="PING test" /></p>
+
+<h3 id="install-the-frr-package">Install the FRR Package</h3>
+
+<p>Go to <strong>System -&gt; Package Manager -&gt; Available Packages</strong> and search for <strong>bgp</strong> or <strong>frr</strong> to find and install the package.</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_15.png" alt="Install BGP" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_16.png" alt="Install BGP" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_17.png" alt="Install BGP" /></p>
+
+<h3 id="configure-dynamic-routing">Configure dynamic routing</h3>
+
+<p>But before traffic will be routed over the tunnel we first must configure the BGP Protocol on both sites at pfSense.</p>
+
+<blockquote>
+<p>zebra is an IP routing manager. It provides kernel routing table updates, interface lookups, and redistribution of routes between different routing protocols.</p>
+</blockquote>
+
+<p>First we click and go to the <strong>Services -&gt; FRR Global/Zebra</strong> configuration.</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_18.png" alt="Configure Zebra" /></p>
+
+<p>Before configuring BGP, add a route map to match any routes so it can be used by FRR to allow exchanging all routes with the peer. Navigate to <strong>Services &gt; FRR Global/Zebra, Route Maps</strong> tab</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_19.png" alt="Policy" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_20.png" alt="Policy" /></p>
+
+<h3 id="configure-bgp">Configure BGP</h3>
+
+<p>Now we can switch to the BGP configuration, therefore you can click in the Global Settings sections menu on BGP with the square brackets or from the main menu under <strong>Services -&gt; FRR BGP</strong>. Here you must configure the BGP Protocol for each site. As Router IP you must enter the internal IP from the LAN interface.</p>
+
+<blockquote>
+<p><a href="https://en.wikipedia.org/wiki/Autonomous_system_(Internet">https://en.wikipedia.org/wiki/Autonomous_system_(Internet</a>)</p>
+
+<p>(64512 – 65534 Reserved for private use RFC1930, RFC6996)</p>
+</blockquote>
+
+<p><strong>Site A</strong>
+<img src="/img/include/pfsense_ha_ipsec_21.png" alt="BGP Site A" /></p>
+
+<p>Also we need to configure here in the Network Distribution section which networks we want to advertise to the other BGP peer.</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_23.png" alt="BGP Site A" /></p>
+
+<p><strong>Site B</strong>
+<img src="/img/include/pfsense_ha_ipsec_22.png" alt="BGP Site B" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_24.png" alt="BGP Site B" /></p>
+
+<h3 id="configure-neighbors">Configure Neighbors</h3>
+
+<p>Now we move on to the Neighbors menu where first I create a Neighbor callef <strong>BGP</strong>. When you add a name instead of the ip of the Neighbor the frr will interpreter this as a Peer Group. At the <strong>Route Map Filters</strong> eet both Inbound and Outbound to <strong>ALLOW-ALL</strong>.</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_25.png" alt="Peer Groupe" /></p>
+
+<p>Then create the Neighbors and use the Peer Group <strong>BGP</strong>.</p>
+
+<p><strong>Site A</strong>
+<img src="/img/include/pfsense_ha_ipsec_26.png" alt="Neighbors Site A" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_27.png" alt="Neighbors Site A" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_28.png" alt="Neighbors Site A" /></p>
+
+<p><strong>Site B</strong>
+<img src="/img/include/pfsense_ha_ipsec_29.png" alt="Neighbors Site B" /></p>
+
+<h3 id="check-the-bgp-status">Check The BGP STatus</h3>
+
+<p>The result for these settings you will see under <strong>Services -&gt; FRR -&gt; Status -&gt; BGP</strong> in the BGP table.</p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_30.png" alt="BGP Status" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_31.png" alt="BGP Status" /></p>
+
+<h3 id="test-the-results">Test the results</h3>
+
+<p>Further we can see this advertised route from the other peer, under <strong>Diagnostics -&gt; Routes</strong></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_32.png" alt="BGP Status" /></p>
+
+<p><img src="/img/include/pfsense_ha_ipsec_33.png" alt="Ping test" /></p>]]></content>
             
                  
                     
@@ -33152,7 +33359,7 @@ PF1 -- sync -- PF2
  |               |
  ----- LAN -------  
 
-WAN: 192.168.0.0/24 (Bridgelt)
+WAN: 192.168.0.0/24 (Bridge)
 LAN: 10.0.1.0/24
 SYNC: 10.0.2.0/24
 </code></pre>
