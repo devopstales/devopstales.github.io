@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-09-26T07:40:57+00:00</updated>
+    <updated>2021-09-26T07:55:35+00:00</updated>
     
     
     <author>
@@ -934,7 +934,7 @@ Nov 25 19:38:18 kernel: [461698.749323] audit: ... syscall=3 compat=0 ip=0x7ff8f
 
 <p>Kubernetes was built to run distributed systems over a cluster of machines. This meanns networking is a central point of all Kubernetes clusters. Kubernetes dose not hawe an includid network solution, you haw to chouse one. Withouth this solutions all host whou be a closed separated ecosistem. Many kubernetes deployment guides provide instructions for deploying a kubernetes networking (CNI) to your cluster. The most polular solutions are Calico, Flannel, Weave, and Cilium. Most time you simpli deploy a yaml or a helm chart, but we didn&rsquo;t undestand how theas solutions works. Understanding the Kubernetes networking model will allow you to easely troubleshoot your applications running on Kubernetes.</p>
 
-<h3 id="what-is-a-cni">What is a CNI?</h3>
+<h2 id="what-is-a-cni">What is a CNI?</h2>
 
 <p>The CNI (Container Network Interface) project describes the specifications to provide a generic plugin-based networking solution for linux containers. A CNI plugin is an executable and it&rsquo;s config that follows the CNI spec and we’ll discuss some plugins in the post below.</p>
 
@@ -1025,7 +1025,24 @@ cidr</p>
 <td>✓</td>
 </tr>
 </tbody>
-</table>]]></content>
+</table>
+
+<h2 id="cluster-mesh">Cluster mesh</h2>
+
+<p>Cluster mesh enables direct networking between Pods and Services in different Kubernetes clusters, either on-premises or in the cloud.</p>
+
+<h3 id="cilium-clustermesh">Cilium ClusterMesh</h3>
+
+<p>As Kubernetes gains adoption, teams are finding they must deploy and manage multiple clusters to facilitate features like geo-redundancy, scale, and fault isolation for their applications. Cilium’s multi-cluster implementation provides the following features:</p>
+
+<ul>
+<li>Inter-cluster pod-to-pod connectivity without gateways or proxies.</li>
+<li>Transparent service discovery across clusters using standard Kubernetes services and CoreDNS.</li>
+<li>Network policy enforcement across clusters.</li>
+<li>Encryption in transit between nodes within a cluster as well as across cluster boundaries.</li>
+</ul>
+
+<p><img src="/img/include/clustermesh-arch.png" alt="Cilium clustermesh" /></p>]]></content>
             
                  
                     
@@ -1079,13 +1096,15 @@ cidr</p>
 
 <p>As we know containers are considered disposable. That means there is no guarantee that the pod&rsquo;s address won’t change the next time the pod is recreated. That is a common problem in cloud environments too, and it has a standard solution: run the traffic through a reverse-proxy. This proxy is represented by a Kubernetes resource type called a service.</p>
 
+<p><img src="/img/include/kubernetes-network-1-4.gif" alt="Pod to Service" /></p>
+
 <h3 id="pod-to-service-communication">Pod-to-Service communication</h3>
 
 <p>When creating a new Kubernetes Service, a new virtual IP is created on your behalf. Anywhere within the cluster, traffic addressed to this virtual IP will be routed or load-balanced to the Pod or Pods associated with the Service. Kubernetes use a networking framework built in to Linux kernel called <code>netfilter</code>.</p>
 
-<p><code>iptables</code> is a user-space utility program that allows a system administrator to configure the IP packet filter rules of the Linux kernel firewall, implemented as different <code>Netfilter</code> modules. In Kubernetes, <code>iptables</code> rules are configured by the <code>kube-proxy</code> controller that watches the Kubernetes API for changes. Creation of a service or change of the pod ip will trigger iptables rules update on the host. When a traffic destined for a Service’s virtual IP is detected the <code>kube-proxy</code> select a random pod ip from the set of available Pods and manipulate the <code>iptables</code> rules to change the destination ip in the package to it. This method is called destination nat. Thi the return path iptables again rewrites the IP header to replace the Pod IP with the Service’s IP.</p>
+<p><code>iptables</code> is a user-space utility program that allows a system administrator to configure the IP packet filter rules of the Linux kernel firewall, implemented as different <code>Netfilter</code> modules. In Kubernetes, <code>iptables</code> rules are configured by the <code>kube-proxy</code> controller that watches the Kubernetes API for changes. Creation of a service or change of the pod ip will trigger iptables rules update on the host. When a traffic destined for a Service’s virtual IP is detected the <code>kube-proxy</code> select a random pod ip from the set of available Pods and manipulate the <code>iptables</code> rules to change the destination ip in the package to it. This method is called destination nat. In the return path <code>iptables</code> again rewrites the IP header to replace the Pod IP with the Service’s IP. The path taken by a packet through the networking stack is depicted in the figure shown below:</p>
 
-<p><img src="/img/include/kubernetes-network-1-4.gif" alt="Pod to Service" /></p>
+<p><img src="/img/include/kubernetes-network-1-5.png" alt="Pod to Service" /></p>
 
 <h3 id="ipvs">IPVS</h3>
 
@@ -1101,7 +1120,11 @@ cidr</p>
 
 <p>eBPF dataplane attaches eBPF programs to hooks on each bridge interface as well as your data and tunnel interfaces. This allows Calico or Cilium to spot workload packets early and handle them through a fast-path that bypasses iptables and other packet processing that the kernel would normally do.</p>
 
-<p><img src="/img/include/kubernetes-network-1-5.svg" alt="Calico Architecture" /></p>]]></content>
+<p><strong><em>Calico:</em></strong>
+<img src="/img/include/kubernetes-network-1-5.svg" alt="Calico Architecture" /></p>
+
+<p><strong><em>Cilium:</em></strong>
+<img src="/img/include/kubernetes-network-1-6.png" alt="Cilium Architecture" /></p>]]></content>
             
                  
                     

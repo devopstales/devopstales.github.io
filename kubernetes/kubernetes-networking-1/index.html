@@ -28,7 +28,7 @@
     "datePublished": "2021-08-30",
     "dateModified" : "2021-08-30",
     "url" : "https://devopstales.github.io/kubernetes/kubernetes-networking-1/",
-    "wordCount" : "830",
+    "wordCount" : "849",
     "keywords" : [ "kubernetes deployment", "owerlay network", "CNI", "Container Network Interface", "calico", "cilium", "Flannel", "IPVS", "kube-proxy", "eBPF", "Blog" ]
     
 }
@@ -185,13 +185,15 @@ if (!doNotTrack) {
 
 <p>As we know containers are considered disposable. That means there is no guarantee that the pod&rsquo;s address won’t change the next time the pod is recreated. That is a common problem in cloud environments too, and it has a standard solution: run the traffic through a reverse-proxy. This proxy is represented by a Kubernetes resource type called a service.</p>
 
+<p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-4.gif" alt="Pod to Service" /></p>
+
 <h3 id="pod-to-service-communication">Pod-to-Service communication</h3>
 
 <p>When creating a new Kubernetes Service, a new virtual IP is created on your behalf. Anywhere within the cluster, traffic addressed to this virtual IP will be routed or load-balanced to the Pod or Pods associated with the Service. Kubernetes use a networking framework built in to Linux kernel called <code>netfilter</code>.</p>
 
-<p><code>iptables</code> is a user-space utility program that allows a system administrator to configure the IP packet filter rules of the Linux kernel firewall, implemented as different <code>Netfilter</code> modules. In Kubernetes, <code>iptables</code> rules are configured by the <code>kube-proxy</code> controller that watches the Kubernetes API for changes. Creation of a service or change of the pod ip will trigger iptables rules update on the host. When a traffic destined for a Service’s virtual IP is detected the <code>kube-proxy</code> select a random pod ip from the set of available Pods and manipulate the <code>iptables</code> rules to change the destination ip in the package to it. This method is called destination nat. Thi the return path iptables again rewrites the IP header to replace the Pod IP with the Service’s IP.</p>
+<p><code>iptables</code> is a user-space utility program that allows a system administrator to configure the IP packet filter rules of the Linux kernel firewall, implemented as different <code>Netfilter</code> modules. In Kubernetes, <code>iptables</code> rules are configured by the <code>kube-proxy</code> controller that watches the Kubernetes API for changes. Creation of a service or change of the pod ip will trigger iptables rules update on the host. When a traffic destined for a Service’s virtual IP is detected the <code>kube-proxy</code> select a random pod ip from the set of available Pods and manipulate the <code>iptables</code> rules to change the destination ip in the package to it. This method is called destination nat. In the return path <code>iptables</code> again rewrites the IP header to replace the Pod IP with the Service’s IP. The path taken by a packet through the networking stack is depicted in the figure shown below:</p>
 
-<p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-4.gif" alt="Pod to Service" /></p>
+<p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-5.png" alt="Pod to Service" /></p>
 
 <h3 id="ipvs">IPVS</h3>
 
@@ -207,7 +209,11 @@ if (!doNotTrack) {
 
 <p>eBPF dataplane attaches eBPF programs to hooks on each bridge interface as well as your data and tunnel interfaces. This allows Calico or Cilium to spot workload packets early and handle them through a fast-path that bypasses iptables and other packet processing that the kernel would normally do.</p>
 
-<p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-5.svg" alt="Calico Architecture" /></p>
+<p><strong><em>Calico:</em></strong>
+<img src="https://devopstales.github.io/img/include/kubernetes-network-1-5.svg" alt="Calico Architecture" /></p>
+
+<p><strong><em>Cilium:</em></strong>
+<img src="https://devopstales.github.io/img/include/kubernetes-network-1-6.png" alt="Cilium Architecture" /></p>
 		</div>
 		<footer class="post__footer">
 			
