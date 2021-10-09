@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	
+<script type="application/ld+json">
+{
+    "@context" : "http://schema.org",
+    "@type" : "BlogPosting",
+    "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "https://devopstales.github.io/"
+    },
+    "articleSection" : "Home",
+    "name" : "Kubernetes Multicluster with Cilium Cluster Mesh",
+    "image": "https://devopstales.github.io/img/cilium.jpg",
+    "headline" : "Kubernetes Multicluster with Cilium Cluster Mesh",
+    "description" : "In this tutorial I will show you how to install Cilium on multiple Kubernetes clusters and connect those clusters with Cluster Mesh.\n",
+    "inLanguage" : "en-US",
+    "author" : "Blaiserman",
+    "creator" : "Blaiserman",
+    "publisher": "Blaiserman",
+    "accountablePerson" : "Blaiserman",
+    "copyrightHolder" : "Blaiserman",
+    "copyrightYear" : "2021",
+    "datePublished": "2021-10-06",
+    "dateModified" : "2021-10-06",
+    "url" : "https://devopstales.github.io/home/cilium-clustermesh/",
+    "wordCount" : "1478",
+    "keywords" : [ "devops", "tales", "Kubernetes", "k8s", "Load Balancer", "BGP", "kubernetes deployment", "kubernetes ingress", "Cilium", "Cluster Mesh", "Multi-Cluster", "Blog" ]
+    
+}
+</script>
+
+<meta name="msvalidate.01" content="4E830BF9C048B3A327492699A61E741E" />
+<meta name="yandex-verification" content="96d0b6ba6c7aa697" />
+
+	<title>Kubernetes Multicluster with Cilium Cluster Mesh - devopstales</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<meta property="og:title" content="Kubernetes Multicluster with Cilium Cluster Mesh" />
+<meta property="og:description" content="In this tutorial I will show you how to install Cilium on multiple Kubernetes clusters and connect those clusters with Cluster Mesh." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://devopstales.github.io/home/cilium-clustermesh/" />
+<meta property="article:published_time" content="2021-10-06T00:00:00+00:00" />
+<meta property="article:modified_time" content="2021-10-06T00:00:00+00:00" />
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/style.css">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/coffeebox.css"><link rel="stylesheet" href="https://devopstales.github.io/css/cookie.css">
+	<link rel="shortcut icon" href="https://devopstales.github.io/favicon.ico">
+		
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+	ga('create', 'UA-135626110-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+        <meta name="twitter:image" content="https://devopstales.github.io/img/cilium.jpg">
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+				<div class="logo__title">devopstales</div>
+				<div class="logo__tagline">Blog about dev and ops stuff</div>
+			</a>
+		</div>
+		
+<nav class="menu">
+	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
+		<span class="menu__btn-title" tabindex="-1">Menu</span>
+	</button>
+	<ul class="menu__list">
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">home</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/linux/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Linux</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/kubernetes/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Kubernetes</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/sso/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">sso</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/monitoring/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">monitoring</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/cloud/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">cloud</span>
+				
+			</a>
+		</li>
+		<li class="menu__item">
+			<a class="menu__link" href="https://devopstales.github.io/windows/">
+				<i class='fa fa-heart'></i>
+				<span class="menu__text">Windows</span>
+				
+			</a>
+		</li>
+	</ul>
+</nav>
+
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Kubernetes Multicluster with Cilium Cluster Mesh</h1>
+			<div class="post__meta meta">
+<div class="meta__item-datetime meta__item">
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2021-10-06T00:00:00Z">October 06, 2021</time>
+</div>
+</div>
+		</header>
+		<div class="content post__content clearfix">
+			<p>In this tutorial I will show you how to install Cilium on multiple Kubernetes clusters and connect those clusters with Cluster Mesh.</p>
+
+<h3 id="what-is-cluster-mesh">What is Cluster Mesh</h3>
+
+<p>Cluster mesh extends the networking datapath across multiple clusters. It allows endpoints in all connected clusters to communicate while providing full policy enforcement. Load-balancing is available via Kubernetes annotations.</p>
+
+<h3 id="the-infrastructure">The infrastructure</h3>
+
+<pre><code class="language-bash">k3s-cl1:
+ip: 172.17.11.11
+
+k3s-cl2:
+ip: 172.17.11.12
+etcd
+kube-vip
+
+k3s-cl3:
+ip: 172.17.11.13
+etcd
+kube-vip
+</code></pre>
+
+<h2 id="installing-k3s-with-k3sup">Installing k3s with k3sup</h2>
+
+<pre><code class="language-bash">ssh-copy-id vagrant@172.17.11.11
+ssh-copy-id vagrant@172.17.11.12
+ssh-copy-id vagrant@172.17.11.13
+</code></pre>
+
+<pre><code class="language-bash">tmux-cssh vagrant@172.17.11.11 vagrant@172.17.11.12 vagrant@172.17.11.13
+sudo su -
+curl -sLS https://get.k3sup.dev | sh
+sudo install k3sup /usr/local/bin/
+k3sup --help
+</code></pre>
+
+<h3 id="bootstrap-cl1">Bootstrap cl1</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+k3sup install \
+  --local \
+  --ip=172.17.11.11 \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.11.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.11&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3scl1
+
+exit
+exit
+</code></pre>
+
+<h3 id="bootstrap-cl2">Bootstrap cl2</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.12
+sudo su -
+
+k3sup install \
+  --local \
+  --ip=172.17.11.12 \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.12.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.12&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3scl2
+
+exit
+exit
+</code></pre>
+
+<h3 id="bootstrap-cl3">Bootstrap cl3</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.13
+sudo su -
+
+k3sup install \
+  --local \
+  --ip=172.17.11.13 \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.13.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.13&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3scl3
+
+exit
+exit
+</code></pre>
+
+<h2 id="deploy-cilium">Deploy cilium</h2>
+
+<p>Each Kubernetes cluster maintains its own etcd cluster which contains the state of that cluster&rsquo;s cilium. State from multiple clusters is never mixed in etcd itself. Each cluster exposes its own etcd via a set of etcd proxies. In this demo I will use NodePort service. Cilium agents running in other clusters connect to the etcd proxies to watch for changes and replicate the multi-cluster relevant state into their own cluster. Use of etcd proxies ensures scalability of etcd watchers. Access is protected with TLS certificates.</p>
+
+<p><img src="https://devopstales.github.io/img/include/clustermesh-arch.png" alt="Cilium clustermesh" /></p>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+helm upgrade --install cilium cilium/cilium \
+--set operator.replicas=1 \
+--set cluster.id=1 \
+--set cluster.name=k3scl1 \
+--set tunnel=vxlan \
+--set kubeProxyReplacement=strict \
+--set containerRuntime.integration=containerd \
+--set etcd.enabled=true \
+--set etcd.managed=true \
+--set k8sServiceHost=10.0.2.15 \
+--set k8sServicePort=6443 \
+-n kube-system
+
+cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-etcd-external
+spec:
+  type: NodePort
+  ports:
+  - port: 2379
+  selector:
+    app: etcd
+    etcd_cluster: cilium-etcd
+    io.cilium/app: etcd-operator
+EOF
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.12
+sudo su -
+
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+helm upgrade --install cilium cilium/cilium \
+--set operator.replicas=1 \
+--set cluster.id=2 \
+--set cluster.name=k3scl2 \
+--set tunnel=vxlan \
+--set containerRuntime.integration=containerd \
+--set etcd.enabled=true \
+--set etcd.managed=true \
+--set k8sServiceHost=10.0.2.15 \
+--set k8sServicePort=6443 \
+-n kube-system
+
+cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-etcd-external
+spec:
+  type: NodePort
+  ports:
+  - port: 2379
+  selector:
+    app: etcd
+    etcd_cluster: cilium-etcd
+    io.cilium/app: etcd-operator
+EOF
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.13
+sudo su -
+
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+helm upgrade --install cilium cilium/cilium \
+--set operator.replicas=1 \
+--set cluster.id=3 \
+--set cluster.name=k3scl3 \
+--set tunnel=vxlan \
+--set containerRuntime.integration=containerd \
+--set etcd.enabled=true \
+--set etcd.managed=true \
+--set k8sServiceHost=10.0.2.15 \
+--set k8sServicePort=6443 \
+-n kube-system
+
+cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-etcd-external
+spec:
+  type: NodePort
+  ports:
+  - port: 2379
+  selector:
+    app: etcd
+    etcd_cluster: cilium-etcd
+    io.cilium/app: etcd-operator
+EOF
+
+exit
+exit
+</code></pre>
+
+<h3 id="configure-cluster-mesh">Configure cluster mesh</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+cd /tmp
+git clone https://github.com/cilium/clustermesh-tools.git
+cd clustermesh-tools
+
+./extract-etcd-secrets.sh 
+Derived cluster-name k3scl1 from present ConfigMap
+====================================================
+ WARNING: The directory config contains private keys.
+          Delete after use.
+====================================================
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.12
+sudo su -
+
+cd /tmp
+git clone https://github.com/cilium/clustermesh-tools.git
+cd clustermesh-tools
+
+./extract-etcd-secrets.sh 
+Derived cluster-name k3scl2 from present ConfigMap
+====================================================
+ WARNING: The directory config contains private keys.
+          Delete after use.
+====================================================
+
+scp -r config/ 172.17.11.11:/tmp/clustermesh-tools/
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.13
+sudo su -
+
+cd /tmp
+git clone https://github.com/cilium/clustermesh-tools.git
+cd clustermesh-tools
+
+./extract-etcd-secrets.sh 
+Derived cluster-name k3scl3 from present ConfigMap
+====================================================
+ WARNING: The directory config contains private keys.
+          Delete after use.
+====================================================
+
+scp -r config/ 172.17.11.11:/tmp/clustermesh-tools/
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+cd /tmp/clustermesh-tools/
+./generate-secret-yaml.sh &gt; clustermesh.yaml
+./generate-name-mapping.sh &gt; ds.patch
+
+scp clustermesh.yaml ds.patch 172.17.11.12:
+scp clustermesh.yaml ds.patch 172.17.11.13:
+
+kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
+kubectl -n kube-system apply -f clustermesh.yaml
+kubectl -n kube-system delete pod -l k8s-app=cilium
+kubectl -n kube-system delete pod -l name=cilium-operator
+
+ssh 172.17.11.12 '
+  kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
+  kubectl -n kube-system apply -f clustermesh.yaml
+  kubectl -n kube-system delete pod -l k8s-app=cilium
+  kubectl -n kube-system delete pod -l name=cilium-operator
+'
+
+ssh 172.17.11.13 '
+  kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
+  kubectl -n kube-system apply -f clustermesh.yaml
+  kubectl -n kube-system delete pod -l k8s-app=cilium
+  kubectl -n kube-system delete pod -l name=cilium-operator
+'
+</code></pre>
+
+<p>Verify the cluster mesh by dumping the node list from any cilium. It should show all nodes in both the clusters.</p>
+
+<pre><code class="language-bash">kubectl get po -l k8s-app=cilium
+NAME           READY   STATUS    RESTARTS   AGE
+cilium-6z8zf   1/1     Running   0          3m54s
+
+kubectl -n kube-system exec -ti cilium-6z8zf -- cilium node list
+ 
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+Name           IPv4 Address   Endpoint CIDR   IPv6 Address   Endpoint CIDR
+k3scl1/k3s01   172.17.11.11   10.0.0.0/24                    
+k3scl2/k3s02   172.17.11.12   10.0.0.0/24                    
+k3scl3/k3s03   172.17.11.13   10.0.0.0/24      
+</code></pre>
+
+<h3 id="test-the-connection">Test the connection</h3>
+
+<pre><code class="language-yaml">ssh vagrant@172.17.11.11
+sudo su -
+
+kubectl create ns test
+kubens test
+
+cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1
+        ports:
+        - name: http
+          containerPort: 80
+EOF
+</code></pre>
+
+<p>The service discovery of Cilium&rsquo;s multi-cluster model is built using standard Kubernetes services and designed to be completely transparent to existing Kubernetes application deployments:</p>
+
+<pre><code class="language-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-global
+  namespace: test
+  annotations:
+    io.cilium/global-service: &quot;true&quot;
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+EOF
+</code></pre>
+
+<p>Cilium monitors Kubernetes services and endpoints and watches for services with an annotation <code>io.cilium/global-service: &quot;true&quot;</code>. For such services, all services with identical name and namespace information are automatically merged together and form a global service that is available across clusters.</p>
+
+<h3 id="test-cl1">Test cl1</h3>
+
+<p>After you deploy the global service to both of the clusters, you can test the connection:</p>
+
+<pre><code class="language-bash">kubectl -n kube-system exec -ti cilium-6z8zf -- cilium service list 
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+ID   Frontend             Service Type   Backend                  
+...
+5    10.43.200.118:80     ClusterIP      1 =&gt; 10.0.0.145:80       
+                                         2 =&gt; 10.0.0.69:80        
+...
+
+kubectl -n kube-system exec -ti cilium-6z8zf -- cilium bpf lb list 
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+SERVICE ADDRESS      BACKEND ADDRESS
+...
+10.43.200.118:80     10.0.0.69:80 (5)                          
+                     10.0.0.145:80 (5)                         
+...
+</code></pre>
+
+<pre><code class="language-bash">kubectl run -it --rm --image=tianon/network-toolbox debian
+curl nginx-global
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;
+&lt;style&gt;
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h1&gt;Welcome to nginx!&lt;/h1&gt;
+&lt;p&gt;If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.&lt;/p&gt;
+
+&lt;p&gt;For online documentation and support please refer to
+&lt;a href=&quot;http://nginx.org/&quot;&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
+Commercial support is available at
+&lt;a href=&quot;http://nginx.com/&quot;&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Thank you for using nginx.&lt;/em&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+<h3 id="test-on-cl3">Test on cl3:</h3>
+
+<pre><code class="language-bash">ssh 172.17.11.12
+
+kubectl create ns test
+kubens test
+
+cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-global
+  namespace: test
+  annotations:
+    io.cilium/global-service: &quot;true&quot;
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+EOF
+
+kubectl -n kube-system exec -ti cilium-8wzrc -- cilium service list
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+ID   Frontend            Service Type   Backend                  
+...
+8    10.43.189.53:80     ClusterIP      1 =&gt; 10.0.0.69:80        
+                                        2 =&gt; 10.0.0.145:80
+...
+
+kubectl -n kube-system exec -ti cilium-8wzrc -- cilium bpf lb list
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+SERVICE ADDRESS     BACKEND ADDRESS
+...
+10.43.189.53:80     0.0.0.0:0 (8) [ClusterIP, non-routable]   
+                    10.0.0.69:80 (8)                          
+                    10.0.0.145:80 (8)                    
+...
+
+kubectl run -it --rm --image=tianon/network-toolbox debian
+curl nginx-global
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;
+&lt;style&gt;
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h1&gt;Welcome to nginx!&lt;/h1&gt;
+&lt;p&gt;If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.&lt;/p&gt;
+
+&lt;p&gt;For online documentation and support please refer to
+&lt;a href=&quot;http://nginx.org/&quot;&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
+Commercial support is available at
+&lt;a href=&quot;http://nginx.com/&quot;&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Thank you for using nginx.&lt;/em&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+
+</code></pre>
+
+<h3 id="multi-cluster-network-policy">Multi-cluster network policy</h3>
+
+<p>It is possible to establish policies that apply to pod in particular clusters only. The cluster name is represented as a label on each pod by Cilium which allows to match on the cluster name in both the <code>endpointSelector</code> as well as the <code>matchLabels</code> for <code>toEndpoints</code> and fromEndpoints constructs:</p>
+
+<pre><code class="language-yaml">apiVersion: &quot;cilium.io/v2&quot;
+kind: CiliumNetworkPolicy
+metadata:
+  name: &quot;allow-cross-cluster&quot;
+  description: &quot;Allow x-wing in cluster1 to contact rebel-base in cluster2&quot;
+spec:
+  endpointSelector:
+    matchLabels:
+      name: x-wing
+      io.cilium.k8s.policy.cluster: cluster1
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        name: rebel-base
+        io.cilium.k8s.policy.cluster: cluster2
+</code></pre>
+
+<p>The above example policy will allow <code>x-wing</code> in cluster1 to talk to <code>rebel-base</code> in cluster2. X-wings won&rsquo;t be able to talk to rebel bases in the local cluster unless additional policies exist that whitelist the communication.</p>
+		</div>
+	</article>
+</main>
+
+<div class=coffee_box>
+  <div class=coffee_box_wrapper>
+    <h3 class=coffee_box_heading>
+      Your support is our everlasting motivation,<br>
+      that cup of coffee is what keeps us going!
+    </h3>
+    <hr>
+    <p class=coffee_box_content>As we continue to grow, we would wish to reach and impact more people who visit and take advantage of the guides we have on our blog. This is a big task for us and we are so far extremely grateful for the kind people who have shown amazing support for our work over the time we have been online.
+    <p class=coffee_box_content>Thank You for your support as we work to give you the best of guides and articles. Click below to buy us a coffee.
+    <div class=coffee_box_img>
+      <a href=https://www.buymeacoffee.com/devopstales target=_blank>
+        <img src="https://devopstales.github.io/img/design/coffee-logo.png" alt="Coffee Box" >
+      </a>
+    </div>
+  </div>
+</div>
+
+
+<nav class="post-nav flex">
+	<div class="post-nav__item post-nav__item--prev">
+		<a class="post-nav__link" href="https://devopstales.github.io/home/docker-desktop-alternatives/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Free Docker Desktop Alternative For Mac And Windows</p></a>
+	</div>
+</nav>
+
+<script src="https://utteranc.es/client.js"
+        repo="devopstales/devopstales.github.io"
+        issue-term="url"
+        label="utteranc"
+        theme="github-light"
+        crossorigin="anonymous"
+        async>
+</script>
+
+
+			</div>
+			<aside class="sidebar"><div class="widget-search widget">
+	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
+		<label>
+			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
+		</label>
+		<input class="widget-search__submit" type="submit" value="Search">
+		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
+	</form>
+</div>
+
+<div class="widget-recent widget">
+
+    <h4 class="widget__title">Blog Series</h4>
+
+    <div class="panel-body">
+        <ul class="nav nav-pills nav-stacked">
+            
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-gitops" class="text-uppercase">k8s-gitops (6)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-network" class="text-uppercase">k8s-network (19)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (37)</a>
+            </li>
+            
+        </ul>
+    </div>
+</div>
+
+
+<div class="widget-social widget">
+	<h4 class="widget-social__title widget__title">Social</h4>
+	<div class="widget-social__content widget__content">
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="Twitter" rel="noopener noreferrer" href="https://twitter.com/_devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-twitter" width="24" height="24" viewBox="0 0 384 312"><path d="m384 36.9c-14.1 6.3-29.3 10.5-45.2 12.4 16.3-9.7 28.8-25.2 34.6-43.6-15.2 9-32.1 15.6-50 19.1-14.4-15.2-34.9-24.8-57.5-24.8-43.5 0-78.8 35.3-78.8 78.8 0 6.2.7 12.2 2 17.9-65.5-3.3-123.5-34.6-162.4-82.3-6.7 11.6-10.6 25.2-10.6 39.6 0 27.3 13.9 51.4 35 65.6-12.9-.4-25.1-4-35.7-9.9v1c0 38.2 27.2 70 63.2 77.2-6.6 1.8-13.6 2.8-20.8 2.8-5.1 0-10-.5-14.8-1.4 10 31.3 39.1 54.1 73.6 54.7-27 21.1-60.9 33.7-97.8 33.7-6.4 0-12.6-.4-18.8-1.1 34.9 22.4 76.3 35.4 120.8 35.4 144.9 0 224.1-120 224.1-224.1 0-3.4-.1-6.8-.2-10.2 15.4-11.1 28.7-25 39.3-40.8z"/></svg>
+				<span>Twitter</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="GitHub" rel="noopener noreferrer" href="https://github.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-github" width="24" height="24" viewBox="0 0 384 374"><path d="m192 0c-106.1 0-192 85.8-192 191.7 0 84.7 55 156.6 131.3 181.9 9.6 1.8 13.1-4.2 13.1-9.2 0-4.6-.2-16.6-.3-32.6-53.4 11.6-64.7-25.7-64.7-25.7-8.7-22.1-21.3-28-21.3-28-17.4-11.9 1.3-11.6 1.3-11.6 19.3 1.4 29.4 19.8 29.4 19.8 17.1 29.3 44.9 20.8 55.9 15.9 1.7-12.4 6.7-20.8 12.2-25.6-42.6-4.8-87.5-21.3-87.5-94.8 0-20.9 7.5-38 19.8-51.4-2-4.9-8.6-24.3 1.9-50.7 0 0 16.1-5.2 52.8 19.7 15.3-4.2 31.7-6.4 48.1-6.5 16.3.1 32.7 2.2 48.1 6.5 36.7-24.8 52.8-19.7 52.8-19.7 10.5 26.4 3.9 45.9 1.9 50.7 12.3 13.4 19.7 30.5 19.7 51.4 0 73.7-44.9 89.9-87.7 94.6 6.9 5.9 13 17.6 13 35.5 0 25.6-.2 46.3-.2 52.6 0 5.1 3.5 11.1 13.2 9.2 76.2-25.5 131.2-97.3 131.2-182 0-105.9-86-191.7-192-191.7z"/></svg>
+				<span>GitHub</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="DockerHub" rel="noopener noreferrer" href="https://hub.docker.com/u/devopstales" target="_blank">
+				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.82 17.275c-.684 0-1.304-.56-1.304-1.24s.56-1.243 1.305-1.243c.748 0 1.31.56 1.31 1.242s-.622 1.24-1.305 1.24zm16.012-6.763c-.135-.992-.75-1.8-1.56-2.42l-.315-.25-.254.31c-.494.56-.69 1.553-.63 2.295.06.562.24 1.12.554 1.554-.254.13-.568.25-.81.377-.57.187-1.124.25-1.68.25H.097l-.06.37c-.12 1.182.06 2.42.562 3.54l.244.435v.06c1.5 2.483 4.17 3.6 7.078 3.6 5.594 0 10.182-2.42 12.357-7.633 1.425.062 2.864-.31 3.54-1.676l.18-.31-.3-.187c-.81-.494-1.92-.56-2.85-.31l-.018.002zm-8.008-.992h-2.428v2.42h2.43V9.518l-.002.003zm0-3.043h-2.428v2.42h2.43V6.48l-.002-.003zm0-3.104h-2.428v2.42h2.43v-2.42h-.002zm2.97 6.147H13.38v2.42h2.42V9.518l-.007.003zm-8.998 0H4.383v2.42h2.422V9.518l-.01.003zm3.03 0h-2.4v2.42H9.84V9.518l-.015.003zm-6.03 0H1.4v2.42h2.428V9.518l-.03.003zm6.03-3.043h-2.4v2.42H9.84V6.48l-.015-.003zm-3.045 0H4.387v2.42H6.8V6.48l-.016-.003z"/></svg>
+				<span>DockerHub</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="ArtifactHub" rel="noopener noreferrer" href="https://artifacthub.io/packages/search?user=devopstales" target="_blank">
+				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.82 17.275c-.684 0-1.304-.56-1.304-1.24s.56-1.243 1.305-1.243c.748 0 1.31.56 1.31 1.242s-.622 1.24-1.305 1.24zm16.012-6.763c-.135-.992-.75-1.8-1.56-2.42l-.315-.25-.254.31c-.494.56-.69 1.553-.63 2.295.06.562.24 1.12.554 1.554-.254.13-.568.25-.81.377-.57.187-1.124.25-1.68.25H.097l-.06.37c-.12 1.182.06 2.42.562 3.54l.244.435v.06c1.5 2.483 4.17 3.6 7.078 3.6 5.594 0 10.182-2.42 12.357-7.633 1.425.062 2.864-.31 3.54-1.676l.18-.31-.3-.187c-.81-.494-1.92-.56-2.85-.31l-.018.002zm-8.008-.992h-2.428v2.42h2.43V9.518l-.002.003zm0-3.043h-2.428v2.42h2.43V6.48l-.002-.003zm0-3.104h-2.428v2.42h2.43v-2.42h-.002zm2.97 6.147H13.38v2.42h2.42V9.518l-.007.003zm-8.998 0H4.383v2.42h2.422V9.518l-.01.003zm3.03 0h-2.4v2.42H9.84V9.518l-.015.003zm-6.03 0H1.4v2.42h2.428V9.518l-.03.003zm6.03-3.043h-2.4v2.42H9.84V6.48l-.015-.003zm-3.045 0H4.387v2.42H6.8V6.48l-.016-.003z"/></svg>
+				<span>ArtifactHUB</span>
+			</a>
+		</div>
+		
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="helm-charts" rel="noopener noreferrer" href="https://devopstales.github.io/helm-charts/" target="_blank">
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.82 17.275c-.684 0-1.304-.56-1.304-1.24s.56-1.243 1.305-1.243c.748 0 1.31.56 1.31 1.242s-.622 1.24-1.305 1.24zm16.012-6.763c-.135-.992-.75-1.8-1.56-2.42l-.315-.25-.254.31c-.494.56-.69 1.553-.63 2.295.06.562.24 1.12.554 1.554-.254.13-.568.25-.81.377-.57.187-1.124.25-1.68.25H.097l-.06.37c-.12 1.182.06 2.42.562 3.54l.244.435v.06c1.5 2.483 4.17 3.6 7.078 3.6 5.594 0 10.182-2.42 12.357-7.633 1.425.062 2.864-.31 3.54-1.676l.18-.31-.3-.187c-.81-.494-1.92-.56-2.85-.31l-.018.002zm-8.008-.992h-2.428v2.42h2.43V9.518l-.002.003zm0-3.043h-2.428v2.42h2.43V6.48l-.002-.003zm0-3.104h-2.428v2.42h2.43v-2.42h-.002zm2.97 6.147H13.38v2.42h2.42V9.518l-.007.003zm-8.998 0H4.383v2.42h2.422V9.518l-.01.003zm3.03 0h-2.4v2.42H9.84V9.518l-.015.003zm-6.03 0H1.4v2.42h2.428V9.518l-.03.003zm6.03-3.043h-2.4v2.42H9.84V6.48l-.015-.003zm-3.045 0H4.387v2.42H6.8V6.48l-.016-.003z"/></svg>
+				<span>helm-charts</span>
+			</a>
+		</div>
+		
+	</div>
+</div>
+<div class="widget-recent widget">
+	<h4 class="widget__title">Recent Posts</h4>
+	<div class="widget__content">
+		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/cilium-clustermesh/">Kubernetes Multicluster with Cilium Cluster Mesh</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/docker-desktop-alternatives/">Free Docker Desktop Alternative For Mac And Windows</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/pfsense-ha-ipsec/">HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-seccomp/">Hardening Kubernetes with seccomp</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-networking-2/">Understanding kubernetes networking: owerlay networks</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/kubernetes-networking-1/">Understanding kubernetes networking: pods and services</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/firecracker-cri-o/">How to deploy CRI-O with Firecracker?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gvisor-cri-o/">How to deploy CRI-O with gVisor?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/firecracker-containerd/">How to deploy containerd with Firecracker?</a></li>
+		</ul>
+	</div>
+</div>
+<div class="widget-taglist widget">
+	<h4 class="widget__title">Tags</h4>
+	<div class="widget__content">
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/active-directory/" title="Active Directory">Active Directory</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/admission-controller/" title="Admission Controller">Admission Controller</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aks/" title="AKS">AKS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="alerta">alerta</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/almalinux/" title="AlmaLinux">AlmaLinux</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="calico">calico</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="Centos">Centos</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="Cilium">Cilium</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/container-runtimes/" title="Container runtimes">Container runtimes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/coredns/" title="CoreDNS">CoreDNS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cosign/" title="Cosign">Cosign</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="docker">docker</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="docker-compose">docker-compose</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ebpf/" title="ebpf">ebpf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="elasticsearch">elasticsearch</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="fedora">fedora</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora-coreos/" title="Fedora CoreOS">Fedora CoreOS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/firecracker/" title="Firecracker">Firecracker</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/flannel/" title="Flannel">Flannel</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="foreman">foreman</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="GCP">GCP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitops/" title="gitops">gitops</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gke/" title="GKE">GKE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gns3/" title="GNS3">GNS3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="Google Cloud Platform">Google Cloud Platform</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="grafana">grafana</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gvisor/" title="gvisor">gvisor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="helm-controller">helm-controller</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="httpd">httpd</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="icinga">icinga</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="jitsi">jitsi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8S">K8S</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kata-container/" title="kata-container">kata-container</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="katello">katello</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="logging">logging</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="loki">loki</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="mutating webhook">mutating webhook</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nerdctl/" title="nerdctl">nerdctl</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="nextcloud">nextcloud</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="noSQL">noSQL</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/notary/" title="Notary">Notary</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="oauth2">oauth2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="openproject">openproject</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="OPNsense">OPNsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="Pfsense">Pfsense</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="postgresql">postgresql</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="privacyidea">privacyidea</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="Prometheus">Prometheus</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="rancher">rancher</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="redmine">redmine</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="registry">registry</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rke2/" title="rke2">rke2</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rsyslog/" title="rsyslog">rsyslog</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="sonarqube">sonarqube</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/squid/" title="squid">squid</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="telegraf">telegraf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
+	</div>
+</div>
+</aside>
+		</div>
+		<footer class="footer">
+        <script data-name="BMC-Widget" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"
+             data-id="devopstales" data-description="Support me on Buy me a coffee!"
+             data-message="Thank you for visiting. You can now buy me a coffee!"
+             data-color="#FF813F" data-position="right" data-x_margin="18" data-y_margin="48">
+        </script>
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2021 devopstales.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+
+	</div>
+<script async defer src="https://devopstales.github.io/js/menu.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.6/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async></script>
+<div class="cookie-container" style="justify-content: space-between;">
+  <div class="cookie-consent-text">
+    This website makes use of third-party cookies.
+     <a href="https://devopstales.github.io/privacy-policy/">Learn More</a>
+  </div>
+  <div class="cookie-consent-button">
+    <button class="cookie-btn">
+      Okay
+    </button>
+  </div>
+</div>
+<script src="https://devopstales.github.io/js/cookie.js"></script>
+
+
+<script src="https://devopstales.github.io/js/medium-zoom.js"></script>
+<script>
+
+var zoomables = document.querySelectorAll('.zoomable > img, img.zoomable');
+zoomables.length && mediumZoom(zoomables, {
+    margin: 0,  
+    scrollOffset: 40,  
+    container: null,  
+    template: null,  
+    background: 'rgba(0, 0, 0, 0.8)'
+  }
+);
+</script></body>
+</html>

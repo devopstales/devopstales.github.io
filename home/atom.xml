@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-10-08T07:52:55+00:00</updated>
+    <updated>2021-10-09T07:40:47+00:00</updated>
     
     
     <author>
@@ -17,6 +17,544 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes Multicluster with Cilium Cluster Mesh]]></title>
+            <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
+                <link href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
+                <link href="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/cilium-clustermesh/</id>
+            
+            
+            <published>2021-10-06T00:00:00+00:00</published>
+            <updated>2021-10-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to install Cilium on multiple Kubernetes clusters and connect those clusters with Cluster Mesh.</p>
+
+<h3 id="what-is-cluster-mesh">What is Cluster Mesh</h3>
+
+<p>Cluster mesh extends the networking datapath across multiple clusters. It allows endpoints in all connected clusters to communicate while providing full policy enforcement. Load-balancing is available via Kubernetes annotations.</p>
+
+<h3 id="the-infrastructure">The infrastructure</h3>
+
+<pre><code class="language-bash">k3s-cl1:
+ip: 172.17.11.11
+
+k3s-cl2:
+ip: 172.17.11.12
+etcd
+kube-vip
+
+k3s-cl3:
+ip: 172.17.11.13
+etcd
+kube-vip
+</code></pre>
+
+<h2 id="installing-k3s-with-k3sup">Installing k3s with k3sup</h2>
+
+<pre><code class="language-bash">ssh-copy-id vagrant@172.17.11.11
+ssh-copy-id vagrant@172.17.11.12
+ssh-copy-id vagrant@172.17.11.13
+</code></pre>
+
+<pre><code class="language-bash">tmux-cssh vagrant@172.17.11.11 vagrant@172.17.11.12 vagrant@172.17.11.13
+sudo su -
+curl -sLS https://get.k3sup.dev | sh
+sudo install k3sup /usr/local/bin/
+k3sup --help
+</code></pre>
+
+<h3 id="bootstrap-cl1">Bootstrap cl1</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+k3sup install \
+  --local \
+  --ip=172.17.11.11 \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.11.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.11&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3scl1
+
+exit
+exit
+</code></pre>
+
+<h3 id="bootstrap-cl2">Bootstrap cl2</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.12
+sudo su -
+
+k3sup install \
+  --local \
+  --ip=172.17.11.12 \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.12.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.12&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3scl2
+
+exit
+exit
+</code></pre>
+
+<h3 id="bootstrap-cl3">Bootstrap cl3</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.13
+sudo su -
+
+k3sup install \
+  --local \
+  --ip=172.17.11.13 \
+  --cluster \
+  --k3s-channel=stable \
+  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.13.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.13&quot; \
+  --merge \
+  --local-path $HOME/.kube/config \
+  --context=k3scl3
+
+exit
+exit
+</code></pre>
+
+<h2 id="deploy-cilium">Deploy cilium</h2>
+
+<p>Each Kubernetes cluster maintains its own etcd cluster which contains the state of that cluster&rsquo;s cilium. State from multiple clusters is never mixed in etcd itself. Each cluster exposes its own etcd via a set of etcd proxies. In this demo I will use NodePort service. Cilium agents running in other clusters connect to the etcd proxies to watch for changes and replicate the multi-cluster relevant state into their own cluster. Use of etcd proxies ensures scalability of etcd watchers. Access is protected with TLS certificates.</p>
+
+<p><img src="/img/include/clustermesh-arch.png" alt="Cilium clustermesh" /></p>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+helm upgrade --install cilium cilium/cilium \
+--set operator.replicas=1 \
+--set cluster.id=1 \
+--set cluster.name=k3scl1 \
+--set tunnel=vxlan \
+--set kubeProxyReplacement=strict \
+--set containerRuntime.integration=containerd \
+--set etcd.enabled=true \
+--set etcd.managed=true \
+--set k8sServiceHost=10.0.2.15 \
+--set k8sServicePort=6443 \
+-n kube-system
+
+cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-etcd-external
+spec:
+  type: NodePort
+  ports:
+  - port: 2379
+  selector:
+    app: etcd
+    etcd_cluster: cilium-etcd
+    io.cilium/app: etcd-operator
+EOF
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.12
+sudo su -
+
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+helm upgrade --install cilium cilium/cilium \
+--set operator.replicas=1 \
+--set cluster.id=2 \
+--set cluster.name=k3scl2 \
+--set tunnel=vxlan \
+--set containerRuntime.integration=containerd \
+--set etcd.enabled=true \
+--set etcd.managed=true \
+--set k8sServiceHost=10.0.2.15 \
+--set k8sServicePort=6443 \
+-n kube-system
+
+cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-etcd-external
+spec:
+  type: NodePort
+  ports:
+  - port: 2379
+  selector:
+    app: etcd
+    etcd_cluster: cilium-etcd
+    io.cilium/app: etcd-operator
+EOF
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.13
+sudo su -
+
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+helm upgrade --install cilium cilium/cilium \
+--set operator.replicas=1 \
+--set cluster.id=3 \
+--set cluster.name=k3scl3 \
+--set tunnel=vxlan \
+--set containerRuntime.integration=containerd \
+--set etcd.enabled=true \
+--set etcd.managed=true \
+--set k8sServiceHost=10.0.2.15 \
+--set k8sServicePort=6443 \
+-n kube-system
+
+cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-etcd-external
+spec:
+  type: NodePort
+  ports:
+  - port: 2379
+  selector:
+    app: etcd
+    etcd_cluster: cilium-etcd
+    io.cilium/app: etcd-operator
+EOF
+
+exit
+exit
+</code></pre>
+
+<h3 id="configure-cluster-mesh">Configure cluster mesh</h3>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+cd /tmp
+git clone https://github.com/cilium/clustermesh-tools.git
+cd clustermesh-tools
+
+./extract-etcd-secrets.sh 
+Derived cluster-name k3scl1 from present ConfigMap
+====================================================
+ WARNING: The directory config contains private keys.
+          Delete after use.
+====================================================
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.12
+sudo su -
+
+cd /tmp
+git clone https://github.com/cilium/clustermesh-tools.git
+cd clustermesh-tools
+
+./extract-etcd-secrets.sh 
+Derived cluster-name k3scl2 from present ConfigMap
+====================================================
+ WARNING: The directory config contains private keys.
+          Delete after use.
+====================================================
+
+scp -r config/ 172.17.11.11:/tmp/clustermesh-tools/
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.13
+sudo su -
+
+cd /tmp
+git clone https://github.com/cilium/clustermesh-tools.git
+cd clustermesh-tools
+
+./extract-etcd-secrets.sh 
+Derived cluster-name k3scl3 from present ConfigMap
+====================================================
+ WARNING: The directory config contains private keys.
+          Delete after use.
+====================================================
+
+scp -r config/ 172.17.11.11:/tmp/clustermesh-tools/
+
+exit
+exit
+</code></pre>
+
+<pre><code class="language-bash">ssh vagrant@172.17.11.11
+sudo su -
+
+cd /tmp/clustermesh-tools/
+./generate-secret-yaml.sh &gt; clustermesh.yaml
+./generate-name-mapping.sh &gt; ds.patch
+
+scp clustermesh.yaml ds.patch 172.17.11.12:
+scp clustermesh.yaml ds.patch 172.17.11.13:
+
+kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
+kubectl -n kube-system apply -f clustermesh.yaml
+kubectl -n kube-system delete pod -l k8s-app=cilium
+kubectl -n kube-system delete pod -l name=cilium-operator
+
+ssh 172.17.11.12 '
+  kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
+  kubectl -n kube-system apply -f clustermesh.yaml
+  kubectl -n kube-system delete pod -l k8s-app=cilium
+  kubectl -n kube-system delete pod -l name=cilium-operator
+'
+
+ssh 172.17.11.13 '
+  kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
+  kubectl -n kube-system apply -f clustermesh.yaml
+  kubectl -n kube-system delete pod -l k8s-app=cilium
+  kubectl -n kube-system delete pod -l name=cilium-operator
+'
+</code></pre>
+
+<p>Verify the cluster mesh by dumping the node list from any cilium. It should show all nodes in both the clusters.</p>
+
+<pre><code class="language-bash">kubectl get po -l k8s-app=cilium
+NAME           READY   STATUS    RESTARTS   AGE
+cilium-6z8zf   1/1     Running   0          3m54s
+
+kubectl -n kube-system exec -ti cilium-6z8zf -- cilium node list
+ 
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+Name           IPv4 Address   Endpoint CIDR   IPv6 Address   Endpoint CIDR
+k3scl1/k3s01   172.17.11.11   10.0.0.0/24                    
+k3scl2/k3s02   172.17.11.12   10.0.0.0/24                    
+k3scl3/k3s03   172.17.11.13   10.0.0.0/24      
+</code></pre>
+
+<h3 id="test-the-connection">Test the connection</h3>
+
+<pre><code class="language-yaml">ssh vagrant@172.17.11.11
+sudo su -
+
+kubectl create ns test
+kubens test
+
+cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1
+        ports:
+        - name: http
+          containerPort: 80
+EOF
+</code></pre>
+
+<p>The service discovery of Cilium&rsquo;s multi-cluster model is built using standard Kubernetes services and designed to be completely transparent to existing Kubernetes application deployments:</p>
+
+<pre><code class="language-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-global
+  namespace: test
+  annotations:
+    io.cilium/global-service: &quot;true&quot;
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+EOF
+</code></pre>
+
+<p>Cilium monitors Kubernetes services and endpoints and watches for services with an annotation <code>io.cilium/global-service: &quot;true&quot;</code>. For such services, all services with identical name and namespace information are automatically merged together and form a global service that is available across clusters.</p>
+
+<h3 id="test-cl1">Test cl1</h3>
+
+<p>After you deploy the global service to both of the clusters, you can test the connection:</p>
+
+<pre><code class="language-bash">kubectl -n kube-system exec -ti cilium-6z8zf -- cilium service list 
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+ID   Frontend             Service Type   Backend                  
+...
+5    10.43.200.118:80     ClusterIP      1 =&gt; 10.0.0.145:80       
+                                         2 =&gt; 10.0.0.69:80        
+...
+
+kubectl -n kube-system exec -ti cilium-6z8zf -- cilium bpf lb list 
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+SERVICE ADDRESS      BACKEND ADDRESS
+...
+10.43.200.118:80     10.0.0.69:80 (5)                          
+                     10.0.0.145:80 (5)                         
+...
+</code></pre>
+
+<pre><code class="language-bash">kubectl run -it --rm --image=tianon/network-toolbox debian
+curl nginx-global
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;
+&lt;style&gt;
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h1&gt;Welcome to nginx!&lt;/h1&gt;
+&lt;p&gt;If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.&lt;/p&gt;
+
+&lt;p&gt;For online documentation and support please refer to
+&lt;a href=&quot;http://nginx.org/&quot;&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
+Commercial support is available at
+&lt;a href=&quot;http://nginx.com/&quot;&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Thank you for using nginx.&lt;/em&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+<h3 id="test-on-cl3">Test on cl3:</h3>
+
+<pre><code class="language-bash">ssh 172.17.11.12
+
+kubectl create ns test
+kubens test
+
+cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-global
+  namespace: test
+  annotations:
+    io.cilium/global-service: &quot;true&quot;
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+EOF
+
+kubectl -n kube-system exec -ti cilium-8wzrc -- cilium service list
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+ID   Frontend            Service Type   Backend                  
+...
+8    10.43.189.53:80     ClusterIP      1 =&gt; 10.0.0.69:80        
+                                        2 =&gt; 10.0.0.145:80
+...
+
+kubectl -n kube-system exec -ti cilium-8wzrc -- cilium bpf lb list
+Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+SERVICE ADDRESS     BACKEND ADDRESS
+...
+10.43.189.53:80     0.0.0.0:0 (8) [ClusterIP, non-routable]   
+                    10.0.0.69:80 (8)                          
+                    10.0.0.145:80 (8)                    
+...
+
+kubectl run -it --rm --image=tianon/network-toolbox debian
+curl nginx-global
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;
+&lt;style&gt;
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h1&gt;Welcome to nginx!&lt;/h1&gt;
+&lt;p&gt;If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.&lt;/p&gt;
+
+&lt;p&gt;For online documentation and support please refer to
+&lt;a href=&quot;http://nginx.org/&quot;&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
+Commercial support is available at
+&lt;a href=&quot;http://nginx.com/&quot;&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Thank you for using nginx.&lt;/em&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+
+</code></pre>
+
+<h3 id="multi-cluster-network-policy">Multi-cluster network policy</h3>
+
+<p>It is possible to establish policies that apply to pod in particular clusters only. The cluster name is represented as a label on each pod by Cilium which allows to match on the cluster name in both the <code>endpointSelector</code> as well as the <code>matchLabels</code> for <code>toEndpoints</code> and fromEndpoints constructs:</p>
+
+<pre><code class="language-yaml">apiVersion: &quot;cilium.io/v2&quot;
+kind: CiliumNetworkPolicy
+metadata:
+  name: &quot;allow-cross-cluster&quot;
+  description: &quot;Allow x-wing in cluster1 to contact rebel-base in cluster2&quot;
+spec:
+  endpointSelector:
+    matchLabels:
+      name: x-wing
+      io.cilium.k8s.policy.cluster: cluster1
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        name: rebel-base
+        io.cilium.k8s.policy.cluster: cluster2
+</code></pre>
+
+<p>The above example policy will allow <code>x-wing</code> in cluster1 to talk to <code>rebel-base</code> in cluster2. X-wings won&rsquo;t be able to talk to rebel bases in the local cluster unless additional policies exist that whitelist the communication.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
