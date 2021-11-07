@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-11-06T09:51:11+00:00</updated>
+    <updated>2021-11-07T13:11:31+00:00</updated>
     
     
     <author>
@@ -17,6 +17,252 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Central authentication with oauth2-proxy]]></title>
+            <link href="https://devopstales.github.io/home/k8s-central-oauth/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k8s-gangway/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gangway" />
+                <link href="https://devopstales.github.io/home/k8s-dasboard-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gatekeeper" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-central-oauth/?utm_source=atom_feed" rel="related" type="text/html" title="Central authentication with oauth2-proxy" />
+                <link href="https://devopstales.github.io/home/foreman-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Foreman openidc SSO with keycloak" />
+                <link href="https://devopstales.github.io/home/mattermost-keycloak-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Free sso for Mattermost Teams Edition" />
+            
+                <id>https://devopstales.github.io/home/k8s-central-oauth/</id>
+            
+            
+            <published>2021-11-05T00:00:00+00:00</published>
+            <updated>2021-11-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to use one central OAuth2 Proxy for multiple services inside your Kubernetes Cluster.</p>
+
+<p>The default example on how to secure a service with Nginx and OAuth2 Proxy shows you how to secure only one service. With this setup you need to create one oauth2-proxy for every service. . Another problem of this setup is that it is not supported by most Helm charts.</p>
+
+<p>First we need an oauth2-proxy to authenticate all of the requests:</p>
+
+<pre><code class="language-bash">apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: auth-proxy
+  namespace: ingress-system
+spec:
+  repo: &quot;https://oauth2-proxy.github.io/manifests&quot;
+  chart: oauth2-proxy
+  targetNamespace: ingress-system
+  valuesContent: |-
+    config:
+      clientID: &quot;&lt;client-id&gt;&quot;
+      clientSecret: &quot;&lt;clinet-secret&gt;&quot;
+      cookieSecret: &quot;bkJnQW1ua2xGa2tCV2pGTlZDdHJWS0t4SWJ2MFFSOWY=&quot;
+    extraArgs:
+      email-domain: '*'
+      provider: keycloak
+      login-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/auth
+      redeem-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/token
+      profile-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/userinfo
+      validate-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/userinfo
+      scope: email
+      skip-provider-button: 'true'
+      force-https: 'false'
+      cookie-secure: 'false'
+      pass-authorization-header: 'true'
+      pass-basic-auth: 'false'
+      skip-jwt-bearer-tokens: 'true'
+      whitelist-domain: .k8s.intra
+      cookie-domain: .k8s.intra
+      oidc-issuer-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;
+    ingress:
+      enabled: true
+      path: /oauth2
+      hosts:
+        - oauth.k8s.intra
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        cert-manager.io/cluster-issuer: ca-issuer
+        nginx.ingress.kubernetes.io/proxy-buffer-size: &quot;16k&quot;
+      tls:
+      - secretName: oauth2-proxy-tls-cert
+        hosts:
+          - oauth.k8s.intra
+    metrics:
+      enabled: true
+#      servicemonitor:
+#        enabled: true
+#        namespace: &quot;ingress-system&quot;
+</code></pre>
+
+<p>For the service you want to secure, add the below annotations to the Ingress:</p>
+
+<pre><code class="language-bash">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: ca-issuer
+    nginx.ingress.kubernetes.io/force-ssl-redirect: &quot;true&quot;
+    nginx.ingress.kubernetes.io/auth-url: &quot;http://auth-proxy-oauth2-proxy.ingress-system.svc.cluster.local/oauth2/auth&quot;
+    nginx.ingress.kubernetes.io/auth-signin: &quot;https://oauth.k8s.intra/oauth2/start?rd=https%3A%2F%2F$host$request_uri&quot;
+  name: alertmanager
+spec:
+  rules:
+  - host: alertmanager.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: alertmanager
+          servicePort: 9093
+        path: /
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - alertmanager.example.com
+    secretName: tls-cert
+</code></pre>
+
+<p>The <code>auth-sigin</code> redirects any needed login to the OAuth2 Proxy Ingress.
+The <code>auth-url</code> annotation can access the OAuth2 Proxy internally via its service to verify a submitted token.</p>
+
+<p>The OAuth2 Proxy will handle the authentication and later redirect you to the protected service again.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to create kubeconfig?]]></title>
+            <link href="https://devopstales.github.io/home/k8s-rbac-gen/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-rbac-gen/?utm_source=atom_feed" rel="related" type="text/html" title="How to create kubeconfig?" />
+                <link href="https://devopstales.github.io/home/k8s-gangway/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gangway" />
+                <link href="https://devopstales.github.io/home/k8s-dasboard-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gatekeeper" />
+                <link href="https://devopstales.github.io/home/k8s-falco/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes audit logs and Falco" />
+                <link href="https://devopstales.github.io/home/k8s-cisa-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Hardening Guide with CISA 1.6 Benchmark" />
+            
+                <id>https://devopstales.github.io/home/k8s-rbac-gen/</id>
+            
+            
+            <published>2021-11-03T00:00:00+00:00</published>
+            <updated>2021-11-03T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this blog, I will show you how to create a kubeconfig file with limited access to kubernetes cluster using service account, secret token and RBAC</p>
+
+<p>Create namespace:</p>
+
+<pre><code class="language-bash">export NAMESPACE=test-ns
+export SERVICEACCOUNT=devopstales
+
+kubectl create namespace $NAMESPACE
+kubectx $NAMESPACE
+</code></pre>
+
+<p>Create serviceaccount with RBAC:</p>
+
+<pre><code class="language-yaml">cat &lt;&lt;EOF | envsubst | kubectl create -f -
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: $SERVICEACCOUNT
+  namespace: $NAMESPACE
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: developer-access
+  namespace: $NAMESPACE
+rules:
+- apiGroups: [&quot;&quot;, &quot;extensions&quot;, &quot;apps&quot;]
+  resources: [&quot;*&quot;]
+  verbs: [&quot;*&quot;]
+- apiGroups: [&quot;batch&quot;]
+  resources:
+  - jobs
+  - cronjobs
+  verbs: [&quot;*&quot;]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: $SERVICEACCOUNT
+  namespace: $NAMESPACE
+subjects:
+- kind: SERVICEACCOUNT
+  name: $SERVICEACCOUNT
+  namespace: $NAMESPACE
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: developer-access
+EOF
+</code></pre>
+
+<p>Create kubeconfig for serviceaccount:</p>
+
+<pre><code class="language-bash">git clone https://github.com/devopstales/k8s_sec_lab.git
+cd k8s_sec_lab/kubernetes-scripts
+./create-kubeconfig devopstales &gt; kubeconfig-$NAMESPACE
+</code></pre>
+
+<p>Use kubeconfig:</p>
+
+<pre><code class="language-bash">kubectl --kubeconfig=kubeconfig-$NAMESPACE get po
+</code></pre>
+
+<h3 id="permission-managger">Permission Managger</h3>
+
+<p>Permission Manager is an application developed by SIGHUP that enables a super-easy and user-friendly RBAC management for Kubernetes.</p>
+
+<pre><code class="language-bash">kubectl create namespace permission-manager
+</code></pre>
+
+<pre><code class="language-yaml">nano pm-secret.yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: permission-manager
+  namespace: permission-manager
+type: Opaque
+stringData:
+  PORT: &quot;4000&quot; # port where server is exposed
+  CLUSTER_NAME: &quot;my-cluster&quot; # name of the cluster to use in the generated kubeconfig file
+  CONTROL_PLANE_ADDRESS: &quot;https://172.17.0.3:6443&quot; # full address of the control plane to use in the generated kubeconfig file
+  BASIC_AUTH_PASSWORD: &quot;changeMe&quot; # password used by basic auth (username is `admin`)
+</code></pre>
+
+<p>Deploy permission-manager:</p>
+
+<pre><code class="language-bash">kubectl apply -f pm-secret.yaml
+kubectl apply -f https://github.com/sighupio/permission-manager/releases/download/v1.7.1-rc1/crd.yml
+kubectl apply -f https://github.com/sighupio/permission-manager/releases/download/v1.7.1-rc1/seed.yml
+kubectl apply -f https://github.com/sighupio/permission-manager/releases/download/v1.7.1-rc1/deploy.yml
+
+kubectl port-forward svc/permission-manager 4000 --namespace permission-manager
+</code></pre>
+
+<p>Connect on localhost:</p>
+
+<p><img src="/img/include/permission-manager.gif" alt="permission-manager" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
