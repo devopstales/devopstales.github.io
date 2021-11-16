@@ -43,9 +43,10 @@
 	<meta property="og:title" content="GKE cluster’s egress traffic via Cloud NAT" />
 <meta property="og:description" content="In this post I will show you how you can can reroute the GKE egress traffic via cloud NAT." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/home/gke-egress/" />
+<meta property="og:url" content="https://devopstales.github.io/home/gke-egress/" /><meta property="article:section" content="Home" />
 <meta property="article:published_time" content="2021-07-01T00:00:00+00:00" />
 <meta property="article:modified_time" content="2021-07-01T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -154,93 +155,75 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In this post I will show you how you can can reroute the GKE egress traffic via cloud NAT.</p>
-
 <p>In Public GKE cluster wach node has it&rsquo;s own external IP address and the nodes route all egress traffic through there external IP. This external IPs can change over time. In the case of a private GKE cluster, all the nodes will have an internal ip address and you can define a cloud NAT for all your egress traffic from the cluster. So public cluster is not a ideal solutinon if you need a static ip list for source ip whtelistink, but here is a solution.</p>
-
 <h3 id="create-a-cloud-nat-gateway">Create a cloud NAT gateway</h3>
-
 <p>We will use a daemon set in GKE , that will rewrite the ip-table rules in the GKE Nodes to masquerade the outbound traffic.</p>
-
 <p>Select the VPC in which you have deployed your public GKE cluster and create a new cloud router. Create it manualli to configure the NAT gateway’s ip. This will be the ip-address that you will give to your third party vendor for whitelisting your incoming connection.</p>
-
 <p>Create the config map and the daemon-set:</p>
-
-<pre><code class="language-yaml">nano config.yaml
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano config.yaml</span>
 ---
-nonMasqueradeCIDRs:
-  - 0.0.0.0/0
-masqLinkLocal: true
-resyncInterval: 60s
-</code></pre>
-
-<pre><code class="language-bash">kubectl create configmap ip-masq-agent --from-file config.yaml --namespace kube-system
-</code></pre>
-
-<p>Deploy the masq-agent:</p>
-
-<pre><code class="language-yaml">nano ip-masq-agent.yaml
+<span style="color:#f92672">nonMasqueradeCIDRs</span>:
+  - <span style="color:#ae81ff">0.0.0.0</span><span style="color:#ae81ff">/0</span>
+<span style="color:#f92672">masqLinkLocal</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">resyncInterval</span>: <span style="color:#ae81ff">60s</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create configmap ip-masq-agent --from-file config.yaml --namespace kube-system
+</code></pre></div><p>Deploy the masq-agent:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano ip-masq-agent.yaml</span>
 ---
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: ip-masq-agent
-  namespace: kube-system
-spec:
-  selector:
-    matchLabels:
-      k8s-app: ip-masq-agent
-  template:
-    metadata:
-      labels:
-        k8s-app: ip-masq-agent
-    spec:
-      hostNetwork: true
-      containers:
-      - name: ip-masq-agent
-        image: gcr.io/google-containers/ip-masq-agent-amd64:v2.4.1
-        args:
-            - --masq-chain=IP-MASQ
-            # To non-masquerade reserved IP ranges by default, uncomment the line below.
-            # - --nomasq-all-reserved-ranges
-        securityContext:
-          privileged: true
-        volumeMounts:
-          - name: config
-            mountPath: /etc/config
-      volumes:
-        - name: config
-          configMap:
-            # Note this ConfigMap must be created in the same namespace as the
-            # daemon pods - this spec uses kube-system
-            name: ip-masq-agent
-            optional: true
-            items:
-              # The daemon looks for its config in a YAML file at /etc/config/ip-masq-agent
-              - key: config
-                path: ip-masq-agent
-      tolerations:
-      - effect: NoSchedule
-        operator: Exists
-      - effect: NoExecute
-        operator: Exists
-      - key: &quot;CriticalAddonsOnly&quot;
-        operator: &quot;Exists&quot;
-</code></pre>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">DaemonSet</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ip-masq-agent</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">k8s-app</span>: <span style="color:#ae81ff">ip-masq-agent</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">k8s-app</span>: <span style="color:#ae81ff">ip-masq-agent</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">hostNetwork</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ip-masq-agent</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">gcr.io/google-containers/ip-masq-agent-amd64:v2.4.1</span>
+        <span style="color:#f92672">args</span>:
+            - --<span style="color:#ae81ff">masq-chain=IP-MASQ</span>
+            <span style="color:#75715e"># To non-masquerade reserved IP ranges by default, uncomment the line below.</span>
+            <span style="color:#75715e"># - --nomasq-all-reserved-ranges</span>
+        <span style="color:#f92672">securityContext</span>:
+          <span style="color:#f92672">privileged</span>: <span style="color:#66d9ef">true</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">config</span>
+            <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/etc/config</span>
+      <span style="color:#f92672">volumes</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">config</span>
+          <span style="color:#f92672">configMap</span>:
+            <span style="color:#75715e"># Note this ConfigMap must be created in the same namespace as the</span>
+            <span style="color:#75715e"># daemon pods - this spec uses kube-system</span>
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ip-masq-agent</span>
+            <span style="color:#f92672">optional</span>: <span style="color:#66d9ef">true</span>
+            <span style="color:#f92672">items</span>:
+              <span style="color:#75715e"># The daemon looks for its config in a YAML file at /etc/config/ip-masq-agent</span>
+              - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">config</span>
+                <span style="color:#f92672">path</span>: <span style="color:#ae81ff">ip-masq-agent</span>
+      <span style="color:#f92672">tolerations</span>:
+      - <span style="color:#f92672">effect</span>: <span style="color:#ae81ff">NoSchedule</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">Exists</span>
+      - <span style="color:#f92672">effect</span>: <span style="color:#ae81ff">NoExecute</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">Exists</span>
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;CriticalAddonsOnly&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f ip-masq-agent.yaml
+</code></pre></div><p>After the creation ogthe ip-masq-agent check the firewall rules of the GKE nodes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo iptables -t NAT -L IP-MASQ
 
-<pre><code class="language-bash">kubectl apply -f ip-masq-agent.yaml
-</code></pre>
-
-<p>After the creation ogthe ip-masq-agent check the firewall rules of the GKE nodes:</p>
-
-<pre><code class="language-bash">sudo iptables -t NAT -L IP-MASQ
-
-Chain IP-MASQ (2 references)
+Chain IP-MASQ <span style="color:#f92672">(</span><span style="color:#ae81ff">2</span> references<span style="color:#f92672">)</span>
 target     prot opt cource      destination
 RETURN     all  --  anywhere    anywhere      /* ip-masq-agent: local traffic is not subject to MASQUERADE */
-MASQUERADE  all  --  anywhere    anywhere      /* ip-masq-agent: outbound traffic is subject to MASQUERADE (must be last in chain) */
-</code></pre>
-
-<p>So the egress traffic from GKE to internet will go via the cloud NAT’s gateway ip address.</p>
+MASQUERADE  all  --  anywhere    anywhere      /* ip-masq-agent: outbound traffic is subject to MASQUERADE <span style="color:#f92672">(</span>must be last in chain<span style="color:#f92672">)</span> */
+</code></pre></div><p>So the egress traffic from GKE to internet will go via the cloud NAT’s gateway ip address.</p>
 		</div>
 	</article>
 </main>
@@ -275,7 +258,7 @@ MASQUERADE  all  --  anywhere    anywhere      /* ip-masq-agent: outbound traffi
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -291,6 +274,9 @@ MASQUERADE  all  --  anywhere    anywhere      /* ip-masq-agent: outbound traffi
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

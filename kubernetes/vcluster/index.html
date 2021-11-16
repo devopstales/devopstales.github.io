@@ -28,7 +28,7 @@
     "datePublished": "2021-08-03",
     "dateModified" : "2021-08-03",
     "url" : "https://devopstales.github.io/kubernetes/vcluster/",
-    "wordCount" : "507",
+    "wordCount" : "502",
     "keywords" : [ "kubernetes deployment", "K3S", "vCluster", "Multi-Tenancy", "Blog" ]
     
 }
@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Kubernetes Multi-Tenancy With vCluster" />
 <meta property="og:description" content="In this post I will use vCluster to run virtual Kubernetes clusters inside a Kubernetes cluster." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/kubernetes/vcluster/" />
+<meta property="og:url" content="https://devopstales.github.io/kubernetes/vcluster/" /><meta property="article:section" content="kubernetes" />
 <meta property="article:published_time" content="2021-08-03T00:00:00+00:00" />
 <meta property="article:modified_time" content="2021-08-03T00:00:00+00:00" />
+<meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k3s-gvisor/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k3sup-calico/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k3s-cilium/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k3s-etcd-kube-vip/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k3s-helm-controller/" />
 <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-clustermesh/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-1/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-custom-host/" />
 <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-central-oauth/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-rbac-gen/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-falco/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-cisa-install/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-seccomp/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-git-backup/" />
 
@@ -159,170 +160,119 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In this post I will use vCluster to run virtual Kubernetes clusters inside a Kubernetes cluster.</p>
-
-<h3 id="parst-of-the-k3s-series">Parst of the K3S series</h3>
-
+<H3>Parst of the K3S series</H3>
 <ul>
-<li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
-<li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
-<li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a>
-<!-- * K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 --></li>
-<li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
-<li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
-<li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a>
-<!-- * K3D --></li>
-<li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-<li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part1a: <a href="../../kubernetes/k3s-etcd-kube-vip/">Install K3S with k3sup and kube-vip</a></li>
+     <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
+     <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
+<!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
+     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
+     <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
+<!-- K3D -->
+     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
-<!-- start ADDS-->
-
-<p><p><ins class="adsbygoogle"
-     style="display:block; text-align:center;"
-     data-ad-layout="in-article"
-     data-ad-format="fluid"
-     data-ad-client="ca-pub-3398636867919740"
-     data-ad-slot="4704035022"></ins>
-<script>
-     (adsbygoogle = window.adsbygoogle || []).push({});
-</script>
-<!-- end ADDS--></p>
 
 <h3 id="what-is-vcluster">What is vCluster</h3>
-
 <p>We all know about <code>k3d</code> is not, it is a lightweight wrapper to run <code>k3s</code> n docker. In that scenario a Kubernetes node is a container running on docker. Probably <code>k3sd</code> was the inspiration for <code>vCluster</code> but they take the idea to the next level. With <code>vCluster</code> you can run a <code>k3s</code> cluster in a single namespace This solution is similar the <a href="https://github.com/kcp-dev/kcp">kcp</a> but they used the tools that already exists.</p>
-
-<p><img src="https://devopstales.github.io/img/include/vcluster-architecture.svg" alt="vcluster - Architecture" /></p>
-
+<p><img src="https://devopstales.github.io/img/include/vcluster-architecture.svg" alt="vcluster - Architecture"  class="zoomable" /></p>
 <p><code>vCluster</code> runs a component called <code>syncert</code> that is synchronize the Low-Level component from the <code>k3s</code> cluster like pods, services, ingress. So in reality the parent cluster will run these objects.</p>
-
 <h3 id="getting-started">Getting Started</h3>
-
 <p><code>vCluster</code> give you a cli to ease the task of installation:</p>
-
-<pre><code class="language-bash">curl -s -L &quot;https://github.com/loft-sh/vcluster/releases/latest&quot; | sed -nE 's!.*&quot;([^&quot;]*vcluster-linux-amd64)&quot;.*!https://github.com\1!p' | xargs -n 1 curl -L -o vcluster &amp;&amp; chmod +x vcluster;
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -s -L <span style="color:#e6db74">&#34;https://github.com/loft-sh/vcluster/releases/latest&#34;</span> | sed -nE <span style="color:#e6db74">&#39;s!.*&#34;([^&#34;]*vcluster-linux-amd64)&#34;.*!https://github.com\1!p&#39;</span> | xargs -n <span style="color:#ae81ff">1</span> curl -L -o vcluster <span style="color:#f92672">&amp;&amp;</span> chmod +x vcluster;
 sudo mv vcluster /usr/local/bin;
-</code></pre>
-
-<p>In the background <code>vCluster CLI</code> use <code>helm</code> and <code>kubectl</code> to do the magic. So you can easily modify the configuration in the <code>values.yaml</code> file if you want.</p>
-
-<pre><code class="language-bash">kubectl create ns vcluster-1
+</code></pre></div><p>In the background <code>vCluster CLI</code> use <code>helm</code> and <code>kubectl</code> to do the magic. So you can easily modify the configuration in the <code>values.yaml</code> file if you want.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns vcluster-1
 
 vcluster create vcluster-1 -n vcluster-1
-</code></pre>
-
-<h3 id="exposing-vcluster">Exposing vcluster</h3>
-
+</code></pre></div><h3 id="exposing-vcluster">Exposing vcluster</h3>
 <p>By default, vcluster is not reachable. To directly access vcluste you need to use one of the following methods:</p>
-
 <ul>
 <li>port-forwarding</li>
 <li>LoadBalancer service</li>
 <li>NodePort service</li>
-
-<li><p>Ingress</p>
-
-<pre><code class="language-bash"># Use --expose to create a vcluster with an LoadBalancer Service
-vcluster create vcluster-1 -n vcluster-1 --expose 
-</code></pre></li>
+<li>Ingress</li>
 </ul>
-
-<p>I have a preinstalled <code>MetalLB</code> so the <code>LoadBalancer Service</code> will work perfectly for me, but if you want to use ingress you can do just fine.</p>
-
-<pre><code class="language-yaml">apiVersion: extensions/v1beta1
-kind: Ingress
-metadata:
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
-    nginx.ingress.kubernetes.io/ssl-passthrough: &quot;true&quot;
-    nginx.ingress.kubernetes.io/ssl-redirect: &quot;true&quot;
-  name: vcluster-1
-  namespace: vcluster-1
-spec:
-  rules:
-  - host: vcluster-1.example.com
-    http:
-      paths:
-      - backend:
-          serviceName: vcluster-1
-          servicePort: 443
-        path: /
-</code></pre>
-
-<p>When you manually add an ingress or service you mast add the ip or the hostname to the certificate of the <code>k3s</code> cluster</p>
-
-<pre><code class="language-yaml">syncer:
-  extraArgs:
-  - --tls-san=my-vcluster.example.com
-# or
-syncer:
-  extraArgs:
-  - --tls-san=10.10.10.5
-</code></pre>
-
-<pre><code class="language-bash">vcluster create vcluster-1 -n vcluster-1 -f values.yaml
-</code></pre>
-
-<h3 id="external-datastorage">External Datastorage</h3>
-
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Use --expose to create a vcluster with an LoadBalancer Service</span>
+vcluster create vcluster-1 -n vcluster-1 --expose 
+</code></pre></div><p>I have a preinstalled <code>MetalLB</code> so the <code>LoadBalancer Service</code> will work perfectly for me, but if you want to use ingress you can do just fine.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">extensions/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">nginx.ingress.kubernetes.io/backend-protocol</span>: <span style="color:#ae81ff">HTTPS</span>
+    <span style="color:#f92672">nginx.ingress.kubernetes.io/ssl-passthrough</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+    <span style="color:#f92672">nginx.ingress.kubernetes.io/ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">vcluster-1</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">vcluster-1</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">vcluster-1.example.com</span>
+    <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">serviceName</span>: <span style="color:#ae81ff">vcluster-1</span>
+          <span style="color:#f92672">servicePort</span>: <span style="color:#ae81ff">443</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</code></pre></div><p>When you manually add an ingress or service you mast add the ip or the hostname to the certificate of the <code>k3s</code> cluster</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">syncer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+  - --<span style="color:#ae81ff">tls-san=my-vcluster.example.com</span>
+<span style="color:#75715e"># or</span>
+<span style="color:#f92672">syncer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+  - --<span style="color:#ae81ff">tls-san=10.10.10.5</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">vcluster create vcluster-1 -n vcluster-1 -f values.yaml
+</code></pre></div><h3 id="external-datastorage">External Datastorage</h3>
 <p>In the default scenario <code>k3s</code> in the namespace will use SQLite as the Datastorage but <code>vCluster</code> can run <code>k3s</code> with all the other supported Datastorage:</p>
-
 <ul>
 <li>Embedded SQLite (default)</li>
 <li>PostgreSQL</li>
 <li>MySQL</li>
 <li>MariaDB</li>
-
-<li><p>etcd</p>
-
-<pre><code class="language-yaml">vcluster:
-env:
-- name: K3S_DATASTORE_ENDPOINT
-value: https://etcd-host-1:2379,https://etcd-host-2:2379,https://etcd-host-3:2379
-</code></pre>
-
-<pre><code class="language-yaml">vcluster:
-env:
-- name: K3S_DATASTORE_ENDPOINT
-value: postgres://username:password@hostname:5432/k3s
-</code></pre>
-
-<pre><code class="language-yaml">vcluster:
-env:
-- name: K3S_DATASTORE_ENDPOINT
-value: 'mysql://username:password@tcp(hostname:3306)/k3s'
-- name: K3S_DATASTORE_CERTFILE
-value: '/path/to/client.crt' 
-- name: K3S_DATASTORE_KEYFILE
-value: '/path/to/client.key' 
-volumeMounts:
-- mountPath: /data
-  name: data
-- mountPath: /path/to
-  name: datastore-tls
-volumes:
-- name: datastore-tls
-secret:
-secretName: my-datastore-secret
-items:
-- key: tls.key
-  path: client.key
-- key: tls.crt
-  path: client.crt
-</code></pre></li>
+<li>etcd</li>
 </ul>
-
-<p>For this demo I will use the default Datastorage.</p>
-
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">vcluster</span>:
+  <span style="color:#f92672">env</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">K3S_DATASTORE_ENDPOINT</span>
+    <span style="color:#f92672">value</span>: <span style="color:#ae81ff">https://etcd-host-1:2379,https://etcd-host-2:2379,https://etcd-host-3:2379</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">vcluster</span>:
+  <span style="color:#f92672">env</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">K3S_DATASTORE_ENDPOINT</span>
+    <span style="color:#f92672">value</span>: <span style="color:#ae81ff">postgres://username:password@hostname:5432/k3s</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">vcluster</span>:
+  <span style="color:#f92672">env</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">K3S_DATASTORE_ENDPOINT</span>
+    <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#39;mysql://username:password@tcp(hostname:3306)/k3s&#39;</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">K3S_DATASTORE_CERTFILE</span>
+    <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#39;/path/to/client.crt&#39;</span> 
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">K3S_DATASTORE_KEYFILE</span>
+    <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#39;/path/to/client.key&#39;</span> 
+  <span style="color:#f92672">volumeMounts</span>:
+    - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/data</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">data</span>
+    - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/path/to</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">datastore-tls</span>
+<span style="color:#f92672">volumes</span>:
+- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">datastore-tls</span>
+  <span style="color:#f92672">secret</span>:
+    <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">my-datastore-secret</span>
+    <span style="color:#f92672">items</span>:
+    - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">tls.key</span>
+      <span style="color:#f92672">path</span>: <span style="color:#ae81ff">client.key</span>
+    - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">tls.crt</span>
+      <span style="color:#f92672">path</span>: <span style="color:#ae81ff">client.crt</span>
+</code></pre></div><p>For this demo I will use the default Datastorage.</p>
 <h3 id="access-the-vcluster">Access the vcluster</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">vcluster connect vcluster-1 -n vcluster-1
 
-<pre><code class="language-bash">vcluster connect vcluster-1 -n vcluster-1
-
-export KUBECONFIG=./kubeconfig.yaml
+export KUBECONFIG<span style="color:#f92672">=</span>./kubeconfig.yaml
 
 kubectl get ns
-</code></pre>
+</code></pre></div>
 		</div>
 		<footer class="post__footer">
 			
@@ -387,7 +337,7 @@ kubectl get ns
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -403,6 +353,9 @@ kubectl get ns
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

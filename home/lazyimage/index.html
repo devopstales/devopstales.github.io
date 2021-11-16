@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Speed up docker pull with lazypull" />
 <meta property="og:description" content="In this post I will show you the solutions to speed up the container downloads." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/home/lazyimage/" />
+<meta property="og:url" content="https://devopstales.github.io/home/lazyimage/" /><meta property="article:section" content="Home" />
 <meta property="article:published_time" content="2021-08-02T00:00:00+00:00" />
 <meta property="article:modified_time" content="2021-08-02T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -154,92 +155,61 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In this post I will show you the solutions to speed up the container downloads.</p>
-
 <p>According to Googles&rsquo;s analisys &ldquo;pulling packages accounts for 76% of container start time, but only 6.4% of that data is read&rdquo; This of course affecting various kinds of workloads on our Kubernetes clusters like cold-start of containers, serverless functions, build and CI/CD. In the community, workarounds are known but they still have unavoidable drawbacks. Let&rsquo;s check this workarounds:</p>
-
 <h3 id="background">Background</h3>
-
 <p>When you run a container the command will pull images from a repository if they are not already available locally. The image is downloaded but not in one big file then multiple smaller one. The runtime engin downloads this files simultaneously to speed up this process. In the background all part is a tar-file downloaded with wget the extracted.</p>
-
 <p>The AUFS storage driver is a common default in container runtime. The AUFS driver takes advantage of the AUFS file system’s layering and copy-on-write (COW) capabilities while also accessing the file system underlying AUFS directly. The driver creates a new directory in the underlying file system for each layer it stores. As a union file system it does not store data directly on disk, but instead uses another file system (e.g. ext4) as underlying storage. A union mount point provides a view of multiple directories in the underlying file system.</p>
-
 <p>Using a HelloBench tool that they wrote, the authors analyse 57 different container images pulled from the Docker Hub. Across these images there are 550 nodes and and 19 roots. They realized that the average uncompressed image is 15 x larger that the amount of image data needed for container startup.</p>
-
 <p>For solving this problem several solution have been proposed including <a href="https://cernvm.cern.ch/fs/">CernVM-FS</a>, <a href="https://stevelasker.blog/2019/10/29/azure-container-registry-teleportation/">Microsoft Teleportation</a>, <a href="https://github.com/google/crfs">Google CRFS</a> and <a href="https://d7y.io/en-us/">Dragonfly</a></p>
-
 <h3 id="standard-compatible-solution">Standard compatible solution</h3>
-
 <p>Containerd started <a href="https://github.com/containerd/stargz-snapshotter">Stargz Snapshotter</a> as a plugin to improve the pull performance. It enables to lazy pull container images leveraging <a href="https://github.com/google/crfs">stargz image format from Google</a>.</p>
-
-<p><img src="https://devopstales.github.io/img/include/lazypull1.png" alt="lazypull" /></p>
-
+<p><img src="https://devopstales.github.io/img/include/lazypull1.png" alt="lazypull"  class="zoomable" /></p>
 <p>The lazy pull here means containerd doesn’t download the entire image on pull operation but fetches necessary contents on-demand. This shortens the container startup latency from tens of seconds into a few seconds at the best.</p>
-
-<p><img src="https://devopstales.github.io/img/include/lazypull2.png" alt="Benchmarking result from the project repository." /></p>
-
+<p><img src="https://devopstales.github.io/img/include/lazypull2.png" alt="Benchmarking result from the project repository."  class="zoomable" /></p>
 <h3 id="quick-start">Quick start</h3>
-
 <p>Containerd supports lazy pulling since version 1.4. Stargz Snapshotter is the plugin that enables containerd to handle eStargz.</p>
-
-<pre><code class="language-bash">nano /etc/containerd/config.toml
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/containerd/config.toml
 ...
-[proxy_plugins]
-  [proxy_plugins.stargz]
-    type = &quot;snapshot&quot;
-    address = &quot;/run/containerd-stargz-grpc/containerd-stargz-grpc.sock&quot;
+<span style="color:#f92672">[</span>proxy_plugins<span style="color:#f92672">]</span>
+  <span style="color:#f92672">[</span>proxy_plugins.stargz<span style="color:#f92672">]</span>
+    type <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;snapshot&#34;</span>
+    address <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/run/containerd-stargz-grpc/containerd-stargz-grpc.sock&#34;</span>
 
-# Use stargz snapshotter through CRI
-[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd]
-  snapshotter = &quot;stargz&quot;
-</code></pre>
+<span style="color:#75715e"># Use stargz snapshotter through CRI</span>
+<span style="color:#f92672">[</span>plugins.<span style="color:#e6db74">&#34;io.containerd.grpc.v1.cri&#34;</span>.containerd<span style="color:#f92672">]</span>
+  snapshotter <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;stargz&#34;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nerdctl --snapshotter<span style="color:#f92672">=</span>stargz run -it --rm docker.io/stargz-containers/fedora:30-esgz
+</code></pre></div><p>CRI-O experimentally supports lazy pulling. The plugin that enables this is called <a href="https://github.com/containerd/stargz-snapshotter/blob/main/docs/INSTALL.md#whats-stargz-snapshotter-and-stargz-store">Additional Layer Store</a>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/containers/storage.conf
+<span style="color:#75715e"># Additional Layer Store is supported only by overlay driver as of now </span>
+<span style="color:#f92672">[</span>storage<span style="color:#f92672">]</span>
+driver <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;overlay&#34;</span>
+graphroot <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/var/lib/containers/storage&#34;</span>
+runroot <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/run/containers/storage&#34;</span>
 
-<pre><code class="language-bash">nerdctl --snapshotter=stargz run -it --rm docker.io/stargz-containers/fedora:30-esgz
-</code></pre>
-
-<p>CRI-O experimentally supports lazy pulling. The plugin that enables this is called <a href="https://github.com/containerd/stargz-snapshotter/blob/main/docs/INSTALL.md#whats-stargz-snapshotter-and-stargz-store">Additional Layer Store</a>.</p>
-
-<pre><code class="language-bash">nano /etc/containers/storage.conf
-# Additional Layer Store is supported only by overlay driver as of now 
-[storage]
-driver = &quot;overlay&quot;
-graphroot = &quot;/var/lib/containers/storage&quot;
-runroot = &quot;/run/containers/storage&quot;
-
-# Interact with Additional Layer Store over a directory
-[storage.options]
-additionallayerstores = [&quot;/path/to/additional/layer/store:ref&quot;]
-</code></pre>
-
-<p><img src="https://devopstales.github.io/img/include/lazypull3.png" alt="eStargz in container workflow" /></p>
-
+<span style="color:#75715e"># Interact with Additional Layer Store over a directory</span>
+<span style="color:#f92672">[</span>storage.options<span style="color:#f92672">]</span>
+additionallayerstores <span style="color:#f92672">=</span> <span style="color:#f92672">[</span><span style="color:#e6db74">&#34;/path/to/additional/layer/store:ref&#34;</span><span style="color:#f92672">]</span>
+</code></pre></div><p><img src="https://devopstales.github.io/img/include/lazypull3.png" alt="eStargz in container workflow"  class="zoomable" /></p>
 <h3 id="build-images">Build images</h3>
-
 <p>You can create an eStarge image using eStargz-aware image builders (e.g. <a href="https://github.com/GoogleContainerTools/kaniko">Kaniko</a>) or image converters (e.g. ctr-remote and nerdctl).</p>
-
 <p><a href="https://github.com/containerd/stargz-snapshotter/blob/main/docs/ctr-remote.md">ctr-remote</a> is a CLI for converting an OCI/Docker image into eStargz.</p>
-
-<pre><code class="language-bash">ctr-remote image pull docker.io/library/ubuntu:21.04
-ctr-remote image optimize --oci \
-    docker.io/library/ubuntu:21.04 docker.io/devopstales/ubuntu:21.04-esgz
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ctr-remote image pull docker.io/library/ubuntu:21.04
+ctr-remote image optimize --oci <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    docker.io/library/ubuntu:21.04 docker.io/devopstales/ubuntu:21.04-esgz
 ctr-remote image push docker.io/devopstales/ubuntu:21.04-esgz
-</code></pre>
-
-<p>nerdctl supports creating eStargz images</p>
-
-<pre><code class="language-bash">nerdctl build -t docker.io/devopstales/foo:1 .
-nerdctl image convert --estargz --oci \
-    docker.io/devopstales/foo:1 docker.io/devopstales/foo:1-esgz
+</code></pre></div><p>nerdctl supports creating eStargz images</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nerdctl build -t docker.io/devopstales/foo:1 .
+nerdctl image convert --estargz --oci <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    docker.io/devopstales/foo:1 docker.io/devopstales/foo:1-esgz
 nerdctl push docker.io/devopstales/foo:1-esgz
-</code></pre>
-
-<p><a href="https://github.com/GoogleContainerTools/kaniko">Kaniko</a> is an image builder runnable in containers and Kubernetes. Since v1.5.0, it experimentally supports building eStargz. 7</p>
-
-<pre><code class="language-bash">docker run --rm -e GGCR_EXPERIMENT_ESTARGZ=1 \
-    -v /tmp/context:/workspace \
-    -v ~/.docker/config.json:/kaniko/.docker/config.json:ro \
-    gcr.io/kaniko-project/executor:v1.6.0 \
-      --destination &quot;docker.io/devopstales/sample:esgz&quot;
-</code></pre>
+</code></pre></div><p><a href="https://github.com/GoogleContainerTools/kaniko">Kaniko</a> is an image builder runnable in containers and Kubernetes. Since v1.5.0, it experimentally supports building eStargz. 7</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker run --rm -e GGCR_EXPERIMENT_ESTARGZ<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -v /tmp/context:/workspace <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -v ~/.docker/config.json:/kaniko/.docker/config.json:ro <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    gcr.io/kaniko-project/executor:v1.6.0 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>      --destination <span style="color:#e6db74">&#34;docker.io/devopstales/sample:esgz&#34;</span>
+</code></pre></div>
 		</div>
 	</article>
 </main>
@@ -290,7 +260,7 @@ nerdctl push docker.io/devopstales/foo:1-esgz
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -306,6 +276,9 @@ nerdctl push docker.io/devopstales/foo:1-esgz
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

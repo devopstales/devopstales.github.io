@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Install Foreman PXE boot" />
 <meta property="og:description" content="Foreman is a complete lifecycle management tool for physical and virtual servers. We give system administrators the power to easily automate repetitive tasks, quickly deploy applications, and proactively manage servers, on-premise or in the cloud." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/home/foreman-pxe/" />
+<meta property="og:url" content="https://devopstales.github.io/home/foreman-pxe/" /><meta property="article:section" content="Home" />
 <meta property="article:published_time" content="2019-11-07T00:00:00+00:00" />
 <meta property="article:modified_time" content="2019-11-07T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -154,17 +155,12 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>Foreman is a complete lifecycle management tool for physical and virtual servers. We give system administrators the power to easily automate repetitive tasks, quickly deploy applications, and proactively manage servers, on-premise or in the cloud.</p>
-
 <p>I hawe a VM with two virtual interface the enp0s3 for NAT and enp0s9 with an internal network.</p>
-
 <h3 id="install-dhcp-server">Install DHCP server</h3>
-
-<pre><code>yum install -y dhcp nano -y
+<pre tabindex="0"><code>yum install -y dhcp nano -y
 
 echo &quot;DHCPDARGS=enp0s9&quot; &gt;&gt; /etc/sysconfig/dhcpd
-</code></pre>
-
-<pre><code>cat &gt; /etc/dhcp/dhcpd.conf &lt;&lt; EOF
+</code></pre><pre tabindex="0"><code>cat &gt; /etc/dhcp/dhcpd.conf &lt;&lt; EOF
 #DHCP configuration for PXE boot server
 ddns-update-style interim;
 ignore client-updates;
@@ -188,16 +184,11 @@ next-server 192.168.100.100; #  PXE server ip
 filename &quot;pxelinux.0&quot;;
 }
 EOF
-</code></pre>
-
-<pre><code>systemctl start dhcpd.service
+</code></pre><pre tabindex="0"><code>systemctl start dhcpd.service
 systemctl enable dhcpd.service
 systemctl status dhcpd.service
-</code></pre>
-
-<h3 id="install-dns-server">Install DNS server</h3>
-
-<pre><code>yum -y install bind bind-utils
+</code></pre><h3 id="install-dns-server">Install DNS server</h3>
+<pre tabindex="0"><code>yum -y install bind bind-utils
 
 nano /etc/named.conf
 options {
@@ -213,9 +204,7 @@ options {
         };
 };
 include &quot;/etc/named.my.zones&quot;;
-</code></pre>
-
-<pre><code>touch /etc/named.my.zones
+</code></pre><pre tabindex="0"><code>touch /etc/named.my.zones
 chown root:named /etc/named.my.zones
 
 nano /etc/named.my.zones
@@ -224,9 +213,7 @@ zone &quot;devopstales.intra&quot; IN {
          file &quot;devopstales.intra.db&quot;;
          allow-update { none; };
 };
-</code></pre>
-
-<pre><code>nano /var/named/devopstales.intra.db
+</code></pre><pre tabindex="0"><code>nano /var/named/devopstales.intra.db
 @   IN  SOA     primary.devopstales.intra. root.mydomain.intra. (
                                                 1001    ;Serial
                                                 3H      ;Refresh
@@ -247,16 +234,11 @@ devopstales.intra. IN  MX 10   mail.mydomain.intra.
 ;A - Record HostName To IP Address
 foreman IN  A       192.168.100.100
 mail    IN  A       192.168.100.50
-</code></pre>
-
-<pre><code>systemctl restart named
+</code></pre><pre tabindex="0"><code>systemctl restart named
 systemctl status named
 systemctl enable named
-</code></pre>
-
-<h3 id="install-vtftp">Install vtftp</h3>
-
-<pre><code>yum install vsftpd -y
+</code></pre><h3 id="install-vtftp">Install vtftp</h3>
+<pre tabindex="0"><code>yum install vsftpd -y
 
 nano /etc/vsftpd/vsftpd.conf
 anonymous_enable=YES
@@ -279,11 +261,8 @@ mkdir /var/ftp/pub/CentOS_7_x86_64
 rsync -rv --progress /mnt/ /var/ftp/pub/CentOS_7_x86_64/
 umount /mnt
 restorecon -Rv /var/ftp/pub/
-</code></pre>
-
-<h3 id="install-foreman">Install Foreman</h3>
-
-<pre><code>yum -y install https://yum.puppet.com/puppet6-release-el-7.noarch.rpm
+</code></pre><h3 id="install-foreman">Install Foreman</h3>
+<pre tabindex="0"><code>yum -y install https://yum.puppet.com/puppet6-release-el-7.noarch.rpm
 yum -y install http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 yum -y install https://yum.theforeman.org/releases/1.23/el7/x86_64/foreman-release.rpm
 yum -y install foreman-installer
@@ -297,11 +276,8 @@ foreman-installer \
 --enable-foreman-proxy-plugin-remote-execution-ssh \
 --enable-foreman-plugin-cockpit \
 --enable-foreman-plugin-openscap
-</code></pre>
-
-<h3 id="configure-hammer">Configure hammer</h3>
-
-<pre><code>nano ~/.hammer/cli.modules.d/foreman.yml
+</code></pre><h3 id="configure-hammer">Configure hammer</h3>
+<pre tabindex="0"><code>nano ~/.hammer/cli.modules.d/foreman.yml
 :foreman:
  :host: 'https://foreman.devopstales.intra/'
  :username: 'admin'
@@ -310,11 +286,8 @@ foreman-installer \
 hammer defaults add --param-name organization --param-value &quot;mydomain&quot;
 hammer defaults add --param-name location --param-value &quot;office&quot;
 hammer defaults list
-</code></pre>
-
-<h3 id="configurate-pxeboot">Configurate PXEboot</h3>
-
-<pre><code>sudo ss -lnup | grep 69
+</code></pre><h3 id="configurate-pxeboot">Configurate PXEboot</h3>
+<pre tabindex="0"><code>sudo ss -lnup | grep 69
 grep disa /etc/xinetd.d/tftp
 ls -l /var/lib/tftpboot/
 
@@ -337,11 +310,8 @@ hammer medium create \
 --name &quot;CentOS7_DVD_FTP&quot; \
 --os-family &quot;Redhat&quot; \
 --path &quot;ftp://foreman.devopstales.intra/pub/CentOS_7_x86_64/&quot;
-</code></pre>
-
-<p>Create a file hardened_ptable.txt with the content below.</p>
-
-<pre><code>&lt;%#
+</code></pre><p>Create a file hardened_ptable.txt with the content below.</p>
+<pre tabindex="0"><code>&lt;%#
 kind: ptable
 name: Kickstart hardened
 oses:
@@ -369,9 +339,7 @@ logvol /tmp     --fstype=&quot;xfs&quot;  --size=1024 --vgname=vg_os --name=lv_t
 logvol /var     --fstype=&quot;xfs&quot;  --size=6144 --vgname=vg_os --name=lv_var  --fsoptions=&quot;rw,nosuid&quot;
 logvol /var/log --fstype=&quot;xfs&quot;  --size=512  --vgname=vg_os --name=lv_log  --fsoptions=&quot;rw,nodev,noexec,nosuid&quot;
 logvol swap     --fstype=&quot;swap&quot; --size=2048 --vgname=vg_os --name=lv_swap --fsoptions=&quot;swap&quot;
-</code></pre>
-
-<pre><code>hammer partition-table create \
+</code></pre><pre tabindex="0"><code>hammer partition-table create \
   --name &quot;Kickstart hardened&quot; \
   --os-family &quot;Redhat&quot; \
   --operatingsystems &quot;CentOS 7.4.1708&quot; \
@@ -424,9 +392,7 @@ hammer host create \
   --name &quot;pxe-test&quot; \
   --hostgroup &quot;el7_group&quot; \
   --interface &quot;type=interface,mac=08:00:27:fb:ad:17,ip=192.168.100.110,managed=true,primary=true,provision=true&quot;
-</code></pre>
-
-<pre><code>ll /var/lib/tftpboot/pxelinux.cfg/
+</code></pre><pre tabindex="0"><code>ll /var/lib/tftpboot/pxelinux.cfg/
 cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
 </code></pre>
 		</div>
@@ -463,7 +429,7 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -479,6 +445,9 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

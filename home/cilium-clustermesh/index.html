@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Kubernetes Multicluster with Cilium Cluster Mesh" />
 <meta property="og:description" content="In this tutorial I will show you how to install Cilium on multiple Kubernetes clusters and connect those clusters with Cluster Mesh." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/home/cilium-clustermesh/" />
+<meta property="og:url" content="https://devopstales.github.io/home/cilium-clustermesh/" /><meta property="article:section" content="Home" />
 <meta property="article:published_time" content="2021-10-06T00:00:00+00:00" />
 <meta property="article:modified_time" content="2021-10-06T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -154,14 +155,10 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In this tutorial I will show you how to install Cilium on multiple Kubernetes clusters and connect those clusters with Cluster Mesh.</p>
-
 <h3 id="what-is-cluster-mesh">What is Cluster Mesh</h3>
-
 <p>Cluster mesh extends the networking datapath across multiple clusters. It allows endpoints in all connected clusters to communicate while providing full policy enforcement. Load-balancing is available via Kubernetes annotations.</p>
-
 <h3 id="the-infrastructure">The infrastructure</h3>
-
-<pre><code class="language-bash">k3s-cl1:
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">k3s-cl1:
 ip: 172.17.11.11
 
 k3s-cl2:
@@ -173,197 +170,171 @@ k3s-cl3:
 ip: 172.17.11.13
 etcd
 kube-vip
-</code></pre>
-
-<h2 id="installing-k3s-with-k3sup">Installing k3s with k3sup</h2>
-
-<pre><code class="language-bash">ssh-copy-id vagrant@172.17.11.11
+</code></pre></div><h2 id="installing-k3s-with-k3sup">Installing k3s with k3sup</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh-copy-id vagrant@172.17.11.11
 ssh-copy-id vagrant@172.17.11.12
 ssh-copy-id vagrant@172.17.11.13
-</code></pre>
-
-<pre><code class="language-bash">tmux-cssh vagrant@172.17.11.11 vagrant@172.17.11.12 vagrant@172.17.11.13
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">tmux-cssh vagrant@172.17.11.11 vagrant@172.17.11.12 vagrant@172.17.11.13
 sudo su -
 curl -sLS https://get.k3sup.dev | sh
 sudo install k3sup /usr/local/bin/
 k3sup --help
-</code></pre>
-
-<h3 id="bootstrap-cl1">Bootstrap cl1</h3>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.11
+</code></pre></div><h3 id="bootstrap-cl1">Bootstrap cl1</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.11
 sudo su -
 
-k3sup install \
-  --local \
-  --ip=172.17.11.11 \
-  --cluster \
-  --k3s-channel=stable \
-  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.11.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.11&quot; \
-  --merge \
-  --local-path $HOME/.kube/config \
-  --context=k3scl1
+k3sup install <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --local <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --ip<span style="color:#f92672">=</span>172.17.11.11 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --cluster <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --k3s-channel<span style="color:#f92672">=</span>stable <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --k3s-extra-args <span style="color:#e6db74">&#34;--flannel-backend=none --cluster-cidr=10.11.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.11&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --merge <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --local-path $HOME/.kube/config <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --context<span style="color:#f92672">=</span>k3scl1
 
 exit
 exit
-</code></pre>
-
-<h3 id="bootstrap-cl2">Bootstrap cl2</h3>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.12
+</code></pre></div><h3 id="bootstrap-cl2">Bootstrap cl2</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.12
 sudo su -
 
-k3sup install \
-  --local \
-  --ip=172.17.11.12 \
-  --cluster \
-  --k3s-channel=stable \
-  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.12.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.12&quot; \
-  --merge \
-  --local-path $HOME/.kube/config \
-  --context=k3scl2
+k3sup install <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --local <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --ip<span style="color:#f92672">=</span>172.17.11.12 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --cluster <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --k3s-channel<span style="color:#f92672">=</span>stable <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --k3s-extra-args <span style="color:#e6db74">&#34;--flannel-backend=none --cluster-cidr=10.12.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.12&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --merge <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --local-path $HOME/.kube/config <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --context<span style="color:#f92672">=</span>k3scl2
 
 exit
 exit
-</code></pre>
-
-<h3 id="bootstrap-cl3">Bootstrap cl3</h3>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.13
+</code></pre></div><h3 id="bootstrap-cl3">Bootstrap cl3</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.13
 sudo su -
 
-k3sup install \
-  --local \
-  --ip=172.17.11.13 \
-  --cluster \
-  --k3s-channel=stable \
-  --k3s-extra-args &quot;--flannel-backend=none --cluster-cidr=10.13.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.13&quot; \
-  --merge \
-  --local-path $HOME/.kube/config \
-  --context=k3scl3
+k3sup install <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --local <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --ip<span style="color:#f92672">=</span>172.17.11.13 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --cluster <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --k3s-channel<span style="color:#f92672">=</span>stable <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --k3s-extra-args <span style="color:#e6db74">&#34;--flannel-backend=none --cluster-cidr=10.13.0.0/16 --disable-network-policy --no-deploy=traefik --no-deploy=servicelb --node-ip=172.17.11.13&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --merge <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --local-path $HOME/.kube/config <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --context<span style="color:#f92672">=</span>k3scl3
 
 exit
 exit
-</code></pre>
-
-<h2 id="deploy-cilium">Deploy cilium</h2>
-
+</code></pre></div><h2 id="deploy-cilium">Deploy cilium</h2>
 <p>Each Kubernetes cluster maintains its own etcd cluster which contains the state of that cluster&rsquo;s cilium. State from multiple clusters is never mixed in etcd itself. Each cluster exposes its own etcd via a set of etcd proxies. In this demo I will use NodePort service. Cilium agents running in other clusters connect to the etcd proxies to watch for changes and replicate the multi-cluster relevant state into their own cluster. Use of etcd proxies ensures scalability of etcd watchers. Access is protected with TLS certificates.</p>
-
-<p><img src="https://devopstales.github.io/img/include/clustermesh-arch.png" alt="Cilium clustermesh" /></p>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.11
+<p><img src="https://devopstales.github.io/img/include/clustermesh-arch.png" alt="Cilium clustermesh"  class="zoomable" /></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.11
 sudo su -
 
 helm repo add cilium https://helm.cilium.io/
 helm repo update
-helm upgrade --install cilium cilium/cilium \
---set operator.replicas=1 \
---set cluster.id=1 \
---set cluster.name=k3scl1 \
---set tunnel=vxlan \
---set kubeProxyReplacement=strict \
---set containerRuntime.integration=containerd \
---set etcd.enabled=true \
---set etcd.managed=true \
---set k8sServiceHost=10.0.2.15 \
---set k8sServicePort=6443 \
--n kube-system
+helm upgrade --install cilium cilium/cilium <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set operator.replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set cluster.id<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set cluster.name<span style="color:#f92672">=</span>k3scl1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set tunnel<span style="color:#f92672">=</span>vxlan <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set kubeProxyReplacement<span style="color:#f92672">=</span>strict <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set containerRuntime.integration<span style="color:#f92672">=</span>containerd <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set etcd.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set etcd.managed<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set k8sServiceHost<span style="color:#f92672">=</span>10.0.2.15 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set k8sServicePort<span style="color:#f92672">=</span><span style="color:#ae81ff">6443</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>-n kube-system
 
-cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: cilium-etcd-external
-spec:
-  type: NodePort
-  ports:
-  - port: 2379
-  selector:
-    app: etcd
-    etcd_cluster: cilium-etcd
-    io.cilium/app: etcd-operator
-EOF
+cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl -n kube-system apply -f -
+</span><span style="color:#e6db74">apiVersion: v1
+</span><span style="color:#e6db74">kind: Service
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: cilium-etcd-external
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  type: NodePort
+</span><span style="color:#e6db74">  ports:
+</span><span style="color:#e6db74">  - port: 2379
+</span><span style="color:#e6db74">  selector:
+</span><span style="color:#e6db74">    app: etcd
+</span><span style="color:#e6db74">    etcd_cluster: cilium-etcd
+</span><span style="color:#e6db74">    io.cilium/app: etcd-operator
+</span><span style="color:#e6db74">EOF</span>
 
 exit
 exit
-</code></pre>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.12
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.12
 sudo su -
 
 helm repo add cilium https://helm.cilium.io/
 helm repo update
-helm upgrade --install cilium cilium/cilium \
---set operator.replicas=1 \
---set cluster.id=2 \
---set cluster.name=k3scl2 \
---set tunnel=vxlan \
---set containerRuntime.integration=containerd \
---set etcd.enabled=true \
---set etcd.managed=true \
---set k8sServiceHost=10.0.2.15 \
---set k8sServicePort=6443 \
--n kube-system
+helm upgrade --install cilium cilium/cilium <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set operator.replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set cluster.id<span style="color:#f92672">=</span><span style="color:#ae81ff">2</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set cluster.name<span style="color:#f92672">=</span>k3scl2 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set tunnel<span style="color:#f92672">=</span>vxlan <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set containerRuntime.integration<span style="color:#f92672">=</span>containerd <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set etcd.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set etcd.managed<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set k8sServiceHost<span style="color:#f92672">=</span>10.0.2.15 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set k8sServicePort<span style="color:#f92672">=</span><span style="color:#ae81ff">6443</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>-n kube-system
 
-cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: cilium-etcd-external
-spec:
-  type: NodePort
-  ports:
-  - port: 2379
-  selector:
-    app: etcd
-    etcd_cluster: cilium-etcd
-    io.cilium/app: etcd-operator
-EOF
+cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl -n kube-system apply -f -
+</span><span style="color:#e6db74">apiVersion: v1
+</span><span style="color:#e6db74">kind: Service
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: cilium-etcd-external
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  type: NodePort
+</span><span style="color:#e6db74">  ports:
+</span><span style="color:#e6db74">  - port: 2379
+</span><span style="color:#e6db74">  selector:
+</span><span style="color:#e6db74">    app: etcd
+</span><span style="color:#e6db74">    etcd_cluster: cilium-etcd
+</span><span style="color:#e6db74">    io.cilium/app: etcd-operator
+</span><span style="color:#e6db74">EOF</span>
 
 exit
 exit
-</code></pre>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.13
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.13
 sudo su -
 
 helm repo add cilium https://helm.cilium.io/
 helm repo update
-helm upgrade --install cilium cilium/cilium \
---set operator.replicas=1 \
---set cluster.id=3 \
---set cluster.name=k3scl3 \
---set tunnel=vxlan \
---set containerRuntime.integration=containerd \
---set etcd.enabled=true \
---set etcd.managed=true \
---set k8sServiceHost=10.0.2.15 \
---set k8sServicePort=6443 \
--n kube-system
+helm upgrade --install cilium cilium/cilium <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set operator.replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set cluster.id<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set cluster.name<span style="color:#f92672">=</span>k3scl3 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set tunnel<span style="color:#f92672">=</span>vxlan <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set containerRuntime.integration<span style="color:#f92672">=</span>containerd <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set etcd.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set etcd.managed<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set k8sServiceHost<span style="color:#f92672">=</span>10.0.2.15 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set k8sServicePort<span style="color:#f92672">=</span><span style="color:#ae81ff">6443</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>-n kube-system
 
-cat &lt;&lt;EOF | kubectl -n kube-system apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: cilium-etcd-external
-spec:
-  type: NodePort
-  ports:
-  - port: 2379
-  selector:
-    app: etcd
-    etcd_cluster: cilium-etcd
-    io.cilium/app: etcd-operator
-EOF
+cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl -n kube-system apply -f -
+</span><span style="color:#e6db74">apiVersion: v1
+</span><span style="color:#e6db74">kind: Service
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: cilium-etcd-external
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  type: NodePort
+</span><span style="color:#e6db74">  ports:
+</span><span style="color:#e6db74">  - port: 2379
+</span><span style="color:#e6db74">  selector:
+</span><span style="color:#e6db74">    app: etcd
+</span><span style="color:#e6db74">    etcd_cluster: cilium-etcd
+</span><span style="color:#e6db74">    io.cilium/app: etcd-operator
+</span><span style="color:#e6db74">EOF</span>
 
 exit
 exit
-</code></pre>
-
-<h3 id="configure-cluster-mesh">Configure cluster mesh</h3>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.11
+</code></pre></div><h3 id="configure-cluster-mesh">Configure cluster mesh</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.11
 sudo su -
 
 cd /tmp
@@ -372,16 +343,14 @@ cd clustermesh-tools
 
 ./extract-etcd-secrets.sh 
 Derived cluster-name k3scl1 from present ConfigMap
-====================================================
+<span style="color:#f92672">====================================================</span>
  WARNING: The directory config contains private keys.
           Delete after use.
-====================================================
+<span style="color:#f92672">====================================================</span>
 
 exit
 exit
-</code></pre>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.12
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.12
 sudo su -
 
 cd /tmp
@@ -390,18 +359,16 @@ cd clustermesh-tools
 
 ./extract-etcd-secrets.sh 
 Derived cluster-name k3scl2 from present ConfigMap
-====================================================
+<span style="color:#f92672">====================================================</span>
  WARNING: The directory config contains private keys.
           Delete after use.
-====================================================
+<span style="color:#f92672">====================================================</span>
 
 scp -r config/ 172.17.11.11:/tmp/clustermesh-tools/
 
 exit
 exit
-</code></pre>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.13
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.13
 sudo su -
 
 cd /tmp
@@ -410,18 +377,16 @@ cd clustermesh-tools
 
 ./extract-etcd-secrets.sh 
 Derived cluster-name k3scl3 from present ConfigMap
-====================================================
+<span style="color:#f92672">====================================================</span>
  WARNING: The directory config contains private keys.
           Delete after use.
-====================================================
+<span style="color:#f92672">====================================================</span>
 
 scp -r config/ 172.17.11.11:/tmp/clustermesh-tools/
 
 exit
 exit
-</code></pre>
-
-<pre><code class="language-bash">ssh vagrant@172.17.11.11
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh vagrant@172.17.11.11
 sudo su -
 
 cd /tmp/clustermesh-tools/
@@ -431,128 +396,112 @@ cd /tmp/clustermesh-tools/
 scp clustermesh.yaml ds.patch 172.17.11.12:
 scp clustermesh.yaml ds.patch 172.17.11.13:
 
-kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
+kubectl -n kube-system patch ds cilium -p <span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">$(</span>cat ds.patch<span style="color:#66d9ef">)</span><span style="color:#e6db74">&#34;</span>
 kubectl -n kube-system apply -f clustermesh.yaml
-kubectl -n kube-system delete pod -l k8s-app=cilium
-kubectl -n kube-system delete pod -l name=cilium-operator
+kubectl -n kube-system delete pod -l k8s-app<span style="color:#f92672">=</span>cilium
+kubectl -n kube-system delete pod -l name<span style="color:#f92672">=</span>cilium-operator
 
-ssh 172.17.11.12 '
-  kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
-  kubectl -n kube-system apply -f clustermesh.yaml
-  kubectl -n kube-system delete pod -l k8s-app=cilium
-  kubectl -n kube-system delete pod -l name=cilium-operator
-'
+ssh 172.17.11.12 <span style="color:#e6db74">&#39;
+</span><span style="color:#e6db74">  kubectl -n kube-system patch ds cilium -p &#34;$(cat ds.patch)&#34;
+</span><span style="color:#e6db74">  kubectl -n kube-system apply -f clustermesh.yaml
+</span><span style="color:#e6db74">  kubectl -n kube-system delete pod -l k8s-app=cilium
+</span><span style="color:#e6db74">  kubectl -n kube-system delete pod -l name=cilium-operator
+</span><span style="color:#e6db74">&#39;</span>
 
-ssh 172.17.11.13 '
-  kubectl -n kube-system patch ds cilium -p &quot;$(cat ds.patch)&quot;
-  kubectl -n kube-system apply -f clustermesh.yaml
-  kubectl -n kube-system delete pod -l k8s-app=cilium
-  kubectl -n kube-system delete pod -l name=cilium-operator
-'
-</code></pre>
-
-<p>Verify the cluster mesh by dumping the node list from any cilium. It should show all nodes in both the clusters.</p>
-
-<pre><code class="language-bash">kubectl get po -l k8s-app=cilium
+ssh 172.17.11.13 <span style="color:#e6db74">&#39;
+</span><span style="color:#e6db74">  kubectl -n kube-system patch ds cilium -p &#34;$(cat ds.patch)&#34;
+</span><span style="color:#e6db74">  kubectl -n kube-system apply -f clustermesh.yaml
+</span><span style="color:#e6db74">  kubectl -n kube-system delete pod -l k8s-app=cilium
+</span><span style="color:#e6db74">  kubectl -n kube-system delete pod -l name=cilium-operator
+</span><span style="color:#e6db74">&#39;</span>
+</code></pre></div><p>Verify the cluster mesh by dumping the node list from any cilium. It should show all nodes in both the clusters.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get po -l k8s-app<span style="color:#f92672">=</span>cilium
 NAME           READY   STATUS    RESTARTS   AGE
-cilium-6z8zf   1/1     Running   0          3m54s
+cilium-6z8zf   1/1     Running   <span style="color:#ae81ff">0</span>          3m54s
 
 kubectl -n kube-system exec -ti cilium-6z8zf -- cilium node list
  
-Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+Defaulted container <span style="color:#e6db74">&#34;cilium-agent&#34;</span> out of: cilium-agent, mount-cgroup <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>, clean-cilium-state <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>
 Name           IPv4 Address   Endpoint CIDR   IPv6 Address   Endpoint CIDR
 k3scl1/k3s01   172.17.11.11   10.0.0.0/24                    
 k3scl2/k3s02   172.17.11.12   10.0.0.0/24                    
 k3scl3/k3s03   172.17.11.13   10.0.0.0/24      
-</code></pre>
+</code></pre></div><h3 id="test-the-connection">Test the connection</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">ssh vagrant@172.17.11.11</span>
+<span style="color:#ae81ff">sudo su -</span>
 
-<h3 id="test-the-connection">Test the connection</h3>
+<span style="color:#ae81ff">kubectl create ns test</span>
+<span style="color:#ae81ff">kubens test</span>
 
-<pre><code class="language-yaml">ssh vagrant@172.17.11.11
-sudo su -
-
-kubectl create ns test
-kubens test
-
-cat &lt;&lt;EOF | kubectl apply -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: nginx
-  namespace: test
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: nginx
-  template:
-    metadata:
-      labels:
-        app: nginx
-    spec:
-      containers:
-      - name: nginx
-        image: nginx:1
-        ports:
-        - name: http
-          containerPort: 80
-EOF
-</code></pre>
-
-<p>The service discovery of Cilium&rsquo;s multi-cluster model is built using standard Kubernetes services and designed to be completely transparent to existing Kubernetes application deployments:</p>
-
-<pre><code class="language-yaml">cat &lt;&lt;EOF | kubectl apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx-global
-  namespace: test
-  annotations:
-    io.cilium/global-service: &quot;true&quot;
-spec:
-  ports:
-  - name: http
-    port: 80
-    protocol: TCP
-    targetPort: 80
-  selector:
-    app: nginx
-EOF
-</code></pre>
-
-<p>Cilium monitors Kubernetes services and endpoints and watches for services with an annotation <code>io.cilium/global-service: &quot;true&quot;</code>. For such services, all services with identical name and namespace information are automatically merged together and form a global service that is available across clusters.</p>
-
+<span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:1</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+          <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>The service discovery of Cilium&rsquo;s multi-cluster model is built using standard Kubernetes services and designed to be completely transparent to existing Kubernetes application deployments:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx-global</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">test</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">io.cilium/global-service</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ports</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+    <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+    <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+    <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">80</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Cilium monitors Kubernetes services and endpoints and watches for services with an annotation <code>io.cilium/global-service: &quot;true&quot;</code>. For such services, all services with identical name and namespace information are automatically merged together and form a global service that is available across clusters.</p>
 <h3 id="test-cl1">Test cl1</h3>
-
 <p>After you deploy the global service to both of the clusters, you can test the connection:</p>
-
-<pre><code class="language-bash">kubectl -n kube-system exec -ti cilium-6z8zf -- cilium service list 
-Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl -n kube-system exec -ti cilium-6z8zf -- cilium service list 
+Defaulted container <span style="color:#e6db74">&#34;cilium-agent&#34;</span> out of: cilium-agent, mount-cgroup <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>, clean-cilium-state <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>
 ID   Frontend             Service Type   Backend                  
 ...
-5    10.43.200.118:80     ClusterIP      1 =&gt; 10.0.0.145:80       
-                                         2 =&gt; 10.0.0.69:80        
+<span style="color:#ae81ff">5</span>    10.43.200.118:80     ClusterIP      1 <span style="color:#f92672">=</span>&gt; 10.0.0.145:80       
+                                         2 <span style="color:#f92672">=</span>&gt; 10.0.0.69:80        
 ...
 
 kubectl -n kube-system exec -ti cilium-6z8zf -- cilium bpf lb list 
-Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+Defaulted container <span style="color:#e6db74">&#34;cilium-agent&#34;</span> out of: cilium-agent, mount-cgroup <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>, clean-cilium-state <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>
 SERVICE ADDRESS      BACKEND ADDRESS
 ...
-10.43.200.118:80     10.0.0.69:80 (5)                          
-                     10.0.0.145:80 (5)                         
+10.43.200.118:80     10.0.0.69:80 <span style="color:#f92672">(</span>5<span style="color:#f92672">)</span>                          
+                     10.0.0.145:80 <span style="color:#f92672">(</span>5<span style="color:#f92672">)</span>                         
 ...
-</code></pre>
-
-<pre><code class="language-bash">kubectl run -it --rm --image=tianon/network-toolbox debian
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl run -it --rm --image<span style="color:#f92672">=</span>tianon/network-toolbox debian
 curl nginx-global
 &lt;!DOCTYPE html&gt;
 &lt;html&gt;
 &lt;head&gt;
 &lt;title&gt;Welcome to nginx!&lt;/title&gt;
 &lt;style&gt;
-html { color-scheme: light dark; }
-body { width: 35em; margin: 0 auto;
-font-family: Tahoma, Verdana, Arial, sans-serif; }
+html <span style="color:#f92672">{</span> color-scheme: light dark; <span style="color:#f92672">}</span>
+body <span style="color:#f92672">{</span> width: 35em; margin: <span style="color:#ae81ff">0</span> auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; <span style="color:#f92672">}</span>
 &lt;/style&gt;
 &lt;/head&gt;
 &lt;body&gt;
@@ -561,67 +510,64 @@ font-family: Tahoma, Verdana, Arial, sans-serif; }
 working. Further configuration is required.&lt;/p&gt;
 
 &lt;p&gt;For online documentation and support please refer to
-&lt;a href=&quot;http://nginx.org/&quot;&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
+&lt;a href<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://nginx.org/&#34;</span>&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
 Commercial support is available at
-&lt;a href=&quot;http://nginx.com/&quot;&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
+&lt;a href<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://nginx.com/&#34;</span>&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
 
-&lt;p&gt;&lt;em&gt;Thank you for using nginx.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Thank you <span style="color:#66d9ef">for</span> using nginx.&lt;/em&gt;&lt;/p&gt;
 &lt;/body&gt;
 &lt;/html&gt;
-</code></pre>
-
-<h3 id="test-on-cl3">Test on cl3:</h3>
-
-<pre><code class="language-bash">ssh 172.17.11.12
+</code></pre></div><h3 id="test-on-cl3">Test on cl3:</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh 172.17.11.12
 
 kubectl create ns test
 kubens test
 
-cat &lt;&lt;EOF | kubectl apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx-global
-  namespace: test
-  annotations:
-    io.cilium/global-service: &quot;true&quot;
-spec:
-  ports:
-  - name: http
-    port: 80
-    protocol: TCP
-    targetPort: 80
-  selector:
-    app: nginx
-EOF
+cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
+</span><span style="color:#e6db74">apiVersion: v1
+</span><span style="color:#e6db74">kind: Service
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: nginx-global
+</span><span style="color:#e6db74">  namespace: test
+</span><span style="color:#e6db74">  annotations:
+</span><span style="color:#e6db74">    io.cilium/global-service: &#34;true&#34;
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  ports:
+</span><span style="color:#e6db74">  - name: http
+</span><span style="color:#e6db74">    port: 80
+</span><span style="color:#e6db74">    protocol: TCP
+</span><span style="color:#e6db74">    targetPort: 80
+</span><span style="color:#e6db74">  selector:
+</span><span style="color:#e6db74">    app: nginx
+</span><span style="color:#e6db74">EOF</span>
 
 kubectl -n kube-system exec -ti cilium-8wzrc -- cilium service list
-Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+Defaulted container <span style="color:#e6db74">&#34;cilium-agent&#34;</span> out of: cilium-agent, mount-cgroup <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>, clean-cilium-state <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>
 ID   Frontend            Service Type   Backend                  
 ...
-8    10.43.189.53:80     ClusterIP      1 =&gt; 10.0.0.69:80        
-                                        2 =&gt; 10.0.0.145:80
+<span style="color:#ae81ff">8</span>    10.43.189.53:80     ClusterIP      1 <span style="color:#f92672">=</span>&gt; 10.0.0.69:80        
+                                        2 <span style="color:#f92672">=</span>&gt; 10.0.0.145:80
 ...
 
 kubectl -n kube-system exec -ti cilium-8wzrc -- cilium bpf lb list
-Defaulted container &quot;cilium-agent&quot; out of: cilium-agent, mount-cgroup (init), clean-cilium-state (init)
+Defaulted container <span style="color:#e6db74">&#34;cilium-agent&#34;</span> out of: cilium-agent, mount-cgroup <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>, clean-cilium-state <span style="color:#f92672">(</span>init<span style="color:#f92672">)</span>
 SERVICE ADDRESS     BACKEND ADDRESS
 ...
-10.43.189.53:80     0.0.0.0:0 (8) [ClusterIP, non-routable]   
-                    10.0.0.69:80 (8)                          
-                    10.0.0.145:80 (8)                    
+10.43.189.53:80     0.0.0.0:0 <span style="color:#f92672">(</span>8<span style="color:#f92672">)</span> <span style="color:#f92672">[</span>ClusterIP, non-routable<span style="color:#f92672">]</span>   
+                    10.0.0.69:80 <span style="color:#f92672">(</span>8<span style="color:#f92672">)</span>                          
+                    10.0.0.145:80 <span style="color:#f92672">(</span>8<span style="color:#f92672">)</span>                    
 ...
 
-kubectl run -it --rm --image=tianon/network-toolbox debian
+kubectl run -it --rm --image<span style="color:#f92672">=</span>tianon/network-toolbox debian
 curl nginx-global
 &lt;!DOCTYPE html&gt;
 &lt;html&gt;
 &lt;head&gt;
 &lt;title&gt;Welcome to nginx!&lt;/title&gt;
 &lt;style&gt;
-html { color-scheme: light dark; }
-body { width: 35em; margin: 0 auto;
-font-family: Tahoma, Verdana, Arial, sans-serif; }
+html <span style="color:#f92672">{</span> color-scheme: light dark; <span style="color:#f92672">}</span>
+body <span style="color:#f92672">{</span> width: 35em; margin: <span style="color:#ae81ff">0</span> auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; <span style="color:#f92672">}</span>
 &lt;/style&gt;
 &lt;/head&gt;
 &lt;body&gt;
@@ -630,38 +576,32 @@ font-family: Tahoma, Verdana, Arial, sans-serif; }
 working. Further configuration is required.&lt;/p&gt;
 
 &lt;p&gt;For online documentation and support please refer to
-&lt;a href=&quot;http://nginx.org/&quot;&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
+&lt;a href<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://nginx.org/&#34;</span>&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
 Commercial support is available at
-&lt;a href=&quot;http://nginx.com/&quot;&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
+&lt;a href<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://nginx.com/&#34;</span>&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
 
-&lt;p&gt;&lt;em&gt;Thank you for using nginx.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Thank you <span style="color:#66d9ef">for</span> using nginx.&lt;/em&gt;&lt;/p&gt;
 &lt;/body&gt;
 &lt;/html&gt;
 
-</code></pre>
-
-<h3 id="multi-cluster-network-policy">Multi-cluster network policy</h3>
-
+</code></pre></div><h3 id="multi-cluster-network-policy">Multi-cluster network policy</h3>
 <p>It is possible to establish policies that apply to pod in particular clusters only. The cluster name is represented as a label on each pod by Cilium which allows to match on the cluster name in both the <code>endpointSelector</code> as well as the <code>matchLabels</code> for <code>toEndpoints</code> and fromEndpoints constructs:</p>
-
-<pre><code class="language-yaml">apiVersion: &quot;cilium.io/v2&quot;
-kind: CiliumNetworkPolicy
-metadata:
-  name: &quot;allow-cross-cluster&quot;
-  description: &quot;Allow x-wing in cluster1 to contact rebel-base in cluster2&quot;
-spec:
-  endpointSelector:
-    matchLabels:
-      name: x-wing
-      io.cilium.k8s.policy.cluster: cluster1
-  egress:
-  - toEndpoints:
-    - matchLabels:
-        name: rebel-base
-        io.cilium.k8s.policy.cluster: cluster2
-</code></pre>
-
-<p>The above example policy will allow <code>x-wing</code> in cluster1 to talk to <code>rebel-base</code> in cluster2. X-wings won&rsquo;t be able to talk to rebel bases in the local cluster unless additional policies exist that whitelist the communication.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;cilium.io/v2&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">CiliumNetworkPolicy</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;allow-cross-cluster&#34;</span>
+  <span style="color:#f92672">description</span>: <span style="color:#e6db74">&#34;Allow x-wing in cluster1 to contact rebel-base in cluster2&#34;</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">endpointSelector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">x-wing</span>
+      <span style="color:#f92672">io.cilium.k8s.policy.cluster</span>: <span style="color:#ae81ff">cluster1</span>
+  <span style="color:#f92672">egress</span>:
+  - <span style="color:#f92672">toEndpoints</span>:
+    - <span style="color:#f92672">matchLabels</span>:
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">rebel-base</span>
+        <span style="color:#f92672">io.cilium.k8s.policy.cluster</span>: <span style="color:#ae81ff">cluster2</span>
+</code></pre></div><p>The above example policy will allow <code>x-wing</code> in cluster1 to talk to <code>rebel-base</code> in cluster2. X-wings won&rsquo;t be able to talk to rebel bases in the local cluster unless additional policies exist that whitelist the communication.</p>
 		</div>
 	</article>
 </main>
@@ -712,7 +652,7 @@ spec:
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -728,6 +668,9 @@ spec:
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

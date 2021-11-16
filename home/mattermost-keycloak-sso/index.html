@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Free sso for Mattermost Teams Edition" />
 <meta property="og:description" content="In this article I will show you how to use Keycloak as an authentication provider for  Mattermost Teams Edition." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/home/mattermost-keycloak-sso/" />
+<meta property="og:url" content="https://devopstales.github.io/home/mattermost-keycloak-sso/" /><meta property="article:section" content="Home" />
 <meta property="article:published_time" content="2020-02-16T00:00:00+00:00" />
 <meta property="article:modified_time" content="2020-02-16T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -154,12 +155,9 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In this article I will show you how to use Keycloak as an authentication provider for  Mattermost Teams Edition.</p>
-
 <p>Slack and Mattermost are very similar products. With Mattermost Teams Edition you can get almost all the functionality of the payed Slack. The only problem is sso. In Mattermost you can use google sso login in the E20 licensing what is more costly the Slack. (Slack: 8$/user Mattermost E20: 8.5$/user) In  Mattermost Teams Edition (the free edition of Mattermost) the only authentication provider you can use is gitlab, but thanks to <a href="https://qiita.com/wadahiro/items/8b118c34aae904353865">wadahiro</a> we can use Keycloak instead of gitlab.</p>
-
 <h3 id="configurate-mattermost">Configurate MAttermost</h3>
-
-<pre><code>nano /etc/mattermost/config.json
+<pre tabindex="0"><code>nano /etc/mattermost/config.json
 ...
 &quot;GitLabSettings&quot;: {
     &quot;Enable&quot;: false,
@@ -170,58 +168,36 @@ if (!doNotTrack) {
     &quot;TokenEndpoint&quot;: &quot;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/token&quot;,
     &quot;UserApiEndpoint&quot;: &quot;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/userinfo&quot;
 },
-</code></pre>
-
-<h3 id="create-client-on-keycloak">Create Client on Keycloak</h3>
-
+</code></pre><h3 id="create-client-on-keycloak">Create Client on Keycloak</h3>
 <p>In keycloak go to <code>Configure &gt; Clients</code> and create a new client for Mattermostw With the fallowing data:</p>
-
 <ul>
 <li>Standard Flow Enabled: <code>ON</code></li>
 <li>Access Type: <code>confidential</code></li>
 <li>Valid Redirect URIs: <code>http://&lt;Mattermost-FQDN&gt;/signup/gitlab/complete</code></li>
 </ul>
-
-<p><img src="https://devopstales.github.io/img/include/mattermost_sso1.png" alt="image" /> <br></p>
-
+<p><img src="https://devopstales.github.io/img/include/mattermost_sso1.png" alt="image"  class="zoomable" /> <!-- raw HTML omitted --></p>
 <h3 id="create-mapper-for-correct-data">Create mapper for correct data</h3>
-
 <p>Mattermost <a href="https://github.com/mattermost/mattermost-server/blob/v4.10.0/model/gitlab/gitlab.go#L19-L25">want</a> the fallowing data from the authentication provider:</p>
-
-<pre><code>type GitLabUser struct {
+<pre tabindex="0"><code>type GitLabUser struct {
 	Id       int64  `json:&quot;id&quot;`
 	Username string `json:&quot;username&quot;`
 	Login    string `json:&quot;login&quot;`
 	Email    string `json:&quot;email&quot;`
 	Name     string `json:&quot;name&quot;`
 }
-</code></pre>
-
-<p>Create mapping for username:</p>
-
-<p><img src="https://devopstales.github.io/img/include/mattermost_sso2.png" alt="image" /> <br></p>
-
+</code></pre><p>Create mapping for username:</p>
+<p><img src="https://devopstales.github.io/img/include/mattermost_sso2.png" alt="image"  class="zoomable" /> <!-- raw HTML omitted --></p>
 <p>The only problematic data is the ID. For the test run you can use a self generated id like this:</p>
-
-<p><img src="https://devopstales.github.io/img/include/mattermost_sso3.png" alt="image" /> <br></p>
-
+<p><img src="https://devopstales.github.io/img/include/mattermost_sso3.png" alt="image"  class="zoomable" /> <!-- raw HTML omitted --></p>
 <h3 id="create-user-for-test">Create user for test</h3>
-
 <p>For testing purposes we’re going to create a local user in Keycloak.</p>
-
-<p><img src="https://devopstales.github.io/img/include/mattermost_sso4.png" alt="image" /> <br></p>
-
+<p><img src="https://devopstales.github.io/img/include/mattermost_sso4.png" alt="image"  class="zoomable" /> <!-- raw HTML omitted --></p>
 <p>Now we need to create an attribute for this user with the mattermost id and the value should be an integer between 1 and 9999999999999999999.</p>
-
-<p><img src="https://devopstales.github.io/img/include/mattermost_sso5.png" alt="image" /> <br></p>
-
+<p><img src="https://devopstales.github.io/img/include/mattermost_sso5.png" alt="image"  class="zoomable" /> <!-- raw HTML omitted --></p>
 <p>If you have many users you didn&rsquo;t want to create id for them manually. If you use LDAP for users the best fit for this need was the employeeNumber or EmployeeId ldap attribute.</p>
-
-<p><img src="https://devopstales.github.io/img/include/mattermost_sso6.png" alt="image" /> <br></p>
-
+<p><img src="https://devopstales.github.io/img/include/mattermost_sso6.png" alt="image"  class="zoomable" /> <!-- raw HTML omitted --></p>
 <p>If you use ActiveDirectory this attribute maybe null so we need to generate it with a powershell script.</p>
-
-<pre><code>ForEach ($User in ((Get-ADUser -Filter * -Properties SamAccountName,EmployeeId)))
+<pre tabindex="0"><code>ForEach ($User in ((Get-ADUser -Filter * -Properties SamAccountName,EmployeeId)))
 {
 if ( ([string]::IsNullOrEmpty($User.EmployeeId)))
 {
@@ -268,7 +244,7 @@ Set-ADUser $User.SamAccountName -employeeID $DATA
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -284,6 +260,9 @@ Set-ADUser $User.SamAccountName -employeeID $DATA
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

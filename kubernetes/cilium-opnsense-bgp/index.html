@@ -28,7 +28,7 @@
     "datePublished": "2021-08-05",
     "dateModified" : "2021-08-05",
     "url" : "https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/",
-    "wordCount" : "404",
+    "wordCount" : "403",
     "keywords" : [ "Kubernetes", "k8s", "Load Balancer", "BGP", "kubernetes deployment", "kubernetes ingress", "Cilium", "OPNsense", "Blog" ]
     
 }
@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Use Cilium BGP integration with OPNsense" />
 <meta property="og:description" content="In this tutorial I will show you how to install Cilium with BGP integration for Kubernetes." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/" />
+<meta property="og:url" content="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/" /><meta property="article:section" content="kubernetes" />
 <meta property="article:published_time" content="2021-08-05T00:00:00+00:00" />
-<meta property="article:modified_time" content="2021-08-05T00:00:00+00:00" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-clustermesh/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-1/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/vcluster/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-custom-host/" />
+<meta property="article:modified_time" content="2021-08-05T00:00:00+00:00" />
+<meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-clustermesh/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-1/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/vcluster/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-custom-host/" />
 
 
 	
@@ -157,13 +158,9 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In this tutorial I will show you how to install Cilium with BGP integration for Kubernetes.</p>
-
 <p>Cilium recently announced the release of 1.10 which allo to advertise routes to Service IPs via BGP, so we didn&rsquo;t need to install MetalLB.</p>
-
 <h3 id="how-does-the-full-setup-look-like">How does the full setup look like?</h3>
-
 <p>For this Demo I will use a pfsense in virtualbox and tree vm for kubernetes in the same host-only network.</p>
-
 <table>
 <thead>
 <tr>
@@ -173,7 +170,6 @@ if (!doNotTrack) {
 <th>mode</th>
 </tr>
 </thead>
-
 <tbody>
 <tr>
 <td>opnsense01</td>
@@ -181,28 +177,24 @@ if (!doNotTrack) {
 <td>192.168.0.200</td>
 <td>bridged</td>
 </tr>
-
 <tr>
 <td>opnsense01</td>
 <td>em2</td>
 <td>172.17.9.200</td>
 <td>host-only</td>
 </tr>
-
 <tr>
 <td>k8sm01</td>
 <td>enp0s8</td>
 <td>172.17.9.10</td>
 <td>host-only</td>
 </tr>
-
 <tr>
 <td>k8sm02</td>
 <td>enp0s8</td>
 <td>172.17.9.11</td>
 <td>host-only</td>
 </tr>
-
 <tr>
 <td>k8sm02</td>
 <td>enp0s8</td>
@@ -211,122 +203,91 @@ if (!doNotTrack) {
 </tr>
 </tbody>
 </table>
-
 <h3 id="install-gbp-to-opnsense">Install GBP to OPNsense</h3>
-
 <p>Go to <code>System &gt; Firmware &gt; Plugins</code> and install <code>os-frr</code></p>
-
 <h3 id="configure-gbp-on-opnsense">Configure GBP on OPNsense</h3>
-
 <p>Go tp <code>Routing &gt; General</code> and enable enable the plugin. Next go to <code>Routing &gt; GBP</code> and enble, then add AS Number.</p>
-
-<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp1.jpg" alt="Enable BGP" /></p>
-
+<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp1.jpg" alt="Enable BGP"  class="zoomable" /></p>
 <h3 id="configure-neighbor">Configure Neighbor</h3>
-
 <p>Go to  <code>Routing &gt; GBP</code> the switch to the <code>Neighbor</code> tab and add the following three neighbors.</p>
-
-<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp2.jpg" alt="Neighbor" /></p>
-
-<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp3.jpg" alt="Neighbor" /></p>
-
-<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp4.PNG" alt="Neighbor" /></p>
-
+<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp2.jpg" alt="Neighbor"  class="zoomable" /></p>
+<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp3.jpg" alt="Neighbor"  class="zoomable" /></p>
+<p><img src="https://devopstales.github.io/img/include/cilium-opnsense-bgp4.PNG" alt="Neighbor"  class="zoomable" /></p>
 <h3 id="cilium-configuration">Cilium configuration</h3>
-
 <p>BGP support is enabled by providing the BGP configuration via a ConfigMap and by setting a few Helm values. Otherwise, BGP is disabled by default.</p>
-
-<pre><code class="language-bash">helm install cilium cilium/cilium \
---version 1.10.3 \
---set bgp.enabled=true \
---set bgp.announce.loadbalancerIP=true
-</code></pre>
-
-<pre><code class="language-yaml">apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: bgp-config
-  namespace: kube-system
-data:
-  config.yaml: |
-    peers:
-    - peer-address: 172.17.9.200
-      peer-asn: 64512
-      my-asn: 64513
-    address-pools:
-    - name: default
-      protocol: bgp
-      addresses:
-      - 10.25.0.10-10.25.3.250
-</code></pre>
-
-<h3 id="demo-time">Demo Time</h3>
-
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm install cilium cilium/cilium <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--version 1.10.3 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set bgp.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set bgp.announce.loadbalancerIP<span style="color:#f92672">=</span>true
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ConfigMap</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">bgp-config</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">config.yaml</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">    peers:
+</span><span style="color:#e6db74">    - peer-address: 172.17.9.200
+</span><span style="color:#e6db74">      peer-asn: 64512
+</span><span style="color:#e6db74">      my-asn: 64513
+</span><span style="color:#e6db74">    address-pools:
+</span><span style="color:#e6db74">    - name: default
+</span><span style="color:#e6db74">      protocol: bgp
+</span><span style="color:#e6db74">      addresses:
+</span><span style="color:#e6db74">      - 10.25.0.10-10.25.3.250</span>    
+</code></pre></div><h3 id="demo-time">Demo Time</h3>
 <p>Let’s create a demo application for testing.</p>
-
-<pre><code class="language-yaml">nano test.yaml
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano test.yaml</span>
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: test-nginx
-  namespace: default
-spec:
-  selector:
-    matchLabels:
-      run: test-nginx
-  replicas: 3
-  template:
-    metadata:
-      labels:
-        run: test-nginx
-    spec:
-      containers:
-      - name: test-nginx
-        image: nginx
-        ports:
-        - containerPort: 80
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-nginx</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">run</span>: <span style="color:#ae81ff">test-nginx</span>
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">3</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">test-nginx</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-nginx</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: test-nginx
-  namespace: default
-  labels:
-    run: test-nginx
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 80
-    protocol: TCP
-  selector:
-    run: test-nginx
-</code></pre>
-
-<pre><code class="language-bash">kubectl apply -f bgpconfig.yaml
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-nginx</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">run</span>: <span style="color:#ae81ff">test-nginx</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">LoadBalancer</span>
+  <span style="color:#f92672">ports</span>:
+  - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+    <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">run</span>: <span style="color:#ae81ff">test-nginx</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f bgpconfig.yaml
 kubectl apply -f test.yaml
-</code></pre>
-
-<p>After a few moments, you can run this command to get the IP address:</p>
-
-<pre><code class="language-bash">$ kubectl describe service test-nginx | grep &quot;LoadBalancer Ingress&quot;
+</code></pre></div><p>After a few moments, you can run this command to get the IP address:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl describe service test-nginx | grep <span style="color:#e6db74">&#34;LoadBalancer Ingress&#34;</span>
 LoadBalancer Ingress:     10.25.0.11
-</code></pre>
-
-<p>Let&rsquo;s check the address in a browser. If pfSense is you default gateway it will work perfectly, but in my demo enviroment I need to create a route to pfSense for this network on my host machine:</p>
-
-<pre><code class="language-bash">sudo route add -net 10.25.0.0/22 gw 172.17.9.200
-</code></pre>
-
-<pre><code class="language-bash">route -n
+</code></pre></div><p>Let&rsquo;s check the address in a browser. If pfSense is you default gateway it will work perfectly, but in my demo enviroment I need to create a route to pfSense for this network on my host machine:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo route add -net 10.25.0.0/22 gw 172.17.9.200
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">route -n
 Kernel IP routing table
 Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
-0.0.0.0         192.168.0.1     0.0.0.0         UG    600    0        0 wlan0
-10.25.0.0       172.17.9.200    255.255.252.0   UG    0      0        0 vboxnet7
-172.17.9.0      0.0.0.0         255.255.255.0   U     0      0        0 vboxnet7
-</code></pre>
-
-<p><img src="https://devopstales.github.io/img/include/pfsense-bgp-kubernetes.png" alt="Demo" /></p>
+0.0.0.0         192.168.0.1     0.0.0.0         UG    <span style="color:#ae81ff">600</span>    <span style="color:#ae81ff">0</span>        <span style="color:#ae81ff">0</span> wlan0
+10.25.0.0       172.17.9.200    255.255.252.0   UG    <span style="color:#ae81ff">0</span>      <span style="color:#ae81ff">0</span>        <span style="color:#ae81ff">0</span> vboxnet7
+172.17.9.0      0.0.0.0         255.255.255.0   U     <span style="color:#ae81ff">0</span>      <span style="color:#ae81ff">0</span>        <span style="color:#ae81ff">0</span> vboxnet7
+</code></pre></div><p><img src="https://devopstales.github.io/img/include/pfsense-bgp-kubernetes.png" alt="Demo"  class="zoomable" /></p>
 		</div>
 		<footer class="post__footer">
 			
@@ -400,7 +361,7 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -416,6 +377,9 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

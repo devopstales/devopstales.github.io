@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Install alerta on Centos8" />
 <meta property="og:description" content="AIn this post I will show you how to install alerta monitoring dashboard on Centos 8." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/home/alerta-on-centos8/" />
+<meta property="og:url" content="https://devopstales.github.io/home/alerta-on-centos8/" /><meta property="article:section" content="Home" />
 <meta property="article:published_time" content="2019-09-28T00:00:00+00:00" />
 <meta property="article:modified_time" content="2019-09-28T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -154,56 +155,37 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>AIn this post I will show you how to install alerta monitoring dashboard on Centos 8.</p>
-
-<pre><code>yum install epel-release -y
+<pre tabindex="0"><code>yum install epel-release -y
 yum upgrade -y
-</code></pre>
-
-<h3 id="install-and-configure-postgresql">Install and configure postgresql</h3>
-
+</code></pre><h3 id="install-and-configure-postgresql">Install and configure postgresql</h3>
 <p>In a previous post I wrote about how to <a href="https://devopstales.github.io/linux/install-postgresql/#install-postgresql-10-on-centos-8">Install PostgreSQL 10</a></p>
-
-<pre><code>sudo su - postgres
+<pre tabindex="0"><code>sudo su - postgres
 createuser alerta
 createdb -O alerta alerta
 psql
 ALTER USER &quot;alerta&quot; WITH PASSWORD 'alerta';
 \q
 exit
-</code></pre>
-
-<h3 id="install-python3-packages">install python3 packages</h3>
-
-<pre><code>yum install python3 python3-pip python3-setuptools python3-devel python3-psycopg2 gcc git tmux nginx
-</code></pre>
-
-<p>Create user for alerta and install python3 moduls with it.</p>
-
-<pre><code>useradd alerta
+</code></pre><h3 id="install-python3-packages">install python3 packages</h3>
+<pre tabindex="0"><code>yum install python3 python3-pip python3-setuptools python3-devel python3-psycopg2 gcc git tmux nginx
+</code></pre><p>Create user for alerta and install python3 moduls with it.</p>
+<pre tabindex="0"><code>useradd alerta
 usermod -aG alerta nginx
 su - alerta
 pip3 install --user wheel alerta-server alerta uwsgi
-</code></pre>
-
-<h1 id="alerta-server">alerta server</h1>
-
-<pre><code>nano /etc/alertad.conf
+</code></pre><h1 id="alerta-server">alerta server</h1>
+<pre tabindex="0"><code>nano /etc/alertad.conf
 DATABASE_URL = 'postgres://alerta:alerta@localhost:5432/alerta'
 PLUGINS=['reject']
 ALLOWED_ENVIRONMENTS=['Production', 'Development', 'Code']
-</code></pre>
-
-<p>We use uwsgi to create a unix socket wgere the alerta webgui can connect.</p>
-
-<pre><code>sudo mkdir -p /var/log/uwsgi
+</code></pre><p>We use uwsgi to create a unix socket wgere the alerta webgui can connect.</p>
+<pre tabindex="0"><code>sudo mkdir -p /var/log/uwsgi
 sudo chown -R alerta:alerta /var/log/uwsgi
 mkdir /var/run/alerta
 chown -R alerta.alerta /var/run/alerta/
 
 echo &quot;from alerta import app&quot; &gt; /usr/share/nginx/wsgi.py
-</code></pre>
-
-<pre><code>nano /etc/uwsgi.ini
+</code></pre><pre tabindex="0"><code>nano /etc/uwsgi.ini
 [uwsgi]
 chdir = /usr/share/nginx/
 mount = /api=wsgi.py
@@ -223,9 +205,7 @@ gid = alerta
 vacuum = true
 
 die-on-term = true
-</code></pre>
-
-<pre><code>nano /etc/systemd/system/uwsgi.service
+</code></pre><pre tabindex="0"><code>nano /etc/systemd/system/uwsgi.service
 [Unit]
 Description=uWSGI service
 After=syslog.target
@@ -239,22 +219,15 @@ NotifyAccess=all
 
 [Install]
 WantedBy=multi-user.target
-</code></pre>
-
-<pre><code>systemctl enable uwsgi
+</code></pre><pre tabindex="0"><code>systemctl enable uwsgi
 systemctl start uwsgi
 systemctl status uwsgi
-</code></pre>
-
-<h1 id="alerta-webgui">alerta webgui</h1>
-
-<pre><code>wget https://github.com/alerta/alerta-webui/releases/latest/download/alerta-webui.tar.gz
+</code></pre><h1 id="alerta-webgui">alerta webgui</h1>
+<pre tabindex="0"><code>wget https://github.com/alerta/alerta-webui/releases/latest/download/alerta-webui.tar.gz
 tar zxvf alerta-webui.tar.gz
 mv dist/ /usr/share/nginx/alerta
 echo '{&quot;endpoint&quot;: &quot;/api&quot;}' &gt; /usr/share/nginx/dist/config.json
-</code></pre>
-
-<pre><code>nano /etc/nginx/nginx.conf
+</code></pre><pre tabindex="0"><code>nano /etc/nginx/nginx.conf
     #server {
     #    listen       80 default_server;
     #    listen       [::]:80 default_server;
@@ -275,9 +248,7 @@ echo '{&quot;endpoint&quot;: &quot;/api&quot;}' &gt; /usr/share/nginx/dist/confi
      #       location = /50x.html {
      #   }
     #}
-</code></pre>
-
-<pre><code>nano /etc/nginx/conf.d/alerta.conf
+</code></pre><pre tabindex="0"><code>nano /etc/nginx/conf.d/alerta.conf
 server {
         listen 80 default_server;
 
@@ -294,18 +265,12 @@ server {
                 root /usr/share/nginx/alerta;
         }
 }
-</code></pre>
-
-<pre><code>nginx -t
+</code></pre><pre tabindex="0"><code>nginx -t
 systemctl restart nginx
 systemctl enable nginx
-</code></pre>
-
-<h3 id="test">test</h3>
-
+</code></pre><h3 id="test">test</h3>
 <p>Send testalert with alerta client.</p>
-
-<pre><code>su - alerta
+<pre tabindex="0"><code>su - alerta
 
 echo '[DEFAULT]
 endpoint = http://localhost/api' &gt;  $HOME/.alerta.conf
@@ -351,7 +316,7 @@ alerta query
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -367,6 +332,9 @@ alerta query
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

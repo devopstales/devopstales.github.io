@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Understanding kubernetes networking: owerlay networks" />
 <meta property="og:description" content="In my previous posts We check how the pod networking and How Kubernetes use services for loadbalancing. Now we check how the diferente Networking solutions works. How Theas solutins link the kubernetes nodes together." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" />
+<meta property="og:url" content="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" /><meta property="article:section" content="kubernetes" />
 <meta property="article:published_time" content="2021-08-31T00:00:00+00:00" />
-<meta property="article:modified_time" content="2021-08-31T00:00:00+00:00" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-clustermesh/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-1/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/vcluster/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-custom-host/" />
+<meta property="article:modified_time" content="2021-08-31T00:00:00+00:00" />
+<meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-clustermesh/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-1/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/vcluster/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-custom-host/" />
 
 
 	
@@ -157,48 +158,27 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In my previous posts We check <a href="https://devopstales.github.io/kubernetes-networking-1/">how the pod networking</a> and <a href="https://devopstales.github.io/kubernetes-networking-1/">How Kubernetes use services for loadbalancing</a>. Now we check how the diferente Networking solutions works. How Theas solutins link the kubernetes nodes together.</p>
-
 <p>Kubernetes was built to run distributed systems over a cluster of machines. This meanns networking is a central point of all Kubernetes clusters. Kubernetes dose not hawe an includid network solution, you haw to chouse one. Withouth this solutions all host whou be a closed separated ecosistem. Many kubernetes deployment guides provide instructions for deploying a kubernetes networking (CNI) to your cluster. The most polular solutions are Calico, Flannel, Weave, and Cilium. Most time you simpli deploy a yaml or a helm chart, but we didn&rsquo;t undestand how theas solutions works. Understanding the Kubernetes networking model will allow you to easely troubleshoot your applications running on Kubernetes.</p>
-
 <h2 id="what-is-a-cni">What is a CNI?</h2>
-
 <p>The CNI (Container Network Interface) project describes the specifications to provide a generic plugin-based networking solution for linux containers. A CNI plugin is an executable and it&rsquo;s config that follows the CNI spec and we’ll discuss some plugins in the post below.</p>
-
 <h3 id="overlay-network">Overlay network</h3>
-
 <p>The concept of overlay networking has been around for a while, but has made a return to the spotlight with the rise of Docker and Kubernetes. It is  basicly a virtual network of nodes and logical links, which are built on top of an existing network. To solve this chelange the CNI plugins use two main aprouch VXLAN (Virtual Extensible LAN) and simple layer3 routing. The aim of an overlay network is to enable a new service or function without having to reconfigure the entire network design.</p>
-
 <h3 id="node-ipam-controller">Node IPAM Controller</h3>
-
 <p>All pods are required to have an IP address. it’s important to ensure that all pods across the entire cluster have a unique IP address. <code>kube-controller-manager</code> allocates each node a dedicated subnet (podCIDR) from the cluster CIDR (IP range for the cluster network) For example if the overlay network is <code>10.244.0.0/16</code> all the kubernetes hosts gets a <code>/24</code> segment so the master01 is <code>10.244.0.0/24</code> the master02 is <code>10.244.1.0/24</code> and so on. podCIDR for a node can be listed using the following command:
 cidr</p>
-
-<pre><code class="language-bash">$ kubectl get no &lt;nodeName&gt; -o json | jq '.spec.podCIDR'
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl get no &lt;nodeName&gt; -o json | jq <span style="color:#e6db74">&#39;.spec.podCIDR&#39;</span>
 10.244.0.0/24
-</code></pre>
-
-<h3 id="flannel">Flannel</h3>
-
+</code></pre></div><h3 id="flannel">Flannel</h3>
 <p>Flannel runs a small, single binary agent called flanneld on each host, and is responsible for allocating a subnet lease to each host out of a larger, preconfigured address space. Flannel uses either the Kubernetes API or etcd directly to store the network configuration, the allocated subnets, and any auxiliary data (such as the host&rsquo;s public IP). Packets are forwarded using one of several backend mechanisms including VXLAN and various cloud integrations. (Refer to <a href="https://github.com/flannel-io/flannel">Flannel</a>)</p>
-
-<p><img src="https://devopstales.github.io/img/include/flannel-01.png" alt="Flannel" /></p>
-
+<p><img src="https://devopstales.github.io/img/include/flannel-01.png" alt="Flannel"  class="zoomable" /></p>
 <h3 id="calico">Calico</h3>
-
 <p>Calico originally used a pure 3-layer protocol to support multi-host network communication. On each host a vRouter propagates workload reachability information (routes) to the rest of the data center using BGP protocol. The pure Layer 3 approach avoids the packet encapsulation associated with the Layer 2 solution which simplifies diagnostics, reduces transport overhead and improves performance. Calico also implements VxLAN and the newer version use VxLAN as it&rsquo;s default soluton.</p>
-
-<p><img src="https://devopstales.github.io/img/include/calicodd.png" alt="Calico" /></p>
-
+<p><img src="https://devopstales.github.io/img/include/calicodd.png" alt="Calico"  class="zoomable" /></p>
 <h3 id="weave-net">Weave Net</h3>
-
 <p>Connectivity is set up by the weave-net binary by attaching pods to the weave Linux bridge. The bridge is, in turn, attached to the Open vSwitch’s kernel datapath which forwards the packets over the vxlan interface towards the target node.</p>
-
 <h3 id="cilium">Cilium</h3>
-
 <p>Cilium is one of the most advanced and powerful Kubernetes networking solutions. At its core, it utilizes the power of <a href="https://ebpf.io/">eBPF</a> to perform a wide range of functionality ranging from traffic filtering for NetworkPolicies all the way to CNI and <a href="https://k8s.networkop.co.uk/cni/cilium/">kube-proxy replacement</a>. BPF is basically the ability of an application developer to write a program, load that into the Linux kernel, then run it when certain events happen.</p>
-
-<p><img src="https://devopstales.github.io/img/include/ciliumart2.png" alt="Cilium" /></p>
-
+<p><img src="https://devopstales.github.io/img/include/ciliumart2.png" alt="Cilium"  class="zoomable" /></p>
 <table>
 <thead>
 <tr>
@@ -209,7 +189,6 @@ cidr</p>
 <th>Cilium</th>
 </tr>
 </thead>
-
 <tbody>
 <tr>
 <td>Network Model</td>
@@ -218,7 +197,6 @@ cidr</p>
 <td>VxLAN or UDP Channel</td>
 <td>VXLAN or Geneve</td>
 </tr>
-
 <tr>
 <td>Encryption Channel</td>
 <td>✓</td>
@@ -226,7 +204,6 @@ cidr</p>
 <td>✓</td>
 <td>✓</td>
 </tr>
-
 <tr>
 <td>NetworkPolicies</td>
 <td>✓</td>
@@ -234,7 +211,6 @@ cidr</p>
 <td>✓</td>
 <td>✓</td>
 </tr>
-
 <tr>
 <td>kube-proxy replacement</td>
 <td>✓</td>
@@ -242,7 +218,6 @@ cidr</p>
 <td>X</td>
 <td>✓</td>
 </tr>
-
 <tr>
 <td>Egress Routing</td>
 <td>X</td>
@@ -252,23 +227,17 @@ cidr</p>
 </tr>
 </tbody>
 </table>
-
 <h2 id="cluster-mesh">Cluster mesh</h2>
-
 <p>Cluster mesh enables direct networking between Pods and Services in different Kubernetes clusters, either on-premises or in the cloud.</p>
-
 <h3 id="cilium-clustermesh">Cilium ClusterMesh</h3>
-
 <p>As Kubernetes gains adoption, teams are finding they must deploy and manage multiple clusters to facilitate features like geo-redundancy, scale, and fault isolation for their applications. Cilium’s multi-cluster implementation provides the following features:</p>
-
 <ul>
 <li>Inter-cluster pod-to-pod connectivity without gateways or proxies.</li>
 <li>Transparent service discovery across clusters using standard Kubernetes services and CoreDNS.</li>
 <li>Network policy enforcement across clusters.</li>
 <li>Encryption in transit between nodes within a cluster as well as across cluster boundaries.</li>
 </ul>
-
-<p><img src="https://devopstales.github.io/img/include/clustermesh-arch.png" alt="Cilium clustermesh" /></p>
+<p><img src="https://devopstales.github.io/img/include/clustermesh-arch.png" alt="Cilium clustermesh"  class="zoomable" /></p>
 		</div>
 		<footer class="post__footer">
 			
@@ -339,7 +308,7 @@ cidr</p>
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -355,6 +324,9 @@ cidr</p>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

@@ -28,7 +28,7 @@
     "datePublished": "2019-11-18",
     "dateModified" : "2019-11-18",
     "url" : "https://devopstales.github.io/kubernetes/openshift-gitlab-helm/",
-    "wordCount" : "609",
+    "wordCount" : "608",
     "keywords" : [ "ansible", "openshift 3.11", "openshift okd", "openshift tutorial", "openshift container platform", "rad hat openshift", "helm 3", "gitlab org chart", "gitlab cicd", "Blog" ]
     
 }
@@ -43,9 +43,10 @@
 	<meta property="og:title" content="Installing GitLab on OpenShift" />
 <meta property="og:description" content="I  had to install Gitlab to Openshift recently. Turned out getting GitLab up and running on OpenShift is not so easy." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/kubernetes/openshift-gitlab-helm/" />
+<meta property="og:url" content="https://devopstales.github.io/kubernetes/openshift-gitlab-helm/" /><meta property="article:section" content="kubernetes" />
 <meta property="article:published_time" content="2019-11-18T00:00:00+00:00" />
 <meta property="article:modified_time" content="2019-11-18T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -156,15 +157,10 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>I  had to install Gitlab to Openshift recently. Turned out getting GitLab up and running on OpenShift is not so easy.</p>
-
 <h3 id="create-new-project">Create new project</h3>
-
-<pre><code>oc new-project gitlab-devopstales.intra
-</code></pre>
-
-<h3 id="deploy-helm">Deploy helm</h3>
-
-<pre><code>nano helm-namespace-account.yaml
+<pre tabindex="0"><code>oc new-project gitlab-devopstales.intra
+</code></pre><h3 id="deploy-helm">Deploy helm</h3>
+<pre tabindex="0"><code>nano helm-namespace-account.yaml
 kind: ServiceAccount
 apiVersion: v1
 metadata:
@@ -183,11 +179,8 @@ subjects:
   - kind: ServiceAccount
     name: tiller-gitlab-devopstales.intra
     namespace: kube-system
-</code></pre>
-
-<p>Now set up Helm, install the Tiller plugin and add the GitLab repository.</p>
-
-<pre><code>oc apply -f helm-namespace-account.yaml
+</code></pre><p>Now set up Helm, install the Tiller plugin and add the GitLab repository.</p>
+<pre tabindex="0"><code>oc apply -f helm-namespace-account.yaml
 oc get sa
 
 helm init --service-account tiller-gitlab-devopstales.intra --tiller-namespace gitlab-mydomain-intra
@@ -196,11 +189,8 @@ oc get po -n kube-system
 export TILLER_NAMESPACE=kube-system
 echo $TILLER_NAMESPACE
 helm version
-</code></pre>
-
-<h2 id="get-helmchart">Get helmchart</h2>
-
-<pre><code>helm repo add gitlab https://charts.gitlab.io/
+</code></pre><h2 id="get-helmchart">Get helmchart</h2>
+<pre tabindex="0"><code>helm repo add gitlab https://charts.gitlab.io/
 helm repo update
 
 oc adm policy add-scc-to-user anyuid -z default -n gitlab-devopstales.intra
@@ -211,11 +201,8 @@ oc adm policy add-scc-to-user anyuid -z gitlab-tst-shared-secrets
 oc adm policy add-scc-to-user anyuid -z gitlab-tst-gitlab-runner
 oc adm policy add-scc-to-user anyuid -z gitlab-tst-prometheus-server
 oc adm policy add-scc-to-user anyuid -z default
-</code></pre>
-
-<h3 id="create-chart-values">Create chart values</h3>
-
-<pre><code>nano gitlab-values.yml
+</code></pre><h3 id="create-chart-values">Create chart values</h3>
+<pre tabindex="0"><code>nano gitlab-values.yml
 certmanager:
   install: false
 global:
@@ -341,11 +328,8 @@ gitlab:
         config:
           secret: storage-config
           key: config
-</code></pre>
-
-<h3 id="create-secrets-for-deployment">Create secrets for deployment</h3>
-
-<pre><code>nano ceph.gitlab-data.yaml
+</code></pre><h3 id="create-secrets-for-deployment">Create secrets for deployment</h3>
+<pre tabindex="0"><code>nano ceph.gitlab-data.yaml
 provider: AWS
 region: default
 aws_access_key_id: W3MNDO373H6LQUNCG4SG
@@ -370,9 +354,7 @@ s3:
   chunksize: 5242880
 redirect:
   disable: true
-</code></pre>
-
-<pre><code>nano ceph.backup.config
+</code></pre><pre tabindex="0"><code>nano ceph.backup.config
 [default]
 access_key = W3MNDO373H8LQUNCJ8QV
 access_token = vVFEWx8hqbcrGJyaZVie8YoER8rPoRYmqnDzRwrn
@@ -381,9 +363,7 @@ host_bucket = %(bucket)s.s3.devopstales.intra
 bucket_location = US
 use_https = True
 check_ssl_certificate = False
-</code></pre>
-
-<pre><code>nano keycloak.sso.yaml
+</code></pre><pre tabindex="0"><code>nano keycloak.sso.yaml
 name: 'oauth2_generic'
 label: 'mydomain'
 app_id: 'gitlab'
@@ -402,11 +382,8 @@ args:
       name: 'name'
       nickname: 'preferred_username'
     id_path: 'preferred_username'
-</code></pre>
-
-<h3 id="deploy-secrets">Deploy secrets</h3>
-
-<pre><code># https ssl cert
+</code></pre><h3 id="deploy-secrets">Deploy secrets</h3>
+<pre tabindex="0"><code># https ssl cert
 oc create secret tls gitlab-certs --cert=tls.crt --key=tls.key
 
 oc create secret generic storage-config --from-file=config=ceph.backup.config
@@ -415,11 +392,8 @@ oc create secret generic ceph-storage --from-file=registry=ceph.gitlab-registry.
 
 oc create secret generic gitlab-sso --from-file=provider=keycloak.sso.yaml
 oc create secret generic gitlab-ldap-secret --from-literal=password=
-</code></pre>
-
-<h3 id="deploy-application-with-helm">Deploy application with helm</h3>
-
-<pre><code>helm upgrade --install -f gitlab-values.yml gitlab-tst gitlab/gitlab --debug --dry-run
+</code></pre><h3 id="deploy-application-with-helm">Deploy application with helm</h3>
+<pre tabindex="0"><code>helm upgrade --install -f gitlab-values.yml gitlab-tst gitlab/gitlab --debug --dry-run
 helm upgrade --install -f gitlab-values.yml gitlab-tst gitlab/gitlab --timeout 600
 helm upgrade -f gitlab-values.yml gitlab-tst gitlab/gitlab --timeout 600
 
@@ -428,11 +402,8 @@ helm upgrade -f gitlab-values.yml gitlab-tst gitlab/gitlab --version 2.3.5 --tim
 
 # gitlab-tst
 oc get secret gitlab-tst-gitlab-initial-root-password -o jsonpath='{.data.password}' | base64 -d
-</code></pre>
-
-<p>###</p>
-
-<pre><code>nano gitlab-ssh-nodeport-svc.yaml
+</code></pre><h3 id="heading"></h3>
+<pre tabindex="0"><code>nano gitlab-ssh-nodeport-svc.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -449,9 +420,7 @@ spec:
   selector:
     app: gitlab-shell
 
-</code></pre>
-
-<pre><code>oc create -f gitlab-ssh-nodeport-svc.yaml
+</code></pre><pre tabindex="0"><code>oc create -f gitlab-ssh-nodeport-svc.yaml
 </code></pre>
 		</div>
 		<footer class="post__footer">
@@ -510,7 +479,7 @@ spec:
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -526,6 +495,9 @@ spec:
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>

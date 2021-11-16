@@ -43,9 +43,10 @@
 	<meta property="og:title" content="How to create Vagrant box?" />
 <meta property="og:description" content="In this post I will show you how to create a vagrant box from pothonos ISO." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/cloud/protonos_vagrant_box/" />
+<meta property="og:url" content="https://devopstales.github.io/cloud/protonos_vagrant_box/" /><meta property="article:section" content="cloud" />
 <meta property="article:published_time" content="2020-03-03T00:00:00+00:00" />
 <meta property="article:modified_time" content="2020-03-03T00:00:00+00:00" />
+
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -156,11 +157,8 @@ if (!doNotTrack) {
 		</header>
 		<div class="content post__content clearfix">
 			<p>In this post I will show you how to create a vagrant box from pothonos ISO.</p>
-
 <h3 id="base-vm">Base VM</h3>
-
 <p>Fist we need to create a virtualbox vm and install the <a href="https://github.com/vmware/photon/wiki/Downloading-Photon-OS">latest PothonOS ISO</a>.</p>
-
 <ul>
 <li>Name: Photon-base</li>
 <li>Type: Linux</li>
@@ -168,44 +166,29 @@ if (!doNotTrack) {
 <li>Memory Size: 1024MB</li>
 <li>New Virtual Disk: [Type: VDI, Size: 40 GB]</li>
 </ul>
-
 <p>Modify the hardware settings of the virtual machine:</p>
-
 <ul>
 <li>Disable audio</li>
 <li>Disable USB</li>
 <li>Ensure Network Adapter 1 is set to NAT</li>
-<li>Add this port-forwarding rule:
-
-<ul>
+<li>Add this port-forwarding rule:</li>
 <li>Name: SSH</li>
 <li>Protocol: TCP</li>
 <li>Host IP: blank</li>
 <li>Host Port: 2222</li>
 <li>Guest IP: blank</li>
 <li>Guest Port: 22</li>
-</ul></li>
 </ul>
-
 <h3 id="configure-system">Configure System</h3>
-
 <p>Change the root users password to <code>vagrant</code></p>
-
-<pre><code>passwd
+<pre tabindex="0"><code>passwd
 chage -I -1 -m 0 -M 99999 -E -1 root
-</code></pre>
-
-<p>Upgrade system and install packages:</p>
-
-<pre><code>tdnf upgrade -y
+</code></pre><p>Upgrade system and install packages:</p>
+<pre tabindex="0"><code>tdnf upgrade -y
 tdnf install sudo nano wget awk tar build-essential linux-devel less -y
-</code></pre>
-
-<h3 id="create-the-vagrant-account">Create the vagrant account</h3>
-
+</code></pre><h3 id="create-the-vagrant-account">Create the vagrant account</h3>
 <p>Next you need to create the default vagrant user account:</p>
-
-<pre><code>useradd -m -G sudo vagrant
+<pre tabindex="0"><code>useradd -m -G sudo vagrant
 passwd vagrant
 chage -I -1 -m 0 -M 99999 -E -1 vagrant
 
@@ -213,54 +196,31 @@ cat &gt; /etc/sudoers.d/vagrant &lt; EOF
 # add vagrant user
 vagrant ALL=(ALL) NOPASSWD:ALL
 EOF
-</code></pre>
-
-<h3 id="change-ssh-config">Change ssh config</h3>
-
-<pre><code>nano /etc/ssh/sshd_config
+</code></pre><h3 id="change-ssh-config">Change ssh config</h3>
+<pre tabindex="0"><code>nano /etc/ssh/sshd_config
 AuthorizedKeysFile     %h/.ssh/authorized_keys
-</code></pre>
-
-<pre><code>systemctl restart sshd
-</code></pre>
-
-<h3 id="add-vagrant-ssh-keys-to-vagrant-user">Add vagrant ssh keys to vagrant user</h3>
-
-<pre><code>su - vagrant
+</code></pre><pre tabindex="0"><code>systemctl restart sshd
+</code></pre><h3 id="add-vagrant-ssh-keys-to-vagrant-user">Add vagrant ssh keys to vagrant user</h3>
+<pre tabindex="0"><code>su - vagrant
 
 mkdir -p /home/vagrant/.ssh
 chmod 0700 /home/vagrant/.ssh
-</code></pre>
-
-<pre><code>wget --no-check-certificate \
+</code></pre><pre tabindex="0"><code>wget --no-check-certificate \
     https://raw.github.com/mitchellh/vagrant/master/keys/vagrant.pub \
     -O /home/vagrant/.ssh/authorized_keys
-</code></pre>
-
-<pre><code>chmod 0600 /home/vagrant/.ssh/authorized_keys
+</code></pre><pre tabindex="0"><code>chmod 0600 /home/vagrant/.ssh/authorized_keys
 chown –R vagrant /home/vagrant/.ssh
-</code></pre>
-
-<h3 id="add-virtualboxadditions">Add VirtualBoxadditions</h3>
-
+</code></pre><h3 id="add-virtualboxadditions">Add VirtualBoxadditions</h3>
 <p>Go to your virtualbox menu for the VM and select <code>Devices / Insert Guest Additions CD Image</code></p>
-
-<p><img src="https://devopstales.github.io/img/include/photon_base_1.png" alt="Example image" /><br><br></p>
-
-<pre><code>mount /dev/cdrom /mnt/cdrom
+<p><img src="https://devopstales.github.io/img/include/photon_base_1.png" alt="Example image"  class="zoomable" /><!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<pre tabindex="0"><code>mount /dev/cdrom /mnt/cdrom
 cd /mnt/cdrom
 ./VBoxLinuxAdditions.run
-</code></pre>
-
-<h3 id="compress-vm">Compress vm</h3>
-
-<pre><code>sudo dd if=/dev/zero of=/EMPTY bs=1M
+</code></pre><h3 id="compress-vm">Compress vm</h3>
+<pre tabindex="0"><code>sudo dd if=/dev/zero of=/EMPTY bs=1M
 sudo rm -f /EMPTY
-</code></pre>
-
-<h3 id="package-box">Package box</h3>
-
-<pre><code>vagrant package --base &quot;Photon-base&quot;
+</code></pre><h3 id="package-box">Package box</h3>
+<pre tabindex="0"><code>vagrant package --base &quot;Photon-base&quot;
 
 vagrant box add &lt;user-name&gt;/photon3 package.box
 vagrant box add devopstales/photon3 package.box
@@ -316,7 +276,7 @@ vagrant box add devopstales/photon3 package.box
     <div class="panel-body">
         <ul class="nav nav-pills nav-stacked">
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (12)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (13)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -332,6 +292,9 @@ vagrant box add devopstales/photon3 package.box
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (42)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (21)</a>
             </li>
             
         </ul>
