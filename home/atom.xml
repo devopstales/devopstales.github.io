@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-11-26T12:54:46+00:00</updated>
+    <updated>2021-12-10T14:06:07+00:00</updated>
     
     
     <author>
@@ -17,6 +17,107 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to deploy a Domain Controller on Microsoft Azure]]></title>
+            <link href="https://devopstales.github.io/home/azure-dc-deploy/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/azure-dc-deploy/?utm_source=atom_feed" rel="related" type="text/html" title="How to deploy a Domain Controller on Microsoft Azure" />
+                <link href="https://devopstales.github.io/home/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
+                <link href="https://devopstales.github.io/home/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to AKS" />
+                <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+                <link href="https://devopstales.github.io/home/k8s-install-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+            
+                <id>https://devopstales.github.io/home/azure-dc-deploy/</id>
+            
+            
+            <published>2021-12-07T00:00:00+00:00</published>
+            <updated>2021-12-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can create a hybrid Acrive Directory Domain with on-premiss and Azure DCs.</p>
+<h3 id="requirements">Requirements</h3>
+<ul>
+<li>An Azure AD tenant with an active subscription.</li>
+<li>A Virtual Network in Azure that doesn’t overlap with your on-premises network.</li>
+<li>A continuous line of sight between your on-premises domain controller and Microsoft Azure (Azure VPN Gateway, ExpressRoute or an NVA).</li>
+</ul>
+<h3 id="deploy-a-virtual-machine">Deploy A Virtual Machine</h3>
+<ul>
+<li>Go to the azure portal (<a href="https://portal.azure.com">https://portal.azure.com</a>) and login</li>
+<li>Create a new Windows Server resource. I Recommened using Windows Server 2019.</li>
+</ul>
+<p><img src="/img/include/azuredc01.jpg" alt="Bacic info"  class="zoomable" /></p>
+<p>For safety reasons, you should set <code>allow selected ports</code> to <code>none</code>.</p>
+<p><img src="/img/include/azuredc02.jpg" alt="disallow selected ports"  class="zoomable" /></p>
+<ul>
+<li>Click Next to configure vm disks.</li>
+</ul>
+<blockquote>
+<p>A Single VM without premium SSD’s has an SLA of 99.95%. A Single VM with premium SSD’s (all disks) has an SLA of 99.99%. I Recommend using premium disks for your domain controller.</p>
+</blockquote>
+<ul>
+<li>Add a second (premium ssd) disk with host caching set to none. This disk will contain the database, logs and sysvol folders.</li>
+</ul>
+<p><img src="/img/include/azuredc03.jpg" alt="add premium ssd"  class="zoomable" /></p>
+<ul>
+<li>Click Next to configure networking. Attach the VM to your existing vNet that’s connected with your on-premises domain. Don’t assign a public IP address to your virtual machine as recommended by Microsoft – use a VPN or Azure Bastion to connect to the machine.</li>
+</ul>
+<p><img src="/img/include/azuredc04.jpg" alt="configure network"  class="zoomable" /></p>
+<ul>
+<li>Finish all steps to create the virtual machine. Don’t enable <code>Login with AAD credentials</code> or <code>Auto-shutdown</code>.</li>
+</ul>
+<h3 id="configure-static-ip">Configure static IP</h3>
+<p>The virtual machine must have a static IP address.</p>
+<ul>
+<li>Select network interface of your new virtual machine</li>
+</ul>
+<p><img src="/img/include/azuredc05.jpg" alt="static ip"  class="zoomable" /></p>
+<p><img src="/img/include/azuredc06.jpg" alt="static ip"  class="zoomable" /></p>
+<ul>
+<li>Select Static and configure the IP address. Don’t forget to click save – a reboot may be required. You should never configure the static IP address on the VM itself as you do on-premises.</li>
+</ul>
+<p><img src="/img/include/azuredc07.jpg" alt="static ip"  class="zoomable" /></p>
+<h3 id="domain-join">Domain join</h3>
+<ul>
+<li>Test if you can ping the VM from your on-premises domain controller and the other way around.</li>
+<li>Open Active Directory Sites &amp; Services on your on-premises domain controller.</li>
+<li>Create a new site</li>
+</ul>
+<p><img src="/img/include/azuredc08.jpg" alt="new site"  class="zoomable" /></p>
+<p><img src="/img/include/azuredc09.jpg" alt="new site"  class="zoomable" /></p>
+<ul>
+<li>Right click Subnets and select New Subnet.</li>
+</ul>
+<p><img src="/img/include/azuredc10.jpg" alt="new subnet"  class="zoomable" /></p>
+<p><img src="/img/include/azuredc11.jpg" alt="new subnet"  class="zoomable" /></p>
+<ul>
+<li>Start Add Roles and Features on the Azure VM.</li>
+<li>Add the Active Directory Domain Services role and all necessary features.</li>
+<li>Promote this server to a domain controller.</li>
+<li>Select Add a domain controller to an existing domain.</li>
+</ul>
+<p><img src="/img/include/azuredc12.jpg" alt="join domain"  class="zoomable" /></p>
+<p><img src="/img/include/azuredc13.jpg" alt="join domain"  class="zoomable" /></p>
+<p><img src="/img/include/azuredc14.jpg" alt="join domain"  class="zoomable" /></p>
+<ul>
+<li>Reboot the virtual machine.</li>
+</ul>
+<h3 id="validate-dc-dns-settings-on-azure">Validate DC DNS Settings on Azure</h3>
+<p>When the virtual machine is back online, it probably has static DNS servers configured – this happened because of the AD DC roles. Change this back to Obtain DNS server address automatically.</p>
+<p><img src="/img/include/azuredc15.jpg" alt="configure dns server"  class="zoomable" /></p>
+<p><img src="/img/include/azuredc16.jpg" alt="configure dns server"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
