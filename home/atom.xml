@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-12-13T15:02:47+00:00</updated>
+    <updated>2021-12-16T11:51:29+00:00</updated>
     
     
     <author>
@@ -17,6 +17,483 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)]]></title>
+            <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
+                <link href="https://devopstales.github.io/home/openshift-elasticsearch-error/?utm_source=atom_feed" rel="related" type="text/html" title="Opeshift elasticsearch search-guard error" />
+                <link href="https://devopstales.github.io/home/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
+            
+                <id>https://devopstales.github.io/home/openshift-log4shell/</id>
+            
+            
+            <published>2021-12-15T00:00:00+00:00</published>
+            <updated>2021-12-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>On OpenShift 4 and OpenShift 3.11 in OpenShift Logging the above mitigation can be applied to the affected Elasticsearch component.</p>
+<H3>Parst of the Openshift series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/ansible-openshift-install/">Install Opeshift</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift-auto-approval-csr/">How to Enable Auto Approval of CSR in Openshift v3.11</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift-add-node/">Add new workers to Openshift cluster</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift-cert/">Chane the certificates of the Openshift cluster</a></li>
+     <li>Part5: <a href="../../kubernetes/openshift-ldap/">LDAP authentication for Openshift</a></li>
+     <li>Part6: <a href="../../sso/openshift-sso/">Keycloak SSO authentication for Openshift</a></li>
+     <li>Part7: <a href="../../sso/openshift-sso2/">Gitlab SSO authentication for Openshift</a></li>
+     <li>Part8a: <a href="../../kubernetes/openshift-ceph/">Ceph persistent storage for Openshift</a></li>
+     <li>Part8b: <a href="../../kubernetes/openshift-vmware/">vSphere persistent storage for Openshift</a></li>
+     <li>Part9: <a href="../../kubernetes/openshift-helm/">Helm on Openshift</a></li>
+     <li>Part10: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless Helm on Openshift</a></li>
+     <li>Part11: <a href="../../kubernetes/openshift-extregistry/">Use external docker registry on Openshift</a></li>
+     <li>Part12: <a href="../../kubernetes/openshift-secondary-router/">Secondary router on Openshift</a></li>
+     <li>Part13a: <a href="../../kubernetes/openshift-letsencrypt/">Use Letsencrypt on Openshift</a></li>
+     <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
+     <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
+     <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+<h3 id="openshift-311">OpenShift 3.11</h3>
+<p>Resolution:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc project openshift-logging
+
+oc get dc -l component<span style="color:#f92672">=</span>es
+NAME                              REVISION   DESIRED   CURRENT   TRIGGERED BY
+logging-es-data-master-9fgtlhi4   <span style="color:#ae81ff">1</span>          <span style="color:#ae81ff">1</span>         <span style="color:#ae81ff">1</span>
+
+oc set env -c elasticsearch dc/logging-es-data-master-9fgtlhi4 ES_JAVA_OPTS<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;-Dlog4j2.formatMsgNoLookups=true&#34;</span>
+
+<span style="color:#75715e"># test the configuration</span>
+oc set env -c elasticsearch dc -l component<span style="color:#f92672">=</span>es --list | grep ES_JAVA_OPTS
+
+oc scale dc/logging-es-data-master-9fgtlhi4 --replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>
+oc rollout latest dc/logging-es-data-master-9fgtlhi4
+oc scale dc/logging-es-data-master-9fgtlhi4 --replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</code></pre></div><p>Afther the pod is recreated test the variable in the pods:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#66d9ef">for</span> es_pod in <span style="color:#66d9ef">$(</span>oc get pods -l component<span style="color:#f92672">=</span>es --no-headers -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{range .items[?(@.status.phase==&#34;Running&#34;)]}{.metadata.name}{&#34;\n&#34;}{end}&#39;</span><span style="color:#66d9ef">)</span>; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>   <span style="color:#66d9ef">do</span> echo <span style="color:#e6db74">&#34;Confirm changes on </span>$es_pod<span style="color:#e6db74">&#34;</span> ;  sleep <span style="color:#ae81ff">1</span> ; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>   oc rsh -Tc elasticsearch $es_pod ps auxwww | grep log4j2.formatMsgNoLookups ; sleep 3; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>   <span style="color:#66d9ef">done</span>
+
+
+<span style="color:#66d9ef">for</span> es_pod in <span style="color:#66d9ef">$(</span>oc get pods -l component<span style="color:#f92672">=</span>es --no-headers -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{range .items[?(@.status.phase==&#34;Running&#34;)]}{.metadata.name}{&#34;\n&#34;}{end}&#39;</span><span style="color:#66d9ef">)</span>; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>   <span style="color:#66d9ef">do</span> echo <span style="color:#e6db74">&#34;Confirm changes on </span>$es_pod<span style="color:#e6db74">&#34;</span> ;  sleep <span style="color:#ae81ff">1</span> ; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>   oc rsh -Tc elasticsearch $es_pod printenv | grep ES_JAVA_OPTS ; sleep 3; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>   <span style="color:#66d9ef">done</span>
+</code></pre></div><h3 id="openshift-4">OpenShift 4</h3>
+<p>Resolution:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc project openshift-logging
+
+oc get deployment -l component<span style="color:#f92672">=</span>elasticsearch
+NAME                                      REVISION   DESIRED   CURRENT   TRIGGERED BY
+elasticsearch-cdm-ba9c6evk-1-796f6cfdbc   <span style="color:#ae81ff">1</span>          <span style="color:#ae81ff">1</span>         <span style="color:#ae81ff">1</span>
+
+oc patch deployment/elasticsearch-cdm-ba9c6evk-1-796f6cfdbc --type<span style="color:#f92672">=</span>merge -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;paused&#34;: false}}&#39;</span>
+oc set env deployment/elasticsearch-cdm-ba9c6evk-1-796f6cfdbc -c elasticsearch ES_JAVA_OPTS<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;-Dlog4j2.formatMsgNoLookups=true&#34;</span>
+
+oc set env -c elasticsearch deployment -l component<span style="color:#f92672">=</span>elasticsearch --list | grep ES_JAVA_OPTS
+
+oc scale deployment/elasticsearch-cdm-ba9c6evk-1-796f6cfdbc --replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>
+</code></pre></div><p>Afther the pod is recreated test the variable in the pods:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc get pods -l component<span style="color:#f92672">=</span>elasticsearch
+
+oc  set env -c elasticsearch pods -l component<span style="color:#f92672">=</span>elasticsearch --list | grep ES_JAVA_OPTS
+
+oc exec -c elasticsearch elasticsearch-cdm-ba9c6evk-1-796f6cfdbc-4dqc6 -- grep -a log4j2.formatMsgNoLookups /proc/1/cmdline
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Opeshift elasticsearch search-guard error]]></title>
+            <link href="https://devopstales.github.io/home/openshift-elasticsearch-error/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
+                <link href="https://devopstales.github.io/home/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/openshift-cert-manager/?utm_source=atom_feed" rel="related" type="text/html" title="Install cert-manager to Openshift" />
+            
+                <id>https://devopstales.github.io/home/openshift-elasticsearch-error/</id>
+            
+            
+            <published>2021-12-15T00:00:00+00:00</published>
+            <updated>2021-12-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show You How you can fix elasticsearch search-guard index error.</p>
+<H3>Parst of the Openshift series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/ansible-openshift-install/">Install Opeshift</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift-auto-approval-csr/">How to Enable Auto Approval of CSR in Openshift v3.11</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift-add-node/">Add new workers to Openshift cluster</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift-cert/">Chane the certificates of the Openshift cluster</a></li>
+     <li>Part5: <a href="../../kubernetes/openshift-ldap/">LDAP authentication for Openshift</a></li>
+     <li>Part6: <a href="../../sso/openshift-sso/">Keycloak SSO authentication for Openshift</a></li>
+     <li>Part7: <a href="../../sso/openshift-sso2/">Gitlab SSO authentication for Openshift</a></li>
+     <li>Part8a: <a href="../../kubernetes/openshift-ceph/">Ceph persistent storage for Openshift</a></li>
+     <li>Part8b: <a href="../../kubernetes/openshift-vmware/">vSphere persistent storage for Openshift</a></li>
+     <li>Part9: <a href="../../kubernetes/openshift-helm/">Helm on Openshift</a></li>
+     <li>Part10: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless Helm on Openshift</a></li>
+     <li>Part11: <a href="../../kubernetes/openshift-extregistry/">Use external docker registry on Openshift</a></li>
+     <li>Part12: <a href="../../kubernetes/openshift-secondary-router/">Secondary router on Openshift</a></li>
+     <li>Part13a: <a href="../../kubernetes/openshift-letsencrypt/">Use Letsencrypt on Openshift</a></li>
+     <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
+     <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
+     <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+<p>If you get the following error:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>2021-12-15 09:10:17,949<span style="color:#f92672">][</span>INFO <span style="color:#f92672">][</span>container.run            <span style="color:#f92672">]</span> Seeding the searchguard ACL index.  Will wait up to <span style="color:#ae81ff">604800</span> seconds.
+<span style="color:#f92672">[</span>2021-12-15 09:10:18,027<span style="color:#f92672">][</span>INFO <span style="color:#f92672">][</span>container.run            <span style="color:#f92672">]</span> Seeding the searchguard ACL index.  Will wait up to <span style="color:#ae81ff">604800</span> seconds.
+/etc/elasticsearch ~
+Search Guard Admin v5
+Will connect to localhost:9300 ... <span style="color:#66d9ef">done</span>
+ERROR StatusLogger No Log4j <span style="color:#ae81ff">2</span> configuration file found. Using default configuration <span style="color:#f92672">(</span>logging only errors to the console<span style="color:#f92672">)</span>, or user programmatically provided configurations. Set system property <span style="color:#e6db74">&#39;log4j2.debug&#39;</span> to show Log4j <span style="color:#ae81ff">2</span> internal initialization logging. See https://logging.apache.org/log4j/2.x/manual/configuration.html <span style="color:#66d9ef">for</span> instructions on how to configure Log4j <span style="color:#ae81ff">2</span>
+Elasticsearch Version: 5.6.13
+Search Guard Version: &lt;unknown&gt;
+Contacting elasticsearch cluster <span style="color:#e6db74">&#39;elasticsearch&#39;</span> ...
+Clustername: logging-es
+Clusterstate: RED
+Number of nodes: <span style="color:#ae81ff">1</span>
+Number of data nodes: <span style="color:#ae81ff">1</span>
+</code></pre></div><p>Try to rerun the inicialization script:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc get pods -l component<span style="color:#f92672">=</span>es
+NAME                                      READY     STATUS    RESTARTS   AGE
+logging-es-data-master-9fgtlhi4-3-d48rs   2/2       Running   <span style="color:#ae81ff">0</span>          21m
+
+oc exec -c elasticsearch logging-es-data-master-9fgtlhi4-3-d48rs -- es_seed_acl
+</code></pre></div><p>If you get the same log we need to delete the searchguard index and reinicilaize:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc exec -c elasticearch logging-es-data-master-9fgtlhi4-3-d48rs --es_util --query<span style="color:#f92672">=</span>.searchguard -XDELETE
+<span style="color:#f92672">{</span><span style="color:#e6db74">&#34;acknowledged&#34;</span>:true<span style="color:#f92672">}</span>
+
+oc exec -c elasticsearch logging-es-data-master-9fgtlhi4-3-d48rs -- es_seed_acl
+<span style="color:#f92672">[</span>2021-12-15 09:15:47,762<span style="color:#f92672">][</span>INFO <span style="color:#f92672">][</span>container.run            <span style="color:#f92672">]</span> Seeding the searchguard ACL index.  Will wait up to <span style="color:#ae81ff">604800</span> seconds.
+<span style="color:#f92672">[</span>2021-12-15 09:15:47,931<span style="color:#f92672">][</span>INFO <span style="color:#f92672">][</span>container.run            <span style="color:#f92672">]</span> Seeding the searchguard ACL index.  Will wait up to <span style="color:#ae81ff">604800</span> seconds.
+/etc/elasticsearch ~
+Search Guard Admin v5
+Will connect to localhost:9300 ... <span style="color:#66d9ef">done</span>
+ERROR StatusLogger No Log4j <span style="color:#ae81ff">2</span> configuration file found. Using default configuration <span style="color:#f92672">(</span>logging only errors to the console<span style="color:#f92672">)</span>, or user programmatically provided configurations. Set system property <span style="color:#e6db74">&#39;log4j2.debug&#39;</span> to show Log4j <span style="color:#ae81ff">2</span> internal initialization logging. See https://logging.apache.org/log4j/2.x/manual/configuration.html <span style="color:#66d9ef">for</span> instructions on how to configure Log4j <span style="color:#ae81ff">2</span>
+Elasticsearch Version: 5.6.16
+Search Guard Version: &lt;unknown&gt;
+Contacting elasticsearch cluster <span style="color:#e6db74">&#39;elasticsearch&#39;</span> ...
+Clustername: logging-es
+Clusterstate: RED
+Number of nodes: <span style="color:#ae81ff">1</span>
+Number of data nodes: <span style="color:#ae81ff">1</span>
+.searchguard index does not exists, attempt to create it ...
+Populate config from /opt/app-root/src/sgconfig/
+Will update <span style="color:#e6db74">&#39;config&#39;</span> with /opt/app-root/src/sgconfig/sg_config.yml
+   SUCC: Configuration <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;config&#39;</span> created or updated
+Will update <span style="color:#e6db74">&#39;roles&#39;</span> with /opt/app-root/src/sgconfig/sg_roles.yml
+   SUCC: Configuration <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;roles&#39;</span> created or updated
+Will update <span style="color:#e6db74">&#39;rolesmapping&#39;</span> with /opt/app-root/src/sgconfig/sg_roles_mapping.yml
+   SUCC: Configuration <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;rolesmapping&#39;</span> created or updated
+Will update <span style="color:#e6db74">&#39;internalusers&#39;</span> with /opt/app-root/src/sgconfig/sg_internal_users.yml
+   SUCC: Configuration <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;internalusers&#39;</span> created or updated
+Will update <span style="color:#e6db74">&#39;actiongroups&#39;</span> with /opt/app-root/src/sgconfig/sg_action_groups.yml
+   SUCC: Configuration <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;actiongroups&#39;</span> created or updated
+Done with success
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Cluster Logging Operator on OpenShift 4]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-logging/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift_4/?utm_source=atom_feed" rel="related" type="text/html" title="OpenShift 4.2 with Red Hat CodeReady Containers" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-logging/?utm_source=atom_feed" rel="related" type="text/html" title="Install Cluster Logging Operator on OpenShift 4" />
+                <link href="https://devopstales.github.io/home/how-to-fix-ansible-service-broker-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix Ansible Service Broker in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix cluster-monitoring-operator in OpenShift 3.11" />
+                <link href="https://devopstales.github.io/home/how-to-fix-registry-console-ui-in-openshift-3-11/?utm_source=atom_feed" rel="related" type="text/html" title="How to fix registry console UI in OpenShift 3.11" />
+            
+                <id>https://devopstales.github.io/home/openshift4-logging/</id>
+            
+            
+            <published>2021-12-12T00:00:00+00:00</published>
+            <updated>2021-12-12T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can install the Cluster Logging Operator on an OpenShift 4.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <!-- <li>Part1: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li> -->
+     <li>Part1a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part1b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+<h3 id="redhat-pull-secret-and-enable-red-hat-operators">RedHat pull secret and enable Red Hat Operators</h3>
+<p>To install the <a href="https://console.redhat.com/openshift/install/pull-secret">RedHat pull secret</a>. First download it from the url.</p>
+<p>If you did&rsquo;t addid at the install create the secret kike this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano pull-secret.json</span>
+{
+  <span style="color:#f92672">&#34;auths&#34;: </span>{
+    <span style="color:#f92672">&#34;registry.redhat.io&#34;: </span>{
+      <span style="color:#f92672">&#34;username&#34;: </span><span style="color:#e6db74">&#34;redhat-user&#34;</span>,
+      <span style="color:#f92672">&#34;password&#34;: </span><span style="color:#e6db74">&#34;redhat-user-pass&#34;</span>,
+      <span style="color:#f92672">&#34;email&#34;: </span><span style="color:#e6db74">&#34;redhat-user-email&#34;</span>,
+      <span style="color:#f92672">&#34;auth&#34;: </span><span style="color:#e6db74">&#34;redhat-user-auth-key&#34;</span>
+    }
+  }
+}
+
+<span style="color:#ae81ff">oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson=./pull-secret.json</span>
+</code></pre></div><p>Modify the following objects to enable Red Hat Operators.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">oc edit configs.samples.operator.openshift.io/cluster -o yaml</span>
+
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">samples.operator.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Config</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#ae81ff">...</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">architectures</span>:
+  - <span style="color:#ae81ff">x86_64</span>
+  <span style="color:#f92672">managementState</span>: <span style="color:#ae81ff">Managed</span>
+<span style="color:#f92672">status</span>:
+  <span style="color:#f92672">architectures</span>:
+  <span style="color:#ae81ff">...</span>
+  <span style="color:#f92672">managementState</span>: <span style="color:#ae81ff">Managed</span>
+  <span style="color:#f92672">version</span>: <span style="color:#ae81ff">4.9.0-0.</span><span style="color:#ae81ff">okd-2021-11-28-035710</span>
+</code></pre></div><p>Second, run the following command to edit the Operator Hub configuration file and set all source to <code>disabled: false</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">oc edit operatorhub cluster -o yaml</span>
+...
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">disableAllDefaultSources</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">sources</span>:
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">community-operators</span>
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">certified-operators</span>
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">redhat-operators</span>
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">redhat-marketplace</span>
+<span style="color:#f92672">status</span>:
+  <span style="color:#f92672">sources</span>:
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">community-operators</span>
+    <span style="color:#f92672">status</span>: <span style="color:#ae81ff">Success</span>
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">message</span>: <span style="color:#ae81ff">CatalogSource.operators.coreos.com &#34;redhat-marketplace&#34; not found</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">redhat-marketplace</span>
+    <span style="color:#f92672">status</span>: <span style="color:#ae81ff">Error</span>
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">message</span>: <span style="color:#ae81ff">CatalogSource.operators.coreos.com &#34;redhat-operators&#34; not found</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">redhat-operators</span>
+    <span style="color:#f92672">status</span>: <span style="color:#ae81ff">Error</span>
+  - <span style="color:#f92672">disabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">message</span>: <span style="color:#ae81ff">CatalogSource.operators.coreos.com &#34;certified-operators&#34; not found</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">certified-operators</span>
+    <span style="color:#f92672">status</span>: <span style="color:#ae81ff">Error</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc get catalogsource --all-namespaces
+NAMESPACE               NAME                  DISPLAY               TYPE      PUBLISHER   AGE
+openshift-marketplace   certified-operators   Certified Operators   grpc      Red Hat     37m
+openshift-marketplace   community-operators   Community Operators   grpc      Red Hat     289d
+openshift-marketplace   redhat-marketplace    Red Hat Marketplace   grpc      Red Hat     37m
+openshift-marketplace   redhat-operators      Red Hat Operators     grpc      Red Hat     37m
+</code></pre></div><h3 id="install-ellasticsearch-operator">Install Ellasticsearch Operator</h3>
+<p>Create Operators namespaces:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;penshift_operators_redhatnamespace.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Namespace</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openshift-operators-redhat </span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">openshift.io/node-selector</span>: <span style="color:#e6db74">&#34;&#34;</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">openshift.io/cluster-monitoring</span>: <span style="color:#e6db74">&#34;true&#34;</span> 
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">oc apply -f penshift_operators_redhatnamespace.yaml</span>
+<span style="color:#ae81ff">oc project openshift-logging</span>
+</code></pre></div><p>Create OperatorGroup object</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;openshift-operators-redhat-operatorgroup.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">OperatorGroup</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openshift-operators-redhat</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-operators-redhat </span>
+<span style="color:#f92672">spec</span>: {}
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">oc apply -f openshift-operators-redhat-operatorgroup.yaml</span>
+</code></pre></div><p>Subscribe a Namespace to the Cluster Logging Operator:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;cluster-logging-sub.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Subscription</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">elasticsearch-operator</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-operators-redhat</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">channel</span>: <span style="color:#ae81ff">stable</span>
+  <span style="color:#f92672">installPlanApproval</span>: <span style="color:#ae81ff">Automatic</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">elasticsearch-operator</span>
+  <span style="color:#f92672">source</span>: <span style="color:#ae81ff">redhat-operators</span>
+  <span style="color:#f92672">sourceNamespace</span>: <span style="color:#ae81ff">openshift-marketplace</span>
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">oc apply -f cluster-logging-sub.yaml</span>
+
+<span style="color:#ae81ff">oc get csv</span>
+<span style="color:#ae81ff">NAME                               DISPLAY                            VERSION    REPLACES                           PHASE</span>
+<span style="color:#ae81ff">elasticsearch-operator.5.3.1-12    OpenShift Elasticsearch Operator   5.3.1-12                                      Succeeded</span>
+</code></pre></div><h3 id="install-logging-operator">Install Logging Operator</h3>
+<p>Create Operators namespaces:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;ocp_cluster_logging_namespace.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Namespace</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openshift-logging</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">openshift.io/node-selector</span>: <span style="color:#e6db74">&#34;&#34;</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">openshift.io/cluster-logging</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+    <span style="color:#f92672">openshift.io/cluster-monitoring</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">oc apply -f ocp_cluster_logging_namespace.yaml</span>
+<span style="color:#ae81ff">oc project openshift-logging</span>
+</code></pre></div><p>Create OperatorGroup object</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;cluster-logging-operatorgroup.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">OperatorGroup</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-logging</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-logging </span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">targetNamespaces</span>:
+  - <span style="color:#ae81ff">openshift-logging</span>
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">oc apply -f cluster-logging-operatorgroup.yaml</span>
+</code></pre></div><p>Subscribe a Namespace to the Cluster Logging Operator:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;cluster-logging-sub.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Subscription</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-logging</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-logging</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">channel</span>: <span style="color:#e6db74">&#34;stable&#34;</span> <span style="color:#75715e"># Set Channel</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-logging</span>
+  <span style="color:#f92672">source</span>: <span style="color:#ae81ff">redhat-operators</span>
+  <span style="color:#f92672">sourceNamespace</span>: <span style="color:#ae81ff">openshift-marketplace</span>
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">oc apply -f cluster-logging-sub.yaml</span>
+
+<span style="color:#ae81ff">oc get csv</span>
+<span style="color:#ae81ff">NAME                               DISPLAY                            VERSION    REPLACES                           PHASE</span>
+<span style="color:#ae81ff">cluster-logging.5.3.1-12           Red Hat OpenShift Logging          5.3.1-12                                      Succeeded</span>
+<span style="color:#ae81ff">elasticsearch-operator.5.3.1-12    OpenShift Elasticsearch Operator   5.3.1-12                                      Succeeded</span>
+</code></pre></div><h3 id="deploy-cluster-logging-stack">Deploy Cluster logging stack</h3>
+<p>Create a Cluster Logging instance:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;cluster-logging-instance.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;logging.openshift.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#e6db74">&#34;ClusterLogging&#34;</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;instance&#34;</span> 
+  <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;openshift-logging&#34;</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">managementState</span>: <span style="color:#e6db74">&#34;Managed&#34;</span>  
+  <span style="color:#f92672">logStore</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#e6db74">&#34;elasticsearch&#34;</span>  
+    <span style="color:#f92672">retentionPolicy</span>: 
+      <span style="color:#f92672">application</span>:
+        <span style="color:#f92672">maxAge</span>: <span style="color:#ae81ff">1d</span>
+      <span style="color:#f92672">infra</span>:
+        <span style="color:#f92672">maxAge</span>: <span style="color:#ae81ff">7d</span>
+      <span style="color:#f92672">audit</span>:
+        <span style="color:#f92672">maxAge</span>: <span style="color:#ae81ff">7d</span>
+    <span style="color:#f92672">elasticsearch</span>:
+      <span style="color:#f92672">nodeCount</span>: <span style="color:#ae81ff">3</span> 
+      <span style="color:#f92672">storage</span>:
+        <span style="color:#f92672">storageClassName</span>: <span style="color:#e6db74">&#34;&lt;storage_class_name&gt;&#34;</span> 
+        <span style="color:#f92672">size</span>: <span style="color:#ae81ff">200G</span>
+      <span style="color:#f92672">resources</span>: 
+          <span style="color:#f92672">limits</span>:
+            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;16Gi&#34;</span>
+          <span style="color:#f92672">requests</span>:
+            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;16Gi&#34;</span>
+      <span style="color:#f92672">proxy</span>: 
+        <span style="color:#f92672">resources</span>:
+          <span style="color:#f92672">limits</span>:
+            <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">256Mi</span>
+          <span style="color:#f92672">requests</span>:
+            <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">256Mi</span>
+      <span style="color:#f92672">redundancyPolicy</span>: <span style="color:#e6db74">&#34;SingleRedundancy&#34;</span>
+  <span style="color:#f92672">visualization</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#e6db74">&#34;kibana&#34;</span>  
+    <span style="color:#f92672">kibana</span>:
+      <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">curation</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#e6db74">&#34;curator&#34;</span>  
+    <span style="color:#f92672">curator</span>:
+      <span style="color:#f92672">schedule</span>: <span style="color:#e6db74">&#34;30 3 * * *&#34;</span>
+  <span style="color:#f92672">collection</span>:
+    <span style="color:#f92672">logs</span>:
+      <span style="color:#f92672">type</span>: <span style="color:#e6db74">&#34;fluentd&#34;</span>  
+      <span style="color:#f92672">fluentd</span>: {}
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">oc apply -f cluster-logging-instance.yaml</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">oc get deployment</span>
+<span style="color:#ae81ff">cluster-logging-operator       1/1     1            1           18h</span>
+<span style="color:#ae81ff">elasticsearch-cd-x6kdekli-1    0/1     1            0           6m54s</span>
+<span style="color:#ae81ff">elasticsearch-cdm-x6kdekli-1   1/1     1            1           18h</span>
+<span style="color:#ae81ff">elasticsearch-cdm-x6kdekli-2   0/1     1            0           6m49s</span>
+<span style="color:#ae81ff">elasticsearch-cdm-x6kdekli-3   0/1     1            0           6m44s</span>
+</code></pre></div><h3 id="defining-kibana-index-patterns">Defining Kibana index patterns</h3>
+<p>In the OpenShift Container Platform console, click the <code>Application Launcher</code> and select <code>Logging</code>.</p>
+<p><img src="/img/include/logging-openshift-1.png" alt="Logging Operator"  class="zoomable" /></p>
+<p>Create your Kibana index patterns by clicking <code>Management</code> → <code>Index Patterns</code> → <code>Create index pattern</code>:</p>
+<ul>
+<li>Each user must manually create index patterns when logging into Kibana the first time in order to see logs for their projects. Users must create an index pattern named <code>app</code> and use the <code>@timestamp</code> time field to view their container logs.</li>
+<li>Each admin user must create index patterns when logged into Kibana the first time for the <code>app</code>, <code>infra</code>, and <code>audit</code> indices using the <code>@timestamp</code> time field.</li>
+</ul>
+<p><img src="/img/include/logging-openshift-2.png" alt="Logging Operator"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -16272,6 +16749,8 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -16337,6 +16816,8 @@ curl -k -H &quot;Authorization: Bearer `oc serviceaccounts get-token asb-client`
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -16408,6 +16889,8 @@ oc delete statefulset/prometheus-k8s
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -16469,6 +16952,8 @@ oc apply -f registry_console.yaml
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -16682,6 +17167,8 @@ spec:
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -20231,6 +20718,8 @@ Events:
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -22734,6 +23223,8 @@ endpoint = http://localhost/api
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -22794,6 +23285,8 @@ endpoint = http://localhost/api
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -24062,6 +24555,8 @@ kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -24405,6 +24900,8 @@ api_url = https://sso.devopstales.intra/auth/realms/gitlab/protocol/openid-conne
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -24816,6 +25313,8 @@ key=”{job=\”nginx\”}” appeared – all good.
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -25636,6 +26135,8 @@ It automatically provision certficates</p>
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -28359,6 +28860,8 @@ oc deploy gitlab-runner-template.yml
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -28564,6 +29067,8 @@ docker push harbor.devopstales.intra/test/nginx:V2
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -28639,6 +29144,8 @@ ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/openshi
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -28821,6 +29328,8 @@ oc aplay -f vmware-sc.yml
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -29202,6 +29711,8 @@ kubectl config use-context $USER \
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -29301,6 +29812,8 @@ master-restart controllers
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -29470,6 +29983,8 @@ master-restart controllers
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -30687,6 +31202,8 @@ ssh ceph node01 sudo ceph osd create mycorp 128
      <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
      <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
      <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
