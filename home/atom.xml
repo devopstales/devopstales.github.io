@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-12-16T11:51:29+00:00</updated>
+    <updated>2021-12-20T08:53:15+00:00</updated>
     
     
     <author>
@@ -484,6 +484,205 @@ openshift-marketplace   redhat-operators      Red Hat Operators     grpc      Re
 <li>Each admin user must create index patterns when logged into Kibana the first time for the <code>app</code>, <code>infra</code>, and <code>audit</code> indices using the <code>@timestamp</code> time field.</li>
 </ul>
 <p><img src="/img/include/logging-openshift-2.png" alt="Logging Operator"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Replace CEPH SSD journal disk]]></title>
+            <link href="https://devopstales.github.io/home/ceph-change-journal-ssd/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/home/ceph-change-journal-ssd/</id>
+            
+            
+            <published>2021-12-12T00:00:00+00:00</published>
+            <updated>2021-12-12T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can change the end of life journal SSD in Ceph.</p>
+<h3 id="replace-a-ssd-disk-used-as-journal-for-filestore">Replace a SSD disk used as journal for filestore</h3>
+<p>Let&rsquo;s suppose that we need to replace /dev/nvme0n1. This device is used for journal for osd.10 and osd.11:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph device ls | grep ceph-osd-02</span>
+ST6000NM0115-1YZ110_ZAD5KF07                    ceph-osd-02:sda                        osd.10
+ST6000NM0115-1YZ110_ZAD5N8P7                    ceph-osd-02:sdb                        osd.11
+Samsung_SSD_970_EVO_Plus_250GB_S4EUNJ0N111052K  ceph-osd-02:nvme0n1                    osd.10 osd.11
+</code></pre></div><p>Let&rsquo;s tell ceph to not rebalance the cluster as we stop these OSDs for maintenance:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd set noout</span>
+</code></pre></div><p>Let&rsquo;s stop the affected OSDs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># systemctl stop ceph-osd@10.service</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># systemctl stop ceph-osd@11.service</span>
+</code></pre></div><p>Let&rsquo;s flush the journals for these OSDs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-osd -i 10 --flush-journal</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-osd -i 11 --flush-journal</span>
+</code></pre></div><p>Backup nvme0n1 partition table.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># sfdisk -l /dev/nvme0n1 &gt; nvme0n1.partition.table.txt</span>
+</code></pre></div><p>Let&rsquo;s replace the device nvme0n1. In case, let&rsquo;s zap it:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-disk zap /dev/nvme0n1</span>
+</code></pre></div><p>Let&rsquo;s partition the new disk, using this script:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e">#!/bin/bash
+</span><span style="color:#75715e"></span> 
+osds<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;10 11&#34;</span>
+journal_disk<span style="color:#f92672">=</span>/dev/nvme0n1
+part_number<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>
+<span style="color:#66d9ef">for</span> osd_id in $osds; <span style="color:#66d9ef">do</span>
+  part_number<span style="color:#f92672">=</span><span style="color:#66d9ef">$((</span>part_number+1<span style="color:#66d9ef">))</span>
+  journal_uuid<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>cat /var/lib/ceph/osd/ceph-$osd_id/journal_uuid<span style="color:#66d9ef">)</span>
+  echo <span style="color:#e6db74">&#34;journal_uuid: </span><span style="color:#e6db74">${</span>journal_uuid<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+  echo <span style="color:#e6db74">&#34;part_number: </span><span style="color:#e6db74">${</span>part_number<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+  sgdisk --new<span style="color:#f92672">=</span><span style="color:#e6db74">${</span>part_number<span style="color:#e6db74">}</span>:0:+30720M --change-name<span style="color:#f92672">=</span><span style="color:#e6db74">${</span>part_number<span style="color:#e6db74">}</span>:<span style="color:#e6db74">&#39;ceph journal&#39;</span> --partition-guid<span style="color:#f92672">=</span><span style="color:#e6db74">${</span>part_number<span style="color:#e6db74">}</span>:$journal_uuid --typecode<span style="color:#f92672">=</span><span style="color:#e6db74">${</span>part_number<span style="color:#e6db74">}</span>:45b0969e-9b03-4f30-b4c6-b4b80ceff106 --mbrtogpt -- $journal_disk
+<span style="color:#66d9ef">done</span>
+</code></pre></div><p>OR with backup:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># sfdisk /dev/nvme0n1 &lt; nvme0n1.partition.table.txt</span>
+</code></pre></div><p>Then:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-osd --mkjournal -i 10</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-osd --mkjournal -i 11</span>
+</code></pre></div><p>Let&rsquo;s restart the osds:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># systemctl restart ceph-osd@10.service</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># systemctl restart ceph-osd@11.service</span>
+</code></pre></div><p>Finally:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd unset noout</span>
+</code></pre></div><h3 id="replace-a-ssd-disk-used-as-db-for-bluestore">Replace a SSD disk used as db for bluestore</h3>
+<p>Let&rsquo;s suppose that we need to replace /dev/nvme0n1. This device is used for journal for osd.10 and osd.11:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph device ls | grep ceph-osd-02</span>
+ST6000NM0115-1YZ110_ZAD5KF07                    ceph-osd-02:sda                        osd.10
+ST6000NM0115-1YZ110_ZAD5N8P7                    ceph-osd-02:sdb                        osd.11
+Samsung_SSD_970_EVO_Plus_250GB_S4EUNJ0N111052K  ceph-osd-02:nvme0n1                    osd.10 osd.11
+</code></pre></div><p>Check the LVM paricioning on the nvme0n1:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># lsblk</span>
+sda                                                                                                     8:0    <span style="color:#ae81ff">0</span>   5.5T  <span style="color:#ae81ff">0</span> disk
+└─ceph--a2d09b40--caa4--4720--8953--5e86750da005-osd--block--de012ee4--60c4--4623--a98c--20b3256a6587 253:6    <span style="color:#ae81ff">0</span>   5.5T  <span style="color:#ae81ff">0</span> lvm
+sdb                                                                                                     8:16   <span style="color:#ae81ff">0</span>   5.5T  <span style="color:#ae81ff">0</span> disk
+└─ceph--01fefec3--2549--40dc--b03e--ea1cbf0c22f1-osd--block--df90bd50--cd26--4306--8c4a--6d97148870e8 253:8    <span style="color:#ae81ff">0</span>   5.5T  <span style="color:#ae81ff">0</span> lvm
+...
+nvme0n1                                                                                               259:0    <span style="color:#ae81ff">0</span> 232.9G  <span style="color:#ae81ff">0</span> disk
+├─ceph--2dd99fb0--5e5a--4795--a14d--8fea42f9b4e9-osd--db--6463679d--ccd6--4988--a4fa--6bb0037b8f7a    253:5    <span style="color:#ae81ff">0</span>   115G  <span style="color:#ae81ff">0</span> lvm
+└─ceph--2dd99fb0--5e5a--4795--a14d--8fea42f9b4e9-osd--db--3b39c364--92cb--41c4--8150--ce7f4bdb4b2c    253:7    <span style="color:#ae81ff">0</span>   115G  <span style="color:#ae81ff">0</span> lvm
+
+vgdisplay -v
+</code></pre></div><p>We find the volume groups used for db and block. This physical devices in our case it is:
+db: <code>ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9</code>
+block1: <code>ceph-a2d09b40-caa4-4720-8953-5e86750da005</code>
+block2: <code>ceph-01fefec3-2549-40dc-b03e-ea1cbf0c22f1</code></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># vgdisplay -v ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9</span>
+  --- Volume group ---
+  VG Name               ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9
+  System ID
+  Format                lvm2
+  Metadata Areas        <span style="color:#ae81ff">1</span>
+  Metadata Sequence No  <span style="color:#ae81ff">5</span>
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                <span style="color:#ae81ff">0</span>
+  Cur LV                <span style="color:#ae81ff">2</span>
+  Open LV               <span style="color:#ae81ff">2</span>
+  Max PV                <span style="color:#ae81ff">0</span>
+  Cur PV                <span style="color:#ae81ff">1</span>
+  Act PV                <span style="color:#ae81ff">1</span>
+  VG Size               232.88 GiB
+  PE Size               4.00 MiB
+  Total PE              <span style="color:#ae81ff">59618</span>
+  Alloc PE / Size       <span style="color:#ae81ff">58880</span> / 230.00 GiB
+  Free  PE / Size       <span style="color:#ae81ff">738</span> / 2.88 GiB
+  VG UUID               f29Vag-1PrI-fo7x-Dvhm-TNDl-2cfY-5hFY33
+
+  --- Logical volume ---
+  LV Path                /dev/ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9/osd-db-6463679d-ccd6-4988-a4fa-6bb0037b8f7a
+  LV Name                osd-db-6463679d-ccd6-4988-a4fa-6bb0037b8f7a
+  VG Name                ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9
+  LV UUID                UWFXM5-5ZmF-Kb4f-jTqc-KuqZ-IWc7-UjHhXY
+  LV Write Access        read/write
+  LV Creation host, time ceph-osd-02, 2021-06-04 21:48:01 +0200
+  LV Status              available
+  <span style="color:#75715e"># open                 12</span>
+  LV Size                115.00 GiB
+  Current LE             <span style="color:#ae81ff">29440</span>
+  Segments               <span style="color:#ae81ff">1</span>
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     <span style="color:#ae81ff">256</span>
+  Block device           253:5
+
+  --- Logical volume ---
+  LV Path                /dev/ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9/osd-db-3b39c364-92cb-41c4-8150-ce7f4bdb4b2c
+  LV Name                osd-db-3b39c364-92cb-41c4-8150-ce7f4bdb4b2c
+  VG Name                ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9
+  LV UUID                e52dYE-FuRK-TMPv-U8vx-38pv-KdfE-R0fwBo
+  LV Write Access        read/write
+  LV Creation host, time ceph-osd-02, 2021-06-04 21:48:30 +0200
+  LV Status              available
+  <span style="color:#75715e"># open                 12</span>
+  LV Size                115.00 GiB
+  Current LE             <span style="color:#ae81ff">29440</span>
+  Segments               <span style="color:#ae81ff">1</span>
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     <span style="color:#ae81ff">256</span>
+  Block device           253:7
+
+  --- Physical volumes ---
+  PV Name               /dev/nvme0n1
+  PV UUID               4bVZmc-Vku7-rWPd-RHrn-xUFf-WrYb-yidijN
+  PV Status             allocatable
+  Total PE / Free PE    <span style="color:#ae81ff">59618</span> / <span style="color:#ae81ff">738</span>
+</code></pre></div><p>I.e. it is used as db for OSD 10-11</p>
+<p>Let&rsquo;s &lsquo;disable these OSDs&rsquo;:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd crush reweight osd.10 0</span>
+reweighted item id <span style="color:#ae81ff">10</span> name <span style="color:#e6db74">&#39;osd.10&#39;</span> to <span style="color:#ae81ff">0</span> in crush map
+<span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd crush reweight osd.11 0</span>
+reweighted item id <span style="color:#ae81ff">11</span> name <span style="color:#e6db74">&#39;osd.11&#39;</span> to <span style="color:#ae81ff">0</span> in crush map
+</code></pre></div><p>Wait that the status is HEALTH-OK. Then destroy the osds(be sure to have saved the mappings first !!):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ll /var/lib/ceph/osd/ceph-10/ | grep block</span>
+lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#ae81ff">93</span> Jun  <span style="color:#ae81ff">4</span> 21:48 block -&gt; /dev/ceph-a2d09b40-caa4-4720-8953-5e86750da005/osd-block-de012ee4-60c4-4623-a98c-20b3256a6587
+lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#ae81ff">90</span> Jun  <span style="color:#ae81ff">4</span> 21:48 block.db -&gt; /dev/ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9/osd-db-6463679d-ccd6-4988-a4fa-6bb0037b8f7a
+
+<span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ll /var/lib/ceph/osd/ceph-11/ | grep block</span>
+lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#ae81ff">93</span> Jun  <span style="color:#ae81ff">4</span> 21:48 block -&gt; /dev/ceph-01fefec3-2549-40dc-b03e-ea1cbf0c22f1/osd-block-df90bd50-cd26-4306-8c4a-6d97148870e8
+lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#ae81ff">90</span> Jun  <span style="color:#ae81ff">4</span> 21:48 block.db -&gt; /dev/ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9/osd-db-3b39c364-92cb-41c4-8150-ce7f4bdb4b2c
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd out osd.10</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd out osd.11</span>
+
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd crush remove osd.10</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd crush remove osd.11</span>
+
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># systemctl stop ceph-osd@10.service</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># systemctl stop ceph-osd@11.service</span>
+
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph auth del osd.10</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph auth del osd.11</span>
+
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd rm osd.10</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># ceph osd rm osd.11</span>
+
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># umount /var/lib/ceph/osd/ceph-10</span>
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># umount /var/lib/ceph/osd/ceph-11</span>
+</code></pre></div><p>Destroy the volume group created on this SSD disk (be sure to have saved the vgdisplay output first !):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># vgdisplay -v ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9 &gt; ceph-vg.txt</span>
+
+<span style="color:#f92672">[</span>root@ceph-osd-02 ~<span style="color:#f92672">]</span><span style="color:#75715e"># vgremove ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9</span>
+</code></pre></div><p>Replace the SSD disk. Suppose the new one is always called vdk. Recreate volume group and logical volume (refer to the previous vgdisplay output):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># vgcreate ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9 /dev/vdk </span>
+  Physical volume <span style="color:#e6db74">&#34;/dev/vdk&#34;</span> successfully created.
+  Volume group <span style="color:#e6db74">&#34;ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9&#34;</span> successfully created
+<span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># lvcreate -L 115GB -n osd-db-6463679d-ccd6-4988-a4fa-6bb0037b8f7a ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9</span>
+  Logical volume <span style="color:#e6db74">&#34;osd-db-6463679d-ccd6-4988-a4fa-6bb0037b8f7a&#34;</span> created.
+<span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># lvcreate -L 115GB -n osd-db-3b39c364-92cb-41c4-8150-ce7f4bdb4b2c ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9</span>
+<span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># </span>
+</code></pre></div><p>Let&rsquo;s do a lvm zap:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-volume lvm zap /var/lib/ceph/osd/ceph-10/block</span>
+<span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-volume lvm zap /var/lib/ceph/osd/ceph-11/block</span>
+</code></pre></div><p>Let&rsquo;s create the OSD:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-volume lvm create --bluestore --data ceph-a2d09b40-caa4-4720-8953-5e86750da005/osd-block-de012ee4-60c4-4623-a98c-20b3256a6587 --block.db ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9/osd-db-6463679d-ccd6-4988-a4fa-6bb0037b8f7a</span>
+<span style="color:#f92672">[</span>root@c-osd-5 /<span style="color:#f92672">]</span><span style="color:#75715e"># ceph-volume lvm create --bluestore --data ceph-01fefec3-2549-40dc-b03e-ea1cbf0c22f1/osd-block-df90bd50-cd26-4306-8c4a-6d97148870e8 --block.db ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9/ceph-2dd99fb0-5e5a-4795-a14d-8fea42f9b4e9</span>
+</code></pre></div>]]></content>
             
                  
                     
