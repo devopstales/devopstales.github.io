@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-12-20T08:53:15+00:00</updated>
+    <updated>2021-12-22T12:49:58+00:00</updated>
     
     
     <author>
@@ -17,6 +17,265 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Publish Kubernetes Operator to OperatorHub]]></title>
+            <link href="https://devopstales.github.io/home/oml/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
+                <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
+                <link href="https://devopstales.github.io/kubernetes/oml/?utm_source=atom_feed" rel="related" type="text/html" title="Publish Kubernetes Operator to OperatorHub" />
+                <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
+                <link href="https://devopstales.github.io/home/openshift-elasticsearch-error/?utm_source=atom_feed" rel="related" type="text/html" title="Opeshift elasticsearch search-guard error" />
+            
+                <id>https://devopstales.github.io/home/oml/</id>
+            
+            
+            <published>2021-12-21T00:00:00+00:00</published>
+            <updated>2021-12-21T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can publish your operator to OperatorHub.</p>
+<p>I assume you have a pre built and publised docker image with the operator in it.</p>
+<h3 id="install-requirement">Install requirement</h3>
+<ul>
+<li><a href="https://github.com/operator-framework/operator-registry/releases">operator-registry-tools</a></li>
+<li><a href="https://github.com/operator-framework/operator-sdk/releases">operator-sdk</a></li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">brew install opm
+brew install operator-sdk
+</code></pre></div><h3 id="stucture">Stucture</h3>
+<p>Your Operator submission can be formatted following the <code>bundle</code> or <code>packagemanifest</code> format. he <code>packagemanifest</code> format is a legacy format which is kept for backwards compatibility only so I will use <code>bundle</code> format.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">tree OLM
+
+OLM
+└── 0.0.1
+    ├── manifests
+    │   ├── trivy-operator.v0.0.1.clusterserviceversion.yaml
+    │   └── crds.yaml
+    └── metadata
+        └── annotations.yaml
+</code></pre></div><h3 id="create-clusterserviceversion">Create clusterserviceversion</h3>
+<p>To add your operator to any of the supported platforms, you will need to submit metadata for your Operator to be used by the <code>Operator Lifecycle Manager</code> (OLM). This is YAML file called <code>ClusterServiceVersion</code> which contains references to all of the CRDs, RBAC rules, Deployment and container image needed to install and securely run your Operator.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano OLM/0.0.1/manifests/trivy-operator.v0.0.1.clusterserviceversion.yaml</span>
+</code></pre></div><p>First start with a CSV that only contains some descriptive metadata:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterServiceVersion</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">capabilities</span>: <span style="color:#ae81ff">Basic Install</span>
+    <span style="color:#f92672">description</span>: <span style="color:#ae81ff">Trivy Operator for scheduled imagescans and an Admission Control.</span>
+    <span style="color:#f92672">certified</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#f92672">containerImage</span>: <span style="color:#ae81ff">devopstales/trivy-operator:0.0.1</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">trivy-operator.v0.0.1</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">description</span>: <span style="color:#ae81ff">Trivy Operator for scheduled imagescans and an Admission Control.</span>
+  <span style="color:#f92672">displayName</span>: <span style="color:#ae81ff">Trivy Operator</span>
+  <span style="color:#f92672">keywords</span>:
+  - <span style="color:#e6db74">&#34;devops&#34;</span>
+  - <span style="color:#e6db74">&#34;tales&#34;</span>
+  - <span style="color:#ae81ff">trivy</span>
+  - <span style="color:#ae81ff">security</span>
+  <span style="color:#f92672">maintainers</span>:
+  - <span style="color:#f92672">email</span>: <span style="color:#ae81ff">devopstales@mydomain.intra</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+  <span style="color:#f92672">maturity</span>: <span style="color:#ae81ff">alpha</span>
+  <span style="color:#f92672">provider</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Blog</span>
+    <span style="color:#f92672">url</span>: <span style="color:#ae81ff">devopstales.hithub.io</span>
+  <span style="color:#f92672">version</span>: <span style="color:#ae81ff">0.10.0</span>
+</code></pre></div><p>The next section to add to the CSV is the Install Strategy - this tells OLM about the runtime components of your operator and their requirements.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterServiceVersion</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+  <span style="color:#75715e"># ... </span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">trivy-operator.v0.0.1</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">install</span>:
+  <span style="color:#75715e"># ... </span>
+    <span style="color:#75715e"># strategy indicates what type of deployment artifacts are used</span>
+    <span style="color:#f92672">strategy</span>: <span style="color:#ae81ff">deployment</span>
+    <span style="color:#75715e"># spec for the deployment strategy is a list of deployment specs and required permissions - similar to a pod template used in a deployment</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">permissions</span>:
+      - <span style="color:#f92672">serviceAccountName</span>: <span style="color:#ae81ff">trivy-operator </span>
+        <span style="color:#f92672">rules</span>:
+        - <span style="color:#f92672">apiGroups</span>:
+          - <span style="color:#e6db74">&#34;&#34;</span>
+          <span style="color:#f92672">resources</span>:
+          - <span style="color:#ae81ff">pods</span>
+          <span style="color:#f92672">verbs</span>:
+          - <span style="color:#e6db74">&#39;*&#39;</span>
+          <span style="color:#75715e"># the rest of the rules</span>
+      <span style="color:#75715e"># permissions required at the cluster scope</span>
+      <span style="color:#f92672">clusterPermissions</span>:
+      - <span style="color:#f92672">serviceAccountName</span>: <span style="color:#ae81ff">trivy-operator </span>
+        <span style="color:#f92672">rules</span>:
+        - <span style="color:#f92672">apiGroups</span>:
+          - <span style="color:#e6db74">&#34;&#34;</span>
+          <span style="color:#f92672">resources</span>:
+          - <span style="color:#ae81ff">serviceaccounts</span>
+          <span style="color:#f92672">verbs</span>:
+          - <span style="color:#e6db74">&#39;*&#39;</span>
+          <span style="color:#75715e"># the rest of the rules</span>
+      <span style="color:#f92672">deployments</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">trivy-operator</span>
+        <span style="color:#f92672">spec</span>:
+          <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+          <span style="color:#75715e"># the rest of a deployment spec</span>
+</code></pre></div><blockquote>
+<p>For Openshift you can append SCC to the serviceaccount in the rules section</p>
+</blockquote>
+<p>It’s also important to tell OLM the ways in which your operator can be deployed:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterServiceVersion</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+  <span style="color:#75715e"># ... </span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">trivy-operator.v0.0.1</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#75715e"># ... </span>
+  <span style="color:#f92672">installModes</span>:
+  - <span style="color:#f92672">supported</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">OwnNamespace</span>
+  - <span style="color:#f92672">supported</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">SingleNamespace</span>
+  - <span style="color:#f92672">supported</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">MultiNamespace</span>
+  - <span style="color:#f92672">supported</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">AllNamespaces</span>
+</code></pre></div><p>By definition, operators are programs that can talk to the Kubernetes API and they are also extend the Kubernetes API, by <code>CustomResourceDefinitions</code>. Which APIs are watched or owned is important metadata for OLM so we need to define thease too.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterServiceVersion</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+  <span style="color:#75715e"># ... </span>
+    <span style="color:#f92672">alm-examples</span>: |-<span style="color:#e6db74">
+</span><span style="color:#e6db74">      [
+</span><span style="color:#e6db74">        {
+</span><span style="color:#e6db74">          &#34;apiVersion&#34;: &#34;trivy-operator.devopstales.io/v1&#34;,
+</span><span style="color:#e6db74">          &#34;kind&#34;: &#34;NamespaceScanner&#34;,
+</span><span style="color:#e6db74">          &#34;metadata&#34;: {
+</span><span style="color:#e6db74">            &#34;name&#34;: &#34;trivy-operator-main-config&#34;
+</span><span style="color:#e6db74">          },
+</span><span style="color:#e6db74">          &#34;spec&#34;: {
+</span><span style="color:#e6db74">            &#34;crontab&#34;: &#34;*/5 * * * *&#34;,
+</span><span style="color:#e6db74">            &#34;namespace_selector&#34;: &#34;trivy-scan&#34;,
+</span><span style="color:#e6db74">            &#34;registry&#34;: [
+</span><span style="color:#e6db74">              {
+</span><span style="color:#e6db74">                &#34;name&#34;: &#34;docker.io&#34;,
+</span><span style="color:#e6db74">                &#34;user&#34;: &#34;&#34;,
+</span><span style="color:#e6db74">                &#34;password&#34;: &#34;&#34;
+</span><span style="color:#e6db74">              }
+</span><span style="color:#e6db74">            ]
+</span><span style="color:#e6db74">          }
+</span><span style="color:#e6db74">        }
+</span><span style="color:#e6db74">      ]</span>      
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">trivy-operator.v0.0.1</span>
+<span style="color:#f92672">spec</span>:
+<span style="color:#f92672">spec</span>:
+  <span style="color:#75715e"># ... </span>
+  <span style="color:#f92672">customresourcedefinitions</span>:
+    <span style="color:#f92672">owned</span>:
+    <span style="color:#75715e"># a list of CRDs that this operator owns </span>
+      <span style="color:#75715e"># name is the metadata.name of the CRD</span>
+    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">namespace-scanners.trivy-operator.devopstales.io</span>
+      <span style="color:#75715e"># version is the version of the CRD (one per entry)</span>
+      <span style="color:#f92672">version</span>: <span style="color:#ae81ff">v1</span>
+      <span style="color:#75715e"># spec.names.kind from the CRD</span>
+      <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NamespaceScanner</span>
+</code></pre></div><p>You must place the <code>CustomResourceDefinitions</code> to the <code>manifests</code> folder andy any other object like <code>service</code> what you want to deploy by the <code>Operator Framework</code>. If you created your `` you can test with OperatorHub&rsquo;s <a href="https://operatorhub.io/preview">Operator Preview</a> page.</p>
+<h1 id="test-operator">Test operator</h1>
+<p>You can test your files with <code>operator-sdk</code> locally:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">operator-sdk bundle validate ./OLM/0.0.1 --select-optional suite<span style="color:#f92672">=</span>operatorframework
+INFO<span style="color:#f92672">[</span>0000<span style="color:#f92672">]</span> All validation tests have completed successfully
+</code></pre></div><h3 id="generate-bundle">Generate bundle</h3>
+<p>To test the functions all working correctly you need first to install the operator with Operato framework. To do so you need a build the <code>bundle</code> image the the catalog index:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cd OML
+opm alpha bundle build -c stable -d 0.0.1/manifests -t devopstales/trivy-operator-bundle:0.0.1 -p trivy-operator
+docker push docker.io/devopstales/trivy-operator-bundle:0.0.1
+
+opm index add -b docker.io/devopstales/trivy-operator-bundle:0.0.1 -t docker.io/devopstales/trivy-operator-index:0.0.1 -c docker
+docker push docker.io/devopstales/trivy-operator-index:0.0.1
+</code></pre></div><h3 id="install-oml">Install OML</h3>
+<p>To install the operator from your catalog index first you need to install the <code>operator-lifecycle-manager</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.19.1/install.sh | bash -s v0.19.1
+</code></pre></div><h3 id="add-your-index-as-catalogsource">Add your index as CatalogSource</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano cs-trivy-operator.yaml</span>
+
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">CatalogSource</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales-catalog</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">olm</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">displayName</span>: <span style="color:#ae81ff">devopstales</span>
+  <span style="color:#f92672">publisher</span>: <span style="color:#ae81ff">devopstales</span>
+  <span style="color:#f92672">sourceType</span>: <span style="color:#ae81ff">grpc</span>
+  <span style="color:#f92672">image</span>: <span style="color:#ae81ff">docker.io/devopstales/trivy-operator-index:0.0.1</span>
+  <span style="color:#f92672">updateStrategy</span>:
+    <span style="color:#f92672">registryPoll</span>:
+      <span style="color:#f92672">interval</span>: <span style="color:#ae81ff">1m</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f cs-trivy-operator.yaml
+
+kubectl get catalogsource --all-namespaces
+NAMESPACE   NAME                    DISPLAY               TYPE      PUBLISHER        AGE
+olm         devopstales-catalog     devopstales           grpc      devopstales      13m
+olm         operatorhubio-catalog   Community Operators   grpc      OperatorHub.io   7h20m
+
+kubectl get packagemanifest | grep trivy
+trivy-operator                             devopstales           6h54m
+</code></pre></div><p>Subscribe to this operator:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">$ cat og.yaml </span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">OperatorGroup</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-og</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">targetNamespaces</span>:
+  - <span style="color:#ae81ff">default</span>
+
+<span style="color:#ae81ff">$ cat sub_devopstales-catalog.yaml </span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operators.coreos.com/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Subscription</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">trivy-operator</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">channel</span>: <span style="color:#ae81ff">alpha</span>
+  <span style="color:#f92672">installPlanApproval</span>: <span style="color:#ae81ff">Automatic</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">trivy-operator</span>
+  <span style="color:#f92672">source</span>: <span style="color:#ae81ff">devopstales-catalog</span>
+  <span style="color:#f92672">sourceNamespace</span>: <span style="color:#ae81ff">olm</span>
+  <span style="color:#f92672">startingCSV</span>: <span style="color:#ae81ff">trivy-operator.v0.0.1</span>
+</code></pre></div><p>After create them, you will get the below objects:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">$ oc get sub -n default</span>
+<span style="color:#ae81ff">NAME             PACKAGE          SOURCE                CHANNEL</span>
+<span style="color:#ae81ff">trivy-operator   trivy-operator   devopstales-catalog   alpha</span>
+
+<span style="color:#ae81ff">$ oc get ip -n default</span>
+<span style="color:#ae81ff">NAME            CSV                     APPROVAL    APPROVED</span>
+<span style="color:#ae81ff">install-tvpq4   trivy-operator.v0.0.1   Automatic   true</span>
+
+<span style="color:#ae81ff">$ oc get csv -n default</span>
+<span style="color:#ae81ff">NAME                    DISPLAY          VERSION   REPLACES   PHASE</span>
+<span style="color:#ae81ff">trivy-operator.v0.0.1   Trivy Operator   0.0.1                Succeeded</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"></code></pre></div><p>The you can create the Custo Resource to test the functionality.</p>
+<h3 id="publicate-operato-on-operatohub">Publicate operato on OperatoHub</h3>
+<p>To publish your bundled operator you need to create a pull requuest to the <a href="https://github.com/k8s-operatorhub/community-operators">operatorhub  community-operators</a> repo or <a href="https://github.com/redhat-openshift-ecosystem/community-operators-prod">RedHat Opeshift community-operators</a> repo.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -228,6 +487,855 @@ Done with success
     
         
         <entry>
+            <title type="html"><![CDATA[Configure OKD OpenShift 4 authentication]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-auth/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift4-ceph-rbd-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 Ceph Persisten Storage" />
+                <link href="https://devopstales.github.io/home/openshift4-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 ingress" />
+                <link href="https://devopstales.github.io/home/openshift4-install/?utm_source=atom_feed" rel="related" type="text/html" title="How To Install OKD OpenShift 4 on premise" />
+                <link href="https://devopstales.github.io/home/openshift4-logging/?utm_source=atom_feed" rel="related" type="text/html" title="Install Cluster Logging Operator on OpenShift 4" />
+                <link href="https://devopstales.github.io/home/openshift_4/?utm_source=atom_feed" rel="related" type="text/html" title="OpenShift 4.2 with Red Hat CodeReady Containers" />
+            
+                <id>https://devopstales.github.io/home/openshift4-auth/</id>
+            
+            
+            <published>2021-12-13T00:00:00+00:00</published>
+            <updated>2021-12-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can create multiple ingress route on an OpenShift 4 on premise.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+<h3 id="create-a-cluster-admin-user">Create a Cluster Admin User</h3>
+<p>The current kubeadmin user that we are using in the previous step is temporary. We need to create a permanent cluster administrator user. The fastest way to do this is by using htpasswd as an authentication provider. We will create a secret under the openshift-config namespace and add a htpasswd provider in the cluster oAuth.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">htpasswd -c -B -b users.htpasswd adminuser adminpassword
+htpasswd -c -B -b users.htpasswd testuser testpassword
+oc create secret generic htpass-secret --from-file<span style="color:#f92672">=</span>htpasswd<span style="color:#f92672">=</span>users.htpasswd -n <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>openshift-config
+oc apply -f htpasswd_provider.yaml
+</code></pre></div><p>You can create groups to the cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano groups.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">user.openshift.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admins</span>
+<span style="color:#f92672">users</span>:
+  - <span style="color:#ae81ff">adminuser</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">user.openshift.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admins</span>
+<span style="color:#f92672">users</span>:
+  - <span style="color:#ae81ff">adminuser</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">user.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">developers</span>
+<span style="color:#f92672">users</span>:
+  - <span style="color:#ae81ff">testuser</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">okd-admins</span>
+<span style="color:#f92672">subjects</span>:
+  - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+    <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admins</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">okd-cluster-admin</span>
+<span style="color:#f92672">subjects</span>:
+  - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+    <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admins</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">okd-cluster-developers</span>
+<span style="color:#f92672">subjects</span>:
+  - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+    <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">developers</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">basic-user</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc apply -f group-admins.yaml
+</code></pre></div><h3 id="enable-oauth-on-okd-cluster">Enable Oauth On OKD Cluster</h3>
+<p>I will use Keycloak as the oauth prowider. In Keycloak <code>okd</code> realm I created a client called <code>okd4</code>. The <code>openid-client-secret</code> is the base64 encodid secret for the <code>okd4</code> Client ID.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano oauth-config.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openid-client-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-config</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">clientSecret</span>: <span style="color:#ae81ff">OWI4OWUyZjgtYrM6ZC10ODU2LTgyN3YtN2ZiODUzNDUyZDc4</span>
+<span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">config.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">OAuth</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">identityProviders</span>:
+    - <span style="color:#f92672">mappingMethod</span>: <span style="color:#ae81ff">add</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">sso.mydomain.intra</span>
+      <span style="color:#f92672">openID</span>:
+        <span style="color:#f92672">claims</span>:
+          <span style="color:#f92672">email</span>:
+            - <span style="color:#ae81ff">email</span>
+          <span style="color:#f92672">name</span>:
+            - <span style="color:#ae81ff">name</span>
+          <span style="color:#f92672">preferredUsername</span>:
+            - <span style="color:#ae81ff">email</span>
+            - <span style="color:#ae81ff">preferred_username</span>
+        <span style="color:#f92672">clientID</span>: <span style="color:#ae81ff">okd4</span>
+        <span style="color:#f92672">clientSecret</span>:
+          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openid-client-secret</span>
+        <span style="color:#f92672">extraScopes</span>: []
+        <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#39;https://sso.mydomain.intra/auth/realms/okd&#39;</span>
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">OpenID</span>
+</code></pre></div><p>Then apply the config <code>oc apply -f oauth-config.yaml</code></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Configure OKD OpenShift 4 Ceph Persisten Storage]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-ceph-rbd-csi/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift4-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 authentication" />
+                <link href="https://devopstales.github.io/home/openshift4-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 ingress" />
+                <link href="https://devopstales.github.io/home/openshift4-install/?utm_source=atom_feed" rel="related" type="text/html" title="How To Install OKD OpenShift 4 on premise" />
+                <link href="https://devopstales.github.io/home/openshift4-logging/?utm_source=atom_feed" rel="related" type="text/html" title="Install Cluster Logging Operator on OpenShift 4" />
+                <link href="https://devopstales.github.io/home/openshift_4/?utm_source=atom_feed" rel="related" type="text/html" title="OpenShift 4.2 with Red Hat CodeReady Containers" />
+            
+                <id>https://devopstales.github.io/home/openshift4-ceph-rbd-csi/</id>
+            
+            
+            <published>2021-12-13T00:00:00+00:00</published>
+            <updated>2021-12-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can create peristent storage on an OpenShift 4 with Ceph RBD CSI Driver.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Host</th>
+<th style="text-align:center">ROLES</th>
+<th style="text-align:center">OS</th>
+<th style="text-align:center">IP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">okd4-ceph1</td>
+<td style="text-align:center">master</td>
+<td style="text-align:center">CentOS 7</td>
+<td style="text-align:center">192.168.1.221</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-ceph2</td>
+<td style="text-align:center">master</td>
+<td style="text-align:center">CentOS 7</td>
+<td style="text-align:center">192.168.1.222</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-ceph3</td>
+<td style="text-align:center">master</td>
+<td style="text-align:center">CentOS 7</td>
+<td style="text-align:center">192.168.1.223</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-ceph4</td>
+<td style="text-align:center">OSD</td>
+<td style="text-align:center">CentOS 7</td>
+<td style="text-align:center">192.168.1.224</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-ceph5</td>
+<td style="text-align:center">OSD</td>
+<td style="text-align:center">CentOS 7</td>
+<td style="text-align:center">192.168.1.225</td>
+</tr>
+</tbody>
+</table>
+<p>First we need a priject where we will install the Ceph Driver:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc adm new-project ceph-csi-rbd
+oc project ceph-csi-rbd
+</code></pre></div><p>We need the cluster id from the ceph cluster so get it from the ceph cluster</p>
+<pre tabindex="0"><code>ceph -s
+  cluster:
+    id:     f8b13ea1-2s52-4fe8-bd67-e7ddf259122b
+    health: HEALTH_OK
+
+  services:
+    mon: 3 daemons, quorum okd4-ceph1,okd4-ceph2,okd4-ceph3
+    mgr: okd4-ceph3(active), standbys: okd4-ceph2, okd4-ceph1
+    mds: cephfs-1/1/1 up  {0=okd4-ceph4=up:active}, 3 up:standby
+    osd: 8 osds: 8 up, 8 in
+    rgw: 4 daemons active
+
+  data:
+    pools:   14 pools, 664 pgs
+    objects: 1.72M objects, 6.26TiB
+    usage:   16.7TiB used, 26.9TiB / 43.7TiB avail
+    pgs:     663 active+clean
+             1   active+clean+scrubbing+deep
+
+  io:
+    client:   253B/s rd, 2.04MiB/s wr, 0op/s rd, 49op/s wr
+</code></pre><p>With the cluster id we can create the value file for the helm chart:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano values.yaml</span>
+<span style="color:#f92672">csiConfig</span>:
+  - <span style="color:#f92672">clusterID</span>: <span style="color:#e6db74">&#34;f8b13ea1-2s52-4fe8-bd67-e7ddf259122b&#34;</span>
+    <span style="color:#f92672">monitors</span>:
+      - <span style="color:#e6db74">&#34;192.168.1.221:6789&#34;</span>
+      - <span style="color:#e6db74">&#34;192.168.1.222:6789&#34;</span>
+      - <span style="color:#e6db74">&#34;192.168.1.223:6789&#34;</span>
+</code></pre></div><p>Create the <code>SecurityContextConstraints</code> fot the <code>ceph-csi-rbd-provisioner</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano provisioner-scc.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">security.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">SecurityContextConstraints</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">kubernetes.io/description</span>: <span style="color:#ae81ff">ceph-csi-rbd-provisioner scc is used for ceph-csi-rbd-provisioner</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ceph-csi-rbd-provisioner</span>
+<span style="color:#f92672">allowHostDirVolumePlugin</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">allowHostIPC</span>: <span style="color:#66d9ef">false</span>
+<span style="color:#f92672">allowHostNetwork</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">allowHostPID</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">allowHostPorts</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">allowPrivilegeEscalation</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">allowPrivilegedContainer</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">allowedCapabilities</span>:
+  - <span style="color:#e6db74">&#39;SYS_ADMIN&#39;</span>
+<span style="color:#f92672">priority</span>: <span style="color:#66d9ef">null</span>
+<span style="color:#f92672">readOnlyRootFilesystem</span>: <span style="color:#66d9ef">false</span>
+<span style="color:#f92672">requiredDropCapabilities</span>: <span style="color:#66d9ef">null</span>
+<span style="color:#f92672">defaultAddCapabilities</span>: <span style="color:#66d9ef">null</span>
+<span style="color:#f92672">runAsUser</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RunAsAny</span>
+<span style="color:#f92672">seLinuxContext</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RunAsAny</span>
+<span style="color:#f92672">fsGroup</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RunAsAny</span>
+<span style="color:#f92672">supplementalGroups</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RunAsAny</span>
+<span style="color:#f92672">volumes</span>:
+  - <span style="color:#e6db74">&#39;configMap&#39;</span>
+  - <span style="color:#e6db74">&#39;emptyDir&#39;</span>
+  - <span style="color:#e6db74">&#39;projected&#39;</span>
+  - <span style="color:#e6db74">&#39;secret&#39;</span>
+  - <span style="color:#e6db74">&#39;downwardAPI&#39;</span>
+  - <span style="color:#e6db74">&#39;hostPath&#39;</span>
+<span style="color:#f92672">users</span>:
+  - <span style="color:#ae81ff">system:serviceaccount:ceph-csi-rbd:ceph-csi-rbd-provisioner</span>
+<span style="color:#f92672">groups</span>: []
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc apply -f provisioner-scc.yaml
+
+helm repo add ceph-csi https://ceph.github.io/csi-charts 
+helm install --namespace <span style="color:#e6db74">&#34;ceph-csi-rbd&#34;</span> <span style="color:#e6db74">&#34;ceph-csi-rbd&#34;</span> ceph-csi/ceph-csi-rbd -f values.yaml
+</code></pre></div><p>Now we need to configure the athentication for the ceph cluster. First get the ceph cluster admin userKey:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#34;admin&#34;</span> | base64
+YWRtaW4K
+
+ceph auth get-key client.admin|base64
+QVFDTDliVmNEb21I32SHoPxXNGhmRkczTFNtcXM0ZW5VaXlTZEE977<span style="color:#f92672">==</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano secret.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">csi-rbd-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">userID</span>: <span style="color:#ae81ff">YWRtaW4=</span>
+  <span style="color:#f92672">userKey</span>: <span style="color:#ae81ff">QVFDTDliVmNEb21I32SHoPxXNGhmRkczTFNtcXM0ZW5VaXlTZEE977==</span>
+<span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano okd4-pool.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">storage.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">StorageClass</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">csi-rbd-sc</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">storageclass.kubernetes.io/is-default-class</span>: <span style="color:#e6db74">&#39;true&#39;</span>
+<span style="color:#f92672">provisioner</span>: <span style="color:#ae81ff">rbd.csi.ceph.com</span>
+<span style="color:#f92672">parameters</span>:
+  <span style="color:#f92672">pool</span>: <span style="color:#ae81ff">okd4-pool</span>
+  <span style="color:#f92672">clusterID</span>: <span style="color:#ae81ff">f8b13ea1-2s52-4fe8-bd67-e7ddf259122b</span>
+  <span style="color:#f92672">volumeNamePrefix</span>: <span style="color:#ae81ff">okd4-vol-</span>
+  <span style="color:#f92672">imageFeatures</span>: <span style="color:#ae81ff">layering</span>
+  <span style="color:#f92672">csi.storage.k8s.io/fstype</span>: <span style="color:#ae81ff">ext4</span>
+  <span style="color:#f92672">csi.storage.k8s.io/provisioner-secret-namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">csi.storage.k8s.io/provisioner-secret-name</span>: <span style="color:#ae81ff">csi-rbd-secret</span>
+  <span style="color:#f92672">csi.storage.k8s.io/node-stage-secret-namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">csi.storage.k8s.io/node-stage-secret-name</span>: <span style="color:#ae81ff">csi-rbd-secret</span>
+  <span style="color:#f92672">csi.storage.k8s.io/controller-expand-secret-namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">csi.storage.k8s.io/controller-expand-secret-name</span>: <span style="color:#ae81ff">csi-rbd-secret</span>
+<span style="color:#f92672">volumeBindingMode</span>: <span style="color:#ae81ff">Immediate</span>
+<span style="color:#f92672">reclaimPolicy</span>: <span style="color:#ae81ff">Delete</span>
+<span style="color:#f92672">allowVolumeExpansion</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">mountOptions</span>:
+  - <span style="color:#ae81ff">discard</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc apply -f secret.yaml
+oc apply -f okd4-pool.yaml
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano raw-block-pvc.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PersistentVolumeClaim</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">raw-block-pvc</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">accessModes</span>:
+    - <span style="color:#ae81ff">ReadWriteOnce</span>
+  <span style="color:#f92672">volumeMode</span>: <span style="color:#ae81ff">Block</span>
+  <span style="color:#f92672">resources</span>:
+    <span style="color:#f92672">requests</span>:
+      <span style="color:#f92672">storage</span>: <span style="color:#ae81ff">50Mi</span>
+  <span style="color:#f92672">storageClassName</span>: <span style="color:#ae81ff">csi-rbd-sc</span>
+</code></pre></div><p>The test with a pvc <code>oc apply raw-block-pvc.yaml</code></p>
+<h3 id="configuring-registry-storage">Configuring registry storage</h3>
+<p>Edit the imageregistry-operator:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;managementState&#34;:&#34;Managed&#34;}}&#39;</span>
+oc edit configs.imageregistry.operator.openshift.io
+
+<span style="color:#75715e"># from</span>
+...
+spec:
+  storage: <span style="color:#f92672">{}</span>
+
+<span style="color:#75715e"># to</span>
+spec:
+  storage:
+    pvc:
+      claim:
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc get pod -n openshift-image-registry
+
+NAME                                               READY     STATUS    RESTARTS      AGE
+cluster-image-registry-operator-5897c9d897-46rg8   1/1       Running   <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>12h ago<span style="color:#f92672">)</span>   33h
+image-registry-7467dd65f9-vhnvx                    1/1       Pending   <span style="color:#ae81ff">0</span>             5m
+node-ca-6q6bh                                      1/1       Running   <span style="color:#ae81ff">2</span>             9d
+node-ca-7hphd                                      1/1       Running   <span style="color:#ae81ff">2</span>             9d
+node-ca-cbt2x                                      1/1       Running   <span style="color:#ae81ff">2</span>             9d
+node-ca-cfqf5                                      1/1       Running   <span style="color:#ae81ff">2</span>             9d
+node-ca-gk5ps                                      1/1       Running   <span style="color:#ae81ff">2</span>             9d
+node-ca-r5jnx                                      1/1       Running   <span style="color:#ae81ff">2</span>             9d
+</code></pre></div><h3 id="enable-the-image-registry-default-route">Enable the Image Registry default route</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc patch configs.imageregistry.operator.openshift.io/cluster --type merge -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;defaultRoute&#34;:true}}&#39;</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Configure OKD OpenShift 4 ingress]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-ingress/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift4-ceph-rbd-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 Ceph Persisten Storage" />
+                <link href="https://devopstales.github.io/home/openshift4-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 authentication" />
+                <link href="https://devopstales.github.io/home/openshift4-install/?utm_source=atom_feed" rel="related" type="text/html" title="How To Install OKD OpenShift 4 on premise" />
+                <link href="https://devopstales.github.io/home/openshift4-logging/?utm_source=atom_feed" rel="related" type="text/html" title="Install Cluster Logging Operator on OpenShift 4" />
+                <link href="https://devopstales.github.io/home/openshift_4/?utm_source=atom_feed" rel="related" type="text/html" title="OpenShift 4.2 with Red Hat CodeReady Containers" />
+            
+                <id>https://devopstales.github.io/home/openshift4-ingress/</id>
+            
+            
+            <published>2021-12-13T00:00:00+00:00</published>
+            <updated>2021-12-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can create multiple ingress route on an OpenShift 4 on premise.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+<h3 id="what-is-ingress-operator">What is Ingress Operator</h3>
+<p>Ingress Operator is an OpenShift component which enables external access to cluster services by configuring Ingress Controllers, which route traffic as specified by OpenShift Route and Kubernetes Ingress resources.</p>
+<p>To provide this functionality, Ingress Operator deploys and manages an OpenShift router — a HAProxy-based Kubernetes ingress controller.</p>
+<h3 id="add-default-certificate-for-ingress-operator">Add default certificate for Ingress Operator</h3>
+<p>Create the secret containing the certificate:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat tls.crt | base64
+LS0tLS1CRUdJTiBDRVJUSUZ...
+cat tls.key | base64
+LS0tLS1CRUdJTiBQUklWQVR...
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano cert.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default-tls-cert</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-ingress</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">tls.crt</span>: <span style="color:#ae81ff">LS0tLS1CRUdJTiBDRVJUSUZ...</span>
+  <span style="color:#f92672">tls.key</span>: <span style="color:#ae81ff">LS0tLS1CRUdJTiBQUklWQVR...</span>
+<span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+</code></pre></div><h3 id="create-multiple-ingress-route">Create multiple ingress route</h3>
+<p>For the example I will create a private and a public rout for the cluster</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano default.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operator.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">IngressController</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-ingress-operator</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">defaultCertificate</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default-tls-cert</span>
+  <span style="color:#f92672">nodePlacement</span>:
+    <span style="color:#f92672">nodeSelector</span>:
+      <span style="color:#f92672">matchLabels</span>:
+        <span style="color:#f92672">node-role.kubernetes.io/ingress-internal</span>: <span style="color:#e6db74">&#39;&#39;</span>
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano public.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">operator.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">IngressController</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">public</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-ingress-operator</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">defaultCertificate</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default-tls-cert</span>
+  <span style="color:#f92672">domain</span>: <span style="color:#ae81ff">external.okd.mydomain.intra</span>
+  <span style="color:#f92672">nodePlacement</span>:
+    <span style="color:#f92672">nodeSelector</span>:
+      <span style="color:#f92672">matchLabels</span>:
+        <span style="color:#f92672">node-role.kubernetes.io/ingress-public</span>: <span style="color:#e6db74">&#39;&#39;</span>
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+  <span style="color:#f92672">routeSelector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">router</span>: <span style="color:#ae81ff">public</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc label nodes okd4-worker-1 node-role.kubernetes.io/ingress-internal<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;</span>
+oc label nodes okd4-worker-2 node-role.kubernetes.io/ingress-internal<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;</span>
+oc label nodes okd4-worker-3 node-role.kubernetes.io/ingress-public<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;</span>
+oc label nodes okd4-worker-4 node-role.kubernetes.io/ingress-public<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;</span>
+
+oc apply -f cert.yaml
+oc apply -f ingress/
+oc patch ingresscontroller.operator default --type<span style="color:#f92672">=</span>merge -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;defaultCertificate&#34;: {&#34;name&#34;: &#34;shiwaforce-com-certs&#34;}}}&#39;</span> -n openshift-ingress-operator
+</code></pre></div><h3 id="enable-http2">enable HTTP/2</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc annotate ingresses.config/cluster ingress.operator.openshift.io/default-enable-http2<span style="color:#f92672">=</span>true
+</code></pre></div><h3 id="add-okd-311-type-conole-url">Add OKD 3.11 type conole url</h3>
+<p>I used OKD 3.11 and ther the conosle usrl wa master.okd.mydomain.intra so I desided to create the same route for okd4:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano master-okf-mydomain-intra.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Route</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">route.openshift.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">master-okd-mydomain-intra</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-console</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">console</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">host</span>: <span style="color:#ae81ff">master.okd.mydomain.intra</span>
+  <span style="color:#f92672">to</span>:
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">console</span>
+    <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">100</span>
+  <span style="color:#f92672">port</span>:
+    <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">https</span>
+  <span style="color:#f92672">tls</span>:
+    <span style="color:#f92672">termination</span>: <span style="color:#ae81ff">reencrypt</span>
+    <span style="color:#f92672">insecureEdgeTerminationPolicy</span>: <span style="color:#ae81ff">Redirect</span>
+  <span style="color:#f92672">wildcardPolicy</span>: <span style="color:#ae81ff">None</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How To Install OKD OpenShift 4 on premise]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift4-ceph-rbd-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 Ceph Persisten Storage" />
+                <link href="https://devopstales.github.io/home/openshift4-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 authentication" />
+                <link href="https://devopstales.github.io/home/openshift4-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 ingress" />
+                <link href="https://devopstales.github.io/home/openshift4-logging/?utm_source=atom_feed" rel="related" type="text/html" title="Install Cluster Logging Operator on OpenShift 4" />
+                <link href="https://devopstales.github.io/home/openshift_4/?utm_source=atom_feed" rel="related" type="text/html" title="OpenShift 4.2 with Red Hat CodeReady Containers" />
+            
+                <id>https://devopstales.github.io/home/openshift4-install/</id>
+            
+            
+            <published>2021-12-13T00:00:00+00:00</published>
+            <updated>2021-12-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can install the an OpenShift 4 on premise.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+<h3 id="infrastructure">Infrastructure</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Host</th>
+<th style="text-align:center">ROLES</th>
+<th style="text-align:center">OS</th>
+<th style="text-align:center">IP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">pfsense</td>
+<td style="text-align:center">Load Balancer, dhcp, dns</td>
+<td style="text-align:center">pfsense</td>
+<td style="text-align:center">192.168.1.1</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-services</td>
+<td style="text-align:center">pxeboot</td>
+<td style="text-align:center">CentOS 7</td>
+<td style="text-align:center">192.168.1.200</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-bootstrap</td>
+<td style="text-align:center">bootstrap</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.210</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-mastr-1</td>
+<td style="text-align:center">master</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.201</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-mastr-2</td>
+<td style="text-align:center">master</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.202</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-mastr-3</td>
+<td style="text-align:center">master</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.203</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-worker-1</td>
+<td style="text-align:center">worker</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.204</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-worker-2</td>
+<td style="text-align:center">worker</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.205</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-worker-4</td>
+<td style="text-align:center">worker</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.206</td>
+</tr>
+<tr>
+<td style="text-align:center">okd4-worker-5</td>
+<td style="text-align:center">worker</td>
+<td style="text-align:center">Fedora Core OS</td>
+<td style="text-align:center">192.168.1.207</td>
+</tr>
+</tbody>
+</table>
+<h3 id="dns-config">DNS Config</h3>
+<pre tabindex="0"><code>; OpenShift Container Platform Cluster - A records
+pfsense.okd.mydomain.intra.          IN      A      192.168.1.1
+okd4-bootstrap.okd.mydomain.intra.   IN      A      192.168.1.210
+
+okd4-mastr-1.okd.mydomain.intra.        IN      A      192.168.1.201
+okd4-mastr-2.okd.mydomain.intra.        IN      A      192.168.1.202
+okd4-mastr-3.okd.mydomain.intra.        IN      A      192.168.1.203
+okd4-worker-1.okd.mydomain.intra.        IN      A      192.168.1.204
+okd4-worker-2.okd.mydomain.intra.        IN      A      192.168.1.205
+okd4-worker-3.okd.mydomain.intra.        IN      A      192.168.1.206
+okd4-worker-4.okd.mydomain.intra.        IN      A      192.168.1.207
+
+
+; OpenShift internal cluster IPs - A records
+api.okd.mydomain.intra.            IN      A      192.168.1.1
+api-int.okd.mydomain.intra.        IN      A      192.168.1.1
+etcd-0.okd.mydomain.intra.         IN      A     192.168.1.201
+etcd-1.okd.mydomain.intra.         IN      A     192.168.1.202
+etcd-2.okd.mydomain.intra.         IN      A     192.168.1.203
+
+okd.mydomain.intra.                IN      A      192.168.1.1
+*.okd.mydomain.intra.              IN      A      192.168.1.1
+
+; OpenShift internal cluster IPs - SRV records
+_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-0.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-1.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-2.okd.mydomain.intra.
+</code></pre><h3 id="dhcp-config">DHCP Config:</h3>
+<pre tabindex="0"><code>32:89:07:57:27:00  192.168.1.200 	okd4-services
+32:89:07:57:27:10  192.168.1.210 	okd4-bootstrap
+32:89:07:57:27:01  192.168.1.201 	okd4-mastr-1
+32:89:07:57:27:02  192.168.1.202 	okd4-mastr-2
+32:89:07:57:27:03  192.168.1.203 	okd4-mastr-3
+32:89:07:57:27:04  192.168.1.204 	okd4-worker-1
+32:89:07:57:27:05  192.168.1.205 	okd4-worker-2
+32:89:07:57:27:06  192.168.1.206 	okd4-worker-3
+32:89:07:57:27:07  192.168.1.207 	okd4-worker-4
+</code></pre><pre tabindex="0"><code>Next Server: 192.168.1.200
+Default BIOS file name: pxelinux.0
+</code></pre><h2 id="haproxy-config">HAPROXY Config:</h2>
+<pre tabindex="0"><code>192.168.201.1 6443  --&gt;  192.168.1.210   6443
+192.168.201.1 6443  --&gt;  192.168.1.201  6443
+192.168.201.1 6443  --&gt;  192.168.1.202  6443
+192.168.201.1 6443  --&gt;  192.168.1.202  6443
+192.168.201.1 22623 --&gt;  192.168.1.210   22623
+192.168.201.1 22623 --&gt;  192.168.1.201  22623
+192.168.201.1 22623 --&gt;  192.168.1.202  22623
+192.168.201.1 22623 --&gt;  192.168.1.202  22623
+192.168.201.1 80    --&gt;  192.168.1.204  80
+192.168.201.1 80    --&gt;  192.168.1.205  80
+192.168.201.1 443   --&gt;  192.168.1.204  443
+192.168.201.1 443   --&gt;  192.168.1.205  443
+&lt;publicip&gt; 80    --&gt;  192.168.1.206  80
+&lt;publicip&gt; 80    --&gt;  192.168.1.207  80
+&lt;publicip&gt; 443   --&gt;  192.168.1.206  443
+&lt;publicip&gt; 443   --&gt;  192.168.1.207  443
+</code></pre><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh okd4-services
+
+yum install epel-release -y
+yum install httpd nano jq -y
+dnf install -y tftp-server syslinux-tftpboot
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir -p /var/lib/tftpboot
+cp -v /tftpboot/pxelinux.0 /var/lib/tftpboot/
+cp -v /tftpboot/menu.c32 /var/lib/tftpboot/
+cp -v /tftpboot/mboot.c32 /var/lib/tftpboot/
+cp -v /tftpboot/chain.c32 /var/lib/tftpboot/
+cp -v /tftpboot/ldlinux.c32 /var/lib/tftpboot/
+cp -v /tftpboot/libutil.c32 /var/lib/tftpboot/
+
+mkdir -p /var/lib/tftpboot/fcsos33
+cd /var/lib/tftpboot/fcsos33
+RHCOS_BASEURL<span style="color:#f92672">=</span>https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/
+wget <span style="color:#e6db74">${</span>RHCOS_BASEURL<span style="color:#e6db74">}</span>33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-live-kernel-x86_64
+wget <span style="color:#e6db74">${</span>RHCOS_BASEURL<span style="color:#e6db74">}</span>33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-live-initramfs.x86_64.img
+wget <span style="color:#e6db74">${</span>RHCOS_BASEURL<span style="color:#e6db74">}</span>33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-live-rootfs.x86_64.img
+cd ~
+
+mkdir /var/lib/tftpboot/pxelinux.cfg
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat &gt; /var/lib/tftpboot/pxelinux.cfg/default <span style="color:#e6db74">&lt;&lt; EOF
+</span><span style="color:#e6db74">default menu.c32
+</span><span style="color:#e6db74">prompt 0
+</span><span style="color:#e6db74">timeout 30
+</span><span style="color:#e6db74">menu title PXE Menu
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">label 1
+</span><span style="color:#e6db74">menu label ^1) Boot from local drive
+</span><span style="color:#e6db74">localboot 0x00
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">label 2
+</span><span style="color:#e6db74">menu label ^2) Install OKD Bootstrap
+</span><span style="color:#e6db74">KERNEL /fcsos33/fedora-coreos-33.20210117.3.2-live-kernel-x86_64
+</span><span style="color:#e6db74">APPEND initrd=/fcsos33/fedora-coreos-33.20210117.3.2-live-initramfs.x86_64.img,/fcsos33/fedora-coreos-33.20210117.3.2-live-rootfs.x86_64.img coreos.inst.install_dev=/dev/vda coreos.inst.image_url=http://192.168.201.4/fcos.raw.xz coreos.inst.ignition_url=http://192.168.201.4/bootstrap.ign
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">label 3
+</span><span style="color:#e6db74">menu label ^3) Install OKD Master
+</span><span style="color:#e6db74">KERNEL /fcsos33/fedora-coreos-33.20210117.3.2-live-kernel-x86_64
+</span><span style="color:#e6db74">APPEND initrd=/fcsos33/fedora-coreos-33.20210117.3.2-live-initramfs.x86_64.img,/fcsos33/fedora-coreos-33.20210117.3.2-live-rootfs.x86_64.img coreos.inst.install_dev=/dev/vda coreos.inst.image_url=http://192.168.201.4/fcos.raw.xz coreos.inst.ignition_url=http://192.168.201.4/master.ign
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">label 4
+</span><span style="color:#e6db74">menu label ^4) Install OKD Worker
+</span><span style="color:#e6db74">KERNEL /fcsos33/fedora-coreos-33.20210117.3.2-live-kernel-x86_64
+</span><span style="color:#e6db74">APPEND initrd=/fcsos33/fedora-coreos-33.20210117.3.2-live-initramfs.x86_64.img,/fcsos33/fedora-coreos-33.20210117.3.2-live-rootfs.x86_64.img coreos.inst.install_dev=/dev/vda coreos.inst.image_url=http://192.168.201.4/fcos.raw.xz coreos.inst.ignition_url=http://192.168.201.4/worker.ign
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><p>Then run: <code>systemctl enable --now tftp.service</code></p>
+<h3 id="create-okd-config">Create okd config</h3>
+<blockquote>
+<p>find the iso:
+<a href="https://getfedora.org/en/coreos/download?tab=metal_virtualized&amp;stream=stable">https://getfedora.org/en/coreos/download?tab=metal_virtualized&amp;stream=stable</a>
+4K vs non 4K</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">wget fedora-coreos-33.20210117.3.2-live.x86_64.iso
+wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz
+wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz.sig
+cp fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz /var/www/html/fcos.raw.xz
+cp fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz.sig /var/www/html/fcos.raw.xz.sig
+</code></pre></div><pre tabindex="0"><code># find installer
+# https://github.com/openshift/okd/releases
+
+wget https://github.com/openshift/okd/releases/download/4.6.0-0.okd-2021-02-14-205305/openshift-client-linux-4.6.0-0.okd-2021-02-14-205305.tar.gz
+wget https://github.com/openshift/okd/releases/download/4.6.0-0.okd-2021-02-14-205305/openshift-install-linux-4.6.0-0.okd-2021-02-14-205305.tar.gz
+
+tar -xzf openshift-client-linux-4.6.0-0.okd-2021-02-14-205305.tar.gz
+tar -xzf openshift-install-linux-4.6.0-0.okd-2021-02-14-205305.tar.gz
+
+sudo mv kubectl oc openshift-install /usr/local/bin/
+oc version
+openshift-install version
+
+mkdir install_dir
+</code></pre><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat &gt; install_dir/install-config.yaml <span style="color:#e6db74">&lt;&lt; EOF
+</span><span style="color:#e6db74">apiVersion: v1
+</span><span style="color:#e6db74">baseDomain: mydomain.intra
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: okd
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">compute:
+</span><span style="color:#e6db74">- hyperthreading: Enabled
+</span><span style="color:#e6db74">  name: worker
+</span><span style="color:#e6db74">  replicas: 0
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">controlPlane:
+</span><span style="color:#e6db74">  hyperthreading: Enabled
+</span><span style="color:#e6db74">  name: master
+</span><span style="color:#e6db74">  replicas: 3
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">networking:
+</span><span style="color:#e6db74">  clusterNetwork:
+</span><span style="color:#e6db74">  - cidr: 10.128.0.0/14
+</span><span style="color:#e6db74">    hostPrefix: 23
+</span><span style="color:#e6db74">  networkType: OpenShiftSDN
+</span><span style="color:#e6db74">  serviceNetwork:
+</span><span style="color:#e6db74">  - 172.30.0.0/16
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">platform:
+</span><span style="color:#e6db74">  none: {}
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">fips: false
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">pullSecret: &#39;{&#34;auths&#34;:{&#34;fake&#34;:{&#34;auth&#34;: &#34;bar&#34;}}}&#39;
+</span><span style="color:#e6db74">sshKey: &#39;ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDK7lDozs9WLJD14H+nz...&#39; 
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">openshift-install create manifests --dir<span style="color:#f92672">=</span>install_dir/
+
+sed -i <span style="color:#e6db74">&#39;s/mastersSchedulable: true/mastersSchedulable: False/&#39;</span> install_dir/manifests/cluster-scheduler-02-config.yml
+
+openshift-install create ignition-configs --dir<span style="color:#f92672">=</span>install_dir/
+
+sudo cp -R install_dir/*.ign /var/www/html/
+sudo cp -R install_dir/metadata.json /var/www/html/
+sudo chown -R apache: /var/www/html/
+sudo chmod -R <span style="color:#ae81ff">755</span> /var/www/html/
+</code></pre></div><blockquote>
+<p>The config contains certificates that is walid for 24 hours.</p>
+</blockquote>
+<h3 id="starting-the-vms">Starting the VMs</h3>
+<p>It&rsquo;s time to start the VMs. Select the okd4-bootstrap VM and navigate to Console. Start the VM. Then one by one the masters and the workers too.</p>
+<h3 id="bootstrap-okd-cluster">Bootstrap OKD Cluster</h3>
+<p>You can monitor the installation progress by running the following command.</p>
+<pre tabindex="0"><code>openshift-install --dir=install_dir/ wait-for bootstrap-complete --log-level=info
+</code></pre><blockquote>
+<p>The certificates in the cluster is not authomaticle approved so I use the abow <code>tmux</code> command to approve</p>
+</blockquote>
+<pre tabindex="0"><code>tmux
+export KUBECONFIG=~/install_dir/auth/kubeconfig
+while true; do echo `oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{&quot;\n&quot;}}{{end}}{{end}}' | xargs -r oc adm certificate approve`; sleep 60; done
+</code></pre><p>Once the bootstrap process completes, you should see the following messages.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">INFO It is now safe to remove the bootstrap resources
+</code></pre></div><p>Then stop the bootstrap node.</p>
+<pre tabindex="0"><code># debug command to check the health of the cluster.
+watch oc get csr
+watch oc get node
+
+oc get clusteroperator
+oc get clusterversion
+
+watch &quot;oc get clusteroperator&quot;
+watch &quot;oc get po -A | grep -v Running | grep -v Completed&quot;
+
+
+curl -X GET https://api.okd.mydomain.intra:6443/healthz -k
+</code></pre><p>Wait for the console to be available. Once it is available, we can point a browser to <a href="https://console-openshift-console.okd.mydomain.intra">https://console-openshift-console.okd.mydomain.intra</a></p>
+<p>You will get an SSL error because the certificate is not valid for this domain. That&rsquo;s normal. Just bypass the SSL error.</p>
+<p>Login with user &ldquo;kubeadmin&rdquo;.You can find the kubeadmin password in a file generated during the installation.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat install_dir/auth/kubeadmin-password
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
             <title type="html"><![CDATA[Install Cluster Logging Operator on OpenShift 4]]></title>
             <link href="https://devopstales.github.io/home/openshift4-logging/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
@@ -247,9 +1355,12 @@ Done with success
             <content type="html"><![CDATA[<p>In this Post I will show you how you can install the Cluster Logging Operator on an OpenShift 4.</p>
 <H3>Parst of the Openshift 4 series</H3>
 <ul>
-     <!-- <li>Part1: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li> -->
-     <li>Part1a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part1b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part1: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
 </ul>
 
 
@@ -5862,12 +6973,12 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
      <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
      <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 <!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2b: <a href="../../kubernetes/k3sup-calico/">Install K3S with k3sup and Calico</a></li>
      <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
      <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
 <!-- K3D -->
-     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part5: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
 
@@ -9483,12 +10594,12 @@ www-runc     1/1     Running   <span style="color:#ae81ff">0</span>          1m
      <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
      <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 <!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2b: <a href="../../kubernetes/k3sup-calico/">Install K3S with k3sup and Calico</a></li>
      <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
      <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
 <!-- K3D -->
-     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part5: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
 
@@ -9592,12 +10703,12 @@ k3sup join <span style="color:#ae81ff">\
      <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
      <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 <!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2b: <a href="../../kubernetes/k3sup-calico/">Install K3S with k3sup and Calico</a></li>
      <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
      <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
 <!-- K3D -->
-     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part5: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
 
@@ -9776,12 +10887,12 @@ k3sup join <span style="color:#ae81ff">\
      <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
      <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 <!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2b: <a href="../../kubernetes/k3sup-calico/">Install K3S with k3sup and Calico</a></li>
      <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
      <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
 <!-- K3D -->
-     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part5: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
 
@@ -16063,12 +17174,12 @@ echo &quot;PATH=$PATH:/usr/local/bin/&quot; &gt;&gt; /etc/profile
      <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
      <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 <!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2b: <a href="../../kubernetes/k3sup-calico/">Install K3S with k3sup and Calico</a></li>
      <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
      <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
 <!-- K3D -->
-     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part5: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
 
@@ -16141,12 +17252,12 @@ spec:
      <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
      <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 <!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2b: <a href="../../kubernetes/k3sup-calico/">Install K3S with k3sup and Calico</a></li>
      <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
      <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
 <!-- K3D -->
-     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part5: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
 
@@ -16308,12 +17419,12 @@ spec:
      <li>Part1b: <a href="../../kubernetes/k3s-crio/">Install K3S with CRI-O</a></li>
      <li>Part1c: <a href="../../kubernetes/k3s-fcos/">Install K3S on Fedora CoreOS</a></li>
 <!-- K3S falnnel wiregard - https://medium.com/@bestpractices/k3s-with-flannel-wireguard-backend-fa433065a401 -->
-     <li>Part2b: <a href="../../kubernetes/k3s-calico/">Install K3S with k3sup and Calico</a></li>
+     <li>Part2b: <a href="../../kubernetes/k3sup-calico/">Install K3S with k3sup and Calico</a></li>
      <li>Part2c: <a href="../../kubernetes/k3s-cilium/">Install K3S with k3sup and Cilium</a></li>
      <li>Part3: <a href="../../kubernetes/k3s-helm-controller/">K3S helm CR</a></li>
 <!-- K3D -->
-     <li>Part5: <a href="../../kk3s-gvisor/">Secure k3s with gVisor</a></li>
-     <li>Part6: <a href="../../kk3s-cert/">Kubernetes Certificate Rotation</a></li>
+     <li>Part5: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
 </ul>
 
 
