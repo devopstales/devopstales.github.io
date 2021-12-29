@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-12-29T12:21:52+00:00</updated>
+    <updated>2021-12-29T14:20:59+00:00</updated>
     
     
     <author>
@@ -17,6 +17,191 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes Single Sign-on with Pinniped OpenID Connect]]></title>
+            <link href="https://devopstales.github.io/home/k8s-pinniped/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-pinniped/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Single Sign-on with Pinniped OpenID Connect" />
+                <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/k8s-git-backup/?utm_source=atom_feed" rel="related" type="text/html" title="How to Backup Kubernetes to git?" />
+                <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
+                <link href="https://devopstales.github.io/home/lazyimage/?utm_source=atom_feed" rel="related" type="text/html" title="Speed up docker pull with lazypull" />
+            
+                <id>https://devopstales.github.io/home/k8s-pinniped/</id>
+            
+            
+            <published>2021-12-29T00:00:00+00:00</published>
+            <updated>2021-12-29T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will setup Pinniped, a Single Sign-on solution from the VMware Tanzu project.</p>
+<h3 id="wtah-is-pinniped">Wtah is Pinniped</h3>
+<p>Pinniped gives you a unified login experience across all your clusters, including on-premises and managed cloud environments.</p>
+<p>Pinniped consists of two components, Supervisor and Concierge:</p>
+<ul>
+<li>
+<p>The Pinniped Supervisor is an OIDC server which allows users to authenticate with an external identity provider (IDP), and then issues its own federation ID tokens to be passed on to clusters based on the user information from the IDP.</p>
+</li>
+<li>
+<p>The Pinniped Concierge is a credential exchange API which takes as input a credential from an identity source (e.g., Pinniped Supervisor, proprietary IDP), authenticates the user via that credential, and returns another credential which is understood by the host Kubernetes cluster or by an impersonation proxy which acts on behalf of the user.</p>
+</li>
+</ul>
+<p><img src="/img/include/pinniped01.svg" alt="Pinniped Architecture"  class="zoomable" /></p>
+<h3 id="install-the-pinniped-supervisor">Install the Pinniped Supervisor</h3>
+<p>Run below command to install Supervisor, this will install everything to the pinniped-supervisor namespace.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f https://get.pinniped.dev/latest/install-pinniped-supervisor.yaml
+
+kubens pinniped-supervisor
+kubectl get po
+</code></pre></div><p>After installing Pinniped, create a secret with the client ID and secret from your identity provider. In below command I have named the secret <code>oidc-client</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create secret generic oidc-client <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --namespace pinniped-supervisor <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --type secrets.pinniped.dev/oidc-client <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --from-literal<span style="color:#f92672">=</span>clientID<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&lt;client-id-goes-here&gt;&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --from-literal<span style="color:#f92672">=</span>clientSecret<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&lt;secret-goes-here&gt;&#34;</span>
+</code></pre></div><p>The supervisor needs to be reachable from other clusters, we need to create a service and an ingress resource.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano pinniped-supervisor-ingress.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+  <span style="color:#f92672">ports</span>:
+    - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">8080</span>
+      <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">tls</span>:
+  - <span style="color:#f92672">hosts</span>:
+    - <span style="color:#ae81ff">supervisor.k8s.intra</span>
+    <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">supervisor-cert</span>
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">supervisor.k8s.intra</span>
+    <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+        <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</code></pre></div><p>Create and apply a <code>FederationDomain</code> resource. Give it a name and set the issuer to the URL you will be using for Supervisor.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano FederationDomain.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">config.supervisor.pinniped.dev/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">FederationDomain</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">keycloak</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">issuer</span>: <span style="color:#ae81ff">https://supervisor.k8s.intra</span>
+</code></pre></div><p>Create and apply a <code>OIDCIdentityProvider</code> resource.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano OIDCIdentityProvider.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">idp.supervisor.pinniped.dev/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">OIDCIdentityProvider</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">keycloak-idp</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">pinniped-supervisor</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">issuer</span>: <span style="color:#ae81ff">https://sso.shiwaforce.com/auth/realms/cl12</span>
+  <span style="color:#f92672">claims</span>:
+    <span style="color:#f92672">username</span>: <span style="color:#ae81ff">email</span>
+    <span style="color:#f92672">groups</span>: <span style="color:#ae81ff">groups</span>
+  <span style="color:#f92672">authorizationConfig</span>:
+    <span style="color:#f92672">additionalScopes</span>: [<span style="color:#e6db74">&#39;email&#39;</span>, <span style="color:#e6db74">&#39;profile&#39;</span>]
+  <span style="color:#f92672">client</span>:
+    <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">oidc-client</span>
+</code></pre></div><h3 id="install-the-pinniped-concierge">Install the Pinniped Concierge</h3>
+<p>Install Concierge on any managed or unmanaged cluster you would like to use OIDC login on. This can include the cluster where Supervisor is running.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f https://get.pinniped.dev/latest/install-pinniped-concierge-crds.yaml
+kubectl apply -f https://get.pinniped.dev/latest/install-pinniped-concierge.yaml
+
+kubens pinniped-concierge
+kubectl get po
+</code></pre></div><p>Create and apply a <code>JWTAuthenticator</code> resource, it is cluster scoped so no need for namespaces. Create a random string for the audience property using <code>openssl rand -base64 24</code> command.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">openssl rand -base64 <span style="color:#ae81ff">24</span>
+jCIGaxMT5Yw9NvafTTVoXxGLkviPPyg6
+</code></pre></div><blockquote>
+<p>If you ise a self signed certificate for the ingress you need o add the base64 encoded CA pem to the JWTAuthenticator.</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat k8s.pem | base64
+LS0tLS1CR...
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano JWTAuthenticator.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">authentication.concierge.pinniped.dev/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">JWTAuthenticator</span>
+<span style="color:#f92672">metadata</span>:
+   <span style="color:#f92672">name</span>: <span style="color:#ae81ff">supervisor-jwt-authenticator</span>
+   <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">pinniped-concierge</span>
+<span style="color:#f92672">spec</span>:
+   <span style="color:#f92672">issuer</span>: <span style="color:#ae81ff">https://supervisor.k8s.intra</span>
+   <span style="color:#f92672">audience</span>: <span style="color:#ae81ff">jCIGaxMT5Yw9NvafTTVoXxGLkviPPyg6</span>
+   <span style="color:#f92672">claims</span>:
+     <span style="color:#f92672">username</span>: <span style="color:#ae81ff">username</span>
+     <span style="color:#f92672">groups</span>: <span style="color:#ae81ff">groups</span>
+  <span style="color:#75715e"># tls:</span>
+  <span style="color:#75715e">#   certificateAuthorityData: LS0tLS1CR... # optional base64 CA data if using a self-signed certificate</span>
+</code></pre></div><blockquote>
+<p>The <code>supervisor.k8s.intra</code> domain must be resolwable from the pinniped-concierge.
+You can add <code>supervisor.k8s.intra</code> as like hists file to the coredns <a href="https://devopstales.github.io/home/k8s-custom-host/">like this</a>.</p>
+</blockquote>
+<p>Below is an example of a <code>ClusterRoleBinding</code> that binds the role <code>cluster-admin</code> to the Keycloak group <code>devops-team</code>. (In my case it came from ldap) Create your own role bindings to fit your needs and apply them to the cluster.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano devops-team_ClusterRoleBinding.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin-it-afdeling</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+<span style="color:#f92672">subjects</span>:
+  - <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devops-team</span>
+</code></pre></div><h3 id="install-the-pinniped-command-line-tool">Install the Pinniped command-line tool</h3>
+<p>For osx you can use <code>brew</code> to install the command-line tool:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">brew install vmware-tanzu/pinniped/pinniped-cli
+</code></pre></div><p>Or find the appropriate binary for your platform from the <a href="https://github.com/vmware-tanzu/pinniped/releases">latest release</a> the put the command-line tool somewhere on your <code>$PATH</code>.</p>
+<p>Generate the <code>kubeconfig</code> file wigh the default admin <code>kubeconfig</code> on the cluster&rsquo;s master node:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">pinniped get kubeconfig <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--oidc-ca-bundle /opt/k8s_sec_lab/cert/k8s.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--output pinniped-kubeconfig
+
+kubectl --kubeconfig pinniped-kubeconfig get pods -n pinniped-concierge
+NAME                                                  READY   STATUS    RESTARTS   AGE
+pinniped-concierge-9bc8bbdc5-qg75p                    1/1     Running   <span style="color:#ae81ff">0</span>          16m
+pinniped-concierge-9bc8bbdc5-zxsjj                    1/1     Running   <span style="color:#ae81ff">0</span>          16m
+pinniped-concierge-kube-cert-agent-5dcccbbb4b-56jbj   1/1     Running   <span style="color:#ae81ff">0</span>          79m
+</code></pre></div><p>The <code>k8s.pem</code> file is containes the  CA certificate from <code>ca-issuer</code>.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
