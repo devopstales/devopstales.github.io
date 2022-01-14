@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2021-12-29T14:22:40+00:00</updated>
+    <updated>2022-01-14T10:57:46+00:00</updated>
     
     
     <author>
@@ -17,6 +17,60 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Cluster Pools got marked read only, OSDs are near full.]]></title>
+            <link href="https://devopstales.github.io/home/ceph-full-osd/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/home/ceph-full-osd/</id>
+            
+            
+            <published>2022-01-12T00:00:00+00:00</published>
+            <updated>2022-01-12T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you what can you do whet an OSD is full and the ceph cluster is locked.</p>
+<p>OSDs should never be full in theory and administrators should monitor how full OSDs are. If OSDs are approaching 80% full, it’s time for the administrator to take action to prevent OSDs from filling up.  Action can include re-weighting the OSDs in question and or adding more OSDs to the cluster.</p>
+<pre tabindex="0"><code># ceph osd dump | grep ratio
+full_ratio 0.95
+backfillfull_ratio 0.9
+nearfull_ratio 0.85
+</code></pre><p>By default, when OSDs reach 85% capacity, <code>nearfull_ratio warning</code> is triggered.
+By default when OSDs reach 90% capacity, <code>backfillfull_ratio warning</code> is triggered.  At this point the cluster will deny backfilling to the OSD in question.
+By default when OSDs reach 95% capacity, <code>full_ratio is triggered</code>, all PGs (Placement Groups) on the OSDs in question will be marked Read Only, as well as all pools which are associated with the PGs on the OSD. The cluster is marked Read Only, to prevent corruption from occurring.</p>
+<p>Check Osd usage:</p>
+<pre tabindex="0"><code>ceph --connect-timeout=5 osd df tree
+</code></pre><p>To get the cluster out of this state, data needs to be pushed away or removed from the OSDs in question. In the below example it is a single OSD in question (osd.52), but there could be many OSDs that are marked full.<br>
+The first objective is to get the OSDs that are full below 95% capacity, so the cluster is not marked Read Only. It is possible to achieve this goal with a lower Weight value, .90, .85, .80, etc.</p>
+<pre tabindex="0"><code>ceph osd set noout
+ceph osd reweight 52 .85
+</code></pre><p><code>ceph osd set-full-ratio .96</code> will change the <code>full_ratio</code> to 96% and remove the Read Only flag on OSDs which are 95% -96% full. If OSDs are 96% full it&rsquo;s possible to set <code>ceph osd set-full-ratio .97</code>, however, do NOT set this value too high.</p>
+<p><code>ceph osd set-backfillfull-ratio 91</code> will change the <code>backfillfull_ratio</code> to 91% and allow backfill to occur on OSDs which are 90-91% full.  This setting is helpful when there are multiple OSDs which are full.</p>
+<pre tabindex="0"><code>ceph osd set-nearfull-ratio .90
+ceph osd set-backfillfull-ratio .95
+ceph osd set-full-ratio .97
+</code></pre><p>Now we can add more OSD to the cluster or force the rebalance of the data. In this case I will do the second because I hawe no more space in my server for more OSD disks.</p>
+<pre tabindex="0"><code>ceph balancer on
+ceph balancer mode upmap
+ceph balancer status
+ceph balancer ls
+</code></pre><p>If the percentig is below the 96 treshold you can configure back the ratios:</p>
+<pre tabindex="0"><code>ceph osd set-nearfull-ratio .85
+ceph osd set-backfillfull-ratio .90
+ceph osd set-full-ratio .95
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
