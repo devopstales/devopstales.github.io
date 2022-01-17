@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-01-14T10:57:46+00:00</updated>
+    <updated>2022-01-17T08:32:19+00:00</updated>
     
     
     <author>
@@ -17,6 +17,127 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to migrate PostgreSQL databases to Google Cloud SQL?]]></title>
+            <link href="https://devopstales.github.io/home/gcp-cloud-sql-postgresql-migration/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/home/gcp-cloud-sql-postgresql-migration/</id>
+            
+            
+            <published>2022-01-13T00:00:00+00:00</published>
+            <updated>2022-01-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can migrate your PostgreSQL database to GCP Cloud SQL.</p>
+<h3 id="what-is-cloud-sql">What is Cloud SQL?</h3>
+<h3 id="create-a-postgresql-instance">Create a PostgreSQL Instance</h3>
+<p>I will create the PostgreSQL instance called postgresql-prod-n8gh.</p>
+<p><img src="/img/include/gcp-psql01.png" alt="Create psql server"  class="zoomable" /></p>
+<p>I will also create the db_admin user for postgresql-prod-n8gh instance in Google CloudSQL platform USERS section.</p>
+<p><img src="/img/include/gcp-psql02.png" alt="Create psql server"  class="zoomable" /></p>
+<p>I will give the access my IP for connection in Cloud SQL platform AUTHORIZATION section.</p>
+<p><img src="/img/include/gcp-psql03.png" alt="Create psql server"  class="zoomable" /></p>
+<p>I will log in with the db_admin user to postgresql-prod-n8gh.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">psql -h 38.56.110.96 -U db_admin -d postgres -W
+</code></pre></div><h2 id="how-to-migrate">How to migrate?</h2>
+<p>You hawe to option to migrate to Cloud SQL. The first is the standard <code>pg_dump</code>. The second is Replication with Seamless Cutover.</p>
+<h3 id="dump-transfer-and-import">Dump, Transfer, and Import</h3>
+<p>First, we would export the data using <code>pg_dump</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">pg_dump -U <span style="color:#f92672">[</span>USERNAME<span style="color:#f92672">]</span> --format<span style="color:#f92672">=</span>plain --no-owner --no-acl <span style="color:#f92672">[</span>DATABASE_NAME<span style="color:#f92672">]</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>| sed -E <span style="color:#e6db74">&#39;s/(DROP|CREATE|COMMENT ON) EXTENSION/-- \1 EXTENSION/g&#39;</span> &gt; <span style="color:#f92672">[</span>SQL_FILE<span style="color:#f92672">]</span>.sql
+</code></pre></div><p>Then we have to transfer the dump to Google Cloud Storage. I will go to the Cloud Storage to create Bucket on Google Cloud Platform.</p>
+<p><img src="/img/include/gcp-psql04.png" alt="Create Bucket"  class="zoomable" /></p>
+<p><img src="/img/include/gcp-psql05.png" alt="Create Bucket"  class="zoomable" /></p>
+<p>I will right-click on the postgres-prod-master-dump to edit bucket&rsquo;s permissions.</p>
+<p><img src="/img/include/gcp-psql06.png" alt="Create Bucket"  class="zoomable" /></p>
+<p>I need to change the Cloud API access scope of the remote-server instance to access and write to Cloud Storage.</p>
+<p><img src="/img/include/gcp-psql07.png" alt="Create Bucket"  class="zoomable" /></p>
+<p>I will run the following command for moving prod.sql dump to the postgres-prod-master-dump bucket in the remote-server instance.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">gsutil cp prod.sql gs://postgres-prod-master-dump
+</code></pre></div><p>Finally, we would run the import. I will return back to the postgresql-prod-n8gh instance that created on Cloud SQL. I will click the IMPORT section in the Cloud SQL platform.</p>
+<p><img src="/img/include/gcp-psql08.png" alt="Import db"  class="zoomable" /></p>
+<p><img src="/img/include/gcp-psql09.png" alt="Import db"  class="zoomable" /></p>
+<h3 id="replication-with-seamless-cutover">Replication with Seamless Cutover</h3>
+<p>The Database Migration service of GCP is a logical replication between source and destination database and then first take the full dump from source and restore it on destination, and then it also keep replicating the ongoing data from source to destination and keep destination in sync with source which avoid downtime, once we see there is no lag between both the databases (we can see it in dms console) we will promote the cloud sql instance and redirect the application to cloud sql.</p>
+<p>First we need some configuration on the On-premise or self-managed source PostgreSQL server:</p>
+<p>Install the pglogical package on the server.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">apt install postgresql-11-pglogical -y
+
+nano postgresql.conf
+<span style="color:#75715e"># logical replication</span>
+wal_level <span style="color:#f92672">=</span> logical
+shared_preload_libraries <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;pglogical&#39;</span>
+track_commit_timestamp <span style="color:#f92672">=</span> on
+pglogical.conflict_resolution <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;last_update_wins&#39;</span>
+</code></pre></div><p>Connect to the instance and set the following parameters, as needed:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo su - postgres
+psql
+
+ALTER SYSTEM SET shared_preload_libraries <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;pglogical&#39;</span>;
+ALTER SYSTEM SET wal_level <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;logical&#39;</span>;
+ALTER SYSTEM SET wal_sender_timeout <span style="color:#f92672">=</span> 0;
+
+
+GRANT USAGE on public to replicator;
+GRANT USAGE on pglogical to replicator;
+
+<span style="color:#ae81ff">\c</span> backup_test
+CREATE EXTENSION IF NOT EXISTS pglogical;
+GRANT USAGE on SCHEMA pglogical to PUBLIC;
+GRANT SELECT on ALL TABLES in SCHEMA pglogical to replicator;
+GRANT SELECT on ALL TABLES in SCHEMA public to replicator;
+GRANT SELECT on ALL SEQUENCES in SCHEMA public to replicator;
+GRANT SELECT on ALL SEQUENCES in SCHEMA pglogical to replicator;
+
+<span style="color:#ae81ff">\c</span> postgres
+CREATE EXTENSION IF NOT EXISTS pglogical;
+GRANT USAGE on SCHEMA pglogical to PUBLIC;
+GRANT SELECT on ALL TABLES in SCHEMA pglogical to replicator;
+GRANT SELECT on ALL TABLES in SCHEMA public to replicator;
+GRANT SELECT on ALL SEQUENCES in SCHEMA public to replicator;
+GRANT SELECT on ALL SEQUENCES in SCHEMA pglogical to replicator;
+<span style="color:#ae81ff">\q</span>
+</code></pre></div><p>Now we need to create a source connection profile: Go to the <code>Database Migration</code> page in the <code>Google Cloud Console</code> and select <code>Connection profiles</code> page and click on <code>create profile</code>.</p>
+<p><img src="/img/include/gcp-psql10.png" alt="Import db"  class="zoomable" /></p>
+<p>Select a Postgresql as Sourcedatabase engine. Enter hostname, port name, username and password to connect to the source database. Select the region and click on create.</p>
+<p><img src="/img/include/gcp-psql11.png" alt="Import db"  class="zoomable" /></p>
+<p>Now we can use this <code>create profile</code> to create a <code> Migration jobs</code>. Go to the <code>Migration jobs</code> page in the <code>Google Cloud Console</code> the click <code>CREATE MIGRATION JOB</code> at the top of the page.</p>
+<p><img src="/img/include/gcp-psql12.png" alt="Import db"  class="zoomable" /></p>
+<p>Select the source database engine the select the destination region for your migration. This is where the Database Migration Service instance is created, and the new database engine will be created. Specify the migration job type: Continuous (snapshot + ongoing changes).</p>
+<p><img src="/img/include/gcp-psql13.png" alt="Import db"  class="zoomable" /></p>
+<p>As we have already created a connection profile, then select it from the list of existing connection profiles.</p>
+<p><img src="/img/include/gcp-psql14.png" alt="Import db"  class="zoomable" /></p>
+<p>Configure a Destination cloud sql instance</p>
+<p><img src="/img/include/gcp-psql15.png" alt="Import db"  class="zoomable" /></p>
+<p>Choose whether to connect to this instance via private or public IP address. It is recommended to use Private IP. If you are using Private IP then select the VPC name as well, if you are using public IP just select it and move on to set the machine type.</p>
+<p><img src="/img/include/gcp-psql16.png" alt="Import db"  class="zoomable" /></p>
+<p>Select the machine type for the Cloud SQL instance. The disk size must be equal to or greater than the source database size, make sure automatic storage increase is enabled.</p>
+<p><img src="/img/include/gcp-psql17.png" alt="Import db"  class="zoomable" /></p>
+<p>Define connectivity method: From the Connectivity method drop-down menu, select a network connectivity method. This method defines how the newly created Cloud SQL instance will connect to the source database. If you have selected public ip at the time of destination instance creation then use the connectivity method as IP allowlist.</p>
+<p><img src="/img/include/gcp-psql18.png" alt="Import db"  class="zoomable" /></p>
+<p>Test and create the migration job:</p>
+<p><img src="/img/include/gcp-psql19.png" alt="Import db"  class="zoomable" /></p>
+<p>Once the job has been started after some time the status of job will be changes as below</p>
+<p><img src="/img/include/gcp-psql20.png" alt="Import db"  class="zoomable" /></p>
+<p>And then once dump and restore completed job status will be changed as below</p>
+<p><img src="/img/include/gcp-psql21.png" alt="Import db"  class="zoomable" /></p>
+<p>Once you see replication as 0 bytes for a long time, it means all the data has been migrated to the destination instance.</p>
+<p><img src="/img/include/gcp-psql22.png" alt="Import db"  class="zoomable" /></p>
+<p>Promoting a migration:</p>
+<p><img src="/img/include/gcp-psql23.png" alt="Import db"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
