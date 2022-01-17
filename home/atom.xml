@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-01-17T08:32:19+00:00</updated>
+    <updated>2022-01-17T08:44:36+00:00</updated>
     
     
     <author>
@@ -17,6 +17,315 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Use Multus CNI in Kubernetes]]></title>
+            <link href="https://devopstales.github.io/home/multus/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/multus/?utm_source=atom_feed" rel="related" type="text/html" title="Use Multus CNI in Kubernetes" />
+                <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
+                <link href="https://devopstales.github.io/home/lazyimage/?utm_source=atom_feed" rel="related" type="text/html" title="Speed up docker pull with lazypull" />
+                <link href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/multus/</id>
+            
+            
+            <published>2022-01-14T00:00:00+00:00</published>
+            <updated>2022-01-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use Multus CNI to create Kubernetes pods with multiple interfaces.</p>
+<h3 id="install-a-default-network">Install a default network</h3>
+<p>Our installation method requires that you first have installed Kubernetes and have configured a default network &ndash; that is, a CNI plugin that&rsquo;s used for your pod-to-pod connectivity. After installing Kubernetes, you must install a default network CNI plugin. In this demo I will use Flannel for the sake of simplicity.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># install flanel:</span>
+wget https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+nano kube-flannel.yml
+...
+        args:
+        - --ip-masq
+        - --kube-subnet-mgr
+        - --iface<span style="color:#f92672">=</span>enp0s8
+
+kubectl apply -f kube-flannel.yml
+</code></pre></div><h3 id="install-multus">Install Multus</h3>
+<p>Now we can install Multus. The recommended method to deploy Multus is to deploy using a Daemonset, this spins up pods which install a Multus binary and configure Multus for usage.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset-thick-plugin.yml
+
+kubectl get pods --all-namespaces | grep -i multus
+</code></pre></div><p>You may further validate that it has ran by looking at the <code>/etc/cni/net.d/</code> directory and ensure that the auto-generated <code>/etc/cni/net.d/00-multus.conf</code> exists. Check the <code>multus</code> binary is exists under <code>/opt/cni/bin</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ll /opt/cni/bin/
+total <span style="color:#ae81ff">98044</span>
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3254624</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> bandwidth
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3581192</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> bridge
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">9837552</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> dhcp
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">4699824</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> firewall
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">2650368</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> flannel
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3274160</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> host-device
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">2847152</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> host-local
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3377272</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> ipvlan
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">2715600</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> loopback
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3440168</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> macvlan
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root <span style="color:#ae81ff">42554869</span> Jan <span style="color:#ae81ff">15</span> 10:44 multus
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3048528</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> portmap
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3528800</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> ptp
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">2849328</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> sbr
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">2503512</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> static
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">2820128</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> tuning
+-rwxr-xr-x. <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">3377120</span> Sep  <span style="color:#ae81ff">9</span>  <span style="color:#ae81ff">2020</span> vlan
+</code></pre></div><h3 id="create-networkattachmentdefinition">Create NetworkAttachmentDefinition</h3>
+<p>The first thing we&rsquo;ll do is create configurations for each of the additional interfaces that we attach to pods. We&rsquo;ll do this by creating Custom Resources. Each configuration we well add is a CNI configuration. If you&rsquo;re not familiar with them, let&rsquo;s break them down quickly.Here&rsquo;s an example CNI configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl create -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;k8s.cni.cncf.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkAttachmentDefinition</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">macvlan-conf</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">config</span>: <span style="color:#e6db74">&#39;{
+</span><span style="color:#e6db74">      &#34;cniVersion&#34;: &#34;0.3.0&#34;,
+</span><span style="color:#e6db74">      &#34;type&#34;: &#34;macvlan&#34;,
+</span><span style="color:#e6db74">      &#34;master&#34;: &#34;enp0s9&#34;,
+</span><span style="color:#e6db74">      &#34;mode&#34;: &#34;bridge&#34;,
+</span><span style="color:#e6db74">      &#34;ipam&#34;: {
+</span><span style="color:#e6db74">        &#34;type&#34;: &#34;host-local&#34;,
+</span><span style="color:#e6db74">        &#34;subnet&#34;: &#34;172.17.9.0/24&#34;,
+</span><span style="color:#e6db74">        &#34;rangeStart&#34;: &#34;172.17.9.240&#34;,
+</span><span style="color:#e6db74">        &#34;rangeEnd&#34;: &#34;172.17.9.250&#34;,
+</span><span style="color:#e6db74">        &#34;routes&#34;: [
+</span><span style="color:#e6db74">          { &#34;dst&#34;: &#34;0.0.0.0/0&#34; }
+</span><span style="color:#e6db74">        ],
+</span><span style="color:#e6db74">        &#34;gateway&#34;: &#34;172.17.9.1&#34;
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    }&#39;</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><ul>
+<li><code>cniVersion</code>: Tells each CNI plugin which version is being used and can give the plugin information if it&rsquo;s using a too late (or too early) version.</li>
+<li><code>master</code>: this parameter should match the interface name on the hosts in your cluster. Can not be the same interface used by the default network!!!</li>
+<li><code>type</code>: This tells CNI which binary to call on disk. Each CNI plugin is a binary that&rsquo;s called. Typically, these binaries are stored in <code>/opt/cni/bin</code> on each node, and CNI executes this binary. In this case we&rsquo;ve specified the <code>macvlan</code> binary. If this is your first time installing Multus, you might want to verify that the plugins that are in the &ldquo;type&rdquo; field are actually on disk in the <code>/opt/cni/bin</code> directory.</li>
+<li><code>ipam</code>: IP address allocation configuration. The <code>type</code> can an be the following:
+<ul>
+<li><code>dhcp</code>: Runs a daemon on the host to make DHCP requests on behalf of a container</li>
+<li><code>host-local</code>: Maintains a local database of allocated IPs</li>
+<li><code>static</code>: Allocates static IPv4/IPv6 addresses to containers</li>
+<li><a href="https://github.com/k8snetworkplumbingwg/whereabouts">whereabouts</a>: A CNI IPAM plugin that assigns IP addresses cluster-wide</li>
+</ul>
+</li>
+</ul>
+<h3 id="networkattachmentdefinition-cni-types">NetworkAttachmentDefinition CNI Types</h3>
+<h5 id="bridge">Bridge:</h5>
+<p>This acts as a network switch between multiple pods on the same node host. In its current form, a bridge interface is created that does not link any physical host interface. As a result, connections are not made to any external networks including other pods on the other host nodes:</p>
+<p><img src="/img/include/multus01.png" alt="Brudge"  class="zoomable" /></p>
+<p>Configure the bridge plug-in with host-local IPAM. The default bridge name is cni0 by default if the name is not specified using bridge parameter:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;k8s.cni.cncf.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkAttachmentDefinition</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">bridge-conf</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">config</span>: <span style="color:#e6db74">&#39;{
+</span><span style="color:#e6db74">      &#34;cniVersion&#34;: &#34;0.3.1&#34;,
+</span><span style="color:#e6db74">      &#34;type&#34;: &#34;bridge&#34;,
+</span><span style="color:#e6db74">      &#34;bridge&#34;: &#34;mybr0&#34;,
+</span><span style="color:#e6db74">      &#34;ipam&#34;: {
+</span><span style="color:#e6db74">          &#34;type&#34;: &#34;host-local&#34;,
+</span><span style="color:#e6db74">          &#34;subnet&#34;: &#34;192.168.12.0/24&#34;,
+</span><span style="color:#e6db74">          &#34;rangeStart&#34;: &#34;192.168.12.10&#34;,
+</span><span style="color:#e6db74">          &#34;rangeEnd&#34;: &#34;192.168.12.200&#34;
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    }&#39;</span>
+</code></pre></div><h5 id="host-device">Host-device:</h5>
+<p>This plug-in makes a physical host interface move to a pod network namespace. When enabled, the specified host interface disappears in the root network namespace (default host network namespace). This behavior might affect re-creating the pod in place on the same host as the host interface may not be found as it is specified by host-device plug-in configuration.</p>
+<p><img src="/img/include/multus02.png" alt="Brudge"  class="zoomable" /></p>
+<p>This time, dhcp IPAM is configured, and it would trigger the creation of the dhcp-daemon daemonset pods. The pod in daemon mode listens for an address from a DHCP server on Kubernetes, whereas the DHCP server itself is not provided. In other words, it requires an existing DHCP server in the same network. This demonstration shows you the MAC address of the parent is kept in the pod network namespace. Additionally, the source IP and MAC address can be identified by using an external web server access test.</p>
+<p>Add the following configurations:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;k8s.cni.cncf.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkAttachmentDefinition</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">host-device</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">config</span>: <span style="color:#e6db74">&#39;{
+</span><span style="color:#e6db74">      &#34;cniVersion&#34;: &#34;0.3.1&#34;,
+</span><span style="color:#e6db74">      &#34;name&#34;: &#34;host-device-main&#34;,
+</span><span style="color:#e6db74">      &#34;type&#34;: &#34;host-device&#34;,
+</span><span style="color:#e6db74">      &#34;device&#34;: &#34;enp0s9&#34;,
+</span><span style="color:#e6db74">      &#34;ipam&#34;: {
+</span><span style="color:#e6db74">          &#34;type&#34;: &#34;dhcp&#34;
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    }&#39;</span>
+</code></pre></div><h5 id="ipvlan">ipvlan:</h5>
+<p>The ipvlan plug-in may be used in the event that there are limited MAC addresses that can be used. This issue is common on some switch devices that restrict the maximum number of MAC addresses per physical port due to port security configurations. When operating in most cloud providers, you should  consider using ipvlan instead of macvlan as unknown MAC addresses are forbidden in VPC networks:</p>
+<p><img src="/img/include/multus03.png" alt="Brudge"  class="zoomable" /></p>
+<p>The sub-interface of the ipvlan can use distinct IP addresses with the same MAC address of the parent host interface. So, it would not work well with a DHCP server which depends on the MAC addresses. Parent host interface acts as a bridge (switch) with L2 mode, and it acts as a router with L3 mode of the ipvlan plug-in.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;k8s.cni.cncf.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkAttachmentDefinition</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ipvlan</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">config</span>: <span style="color:#e6db74">&#39;{
+</span><span style="color:#e6db74">   &#34;cniVersion&#34;: &#34;0.3.1&#34;,
+</span><span style="color:#e6db74">   &#34;name&#34;: &#34;ipvlan-main&#34;,
+</span><span style="color:#e6db74">   &#34;type&#34;: &#34;ipvlan&#34;,
+</span><span style="color:#e6db74">   &#34;mode&#34;: &#34;l2&#34;,
+</span><span style="color:#e6db74">   &#34;master&#34;: &#34;enp0s9&#34;,
+</span><span style="color:#e6db74">     &#34;ipam&#34;: {
+</span><span style="color:#e6db74">          &#34;type&#34;: &#34;host-local&#34;,
+</span><span style="color:#e6db74">          &#34;subnet&#34;: &#34;172.17.9.0/24&#34;,
+</span><span style="color:#e6db74">          &#34;rangeStart&#34;: &#34;172.17.9.201&#34;,
+</span><span style="color:#e6db74">          &#34;rangeEnd&#34;: &#34;172.17.9.205&#34;,
+</span><span style="color:#e6db74">          &#34;gateway&#34;: &#34;172.17.9.1&#34;
+</span><span style="color:#e6db74">     }
+</span><span style="color:#e6db74">   }&#39;</span>
+</code></pre></div><h5 id="macvlan">Macvlan:</h5>
+<p>With macvlan, it&rsquo;s simple to use as it aligns to traditional network connectivity. Since the connectivity is directly bound with the underlying network using sub-interfaces each having MAC address.</p>
+<p><img src="/img/include/multus04.png" alt="Brudge"  class="zoomable" /></p>
+<p>macvlan generates MAC addresses per the sub-interfaces, and in most cases, Public Cloud Platforms are not allowed due to their security policy and Hypervisors have limited capabilities. For the <code>RHV</code> (Red Hat Virtualization) use case, you will need to change <code>No network filter</code> on your network profile before executing the test. For <code>vSwitch</code> in vSphere environments, similar relaxed policies need to be applied. The test procedure is almost the same as ipvlan, so it is easy to compare both plug-ins.</p>
+<p>Macvlan has multiple modes. In this example, bridge mode will be configured. Refer to MACVLAN documentation for more information on the other mode which will not be demonstrated.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;k8s.cni.cncf.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkAttachmentDefinition</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">macvlan</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">config</span>: <span style="color:#e6db74">&#39;{
+</span><span style="color:#e6db74">    &#34;cniVersion&#34;: &#34;0.3.1&#34;,
+</span><span style="color:#e6db74">    &#34;name&#34;: &#34;macvlan-main&#34;,
+</span><span style="color:#e6db74">    &#34;type&#34;: &#34;macvlan&#34;,
+</span><span style="color:#e6db74">    &#34;mode&#34;: &#34;bridge&#34;,
+</span><span style="color:#e6db74">    &#34;master&#34;: &#34;enp0s9&#34;,
+</span><span style="color:#e6db74">      &#34;ipam&#34;: {
+</span><span style="color:#e6db74">            &#34;type&#34;: &#34;static&#34;
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    }&#39;</span>
+</code></pre></div><h3 id="creating-a-pod-that-attaches-an-additional-interface">Creating a pod that attaches an additional interface</h3>
+<p><img src="/img/include/multus00.png" alt="Infra"  class="zoomable" /></p>
+<p>Deploy a IPVLAN Type NetworkAttachmentDefinition:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl create -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;k8s.cni.cncf.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkAttachmentDefinition</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ipvlan-def</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">config</span>: <span style="color:#e6db74">&#39;{
+</span><span style="color:#e6db74">      &#34;cniVersion&#34;: &#34;0.3.1&#34;,
+</span><span style="color:#e6db74">      &#34;type&#34;: &#34;ipvlan&#34;,
+</span><span style="color:#e6db74">      &#34;master&#34;: &#34;enp0s9&#34;,
+</span><span style="color:#e6db74">      &#34;mode&#34;: &#34;l2&#34;,
+</span><span style="color:#e6db74">      &#34;ipam&#34;: {
+</span><span style="color:#e6db74">        &#34;type&#34;: &#34;host-local&#34;,
+</span><span style="color:#e6db74">        &#34;subnet&#34;: &#34;192.168.200.0/24&#34;,
+</span><span style="color:#e6db74">        &#34;rangeStart&#34;: &#34;192.168.200.201&#34;,
+</span><span style="color:#e6db74">        &#34;rangeEnd&#34;: &#34;192.168.200.205&#34;,
+</span><span style="color:#e6db74">        &#34;gateway&#34;: &#34;192.168.200.1&#34;
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    }&#39;</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Let&rsquo;s go ahead and create a pod (that just sleeps for a really long time) with this command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl create -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">net-pod</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">k8s.v1.cni.cncf.io/networks</span>: <span style="color:#ae81ff">ipvlan-def</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">netshoot-pod</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nicolaka/netshoot</span>
+    <span style="color:#f92672">command</span>: [<span style="color:#e6db74">&#34;tail&#34;</span>]
+    <span style="color:#f92672">args</span>: [<span style="color:#e6db74">&#34;-f&#34;</span>, <span style="color:#e6db74">&#34;/dev/null&#34;</span>]
+  <span style="color:#f92672">terminationGracePeriodSeconds</span>: <span style="color:#ae81ff">0</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">net-pod2</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">k8s.v1.cni.cncf.io/networks</span>: <span style="color:#ae81ff">ipvlan-def</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">netshoot-pod</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nicolaka/netshoot</span>
+    <span style="color:#f92672">command</span>: [<span style="color:#e6db74">&#34;tail&#34;</span>]
+    <span style="color:#f92672">args</span>: [<span style="color:#e6db74">&#34;-f&#34;</span>, <span style="color:#e6db74">&#34;/dev/null&#34;</span>]
+  <span style="color:#f92672">terminationGracePeriodSeconds</span>: <span style="color:#ae81ff">0</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Check the ips in the pod:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl exec -it net-pod -- ip addr
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu <span style="color:#ae81ff">65536</span> qdisc noqueue state UNKNOWN group default qlen <span style="color:#ae81ff">1000</span>
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+3: eth0@if10: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu <span style="color:#ae81ff">1450</span> qdisc noqueue state UP group default 
+    link/ether 06:56:cf:cb:3e:75 brd ff:ff:ff:ff:ff:ff link-netnsid <span style="color:#ae81ff">0</span>
+    inet 10.244.0.5/24 brd 10.244.0.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::456:cfff:fecb:3e75/64 scope link 
+       valid_lft forever preferred_lft forever
+4: net1: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu <span style="color:#ae81ff">1500</span> qdisc noqueue state UNKNOWN group default 
+    link/ether 08:00:27:a0:41:35 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.200.201/24 brd 192.168.200.255 scope global net1
+       valid_lft forever preferred_lft forever
+    inet6 fe80::800:2700:1a0:4135/64 scope link 
+       valid_lft forever preferred_lft forever
+
+kubectl exec -it net-pod2 -- ip addr
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu <span style="color:#ae81ff">65536</span> qdisc noqueue state UNKNOWN group default qlen <span style="color:#ae81ff">1000</span>
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+3: eth0@if9: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu <span style="color:#ae81ff">1450</span> qdisc noqueue state UP group default 
+    link/ether 8e:8f:68:f8:80:2c brd ff:ff:ff:ff:ff:ff link-netnsid <span style="color:#ae81ff">0</span>
+    inet 10.244.0.4/24 brd 10.244.0.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::8c8f:68ff:fef8:802c/64 scope link 
+       valid_lft forever preferred_lft forever
+4: net1: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu <span style="color:#ae81ff">1500</span> qdisc noqueue state UNKNOWN group default 
+    link/ether 08:00:27:a0:41:35 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.200.202/24 brd 192.168.200.255 scope global net1
+       valid_lft forever preferred_lft forever
+    inet6 fe80::800:2700:2a0:4135/64 scope link 
+       valid_lft forever preferred_lft forever
+</code></pre></div><p>Ping test:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># ping own ip</span>
+kubectl exec -it net-pod -- ping -c <span style="color:#ae81ff">1</span> -I net1 192.168.200.201
+PING 192.168.200.201 <span style="color:#f92672">(</span>192.168.200.201<span style="color:#f92672">)</span> from 192.168.200.201 net1: 56<span style="color:#f92672">(</span>84<span style="color:#f92672">)</span> bytes of data.
+<span style="color:#ae81ff">64</span> bytes from 192.168.200.201: icmp_seq<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> ttl<span style="color:#f92672">=</span><span style="color:#ae81ff">64</span> time<span style="color:#f92672">=</span>0.024 ms
+
+--- 192.168.200.201 ping statistics ---
+<span style="color:#ae81ff">1</span> packets transmitted, <span style="color:#ae81ff">1</span> received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev <span style="color:#f92672">=</span> 0.024/0.024/0.024/0.000 ms
+
+<span style="color:#75715e"># ping net-pod2&#39;s ip</span>
+kubectl exec -it net-pod -- ping -c <span style="color:#ae81ff">1</span> -I net1 192.168.200.201
+PING 192.168.200.202 <span style="color:#f92672">(</span>192.168.200.202<span style="color:#f92672">)</span> from 192.168.200.201 net1: 56<span style="color:#f92672">(</span>84<span style="color:#f92672">)</span> bytes of data.
+<span style="color:#ae81ff">64</span> bytes from 192.168.200.202: icmp_seq<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> ttl<span style="color:#f92672">=</span><span style="color:#ae81ff">64</span> time<span style="color:#f92672">=</span>0.040 ms
+
+--- 192.168.200.202 ping statistics ---
+<span style="color:#ae81ff">1</span> packets transmitted, <span style="color:#ae81ff">1</span> received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev <span style="color:#f92672">=</span> 0.040/0.040/0.040/0.000 ms
+
+<span style="color:#75715e"># ping dw</span>
+kubectl exec -it net-pod -- ping -c <span style="color:#ae81ff">1</span> -I net1 192.168.200.10
+PING 192.168.200.1 <span style="color:#f92672">(</span>192.168.200.1<span style="color:#f92672">)</span> from 192.168.200.201 net1: 56<span style="color:#f92672">(</span>84<span style="color:#f92672">)</span> bytes of data.
+<span style="color:#ae81ff">64</span> bytes from 192.168.200.1: icmp_seq<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> ttl<span style="color:#f92672">=</span><span style="color:#ae81ff">64</span> time<span style="color:#f92672">=</span>0.217 ms
+
+--- 192.168.200.1 ping statistics ---
+<span style="color:#ae81ff">1</span> packets transmitted, <span style="color:#ae81ff">1</span> received, 0% packet loss, time 4ms
+rtt min/avg/max/mdev <span style="color:#f92672">=</span> 0.217/0.217/0.217/0.000 ms
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
