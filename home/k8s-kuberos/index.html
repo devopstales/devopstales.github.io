@@ -28,7 +28,7 @@
     "datePublished": "2020-01-07",
     "dateModified" : "2020-01-07",
     "url" : "https://devopstales.github.io/home/k8s-kuberos/",
-    "wordCount" : "298",
+    "wordCount" : "347",
     "keywords" : [ "devops", "tales", "Keycloak", "kuberos", "kubernetes", "oauth2", "SSO", "OIDC", "Blog" ]
     
 }
@@ -72,16 +72,13 @@ if (!doNotTrack) {
 <body class="body">
 	<div class="container container--outer">
 		<header class="header">
-	<div class="container header__container">
-		
-	<div class="logo">
-		<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
-			<div class="logo__item logo__text">
-					<div class="logo__title">devopstales</div>
-					<div class="logo__tagline">Blog about dev and ops stuff</div>
-				</div>
-		</a>
-	</div>
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+				<div class="logo__title">devopstales</div>
+				<div class="logo__tagline">Blog about dev and ops stuff</div>
+			</a>
+		</div>
 		
 <nav class="menu">
 	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
@@ -151,7 +148,10 @@ if (!doNotTrack) {
 			<h1 class="post__title">Kubectl authentication with Kuberos</h1>
 			<div class="post__meta meta">
 <div class="meta__item-datetime meta__item">
-	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg><time class="meta__text" datetime="2020-01-07T00:00:00Z">January 07, 2020</time></div></div>
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2020-01-07T00:00:00Z">January 07, 2020</time>
+</div>
+</div>
 		</header>
 		<div class="content post__content clearfix">
 			<p>Kuberos is an OIDC authentication helper for Kubernetes' kubectl</p>
@@ -192,88 +192,117 @@ if (!doNotTrack) {
 </ul>
 
 
-<pre tabindex="0"><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/kubernetes/manifests/kube-apiserver.yaml
 ...
     command:
     - /hyperkube
     - apiserver
-    - --advertise-address=10.10.40.30
+    - --advertise-address<span style="color:#f92672">=</span>10.10.40.30
 ...
 
-    - --oidc-issuer-url=https://keycloak.devopstales.intra/auth/realms/mydomain
-    - --oidc-client-id=k8s
-    - --oidc-username-claim=email
-    - --oidc-groups-claim=groups
+    - --oidc-issuer-url<span style="color:#f92672">=</span>https://keycloak.devopstales.intra/auth/realms/mydomain
+    - --oidc-client-id<span style="color:#f92672">=</span>k8s
+    - --oidc-username-claim<span style="color:#f92672">=</span>email
+    - --oidc-groups-claim<span style="color:#f92672">=</span>groups
 ...
 
 systemctl restart docker kubelet
-</code></pre><pre tabindex="0"><code>cat &gt;&gt;EOF&lt; values.yaml
-replicaCount: 1
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;&#39;EOF&#39;&gt; values.yaml</span>
+<span style="color:#f92672">replicaCount</span>: <span style="color:#ae81ff">1</span>
 
-kuberos:
-  oidcClientURL: https://keycloak.devopstales.intra/auth/realms/mydomain
-  oidcClientID: k8s
-  oidcSecret: 43219919-0904-4338-bc0f-c986e1891a7a
-  clusters:
-  - name: openshift
-    apiServer: https://192.168.0.106:6443
-    # `apiServer` is the url for kubectl
-    #   This is typically  https://api.fqdn
-    caCrt: |-
-      -----BEGIN CERTIFICATE-----
-      MIIDZDCCAkygAwIBAgIIe/R9sc8oJiAwDQYJKoZIhvcNAQELBQAwFTETMBEGA1UE
-      AxMKa3ViZXJuZXRlczAeFw0xOTEyMjcxNzM3MzlaFw0yMDEyMjYxNzM3MzlaMBkx
-      FzAVBgNVBAMTDmt1YmUtYXBpc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
-      MIIBCgKCAQEAzAg7MflA/HVTVcZPsGJH71cfcJ/U1CtEYbXfu/AQbhGg09XKmeK9
-      aGEK3kSgi/Hyoi7M+e/ntx1+Gp/jwc8kanMFRLgxdKCxxi4MOswZF/q2loUdNoE/
-      OQVPWQi8Hgznubw/0gINUkIq8mRx9Bb+RcRnJEfD3CXkxDhUNeCvvjeTrujguF0h
-      pgfzrLoc2kGdJYpHiLqow8jRq7XXk0RzZaqCQjAEZgqWamwbTTqFZh3v+1gF/2s0
-      EbFVVL2Ctu1dOGe1FkZxte7/Po1XBkPLQuRXbH3QRiJkPfyOW16T1nWk1QTcpCdH
-      HO/l+CY2nLPFZL1BM83QuVmPgR1T1p+5tQIDAQABo4GzMIGwMA4GA1UdDwEB/wQE
-      AwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATCBiAYDVR0RBIGAMH6CEms4cy5teWRv
-      bWFpbi5pbnRyYYIKa3ViZXJuZXRlc4ISa3ViZXJuZXRlcy5kZWZhdWx0ghZrdWJl
-      cm5ldGVzLmRlZmF1bHQuc3ZjgiRrdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0
-      ZXIubG9jYWyHBApgAAGHBMCoAGowDQYJKoZIhvcNAQELBQADggEBAJZ7jxPR72V6
-      PYL3SKCWaS+RgTuGuSm0pYu26cBmPOjsugd8DUrJ7+iAnKDHUmmw22sWheLLCokc
-      YU/AIfdbbsz0+f+/qthkO7zJmAJgdIAOMJ5MQCbxMBt+6L813r1R3QI7kAGxHvzV
-      loKJVIIHq/6K3gFEZDfo0myvNvtOIpBCeMnZRK+8hx3UNcHckZbhkan1Z1j9t9iw
-      b6Vv5jY1+9t2Iltd2wuNaUvHicx+3X6JPAqVR6H0jI3i+QSyT1EHXtBtbQBBpP4T
-      5WDz+9uDa1mIDHtww7DTnJwY+hGI7fVF2H7XQaM4xwhGnwIwbkSh45JWVtUEHMou
-      Q7T4bTyrwuQ=
-      -----END CERTIFICATE-----
-    # `caCrt` is the public / CA cert for the cluster
-    # cat /etc/kubernetes/pki/apiserver.crt
+<span style="color:#f92672">kuberos</span>:
+  <span style="color:#f92672">oidcClientURL</span>: <span style="color:#ae81ff">https://keycloak.devopstales.intra/auth/realms/mydomain</span>
+  <span style="color:#f92672">oidcClientID</span>: <span style="color:#ae81ff">k8s</span>
+  <span style="color:#f92672">oidcSecret</span>: <span style="color:#ae81ff">43219919-0904-4338</span>-<span style="color:#ae81ff">bc0f-c986e1891a7a</span>
+  <span style="color:#f92672">clusters</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openshift</span>
+    <span style="color:#f92672">apiServer</span>: <span style="color:#ae81ff">https://192.168.0.106:6443</span>
+    <span style="color:#75715e"># `apiServer` is the url for kubectl</span>
+    <span style="color:#75715e">#   This is typically  https://api.fqdn</span>
+    <span style="color:#f92672">caCrt</span>: |-<span style="color:#e6db74">
+</span><span style="color:#e6db74">      -----BEGIN CERTIFICATE-----
+</span><span style="color:#e6db74">      MIIDZDCCAkygAwIBAgIIe/R9sc8oJiAwDQYJKoZIhvcNAQELBQAwFTETMBEGA1UE
+</span><span style="color:#e6db74">      AxMKa3ViZXJuZXRlczAeFw0xOTEyMjcxNzM3MzlaFw0yMDEyMjYxNzM3MzlaMBkx
+</span><span style="color:#e6db74">      FzAVBgNVBAMTDmt1YmUtYXBpc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+</span><span style="color:#e6db74">      MIIBCgKCAQEAzAg7MflA/HVTVcZPsGJH71cfcJ/U1CtEYbXfu/AQbhGg09XKmeK9
+</span><span style="color:#e6db74">      aGEK3kSgi/Hyoi7M+e/ntx1+Gp/jwc8kanMFRLgxdKCxxi4MOswZF/q2loUdNoE/
+</span><span style="color:#e6db74">      OQVPWQi8Hgznubw/0gINUkIq8mRx9Bb+RcRnJEfD3CXkxDhUNeCvvjeTrujguF0h
+</span><span style="color:#e6db74">      pgfzrLoc2kGdJYpHiLqow8jRq7XXk0RzZaqCQjAEZgqWamwbTTqFZh3v+1gF/2s0
+</span><span style="color:#e6db74">      EbFVVL2Ctu1dOGe1FkZxte7/Po1XBkPLQuRXbH3QRiJkPfyOW16T1nWk1QTcpCdH
+</span><span style="color:#e6db74">      HO/l+CY2nLPFZL1BM83QuVmPgR1T1p+5tQIDAQABo4GzMIGwMA4GA1UdDwEB/wQE
+</span><span style="color:#e6db74">      AwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATCBiAYDVR0RBIGAMH6CEms4cy5teWRv
+</span><span style="color:#e6db74">      bWFpbi5pbnRyYYIKa3ViZXJuZXRlc4ISa3ViZXJuZXRlcy5kZWZhdWx0ghZrdWJl
+</span><span style="color:#e6db74">      cm5ldGVzLmRlZmF1bHQuc3ZjgiRrdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0
+</span><span style="color:#e6db74">      ZXIubG9jYWyHBApgAAGHBMCoAGowDQYJKoZIhvcNAQELBQADggEBAJZ7jxPR72V6
+</span><span style="color:#e6db74">      PYL3SKCWaS+RgTuGuSm0pYu26cBmPOjsugd8DUrJ7+iAnKDHUmmw22sWheLLCokc
+</span><span style="color:#e6db74">      YU/AIfdbbsz0+f+/qthkO7zJmAJgdIAOMJ5MQCbxMBt+6L813r1R3QI7kAGxHvzV
+</span><span style="color:#e6db74">      loKJVIIHq/6K3gFEZDfo0myvNvtOIpBCeMnZRK+8hx3UNcHckZbhkan1Z1j9t9iw
+</span><span style="color:#e6db74">      b6Vv5jY1+9t2Iltd2wuNaUvHicx+3X6JPAqVR6H0jI3i+QSyT1EHXtBtbQBBpP4T
+</span><span style="color:#e6db74">      5WDz+9uDa1mIDHtww7DTnJwY+hGI7fVF2H7XQaM4xwhGnwIwbkSh45JWVtUEHMou
+</span><span style="color:#e6db74">      Q7T4bTyrwuQ=
+</span><span style="color:#e6db74">      -----END CERTIFICATE-----</span>      
+    <span style="color:#75715e"># `caCrt` is the public / CA cert for the cluster</span>
+    <span style="color:#75715e"># cat /etc/kubernetes/pki/apiserver.crt</span>
 
-ingress:
-  enabled: true
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/proxy-buffer-size: &quot;64k&quot;
-    cert-manager.io/cluster-issuer: ca-issuer
-    ingress.kubernetes.io/force-ssl-redirect: &quot;true&quot;
-  path: /
-  hosts:
-    - kubectl.devopstales.intra
-  tls:
-    - secretName: default-cert
-      hosts:
-        - kubectl.devopstales.intra
+<span style="color:#f92672">ingress</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">nginx.ingress.kubernetes.io/proxy-buffer-size</span>: <span style="color:#e6db74">&#34;64k&#34;</span>
+    <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+    <span style="color:#f92672">ingress.kubernetes.io/force-ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+  <span style="color:#f92672">hosts</span>:
+    - <span style="color:#ae81ff">kubectl.devopstales.intra</span>
+  <span style="color:#f92672">tls</span>:
+    - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">default-cert</span>
+      <span style="color:#f92672">hosts</span>:
+        - <span style="color:#ae81ff">kubectl.devopstales.intra</span>
 
-image:
-  repository: negz/kuberos
-  tag: ede4085
-  pullPolicy: IfNotPresent
+<span style="color:#f92672">image</span>:
+  <span style="color:#f92672">repository</span>: <span style="color:#ae81ff">negz/kuberos</span>
+  <span style="color:#f92672">tag</span>: <span style="color:#ae81ff">ede4085</span>
+  <span style="color:#f92672">pullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
 
-service:
-  type: ClusterIP
-  port: 80
-  annotations: {}
-  # Add your service annotations here.
+<span style="color:#f92672">service</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+  <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+  <span style="color:#f92672">annotations</span>: {}
+  <span style="color:#75715e"># Add your service annotations here.</span>
 
-resources: {}
-EOF
-</code></pre><pre tabindex="0"><code>helm upgrade --install kuberos stable/kuberos --namespace kuberos -f values.yaml
-</code></pre><p><img src="https://devopstales.github.io/img/include/kuberos.png" alt="kuberos"  class="zoomable" /></p>
+<span style="color:#f92672">resources</span>: {}
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm upgrade --install kuberos stable/kuberos --namespace kuberos -f values.yaml
+</code></pre></div><p><img src="https://devopstales.github.io/img/include/kuberos.png" alt="kuberos"  class="zoomable" /></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano devops-group-rbac.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devops-cluster-admin</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+<span style="color:#f92672">subjects</span>:
+- <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">RoleBinding</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales-admin-user</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">subjects</span>:
+- <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">User</span>
+  <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;devopstales&#34;</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">cluster-admin</span>
+</code></pre></div>
 		</div>
 	</article>
 </main>
@@ -294,7 +323,7 @@ EOF
 			<aside class="sidebar"><div class="widget-search widget">
 	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
 		<label>
-			<input class="widget-search__field" type="search" placeholder="SEARCH…" value="" name="q" aria-label="SEARCH…">
+			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
 		</label>
 		<input class="widget-search__submit" type="submit" value="Search">
 		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />

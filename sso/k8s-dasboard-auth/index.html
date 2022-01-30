@@ -28,7 +28,7 @@
     "datePublished": "2020-01-03",
     "dateModified" : "2020-01-03",
     "url" : "https://devopstales.github.io/sso/k8s-dasboard-auth/",
-    "wordCount" : "444",
+    "wordCount" : "447",
     "keywords" : [ "Keycloak", "Kubernetes", "dasboard", "oauth2", "SSO", "OIDC", "Blog" ]
     
 }
@@ -75,16 +75,13 @@ if (!doNotTrack) {
 <body class="body">
 	<div class="container container--outer">
 		<header class="header">
-	<div class="container header__container">
-		
-	<div class="logo">
-		<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
-			<div class="logo__item logo__text">
-					<div class="logo__title">devopstales</div>
-					<div class="logo__tagline">Blog about dev and ops stuff</div>
-				</div>
-		</a>
-	</div>
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+				<div class="logo__title">devopstales</div>
+				<div class="logo__tagline">Blog about dev and ops stuff</div>
+			</a>
+		</div>
 		
 <nav class="menu">
 	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
@@ -154,7 +151,13 @@ if (!doNotTrack) {
 			<h1 class="post__title">Dashboard authentication with Keycloak and gatekeeper</h1>
 			<div class="post__meta meta">
 <div class="meta__item-datetime meta__item">
-	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg><time class="meta__text" datetime="2020-01-03T00:00:00Z">January 03, 2020</time></div><div class="meta__item-categories meta__item"><svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg><span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2020-01-03T00:00:00Z">January 03, 2020</time>
+</div>
+
+<div class="meta__item-categories meta__item">
+	<svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
+	<span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
 	</span>
 </div></div>
 		</header>
@@ -198,147 +201,143 @@ if (!doNotTrack) {
 
 
 <p>Kubernetes does not have its own user management and relies on external providers like Keycloak. First we need to integrate an OpeniD prodiver (for me keycloak) with the kubernetes api server.</p>
-<pre tabindex="0"><code>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/kubernetes/manifests/kube-apiserver.yaml
 ...
     command:
     - /hyperkube
     - apiserver
-    - --advertise-address=10.10.40.30
+    - --advertise-address<span style="color:#f92672">=</span>10.10.40.30
 ...
 
-    - --oidc-issuer-url=https://keycloak.devopstales.intra/auth/realms/mydomain
-    - --oidc-client-id=k8s
-    - --oidc-username-claim=email
-    - --oidc-groups-claim=groups
-    # for self sign cert or custom ca
-    #- --oidc-ca-file=/etc/kubernetes/pki/rootca.pem
+    - --oidc-issuer-url<span style="color:#f92672">=</span>https://keycloak.devopstales.intra/auth/realms/mydomain
+    - --oidc-client-id<span style="color:#f92672">=</span>k8s
+    - --oidc-username-claim<span style="color:#f92672">=</span>email
+    - --oidc-groups-claim<span style="color:#f92672">=</span>groups
+    <span style="color:#75715e"># for self sign cert or custom ca</span>
+    <span style="color:#75715e">#- --oidc-ca-file=/etc/kubernetes/pki/rootca.pem</span>
 ...
 
 systemctl restart docker kubelet
-</code></pre><p>We need an authentication proxy before the dasboard. I will use keycloak-gatekeeper for that purpose.</p>
-<pre tabindex="0"><code>nano proxy-deplayment.yaml
+</code></pre></div><p>We need an authentication proxy before the dasboard. I will use keycloak-gatekeeper for that purpose.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano proxy-deplayment.yaml</span>
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: dasboard-proxy
-  labels:
-    app.kubernetes.io/name: dasboard-proxy
-  namespace: kubernetes-dashboard
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: dasboard-proxy
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: dasboard-proxy
-    spec:
-      containers:
-        - name: dasboard-proxy
-          image: &quot;keycloak/keycloak-gatekeeper:latest&quot;
-          command:
-            - /opt/keycloak-gatekeeper
-            - --discovery-url=https://keycloak.devopstales.intra/auth/realms/mydomain/.well-known/openid-configuration
-            - --client-id=k8s
-            - --client-secret=43219919-0904-4338-bc0f-c986e1891a7a
-            - --listen=0.0.0.0:3000
-            - --encryption-key=AgXa7xRcoClDEU0ZDSH4X0XhL5Qy2Z2j
-            - --redirection-url=https://dashboard.devopstales.intra
-            - --enable-refresh-tokens=true
-            - --upstream-url=https://kubernetes-dashboard
-            # debug:
-            #- --upstream-url=http://echo:8080
-            # for self sign cert or custom ca
-            #- --skip-upstream-tls-verify
-            #- --skip-openid-provider-tls-verify
-          ports:
-            - name: http
-              containerPort: 3000
-              protocol: TCP
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kubernetes-dashboard</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+          <span style="color:#f92672">image</span>: <span style="color:#e6db74">&#34;keycloak/keycloak-gatekeeper:latest&#34;</span>
+          <span style="color:#f92672">command</span>:
+            - <span style="color:#ae81ff">/opt/keycloak-gatekeeper</span>
+            - --<span style="color:#ae81ff">discovery-url=https://keycloak.devopstales.intra/auth/realms/mydomain/.well-known/openid-configuration</span>
+            - --<span style="color:#ae81ff">client-id=k8s</span>
+            - --<span style="color:#ae81ff">client-secret=43219919-0904-4338-bc0f-c986e1891a7a</span>
+            - --<span style="color:#ae81ff">listen=0.0.0.0:3000</span>
+            - --<span style="color:#ae81ff">encryption-key=AgXa7xRcoClDEU0ZDSH4X0XhL5Qy2Z2j</span>
+            - --<span style="color:#ae81ff">redirection-url=https://dashboard.devopstales.intra</span>
+            - --<span style="color:#ae81ff">enable-refresh-tokens=true</span>
+            - --<span style="color:#ae81ff">upstream-url=https://kubernetes-dashboard</span>
+            <span style="color:#75715e"># debug:</span>
+            <span style="color:#75715e">#- --upstream-url=http://echo:8080</span>
+            <span style="color:#75715e"># for self sign cert or custom ca</span>
+            <span style="color:#75715e">#- --skip-upstream-tls-verify</span>
+            <span style="color:#75715e">#- --skip-openid-provider-tls-verify</span>
+          <span style="color:#f92672">ports</span>:
+            - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+              <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">3000</span>
+              <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: dasboard-proxy
-  labels:
-    app.kubernetes.io/name: dasboard-proxy
-  namespace: kubernetes-dashboard
-spec:
-  type: ClusterIP
-  ports:
-    - port: 3000
-      targetPort: http
-      protocol: TCP
-      name: http
-  selector:
-    app.kubernetes.io/name: dasboard-proxy
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kubernetes-dashboard</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+  <span style="color:#f92672">ports</span>:
+    - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">3000</span>
+      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">http</span>
+      <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
 ---
-apiVersion: extensions/v1beta1
-kind: Ingress
-metadata:
-  name: dasboard-proxy
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/proxy-buffer-size: &quot;64k&quot;
-    cert-manager.io/cluster-issuer: ca-issuer
-  namespace: kubernetes-dashboard
-spec:
-  tls:
-    - hosts:
-        - dashboard.devopstales.intra
-      secretName: dasboard-proxy-tls
-  rules:
-    - host: dashboard.devopstales.intra
-      http:
-        paths:
-          - backend:
-             serviceName: dasboard-proxy
-             servicePort: 3000
-</code></pre><p>Now you can login at dashboard.devopstales.intra but you haven&rsquo;t got any privileges so lets create. some.</p>
-<pre tabindex="0"><code>nano devops-group-rbac.yaml
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">extensions/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">nginx.ingress.kubernetes.io/proxy-buffer-size</span>: <span style="color:#e6db74">&#34;64k&#34;</span>
+    <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kubernetes-dashboard</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">tls</span>:
+    - <span style="color:#f92672">hosts</span>:
+        - <span style="color:#ae81ff">dashboard.devopstales.intra</span>
+      <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">dasboard-proxy-tls</span>
+  <span style="color:#f92672">rules</span>:
+    - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">dashboard.devopstales.intra</span>
+      <span style="color:#f92672">http</span>:
+        <span style="color:#f92672">paths</span>:
+          - <span style="color:#f92672">backend</span>:
+             <span style="color:#f92672">serviceName</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+             <span style="color:#f92672">servicePort</span>: <span style="color:#ae81ff">3000</span>
+</code></pre></div><p>Now you can login at dashboard.devopstales.intra but you haven&rsquo;t got any privileges so lets create. some.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano devops-group-rbac.yaml</span>
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: devops-cluster-admin
-  namespace: kubernetes-dashboard
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-- apiGroup: rbac.authorization.k8s.io
-  kind: Group
-  name: devopstales
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devops-cluster-admin</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+<span style="color:#f92672">subjects</span>:
+- <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
 ---
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-subjects:
-- kind: User
-  name: &quot;devopstales&quot;
-  namespace: &quot;kube-system&quot;
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name:  cluster-admin
-</code></pre>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">RoleBinding</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales-admin-user</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">subjects</span>:
+- <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">User</span>
+  <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;devopstales&#34;</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+  <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">cluster-admin</span>
+</code></pre></div>
 		</div>
 		<footer class="post__footer">
 			
 <div class="post__tags tags clearfix">
 	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M32 19c0 1-1 2-1 2L21 31s-1 1-2 1-2-1-2-1L2 16c-1-1-1.4-2-1.4-2S0 12.5 0 11V3C0 1.5.8.8.8.8S1.5 0 3 0h8c1.5 0 3 .6 3 .6S15 1 16 2l15 15s1 1 1 2zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
 	<ul class="tags__list">
-		<li class="tags__item">
-			<a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a>
-		</li>
-		<li class="tags__item">
-			<a class="tags__link btn" href="https://devopstales.github.io/tags/helm2/" rel="tag">helm2</a>
-		</li>
-		<li class="tags__item">
-			<a class="tags__link btn" href="https://devopstales.github.io/tags/oidc/" rel="tag">oidc</a>
-		</li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/helm2/" rel="tag">helm2</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/oidc/" rel="tag">oidc</a></li>
 	</ul>
 </div>
 		</footer>
@@ -377,7 +376,7 @@ roleRef:
 			<aside class="sidebar"><div class="widget-search widget">
 	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
 		<label>
-			<input class="widget-search__field" type="search" placeholder="SEARCH…" value="" name="q" aria-label="SEARCH…">
+			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
 		</label>
 		<input class="widget-search__submit" type="submit" value="Search">
 		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
