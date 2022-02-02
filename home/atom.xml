@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-01-30T14:15:12+00:00</updated>
+    <updated>2022-02-02T14:33:51+00:00</updated>
     
     
     <author>
@@ -17,6 +17,253 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Create K8S cluster with Terraform and GitlabCI]]></title>
+            <link href="https://devopstales.github.io/home/gke-gitlab-terraform/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/gke-gitlab-terraform/?utm_source=atom_feed" rel="related" type="text/html" title="Create K8S cluster with Terraform and GitlabCI" />
+                <link href="https://devopstales.github.io/home/multus-calico/?utm_source=atom_feed" rel="related" type="text/html" title="Use multus to separate metwork trafics" />
+                <link href="https://devopstales.github.io/home/multus/?utm_source=atom_feed" rel="related" type="text/html" title="Use Multus CNI in Kubernetes" />
+                <link href="https://devopstales.github.io/home/k8s-central-oauth/?utm_source=atom_feed" rel="related" type="text/html" title="Central authentication with oauth2-proxy" />
+                <link href="https://devopstales.github.io/home/k8s-rbac-gen/?utm_source=atom_feed" rel="related" type="text/html" title="How to create kubeconfig?" />
+            
+                <id>https://devopstales.github.io/home/gke-gitlab-terraform/</id>
+            
+            
+            <published>2022-01-30T00:00:00+00:00</published>
+            <updated>2022-01-30T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how how you can create a K8S cluster with Terraform and GitlabCI.</p>
+<h3 id="create-service-account-on-gcp">create service account on GCP</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">gcloud config set project gke-terraform-test
+
+gcloud iam service-accounts create gitlab-terraform <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--display-name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gitlab-terraform&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--project<span style="color:#f92672">=</span>gke-terraform-test
+
+gcloud iam service-accounts add-iam-policy-binding <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--member<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;serviceAccount:gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;roles/compute.networkAdmin&#39;</span>
+
+gcloud iam service-accounts add-iam-policy-binding <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--member<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;serviceAccount:gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;roles/container.admin&#39;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--project<span style="color:#f92672">=</span>gke-terraform-test
+
+gcloud iam service-accounts add-iam-policy-binding <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--member<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;serviceAccount:gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;roles/iam.serviceAccountUser&#39;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--project<span style="color:#f92672">=</span>gke-terraform-test
+
+gcloud iam service-accounts add-iam-policy-binding <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--member<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;serviceAccount:gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;roles/iam.serviceAccountAdmin&#39;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--project<span style="color:#f92672">=</span>gke-terraform-test
+
+gcloud iam service-accounts keys create serviceaccount.json <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--iam-account <span style="color:#e6db74">&#34;gitlab-terraform@gke-terraform-test.iam.gserviceaccount.com&#34;</span>
+</code></pre></div><p>Store the content of the <code>serviceaccount.json</code> as base64 encoded value in gitlab variable called <code>BASE64_GOOGLE_CREDENTIALS</code></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">base64 serviceaccount.json | tr -d <span style="color:#ae81ff">\\</span>n
+</code></pre></div><h3 id="create-gitlab-ciyaml">Create gitlab-ci.yaml</h3>
+<p>Create CI environment variable:</p>
+<p><code>TF_VAR_gitlab_token</code>:  GitLab personal access token with api scope to add the provisioned cluster to your GitLab group.
+<code>TF_ROOT</code>: terraform
+<code>TF_VAR_gcp_project</code>: gke-terraform-test</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano gitlab-ci.yaml</span>
+<span style="color:#f92672">include</span>:
+  - <span style="color:#f92672">template</span>: <span style="color:#ae81ff">Terraform.gitlab-ci.yml</span>
+
+<span style="color:#f92672">variables</span>:
+  <span style="color:#f92672">TF_STATE_NAME</span>: <span style="color:#ae81ff">production</span>
+  <span style="color:#f92672">TF_CACHE_KEY</span>: <span style="color:#ae81ff">production</span>
+  <span style="color:#f92672">TF_ROOT</span>: <span style="color:#ae81ff">terraform</span>
+  <span style="color:#f92672">TF_VAR_gcp_project</span>: <span style="color:#ae81ff">gke-terraform-test</span>
+
+<span style="color:#f92672">before_script</span>:
+  - <span style="color:#ae81ff">export GOOGLE_CREDENTIALS=$(echo $BASE64_GOOGLE_CREDENTIALS | base64 -d)</span>
+</code></pre></div><h3 id="create-terraform-file">Create terraform file</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir  terraform
+cd
+</code></pre></div><p>Import the <code>hashicorp/google</code> provider:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano providers.tf</span>
+<span style="color:#ae81ff">terraform {</span>
+  <span style="color:#ae81ff">required_providers {</span>
+    <span style="color:#ae81ff">google = {</span>
+      <span style="color:#ae81ff">source  = &#34;hashicorp/google&#34;</span>
+      <span style="color:#ae81ff">version = &#34;3.79.0&#34;</span>
+    }
+  }
+
+  <span style="color:#ae81ff">required_version = &#34;~&gt; 1.0.3&#34;</span>
+
+  <span style="color:#ae81ff">backend &#34;http&#34; {</span>
+  }
+}
+
+<span style="color:#ae81ff">provider &#34;google&#34; {</span>
+  <span style="color:#ae81ff">project = var.project_id</span>
+  <span style="color:#ae81ff">region  = var.region</span>
+}
+</code></pre></div><p>Generate Variables:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano variables.tf</span>
+<span style="color:#ae81ff">variable &#34;project_id&#34; {</span>
+  <span style="color:#ae81ff">description = &#34;project id&#34;</span>
+}
+
+<span style="color:#ae81ff">variable &#34;region&#34; {</span>
+  <span style="color:#ae81ff">description = &#34;region&#34;</span>
+}
+
+<span style="color:#ae81ff">variable &#34;gke_num_nodes&#34; {</span>
+  <span style="color:#ae81ff">default     = 1</span>
+  <span style="color:#ae81ff">description = &#34;number of gke nodes per zone&#34;</span>
+}
+
+<span style="color:#ae81ff">variable &#34;machine_type&#34; {</span>
+  <span style="color:#ae81ff">type        = string</span>
+  <span style="color:#ae81ff">description = &#34;Type of the node compute engines.&#34;</span>
+}
+
+<span style="color:#ae81ff">variable &#34;disk_size_gb&#34; {</span>
+  <span style="color:#ae81ff">type        = number</span>
+  <span style="color:#ae81ff">description = &#34;Size of the node&#39;s disk.&#34;</span>
+}
+
+<span style="color:#ae81ff">variable &#34;disk_type&#34; {</span>
+  <span style="color:#ae81ff">type        = string</span>
+  <span style="color:#ae81ff">description = &#34;Type of the node&#39;s disk.&#34;</span>
+}
+
+<span style="color:#ae81ff">variable &#34;cluster_version&#34; {</span>
+  <span style="color:#ae81ff">default = &#34;1.20&#34;</span>
+}
+</code></pre></div><p>Create network and GKE Cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano main.json</span>
+<span style="color:#ae81ff">resource &#34;google_compute_network&#34; &#34;vpc&#34; {</span>
+  <span style="color:#ae81ff">name                    = &#34;gke-test-vpc&#34;</span>
+  <span style="color:#ae81ff">auto_create_subnetworks = &#34;false&#34;</span>
+}
+
+<span style="color:#ae81ff">resource &#34;google_compute_subnetwork&#34; &#34;gke-test-network&#34; {</span>
+  <span style="color:#ae81ff">name          = &#34;gke-test-network&#34;</span>
+  <span style="color:#ae81ff">region        = var.region</span>
+  <span style="color:#ae81ff">network       = google_compute_network.vpc.name</span>
+  <span style="color:#ae81ff">ip_cidr_range = &#34;10.10.10.0/24&#34;</span>
+}
+
+<span style="color:#ae81ff">resource &#34;google_service_account&#34; &#34;default&#34; {</span>
+  <span style="color:#ae81ff">account_id   = &#34;service-account-id&#34;</span>
+  <span style="color:#ae81ff">display_name = &#34;Service Account&#34;</span>
+}
+
+<span style="color:#ae81ff">resource &#34;google_container_cluster&#34; &#34;primary&#34; {</span>
+  <span style="color:#ae81ff">name     = &#34;gke-test&#34;</span>
+  <span style="color:#ae81ff">location = var.region</span>
+
+  <span style="color:#ae81ff">min_master_version       = var.cluster_version</span>
+  <span style="color:#ae81ff">remove_default_node_pool = true</span>
+  <span style="color:#ae81ff">initial_node_count       = 1</span>
+
+  <span style="color:#ae81ff">network    = google_compute_network.vpc.name</span>
+  <span style="color:#ae81ff">subnetwork = &#34;gke-test-network&#34;</span>
+}
+
+
+<span style="color:#ae81ff">resource &#34;google_container_node_pool&#34; &#34;primary_nodes&#34; {</span>
+  <span style="color:#ae81ff">name       = &#34;${google_container_cluster.primary.name}-node-pool&#34;</span>
+  <span style="color:#ae81ff">location   = var.region</span>
+  <span style="color:#ae81ff">cluster    = google_container_cluster.primary.name</span>
+  <span style="color:#ae81ff">node_count = var.gke_num_nodes</span>
+  <span style="color:#ae81ff">version    = var.cluster_version</span>
+
+  <span style="color:#ae81ff">management {</span>
+    <span style="color:#ae81ff">auto_repair  = &#34;true&#34;</span>
+    <span style="color:#ae81ff">auto_upgrade = &#34;true&#34;</span>
+  }
+
+  <span style="color:#ae81ff">node_config {</span>
+    <span style="color:#ae81ff">oauth_scopes = [</span>
+      <span style="color:#e6db74">&#34;https://www.googleapis.com/auth/cloud-platform&#34;</span>,
+    ]
+
+    <span style="color:#ae81ff">labels = {</span>
+      <span style="color:#ae81ff">env = var.project_id</span>
+    }
+
+    <span style="color:#ae81ff">service_account = google_service_account.default.email</span>
+    <span style="color:#ae81ff">image_type      = &#34;COS&#34;</span>
+    <span style="color:#ae81ff">machine_type    = var.machine_type</span>
+    <span style="color:#ae81ff">disk_size_gb    = var.disk_size_gb</span>
+    <span style="color:#ae81ff">disk_type       = var.disk_type</span>
+    <span style="color:#ae81ff">preemptible     = false</span>
+    <span style="color:#ae81ff">tags         = [</span>
+      <span style="color:#e6db74">&#34;gke-node&#34;</span>,
+    ]
+
+    <span style="color:#ae81ff">metadata = {</span>
+      <span style="color:#ae81ff">disable-legacy-endpoints = &#34;true&#34;</span>
+    }
+  }
+}
+</code></pre></div><p>Add value for the variables:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano terraform.tfvars</span>
+<span style="color:#ae81ff">project_id   = &#34;gke-terraform-test&#34;</span>
+<span style="color:#ae81ff">region       = &#34;europe-west1&#34;</span>
+<span style="color:#ae81ff">gke_num_nodes = 1</span>
+<span style="color:#ae81ff">machine_type  = &#34;g1-small&#34;</span>
+<span style="color:#ae81ff">disk_type     = &#34;pd-standard&#34;</span>
+<span style="color:#ae81ff">disk_size_gb  = 10</span>
+</code></pre></div><p>Configure what data will print in the end of the deploy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano outputs.tf</span>
+<span style="color:#ae81ff">output &#34;region&#34; {</span>
+  <span style="color:#ae81ff">value       = var.region</span>
+  <span style="color:#ae81ff">description = &#34;GCloud Region&#34;</span>
+}
+
+<span style="color:#ae81ff">output &#34;project_id&#34; {</span>
+  <span style="color:#ae81ff">value       = var.project_id</span>
+  <span style="color:#ae81ff">description = &#34;GCloud Project ID&#34;</span>
+}
+
+<span style="color:#ae81ff">output &#34;kubernetes_cluster_name&#34; {</span>
+  <span style="color:#ae81ff">value       = google_container_cluster.primary.name</span>
+  <span style="color:#ae81ff">description = &#34;GKE Cluster Name&#34;</span>
+}
+</code></pre></div><p>If you created all the fles it looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cd ..
+tree .
+.
+├── README.md
+└── terraform
+    ├── providers.tf
+    ├── main.tf
+    ├── outputs.tf
+    ├── terraform.tfvars
+    ├── variables.tf
+
+<span style="color:#ae81ff">1</span> directory, <span style="color:#ae81ff">5</span> files
+</code></pre></div><p>Now you can push to the gitlab project:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">git add -A
+git commit -m <span style="color:#e6db74">&#34;base terraform commit&#34;</span>
+git push
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -3441,7 +3688,7 @@ The <code>auth-url</code> annotation can access the OAuth2 Proxy internally via 
 export SERVICEACCOUNT<span style="color:#f92672">=</span>devopstales
 
 kubectl create namespace $NAMESPACE
-kubectx $NAMESPACE
+kubens $NAMESPACE
 </code></pre></div><p>Create serviceaccount with RBAC:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | envsubst | kubectl create -f -</span>
 ---
@@ -3472,7 +3719,7 @@ kubectx $NAMESPACE
   <span style="color:#f92672">name</span>: <span style="color:#ae81ff">$SERVICEACCOUNT</span>
   <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">$NAMESPACE</span>
 <span style="color:#f92672">subjects</span>:
-- <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">SERVICEACCOUNT</span>
+- <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ServiceAccount</span>
   <span style="color:#f92672">name</span>: <span style="color:#ae81ff">$SERVICEACCOUNT</span>
   <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">$NAMESPACE</span>
 <span style="color:#f92672">roleRef</span>:
@@ -3483,7 +3730,8 @@ kubectx $NAMESPACE
 </code></pre></div><p>Create kubeconfig for serviceaccount:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">git clone https://github.com/devopstales/k8s_sec_lab.git
 cd k8s_sec_lab/kubernetes-scripts
-./create-kubeconfig devopstales &gt; kubeconfig-$NAMESPACE
+chmod +x create-kubeconfig.sh
+./create-kubeconfig.sh $SERVICEACCOUNT &gt; kubeconfig-$NAMESPACE
 </code></pre></div><p>Use kubeconfig:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl --kubeconfig<span style="color:#f92672">=</span>kubeconfig-$NAMESPACE get po
 </code></pre></div><h3 id="permission-managger">Permission Managger</h3>
