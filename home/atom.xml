@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-02-04T13:32:00+00:00</updated>
+    <updated>2022-02-06T11:09:53+00:00</updated>
     
     
     <author>
@@ -17,6 +17,100 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to create your own Homebrew repo?]]></title>
+            <link href="https://devopstales.github.io/home/brew-repo/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/linux/brew-repo/?utm_source=atom_feed" rel="related" type="text/html" title="How to create your own Homebrew repo?" />
+                <link href="https://devopstales.github.io/home/trivy-operator-2.3/?utm_source=atom_feed" rel="related" type="text/html" title="trivy-operator 2.3: Patch release for Admisssion controller" />
+                <link href="https://devopstales.github.io/home/gke-gitlab-terraform/?utm_source=atom_feed" rel="related" type="text/html" title="Create K8S cluster with Terraform and GitlabCI" />
+                <link href="https://devopstales.github.io/home/multus-calico/?utm_source=atom_feed" rel="related" type="text/html" title="Use multus to separate metwork trafics" />
+                <link href="https://devopstales.github.io/home/multus/?utm_source=atom_feed" rel="related" type="text/html" title="Use Multus CNI in Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/brew-repo/</id>
+            
+            
+            <published>2022-02-05T00:00:00+00:00</published>
+            <updated>2022-02-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>I this post I will show you in a Step-by-Step guide how cou can create your own Homebrew repository on GitHub.</p>
+<h3 id="what-is-homebrew">What is Homebrew?</h3>
+<p>Homebrew is the missing package manager for macOS. It installs packages with a simple command like <code>brew install curl</code>. It can be used on Linux too. Homebrew taps are third-party repositories. You can create your own repository and host on GitHub.</p>
+<p>In this article I will use <code>tmux-cssh</code> script as the program I will share by Homebrew.</p>
+<h3 id="create-git-repo">Create Git repo</h3>
+<p>To host a Homebrew tap you just need to create a GitGub git repository with the naming convention <code>homebrew-&lt;name&gt;</code>. I called <code>homebrew-devopstales</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">git clone git@github.com:devopstales/homebrew-devopstales.gi
+cd homebrew-devopstales
+echo <span style="color:#e6db74">&#34;# homebrew-devopstales&#34;</span> &gt;&gt; README.md                                  
+git init
+git add README.md
+git commit -m <span style="color:#e6db74">&#34;first commit&#34;</span>
+git branch -M main
+git remote add origin git@github.com:devopstales/homebrew-devopstales.git
+git push -u origin main
+</code></pre></div><p>I will use this repo to host the <code>tmux-cssh</code> script too on another branch, but you can use It&rsquo;s own repo.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">git checkout -b tmux-cssh
+cp /usr/local/sbin/tmux-cssh .
+git add -A
+git commit -m <span style="color:#e6db74">&#34;tmux-cssh&#34;</span>
+git push --set-upstream origin tmux-cssh
+git tag tmux-cssh_1.0
+git commit -m <span style="color:#e6db74">&#34;tmux-cssh_1.0&#34;</span>
+git push origin --tags
+</code></pre></div><p>I cerated a teg to use It&rsquo;s tar.gz in the release file of the package in Homebrew tap.</p>
+<p><img src="/img/include/brew01.png" alt="release tar.gzm"  class="zoomable" /></p>
+<p>Right click on the tar.gz and sopy the link address. Now we go back the main branch and generate the release file for brew.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">git checkout main
+brew create https://github.com/devopstales/homebrew-devopstales/archive/refs/tags/tmux-cssh_1.0.tar.gz
+</code></pre></div><p>It will show the content of the created file in your default text editor. Save the file and move to this git repo.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cp /home/linuxbrew/.linuxbrew/Homebrew/Library/Taps/homebrew/homebrew-core/Formula/homebrew-devopstales.rb tmux-cssh.rb
+</code></pre></div><p>Edit the <code>tmux-cssh.rb</code> file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">TmuxCssh</span> <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">Formula</span>
+  desc <span style="color:#e6db74">&#34;tmux-css allow parallel execution of cmmands on remote servers&#34;</span>
+  homepage <span style="color:#e6db74">&#34;https://github.com/knakayama/tmux-cssh&#34;</span>
+  url <span style="color:#e6db74">&#34;https://github.com/devopstales/homebrew-devopstales/archive/refs/tags/tmux-cssh_1.0.tar.gz&#34;</span>
+  sha256 <span style="color:#e6db74">&#34;ce761f21fa0fe7050f408e687f9a4964acf95736c85678e3cc27cee88bd6ceed&#34;</span>
+  version <span style="color:#e6db74">&#34;1.0&#34;</span>
+
+  depends_on <span style="color:#e6db74">&#34;tmux&#34;</span>
+
+  <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">install</span>
+    bin<span style="color:#f92672">.</span>install <span style="color:#e6db74">&#34;tmux-cssh&#34;</span>
+  <span style="color:#66d9ef">end</span>
+
+  test <span style="color:#66d9ef">do</span>
+    system <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">#{</span>bin<span style="color:#e6db74">}</span><span style="color:#e6db74">/tmux-cssh&#34;</span>, <span style="color:#e6db74">&#34;--help&#34;</span>
+  <span style="color:#66d9ef">end</span>
+<span style="color:#66d9ef">end</span>
+</code></pre></div><p>If you have directories, you can use <code>Dir[&quot;lib&quot;]</code> to install directories or use <code>prefix.install</code> to copy files:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">def install    
+    bin.install <span style="color:#e6db74">&#34;tmux-cssh&#34;</span>    
+    bin.install Dir<span style="color:#f92672">[</span><span style="color:#e6db74">&#34;lib&#34;</span><span style="color:#f92672">]</span>    
+    bin.install Dir<span style="color:#f92672">[</span><span style="color:#e6db74">&#34;files&#34;</span><span style="color:#f92672">]</span>
+    prefix.install <span style="color:#e6db74">&#34;README.md&#34;</span>
+    prefix.install <span style="color:#e6db74">&#34;LICENSE&#34;</span>  
+end
+</code></pre></div><p>Once it is ready, add the file, commit, and push.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">git add -A
+git commit -m <span style="color:#e6db74">&#34;tmux-cssh_1.0&#34;</span>
+git push
+</code></pre></div><p>Now your tap is ready. Run the following commands to use it:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">brew tap devopstales/devopstales
+brew install tmux-cssh
+</code></pre></div><p>For update you just generate a new rb file with <code>brew create</code> command and the new tar.gz archive. Then change the <code>url</code> and <code>sha256</code> fields in tmux-cssh.rb.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
