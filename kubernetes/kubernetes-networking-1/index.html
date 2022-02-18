@@ -28,7 +28,7 @@
     "datePublished": "2021-08-30",
     "dateModified" : "2021-08-30",
     "url" : "https://devopstales.github.io/kubernetes/kubernetes-networking-1/",
-    "wordCount" : "849",
+    "wordCount" : "1141",
     "keywords" : [ "kubernetes deployment", "owerlay network", "CNI", "Container Network Interface", "calico", "cilium", "Flannel", "IPVS", "kube-proxy", "eBPF", "Blog" ]
     
 }
@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://devopstales.github.io/kubernetes/kubernetes-networking-1/" /><meta property="article:section" content="kubernetes" />
 <meta property="article:published_time" content="2021-08-30T00:00:00+00:00" />
 <meta property="article:modified_time" content="2021-08-30T00:00:00+00:00" />
-<meta property="og:see_also" content="https://devopstales.github.io/kubernetes/multus-calico/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/multus/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-clustermesh/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-opnsense-bgp/" />
+<meta property="og:see_also" content="https://devopstales.github.io/cloud/aws-eks-networking/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/multus-calico/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/multus/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/cilium-clustermesh/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubernetes-networking-2/" />
 
 
 	
@@ -73,13 +73,16 @@ if (!doNotTrack) {
 <body class="body">
 	<div class="container container--outer">
 		<header class="header">
-	<div class="container">
-		<div class="logo">
-			<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
-				<div class="logo__title">devopstales</div>
-				<div class="logo__tagline">Blog about dev and ops stuff</div>
-			</a>
-		</div>
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="https://devopstales.github.io/" title="devopstales" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">devopstales</div>
+					<div class="logo__tagline">Blog about dev and ops stuff</div>
+				</div>
+		</a>
+	</div>
 		
 <nav class="menu">
 	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
@@ -149,13 +152,7 @@ if (!doNotTrack) {
 			<h1 class="post__title">Understanding kubernetes networking: pods and services</h1>
 			<div class="post__meta meta">
 <div class="meta__item-datetime meta__item">
-	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
-	<time class="meta__text" datetime="2021-08-30T00:00:00Z">August 30, 2021</time>
-</div>
-
-<div class="meta__item-categories meta__item">
-	<svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
-	<span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg><time class="meta__text" datetime="2021-08-30T00:00:00Z">August 30, 2021</time></div><div class="meta__item-categories meta__item"><svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg><span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
 	</span>
 </div></div>
 		</header>
@@ -163,6 +160,7 @@ if (!doNotTrack) {
 			<p>In this series I will attempt to demystify the Kubernetes networkiing layers. This first part will look at containers and pods.</p>
 <h3 id="what-is-a-pod">What is a pod?</h3>
 <p>A Pod is the atom of Kubernetes — the smallest deployable object for building applications.  A single Pod represents an applications in your cluster and encapsulates one or more containers. Containers that make up a pod are designed to be co-located and scheduled on the same machine. They share the same resources like ip, network and volumes. In Linux, each running process communicates within a <a href="https://en.wikipedia.org/wiki/Linux_namespaces">Linux namespace</a> that provides a logical networking stack. In essence, a pod is a representation of a Linux namespace that allow the containers to usa the same resources. Containers within a Pod all have the same IP address and port range. They can find each other via localhost since they reside in the same namespace. This means the containers in a pod can not us the same ports.</p>
+<p><img src="https://devopstales.github.io/img/include/k8s-pod-ip-with-cni.png" alt="Pow With IP"  class="zoomable" /></p>
 <p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-1.png" alt="Pod Network"  class="zoomable" /></p>
 <p>Kubernetes creates a special container for each pod whose purpose is to provide a network interface for the other containers. This is the &ldquo;pause&rdquo; container.</p>
 <p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-2.png" alt="Pod Network"  class="zoomable" /></p>
@@ -173,12 +171,28 @@ if (!doNotTrack) {
 <h4 id="what-is-a-service">What is a Service?</h4>
 <p>As we know containers are considered disposable. That means there is no guarantee that the pod&rsquo;s address won’t change the next time the pod is recreated. That is a common problem in cloud environments too, and it has a standard solution: run the traffic through a reverse-proxy. This proxy is represented by a Kubernetes resource type called a service.</p>
 <p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-4.gif" alt="Pod to Service"  class="zoomable" /></p>
+<h3 id="service-types">Service Types</h3>
+<h4 id="clusterip">ClusterIP</h4>
+<p>ClusterIP is the default and most common service type. Kubernetes will assign a cluster-internal IP address to ClusterIP service. This makes the service only reachable within the cluster. You can use it for inter service communication within the cluster. For example, communication between the front-end and back-end components of your app.</p>
+<p><img src="https://devopstales.github.io/img/include/k8s-cluster-ip-service.png" alt="ClusterIP"  class="zoomable" /></p>
+<h4 id="nodeport">NodePort</h4>
+<p>NodePort service is an extension of ClusterIP service. It exposes the service outside of the cluster by adding a cluster-wide port nat on top of ClusterIP. Each node proxies that port to there ip. So, external traffic has access to fixed port on each Node. ode port must be in the range of 30000–32767. Manually allocating a port to the service is optional. If it is undefined, Kubernetes will automatically assign one.</p>
+<p><img src="https://devopstales.github.io/img/include/k8s-node-port.png" alt="NodePort"  class="zoomable" /></p>
+<h4 id="loadbalancer">LoadBalancer</h4>
+<p>LoadBalancer service is an extension of NodePort service. It integrates NodePort with cloud-based load balancers. It exposes the Service externally using a cloud provider’s load balancer. Each cloud provider (AWS, Azure, GCP, etc) has its own native load balancer implementation. The cloud provider will create a load balancer, which then automatically routes requests to your Kubernetes Service. Traffic from the external load balancer is directed at the backend Pods. The cloud provider decides how it is load balanced. Every time you want to expose a service to the outside world, you have to create a new LoadBalancer and get an IP address.</p>
+<p><img src="https://devopstales.github.io/img/include/k8s-external-ip-service.png" alt="LoadBalancer"  class="zoomable" /></p>
+<p><img src="https://devopstales.github.io/img/include/k8s-external-ip-service.png" alt="External IP"  class="zoomable" /></p>
+<h4 id="externalname">ExternalName</h4>
+<p>ExternalName map a Service to a DNS name, not to a typical selector. It maps the Service to the contents of the externalName field (e.g. foo.bar.example.com), by returning a CNAME record with its value. This is commonly used to create a service within Kubernetes to represent an external datastore like a database that runs externally to Kubernetes.</p>
 <h3 id="pod-to-service-communication">Pod-to-Service communication</h3>
 <p>When creating a new Kubernetes Service, a new virtual IP is created on your behalf. Anywhere within the cluster, traffic addressed to this virtual IP will be routed or load-balanced to the Pod or Pods associated with the Service. Kubernetes use a networking framework built in to Linux kernel called <code>netfilter</code>.</p>
 <p><code>iptables</code> is a user-space utility program that allows a system administrator to configure the IP packet filter rules of the Linux kernel firewall, implemented as different <code>Netfilter</code> modules. In Kubernetes, <code>iptables</code> rules are configured by the <code>kube-proxy</code> controller that watches the Kubernetes API for changes. Creation of a service or change of the pod ip will trigger iptables rules update on the host. When a traffic destined for a Service’s virtual IP is detected the <code>kube-proxy</code> select a random pod ip from the set of available Pods and manipulate the <code>iptables</code> rules to change the destination ip in the package to it. This method is called destination nat. In the return path <code>iptables</code> again rewrites the IP header to replace the Pod IP with the Service’s IP. The path taken by a packet through the networking stack is depicted in the figure shown below:</p>
-<p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-5.png" alt="Pod to Service"  class="zoomable" /></p>
+<p><img src="https://devopstales.github.io/img/include/services-userspace-overview.svg" alt="Pod to Service"  class="zoomable" /></p>
+<p>In the iptables perspective:</p>
+<p><img src="https://devopstales.github.io/img/include/kubernetes-network-1-5.png" alt="iptables structure"  class="zoomable" /></p>
 <h3 id="ipvs">IPVS</h3>
 <p>Since verion 1.11 Kubernetes includes a second option for load balancing. IPVS (IP Virtual Server) is also built on top of <code>netfilter</code> and implements load balancing as part of the Linux kernel. IPVS can direct requests for TCP- and UDP-based services to the real servers, and make services of the real servers appear as virtual services on a single IP address. When creating a Service load balanced with IPVS, three things happen: a dummy IPVS interface is created on the Node, the Service’s IP address is bound to the dummy IPVS interface, and IPVS servers are created for each Service IP address.</p>
+<p><img src="https://devopstales.github.io/img/include/services-ipvs-overview.svg" alt="Pod to Service"  class="zoomable" /></p>
 <h3 id="ebpf">eBPF</h3>
 <p>Some Network plugin is Kubernetes can act as a replacement for <code>kube-proxy</code> like Calico and Cilium. They use eBPF as a solution to solve the load-balancing problem.</p>
 <h3 id="what-is-ebpf">What is eBPF?</h3>
@@ -194,10 +208,18 @@ if (!doNotTrack) {
 <div class="post__tags tags clearfix">
 	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M32 19c0 1-1 2-1 2L21 31s-1 1-2 1-2-1-2-1L2 16c-1-1-1.4-2-1.4-2S0 12.5 0 11V3C0 1.5.8.8.8.8S1.5 0 3 0h8c1.5 0 3 .6 3 .6S15 1 16 2l15 15s1 1 1 2zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
 	<ul class="tags__list">
-		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a></li>
-		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/calico/" rel="tag">calico</a></li>
-		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/cilium/" rel="tag">cilium</a></li>
-		<li class="tags__item"><a class="tags__link btn" href="https://devopstales.github.io/tags/flannel/" rel="tag">Flannel</a></li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/calico/" rel="tag">calico</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/cilium/" rel="tag">cilium</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/flannel/" rel="tag">Flannel</a>
+		</li>
 	</ul>
 </div>
 		</footer>
@@ -236,7 +258,7 @@ if (!doNotTrack) {
 			<aside class="sidebar"><div class="widget-search widget">
 	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
 		<label>
-			<input class="widget-search__field" type="search" placeholder="SEARCH..." value="" name="q" aria-label="SEARCH...">
+			<input class="widget-search__field" type="search" placeholder="SEARCH…" value="" name="q" aria-label="SEARCH…">
 		</label>
 		<input class="widget-search__submit" type="submit" value="Search">
 		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
@@ -262,7 +284,7 @@ if (!doNotTrack) {
             <li><a href="https://devopstales.github.io/series/k8s-gitops" class="text-uppercase">k8s-gitops (6)</a>
             </li>
             
-            <li><a href="https://devopstales.github.io/series/k8s-network" class="text-uppercase">k8s-network (21)</a>
+            <li><a href="https://devopstales.github.io/series/k8s-network" class="text-uppercase">k8s-network (22)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-operators" class="text-uppercase">k8s-operators (2)</a>
@@ -351,6 +373,8 @@ if (!doNotTrack) {
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/aws-eks-ingress/">Deploy Ingress Controller to EKS cluster with WAF</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/aws-eks-networking/">AWS EKS Network Solutions</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/brew-repo/">How to create your own Homebrew repo?</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/trivy-operator-2.3/">trivy-operator 2.3: Patch release for Admisssion controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gke-gitlab-terraform/">Create K8S cluster with Terraform and GitlabCI</a></li>
@@ -359,8 +383,6 @@ if (!doNotTrack) {
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gcp-cloud-sql-postgresql-migration/">How to migrate PostgreSQL databases to Google Cloud SQL?</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/ceph-full-osd/">Cluster Pools got marked read only, OSDs are near full.</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-pinniped/">Kubernetes Single Sign-on with Pinniped OpenID Connect</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/trivy-operator-2.2/">trivy-operator 2.2: Patch release for Admisssion controller</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/oml/">Publish Kubernetes Operator to OperatorHub</a></li>
 		</ul>
 	</div>
 </div>
@@ -375,11 +397,12 @@ if (!doNotTrack) {
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/almalinux/" title="AlmaLinux">AlmaLinux</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aws/" title="AWS">AWS</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="Calico">Calico</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="calico">calico</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="Centos">Centos</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
@@ -397,6 +420,7 @@ if (!doNotTrack) {
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="docker">docker</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="docker-compose">docker-compose</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ebpf/" title="ebpf">ebpf</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/eks/" title="EKS">EKS</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="elasticsearch">elasticsearch</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/falco/" title="falco">falco</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="fedora">fedora</a>
