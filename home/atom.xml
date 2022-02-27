@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-02-27T08:39:16+00:00</updated>
+    <updated>2022-02-27T10:58:28+00:00</updated>
     
     
     <author>
@@ -20,13 +20,485 @@
     
         
         <entry>
+            <title type="html"><![CDATA[Elastic Container Registry Integration with EKS]]></title>
+            <link href="https://devopstales.github.io/home/aws-eks-ecr/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/aws-eks-ecr/?utm_source=atom_feed" rel="related" type="text/html" title="Elastic Container Registry Integration with EKS" />
+                <link href="https://devopstales.github.io/home/aws-eks-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Deploy Ingress Controller to EKS cluster with WAF" />
+                <link href="https://devopstales.github.io/home/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
+                <link href="https://devopstales.github.io/home/aws-eks-amp-monitoring/?utm_source=atom_feed" rel="related" type="text/html" title="Using AWS Prometheus (AMP) for monitoring AWS EKS cluster." />
+                <link href="https://devopstales.github.io/cloud/aws-eks-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Deploy Ingress Controller to EKS cluster with WAF" />
+            
+                <id>https://devopstales.github.io/home/aws-eks-ecr/</id>
+            
+            
+            <published>2022-02-26T00:00:00+00:00</published>
+            <updated>2022-02-26T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can integrate your Elastic Container Registry with EKS.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">aws ecr create-repository --repository-name aws-ecr-kubenginx --region us-east-1
+</code></pre></div><p>Build end push image</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Build image with &lt;ECR-REPOSITORY-URI&gt;:&lt;TAG&gt;</span>
+docker build -t 180789647333.dkr.ecr.us-east-1.amazonaws.com/aws-ecr-kubenginx:1.0.0 .
+
+<span style="color:#75715e"># Get Login Password</span>
+<span style="color:#75715e"># aws ecr get-login-password --region &lt;your-region&gt; | docker login --username AWS --password-stdin &lt;ECR-REPOSITORY-URI&gt;</span>
+aws ecr get-login-password --region us-east-1 | <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>docker login --username AWS --password-stdin 180789647333.dkr.ecr.us-east-1.amazonaws.com/aws-ecr-kubenginx
+
+<span style="color:#75715e"># Push the Docker Image</span>
+docker push &lt;ECR-REPOSITORY-URI&gt;:&lt;TAG&gt;
+docker push 180789647333.dkr.ecr.us-east-1.amazonaws.com/aws-ecr-kubenginx:1.0.0
+</code></pre></div><p>Verify ECR Access to EKS Worker Nodes</p>
+<ul>
+<li>Go to Services -&gt; EC2 -&gt; Running Instances &gt; Select a Worker Node -&gt; Description Tab</li>
+<li>Click on value in <code>IAM Role</code> field Role name</li>
+<li>In IAM on that <code>specific role</code>, verify <code>permissions</code> tab</li>
+<li>Policy with name <code>AmazonEC2ContainerRegistryReadOnly</code>, <code>AmazonEC2ContainerRegistryPowerUser</code> should be associated</li>
+</ul>
+<p>Use ECR image with Amazon EKS</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e">#01-ECR-Nginx-Deployment.yml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+<span style="color:#f92672">name</span>: <span style="color:#ae81ff">kubeapp-ecr</span>
+<span style="color:#f92672">labels</span>:
+   <span style="color:#f92672">app</span>: <span style="color:#ae81ff">kubeapp-ecr</span>
+<span style="color:#f92672">spec</span>:
+<span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+<span style="color:#f92672">selector</span>:
+   <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">kubeapp-ecr</span>
+<span style="color:#f92672">template</span>:
+   <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">kubeapp-ecr</span>
+   <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kubeapp-ecr</span>
+         <span style="color:#f92672">image</span>: <span style="color:#ae81ff">180789647333.</span><span style="color:#ae81ff">dkr.ecr.us-east-1.amazonaws.com/aws-ecr-kubenginx:1.0.0</span>
+         <span style="color:#f92672">resources</span>:
+            <span style="color:#f92672">requests</span>:
+            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+            <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;500m&#34;</span>
+            <span style="color:#f92672">limits</span>:
+            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;256Mi&#34;</span>
+            <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;1000m&#34;</span>
+         <span style="color:#f92672">ports</span>:
+            - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[AWS - pfsense: Site-to-site VPN using static routes]]></title>
+            <link href="https://devopstales.github.io/home/aws-s2s-vpn/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/aws-s2s-vpn/?utm_source=atom_feed" rel="related" type="text/html" title="AWS - pfsense: Site-to-site VPN using static routes" />
+                <link href="https://devopstales.github.io/home/aws-eks-amp-monitoring/?utm_source=atom_feed" rel="related" type="text/html" title="Using AWS Prometheus (AMP) for monitoring AWS EKS cluster." />
+                <link href="https://devopstales.github.io/home/aws-eks-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Deploy Ingress Controller to EKS cluster with WAF" />
+                <link href="https://devopstales.github.io/home/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
+                <link href="https://devopstales.github.io/home/aws-eks-networking/?utm_source=atom_feed" rel="related" type="text/html" title="AWS EKS Network Solutions" />
+            
+                <id>https://devopstales.github.io/home/aws-s2s-vpn/</id>
+            
+            
+            <published>2022-02-22T00:00:00+00:00</published>
+            <updated>2022-02-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I willll show you how to configure a VPN between pfSense and AWS using static routes.</p>
+<p>To create a VPN on AWS side you need the following Components:</p>
+<ul>
+<li>Customer Gateway - This is represent the on-premise side of the vpn</li>
+<li>virtual private gateway - this is a router in the aws</li>
+<li>vpn Connection</li>
+<li>virtual priveta cloud</li>
+</ul>
+<p><code>vpc -&gt; virtual private gateway -&gt; vpn Connection -&gt; Customer Gateway</code></p>
+<p><img src="/img/include/vpn-how-it-works-vgw.png" alt="vpn infra"  class="zoomable" /></p>
+<p>We need to create this components and connect them to each other.</p>
+<h3 id="customer-gateway">Customer Gateway</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># set to your own public ip</span>
+export CLIENT_PUBLIC_IP<span style="color:#f92672">=</span>1.2.3.4
+
+<span style="color:#75715e"># Create the customer gateway using the following AWS command:</span>
+aws ec2 create-customer-gateway --type ipsec.1 --public-ip $CLIENT_PUBLIC_IP
+
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;CustomerGateway&#34;</span>: <span style="color:#f92672">{</span>
+        <span style="color:#e6db74">&#34;CustomerGatewayId&#34;</span>: <span style="color:#e6db74">&#34;cgw-0e11f167&#34;</span>,
+        <span style="color:#e6db74">&#34;IpAddress&#34;</span>: <span style="color:#e6db74">&#34;1.2.3.4&#34;</span>,
+        <span style="color:#e6db74">&#34;State&#34;</span>: <span style="color:#e6db74">&#34;available&#34;</span>,
+        <span style="color:#e6db74">&#34;Type&#34;</span>: <span style="color:#e6db74">&#34;ipsec.1&#34;</span>,
+        <span style="color:#e6db74">&#34;BgpAsn&#34;</span>: <span style="color:#e6db74">&#34;65000&#34;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+export CUSTOMER_GATEWAY<span style="color:#f92672">=</span>cgw-0e11f167
+</code></pre></div><h3 id="create-a-virtual-private-gateway">Create a Virtual Private Gateway</h3>
+<p>Create a target gateway and attach it to your VPC network.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Create a virtual private gateway with a specific AWS-side ASN:</span>
+aws ec2 create-vpn-gateway --type ipsec.1
+
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;VpnGateway&#34;</span>: <span style="color:#f92672">{</span>
+        <span style="color:#e6db74">&#34;AmazonSideAsn&#34;</span>: 64512,
+        <span style="color:#e6db74">&#34;State&#34;</span>: <span style="color:#e6db74">&#34;available&#34;</span>,
+        <span style="color:#e6db74">&#34;Type&#34;</span>: <span style="color:#e6db74">&#34;ipsec.1&#34;</span>,
+        <span style="color:#e6db74">&#34;VpnGatewayId&#34;</span>: <span style="color:#e6db74">&#34;vgw-9a4cacf3&#34;</span>,
+        <span style="color:#e6db74">&#34;VpcAttachments&#34;</span>: <span style="color:#f92672">[]</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+export VPN_GATEWAY_ID<span style="color:#f92672">=</span>vgw-9a4cacf3
+export VPC_ID<span style="color:#f92672">=</span>
+
+<span style="color:#75715e"># Attach the virtual private gateway to your VPC network:</span>
+aws ec2 attach-vpn-gateway --vpn-gateway-id $VPN_GATEWAY_ID --vpc-id $VPC_ID
+</code></pre></div><h3 id="create-a-vpn-connection">Create a VPN Connection</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export AWS_TIP<span style="color:#f92672">=</span>169.254.0.0/30
+<span style="color:#75715e"># random string for secret</span>
+export SHARED_SECRET<span style="color:#f92672">=</span>g23r8gr7grg23r8g2fnmf
+<span style="color:#75715e"># my network on the on-premise side</span>
+export ONPREM_NETWORK<span style="color:#f92672">=</span>192.168.1.0/24
+
+aws ec2 create-vpn-connection <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --type ipsec.1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --customer-gateway-id $CUSTOMER_GATEWAY <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --vpn-gateway-id $VPN_GATEWAY_ID <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --options TunnelOptions<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;[{TunnelInsideCidr=</span>$AWS_TIP<span style="color:#e6db74">,PreSharedKey=</span>$SHARED_SECRET<span style="color:#e6db74">}]&#34;</span>,StaticRoutesOnly<span style="color:#f92672">=</span>true,LocalIpv4NetworkCidr<span style="color:#f92672">=</span>$ONPREM_NETWORK
+
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;VpnConnection&#34;</span>: <span style="color:#f92672">{</span>
+        <span style="color:#e6db74">&#34;CustomerGatewayConfiguration&#34;</span>: <span style="color:#e6db74">&#34;...configuration information...&#34;</span>,
+        <span style="color:#e6db74">&#34;CustomerGatewayId&#34;</span>: <span style="color:#e6db74">&#34;cgw-0e11f167&#34;</span>,
+        <span style="color:#e6db74">&#34;Category&#34;</span>: <span style="color:#e6db74">&#34;VPN&#34;</span>,
+        <span style="color:#e6db74">&#34;State&#34;</span>: <span style="color:#e6db74">&#34;pending&#34;</span>,
+        <span style="color:#e6db74">&#34;VpnConnectionId&#34;</span>: <span style="color:#e6db74">&#34;vpn-123123123123abcab&#34;</span>,
+        <span style="color:#e6db74">&#34;VpnGatewayId&#34;</span>: <span style="color:#e6db74">&#34;vgw-9a4cacf3&#34;</span>,
+        <span style="color:#e6db74">&#34;Options&#34;</span>: <span style="color:#f92672">{</span>
+            <span style="color:#e6db74">&#34;EnableAcceleration&#34;</span>: false,
+            <span style="color:#e6db74">&#34;StaticRoutesOnly&#34;</span>: true,
+            <span style="color:#e6db74">&#34;LocalIpv4NetworkCidr&#34;</span>: <span style="color:#e6db74">&#34;192.168.1.0/24&#34;</span>,
+            <span style="color:#e6db74">&#34;RemoteIpv4NetworkCidr&#34;</span>: <span style="color:#e6db74">&#34;0.0.0.0/0&#34;</span>,
+            <span style="color:#e6db74">&#34;TunnelInsideIpVersion&#34;</span>: <span style="color:#e6db74">&#34;ipv4&#34;</span>,
+            <span style="color:#e6db74">&#34;TunnelOptions&#34;</span>: <span style="color:#f92672">[</span>
+                <span style="color:#f92672">{</span>
+                    <span style="color:#e6db74">&#34;OutsideIpAddress&#34;</span>: <span style="color:#e6db74">&#34;203.0.113.3&#34;</span>,
+                    <span style="color:#e6db74">&#34;TunnelInsideCidr&#34;</span>: <span style="color:#e6db74">&#34;169.254.0.0/30&#34;</span>,
+                    <span style="color:#e6db74">&#34;PreSharedKey&#34;</span>: <span style="color:#e6db74">&#34;g23r8gr7grg23r8g2fnmf&#34;</span>
+                <span style="color:#f92672">}</span>,
+                <span style="color:#f92672">{}</span>
+            <span style="color:#f92672">]</span>
+        <span style="color:#f92672">}</span>,
+        <span style="color:#e6db74">&#34;Routes&#34;</span>: <span style="color:#f92672">[]</span>,
+        <span style="color:#e6db74">&#34;Tags&#34;</span>: <span style="color:#f92672">[]</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>In the <code>TunnelOptions</code> you can configure other options of the vpn like:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">IKEVersions<span style="color:#f92672">=[{</span>Value<span style="color:#f92672">=</span>ikev2<span style="color:#f92672">})</span>
+Phase2DHGroupNumbers<span style="color:#f92672">=[{</span>Value<span style="color:#f92672">=</span>15<span style="color:#f92672">})</span>
+Phase1DHGroupNumbers<span style="color:#f92672">=[{</span>Value<span style="color:#f92672">=</span>15<span style="color:#f92672">})</span>
+Phase2IntegrityAlgorithms<span style="color:#f92672">=[{</span>Value<span style="color:#f92672">=</span>SHA2-256<span style="color:#f92672">})</span>
+Phase1IntegrityAlgorithms<span style="color:#f92672">=[{</span>Value<span style="color:#f92672">=</span>SHA2-256<span style="color:#f92672">})</span>
+Phase2EncryptionAlgorithms<span style="color:#f92672">=[{</span>Value<span style="color:#f92672">=</span>AES256-GCM-16<span style="color:#f92672">})</span>
+Phase1EncryptionAlgorithms<span style="color:#f92672">=[{</span>Value<span style="color:#f92672">=</span>AES256-GCM-16<span style="color:#f92672">})</span>
+</code></pre></div><h3 id="configure-routing">Configure Routing</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">aws ec2 create-route --route-table-id rtb-89012345678901234 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--destination-cidr-block 172.31.0.0/16 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--transit-gateway-id tgw-56789012345678901 
+</code></pre></div><h3 id="download-the-configuration-file">Download the configuration file</h3>
+<p>After you create the Site-to-Site VPN connection, you can download a sample configuration file to use for configuring the customer gateway device.</p>
+<blockquote>
+<p>The configuration file is an example only and might not match your intended Site-to-Site VPN connection settings entirely. It specifies the minimum requirements for a Site-to-Site VPN connection of AES128, SHA1, and Diffie-Hellman group 2 in most AWS Regions, and AES128, SHA2, and Diffie-Hellman group 14 in the AWS GovCloud Regions. It also specifies pre-shared keys for authentication. You must modify the example configuration file to take advantage of additional security algorithms, Diffie-Hellman groups, private certificates, and IPv6 traffic.</p>
+</blockquote>
+<ul>
+<li>Open the Amazon VPC console at <a href="https://console.aws.amazon.com/vpc/">https://console.aws.amazon.com/vpc/</a></li>
+<li>In the navigation pane, choose Site-to-Site VPN Connections.</li>
+<li>Select your VPN connection and choose Download Configuration.</li>
+</ul>
+<h3 id="creating-a-new-ipsec-vpn-on-pfsense">Creating a new IPsec VPN on pfsense</h3>
+<p>At <code>VPN &gt; IPsec &gt; Add</code>  Fill out the values from the text file that you just downloaded from AWS. It looks like this.</p>
+<p><img src="/img/include/aws-vpn01.jpg" alt="vpn infra"  class="zoomable" /></p>
+<p><img src="/img/include/aws-vpn02.jpg" alt="vpn infra"  class="zoomable" /></p>
+<p><img src="/img/include/aws-vpn03.jpg" alt="vpn infra"  class="zoomable" /></p>
+<p><img src="/img/include/aws-vpn04.jpg" alt="vpn infra"  class="zoomable" /></p>
+<p>As with <code>Phase 1</code>, do the same for <code>Phase 2</code>. Read the values from the text file.</p>
+<p><img src="/img/include/aws-vpn05.jpg" alt="vpn infra"  class="zoomable" /></p>
+<p><img src="/img/include/aws-vpn06.jpg" alt="vpn infra"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Using AWS Prometheus (AMP) for monitoring AWS EKS cluster.]]></title>
+            <link href="https://devopstales.github.io/home/aws-eks-amp-monitoring/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/aws-eks-amp-monitoring/?utm_source=atom_feed" rel="related" type="text/html" title="Using AWS Prometheus (AMP) for monitoring AWS EKS cluster." />
+                <link href="https://devopstales.github.io/home/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
+                <link href="https://devopstales.github.io/home/aws-eks-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Deploy Ingress Controller to EKS cluster with WAF" />
+                <link href="https://devopstales.github.io/home/aws-eks-networking/?utm_source=atom_feed" rel="related" type="text/html" title="AWS EKS Network Solutions" />
+                <link href="https://devopstales.github.io/cloud/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
+            
+                <id>https://devopstales.github.io/home/aws-eks-amp-monitoring/</id>
+            
+            
+            <published>2022-02-18T00:00:00+00:00</published>
+            <updated>2022-02-18T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can install the AWS managed Prometheus Service for EKS monitoring.</p>
+<h3 id="create-a-new-amp-workspace">Create a new AMP workspace</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">aws amp create-workspace --alias eks-workshop --region $AWS_REGION
+</code></pre></div><h3 id="setup-iam-for-prometheus-server-to-send-metrics-to-amp">Setup IAM for Prometheus Server to send metrics to AMP</h3>
+<p>After setting the <code>YOUR_EKS_CLUSTER_NAME</code> variable the below shell script can be used to:</p>
+<ul>
+<li>Creates an IAM role with an IAM policy</li>
+<li>Creates a Kubernetes service account</li>
+<li>Creates a trust relationship between the IAM role and the OIDC provider</li>
+</ul>
+<p>for the AMP and EKS cluster.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e">##!/bin/bash</span>
+CLUSTER_NAME<span style="color:#f92672">=</span>YOUR_EKS_CLUSTER_NAME
+AWS_ACCOUNT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws sts get-caller-identity --query <span style="color:#e6db74">&#34;Account&#34;</span> --output text<span style="color:#66d9ef">)</span>
+OIDC_PROVIDER<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws eks describe-cluster --name $CLUSTER_NAME --query <span style="color:#e6db74">&#34;cluster.identity.oidc.issuer&#34;</span> --output text | sed -e <span style="color:#e6db74">&#34;s/^https:\/\///&#34;</span><span style="color:#66d9ef">)</span>
+
+PROM_SERVICE_ACCOUNT_NAMESPACE<span style="color:#f92672">=</span>prometheus
+GRAFANA_SERVICE_ACCOUNT_NAMESPACE<span style="color:#f92672">=</span>grafana
+SERVICE_ACCOUNT_NAME<span style="color:#f92672">=</span>iamproxy-service-account
+SERVICE_ACCOUNT_IAM_ROLE<span style="color:#f92672">=</span>EKS-AMP-ServiceAccount-Role
+SERVICE_ACCOUNT_IAM_ROLE_DESCRIPTION<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;IAM role to be used by a K8s service account with write access to AMP&#34;</span>
+SERVICE_ACCOUNT_IAM_POLICY<span style="color:#f92672">=</span>AWSManagedPrometheusWriteAccessPolicy
+SERVICE_ACCOUNT_IAM_POLICY_ARN<span style="color:#f92672">=</span>arn:aws:iam::$AWS_ACCOUNT_ID:policy/$SERVICE_ACCOUNT_IAM_POLICY
+<span style="color:#75715e">#</span>
+<span style="color:#75715e"># Setup a trust policy designed for a specific combination of K8s service account and namespace to sign in from a Kubernetes cluster which hosts the OIDC Idp.</span>
+<span style="color:#75715e"># If the IAM role already exists, then add this new trust policy to the existing trust policy</span>
+<span style="color:#75715e">#</span>
+echo <span style="color:#e6db74">&#34;Creating a new trust policy&#34;</span>
+read -r -d <span style="color:#e6db74">&#39;&#39;</span> NEW_TRUST_RELATIONSHIP <span style="color:#e6db74">&lt;&lt;EOF
+</span><span style="color:#e6db74"> [
+</span><span style="color:#e6db74">    {
+</span><span style="color:#e6db74">      &#34;Effect&#34;: &#34;Allow&#34;,
+</span><span style="color:#e6db74">      &#34;Principal&#34;: {
+</span><span style="color:#e6db74">        &#34;Federated&#34;: &#34;arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}&#34;
+</span><span style="color:#e6db74">      },
+</span><span style="color:#e6db74">      &#34;Action&#34;: &#34;sts:AssumeRoleWithWebIdentity&#34;,
+</span><span style="color:#e6db74">      &#34;Condition&#34;: {
+</span><span style="color:#e6db74">        &#34;StringEquals&#34;: {
+</span><span style="color:#e6db74">          &#34;${OIDC_PROVIDER}:sub&#34;: &#34;system:serviceaccount:${GRAFANA_SERVICE_ACCOUNT_NAMESPACE}:${SERVICE_ACCOUNT_NAME}&#34;
+</span><span style="color:#e6db74">        }
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    },
+</span><span style="color:#e6db74">    {
+</span><span style="color:#e6db74">      &#34;Effect&#34;: &#34;Allow&#34;,
+</span><span style="color:#e6db74">      &#34;Principal&#34;: {
+</span><span style="color:#e6db74">        &#34;Federated&#34;: &#34;arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}&#34;
+</span><span style="color:#e6db74">      },
+</span><span style="color:#e6db74">      &#34;Action&#34;: &#34;sts:AssumeRoleWithWebIdentity&#34;,
+</span><span style="color:#e6db74">      &#34;Condition&#34;: {
+</span><span style="color:#e6db74">        &#34;StringEquals&#34;: {
+</span><span style="color:#e6db74">          &#34;${OIDC_PROVIDER}:sub&#34;: &#34;system:serviceaccount:${PROM_SERVICE_ACCOUNT_NAMESPACE}:${SERVICE_ACCOUNT_NAME}&#34;
+</span><span style="color:#e6db74">        }
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    }
+</span><span style="color:#e6db74">  ]
+</span><span style="color:#e6db74">EOF</span>
+<span style="color:#75715e">#</span>
+<span style="color:#75715e"># Get the old trust policy, if one exists, and append it to the new trust policy</span>
+<span style="color:#75715e">#</span>
+OLD_TRUST_RELATIONSHIP<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws iam get-role --role-name $SERVICE_ACCOUNT_IAM_ROLE --query <span style="color:#e6db74">&#39;Role.AssumeRolePolicyDocument.Statement[]&#39;</span> --output json<span style="color:#66d9ef">)</span>
+COMBINED_TRUST_RELATIONSHIP<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>echo $OLD_TRUST_RELATIONSHIP $NEW_TRUST_RELATIONSHIP | jq -s add<span style="color:#66d9ef">)</span>
+echo <span style="color:#e6db74">&#34;Appending to the existing trust policy&#34;</span>
+read -r -d <span style="color:#e6db74">&#39;&#39;</span> TRUST_POLICY <span style="color:#e6db74">&lt;&lt;EOF
+</span><span style="color:#e6db74">{
+</span><span style="color:#e6db74">  &#34;Version&#34;: &#34;2012-10-17&#34;,
+</span><span style="color:#e6db74">  &#34;Statement&#34;: ${COMBINED_TRUST_RELATIONSHIP}
+</span><span style="color:#e6db74">}
+</span><span style="color:#e6db74">EOF</span>
+echo <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>TRUST_POLICY<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> &gt; TrustPolicy.json
+<span style="color:#75715e">#</span>
+<span style="color:#75715e"># Setup the permission policy grants write permissions for all AWS StealFire workspaces</span>
+<span style="color:#75715e">#</span>
+read -r -d <span style="color:#e6db74">&#39;&#39;</span> PERMISSION_POLICY <span style="color:#e6db74">&lt;&lt;EOF
+</span><span style="color:#e6db74">{
+</span><span style="color:#e6db74">   &#34;Version&#34;:&#34;2012-10-17&#34;,
+</span><span style="color:#e6db74">   &#34;Statement&#34;:[
+</span><span style="color:#e6db74">      {
+</span><span style="color:#e6db74">         &#34;Effect&#34;:&#34;Allow&#34;,
+</span><span style="color:#e6db74">         &#34;Action&#34;:[
+</span><span style="color:#e6db74">            &#34;aps:RemoteWrite&#34;,
+</span><span style="color:#e6db74">            &#34;aps:QueryMetrics&#34;,
+</span><span style="color:#e6db74">            &#34;aps:GetSeries&#34;,
+</span><span style="color:#e6db74">            &#34;aps:GetLabels&#34;,
+</span><span style="color:#e6db74">            &#34;aps:GetMetricMetadata&#34;
+</span><span style="color:#e6db74">         ],
+</span><span style="color:#e6db74">         &#34;Resource&#34;:&#34;*&#34;
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">   ]
+</span><span style="color:#e6db74">}
+</span><span style="color:#e6db74">EOF</span>
+echo <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>PERMISSION_POLICY<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> &gt; PermissionPolicy.json
+
+<span style="color:#75715e">#</span>
+<span style="color:#75715e"># Create an IAM permission policy to be associated with the role, if the policy does not already exist</span>
+<span style="color:#75715e">#</span>
+SERVICE_ACCOUNT_IAM_POLICY_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws iam get-policy --policy-arn $SERVICE_ACCOUNT_IAM_POLICY_ARN --query <span style="color:#e6db74">&#39;Policy.PolicyId&#39;</span> --output text<span style="color:#66d9ef">)</span>
+<span style="color:#66d9ef">if</span> <span style="color:#f92672">[</span> <span style="color:#e6db74">&#34;</span>$SERVICE_ACCOUNT_IAM_POLICY_ID<span style="color:#e6db74">&#34;</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#f92672">]</span>; 
+<span style="color:#66d9ef">then</span>
+  echo <span style="color:#e6db74">&#34;Creating a new permission policy </span>$SERVICE_ACCOUNT_IAM_POLICY<span style="color:#e6db74">&#34;</span>
+  aws iam create-policy --policy-name $SERVICE_ACCOUNT_IAM_POLICY --policy-document file://PermissionPolicy.json 
+<span style="color:#66d9ef">else</span>
+  echo <span style="color:#e6db74">&#34;Permission policy </span>$SERVICE_ACCOUNT_IAM_POLICY<span style="color:#e6db74"> already exists&#34;</span>
+<span style="color:#66d9ef">fi</span>
+
+<span style="color:#75715e">#</span>
+<span style="color:#75715e"># If the IAM role already exists, then just update the trust policy.</span>
+<span style="color:#75715e"># Otherwise create one using the trust policy and permission policy</span>
+<span style="color:#75715e">#</span>
+SERVICE_ACCOUNT_IAM_ROLE_ARN<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws iam get-role --role-name $SERVICE_ACCOUNT_IAM_ROLE --query <span style="color:#e6db74">&#39;Role.Arn&#39;</span> --output text<span style="color:#66d9ef">)</span>
+<span style="color:#66d9ef">if</span> <span style="color:#f92672">[</span> <span style="color:#e6db74">&#34;</span>$SERVICE_ACCOUNT_IAM_ROLE_ARN<span style="color:#e6db74">&#34;</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#f92672">]</span>; 
+<span style="color:#66d9ef">then</span>
+  echo <span style="color:#e6db74">&#34;</span>$SERVICE_ACCOUNT_IAM_ROLE<span style="color:#e6db74"> role does not exist. Creating a new role with a trust and permission policy&#34;</span>
+  <span style="color:#75715e">#</span>
+  <span style="color:#75715e"># Create an IAM role for Kubernetes service account </span>
+  <span style="color:#75715e">#</span>
+  SERVICE_ACCOUNT_IAM_ROLE_ARN<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws iam create-role <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --role-name $SERVICE_ACCOUNT_IAM_ROLE <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --assume-role-policy-document file://TrustPolicy.json <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --description <span style="color:#e6db74">&#34;</span>$SERVICE_ACCOUNT_IAM_ROLE_DESCRIPTION<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --query <span style="color:#e6db74">&#34;Role.Arn&#34;</span> --output text<span style="color:#66d9ef">)</span>
+  <span style="color:#75715e">#</span>
+  <span style="color:#75715e"># Attach the trust and permission policies to the role</span>
+  <span style="color:#75715e">#</span>
+  aws iam attach-role-policy --role-name $SERVICE_ACCOUNT_IAM_ROLE --policy-arn $SERVICE_ACCOUNT_IAM_POLICY_ARN  
+<span style="color:#66d9ef">else</span>
+  echo <span style="color:#e6db74">&#34;</span>$SERVICE_ACCOUNT_IAM_ROLE_ARN<span style="color:#e6db74"> role already exists. Updating the trust policy&#34;</span>
+  <span style="color:#75715e">#</span>
+  <span style="color:#75715e"># Update the IAM role for Kubernetes service account with a with the new trust policy</span>
+  <span style="color:#75715e">#</span>
+  aws iam update-assume-role-policy --role-name $SERVICE_ACCOUNT_IAM_ROLE --policy-document file://TrustPolicy.json
+<span style="color:#66d9ef">fi</span>
+echo $SERVICE_ACCOUNT_IAM_ROLE_ARN
+
+<span style="color:#75715e"># EKS cluster hosts an OIDC provider with a public discovery endpoint.</span>
+<span style="color:#75715e"># Associate this Idp with AWS IAM so that the latter can validate and accept the OIDC tokens issued by Kubernetes to service accounts.</span>
+<span style="color:#75715e"># Doing this with eksctl is the easier and best approach.</span>
+<span style="color:#75715e">#</span>
+eksctl utils associate-iam-oidc-provider --cluster $CLUSTER_NAME --approve
+</code></pre></div><h3 id="setting-up-prometheus-server-in-the-kubernetes-cluster">Setting up Prometheus server in the Kubernetes cluster</h3>
+<p>We need to provision a Prometheus server inside our EKS cluster that would be tasked to collect all the cluster metrics and ship them to AMP (or AWS Managed Service for Prometheus)</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+kubectl create ns prometheus
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano amp_ingest_override_values.yaml</span>
+---
+<span style="color:#f92672">serviceAccounts</span>:
+  <span style="color:#75715e">## Disable alert manager roles</span>
+  <span style="color:#f92672">server</span>:
+        <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;iamproxy-service-account&#34;</span>
+  <span style="color:#f92672">alertmanager</span>:
+    <span style="color:#f92672">create</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#75715e">## Disable pushgateway</span>
+  <span style="color:#f92672">pushgateway</span>:
+    <span style="color:#f92672">create</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">server</span>:
+  <span style="color:#f92672">remoteWrite</span>:
+    -
+      <span style="color:#f92672">queue_config</span>:
+        <span style="color:#f92672">max_samples_per_send</span>: <span style="color:#ae81ff">1000</span>
+        <span style="color:#f92672">max_shards</span>: <span style="color:#ae81ff">200</span>
+        <span style="color:#f92672">capacity</span>: <span style="color:#ae81ff">2500</span>
+  <span style="color:#75715e">## Use a statefulset instead of a deployment for resiliency</span>
+  <span style="color:#f92672">statefulSet</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#75715e">## Store blocks locally for short time period only</span>
+  <span style="color:#f92672">retention</span>: <span style="color:#ae81ff">1h</span>
+  
+<span style="color:#75715e">## Disable alert manager</span>
+<span style="color:#f92672">alertmanager</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#75715e">## Disable pushgateway</span>
+<span style="color:#f92672">pushgateway</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export SERVICE_ACCOUNT_IAM_ROLE<span style="color:#f92672">=</span>EKS-AMP-ServiceAccount-Role
+export SERVICE_ACCOUNT_IAM_ROLE_ARN<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws iam get-role --role-name $SERVICE_ACCOUNT_IAM_ROLE --query <span style="color:#e6db74">&#39;Role.Arn&#39;</span> --output text<span style="color:#66d9ef">)</span>
+export WORKSPACE_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>aws amp list-workspaces --alias eks-workshop | jq .workspaces<span style="color:#f92672">[</span>0<span style="color:#f92672">]</span>.workspaceId -r<span style="color:#66d9ef">)</span>
+
+helm install prometheus-for-amp prometheus-community/prometheus -n prometheus -f ./amp_ingest_override_values.yaml <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set serviceAccounts.server.annotations.<span style="color:#e6db74">&#34;eks\.amazonaws\.com/role-arn&#34;</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>SERVICE_ACCOUNT_IAM_ROLE_ARN<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set server.remoteWrite<span style="color:#f92672">[</span>0<span style="color:#f92672">]</span>.url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://aps-workspaces.</span><span style="color:#e6db74">${</span>AWS_REGION<span style="color:#e6db74">}</span><span style="color:#e6db74">.amazonaws.com/workspaces/</span><span style="color:#e6db74">${</span>WORKSPACE_ID<span style="color:#e6db74">}</span><span style="color:#e6db74">/api/v1/remote_write&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set server.remoteWrite<span style="color:#f92672">[</span>0<span style="color:#f92672">]</span>.sigv4.region<span style="color:#f92672">=</span><span style="color:#e6db74">${</span>AWS_REGION<span style="color:#e6db74">}</span>
+</code></pre></div><h3 id="visualizing-metrics-using-grafana">Visualizing metrics using Grafana</h3>
+<p>You need a dashboard to visualize the metrics in Promethsus. You can install a Grafana to the EKS Cluster by helm or use AWS Grafana.</p>
+<h4 id="install-grafana-by-helm">Install Grafana by helm</h4>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add grafana https://grafana.github.io/helm-charts
+kubectl create ns grafana
+helm install grafana-for-amp grafana/grafana -n grafana
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano amp_query_override_values.yaml</span>
+---
+
+<span style="color:#f92672">serviceAccount</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;iamproxy-service-account&#34;</span>
+    <span style="color:#f92672">annotations</span>:
+
+        <span style="color:#f92672">eks.amazonaws.com/role-arn</span>: <span style="color:#e6db74">&#34;${IAM_PROXY_PROMETHEUS_ROLE_ARN}&#34;</span>
+<span style="color:#f92672">grafana.ini</span>:
+  <span style="color:#f92672">auth</span>:
+    <span style="color:#f92672">sigv4_auth_enabled</span>: <span style="color:#66d9ef">true</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm upgrade --install grafana-for-amp grafana/grafana -n grafana -f ./amp_query_override_values.yaml
+
+<span style="color:#75715e"># get passwor</span>
+kubectl get secrets grafana-for-amp -n grafana -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.data.admin-password}&#39;</span>|base64 --decode
+
+<span style="color:#75715e"># port-forward to get th ui:</span>
+kubectl port-forward -n grafana pods/GRAFANA_POD_NAME 5001:3000 
+</code></pre></div><h3 id="configure-grafana">Configure Grafana</h3>
+<p>Before we can visualize the metrics in Grafana, it has to be configured with one or more data sources. Here, we will specify the workspace within Amazon Managed Service for Prometheus as a data source, as shown below. In the URL field, specify the Endpoint – query URL displayed in the AMP workspace details page without the /api/v1/query string at the end of the URL.</p>
+<p><img src="/img/include/aws-grafana01.png" alt="aws-grafana"  class="zoomable" /></p>
+<p>You’re now ready to query metrics data for the Prometheus Counter <code>http_requests_total</code> stored in the managed service workspace and visualize the rate of HTTP requests over a trailing 5-minute period using a Prometheus query as follows:
+<code>sum(rate(http_requests_total{exported_job=”recommender”}[5m])) by (path)</code></p>
+<p>The figure below illustrates how to visualize this metric in Grafana across the different path labels captured in the Prometheus Counter.</p>
+<p><img src="/img/include/aws-grafana02.png" alt="aws-grafana"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
             <title type="html"><![CDATA[Deploy Ingress Controller to EKS cluster with WAF]]></title>
             <link href="https://devopstales.github.io/home/aws-eks-ingress/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/home/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
+                <link href="https://devopstales.github.io/cloud/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
                 <link href="https://devopstales.github.io/home/aws-eks-networking/?utm_source=atom_feed" rel="related" type="text/html" title="AWS EKS Network Solutions" />
                 <link href="https://devopstales.github.io/cloud/aws-eks-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Deploy Ingress Controller to EKS cluster with WAF" />
-                <link href="https://devopstales.github.io/cloud/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
                 <link href="https://devopstales.github.io/cloud/aws-eks-networking/?utm_source=atom_feed" rel="related" type="text/html" title="AWS EKS Network Solutions" />
             
                 <id>https://devopstales.github.io/home/aws-eks-ingress/</id>
@@ -36,7 +508,7 @@
             <updated>2022-02-12T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>In this pos I will show you how you can install the WS Load Balancer Controller on EKS Cluster with WAF protection.</p>
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can install the AWS Load Balancer Controller on EKS Cluster with WAF protection.</p>
 <p>AWS Load Balancer Controller is a controller to help manage Elastic Load Balancers for a Kubernetes cluster. It satisfies Kubernetes <code>Ingress</code> resources by provisioning Application Load Balancers and <code>Service</code> resources by provisioning Network Load Balancers.</p>
 <p>AWS Elastic Load Balancing Application Load Balancer (ALB) is a popular AWS service that load balances incoming traffic at the application layer (layer 7) across multiple targets, such as Amazon EC2 instances, in multiple Availability Zones. It supports multiple features including: TLS (Transport Layer Security) termination, AWS WAF (Web Application Firewall) integration and integrated access logs, and health checks.</p>
 <h3 id="deploy-the-aws-load-balancer-controller">Deploy the AWS Load Balancer Controller</h3>
@@ -212,8 +684,8 @@ WAF_WAF_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</sp
             <title type="html"><![CDATA[Create EKS Cluster with eksctl]]></title>
             <link href="https://devopstales.github.io/home/aws-eks-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/aws-eks-networking/?utm_source=atom_feed" rel="related" type="text/html" title="AWS EKS Network Solutions" />
                 <link href="https://devopstales.github.io/cloud/aws-eks-install/?utm_source=atom_feed" rel="related" type="text/html" title="Create EKS Cluster with eksctl" />
+                <link href="https://devopstales.github.io/home/aws-eks-networking/?utm_source=atom_feed" rel="related" type="text/html" title="AWS EKS Network Solutions" />
                 <link href="https://devopstales.github.io/cloud/aws-eks-networking/?utm_source=atom_feed" rel="related" type="text/html" title="AWS EKS Network Solutions" />
                 <link href="https://devopstales.github.io/home/kubernetes-networking-2/?utm_source=atom_feed" rel="related" type="text/html" title="Understanding kubernetes networking: owerlay networks" />
                 <link href="https://devopstales.github.io/home/kubernetes-networking-1/?utm_source=atom_feed" rel="related" type="text/html" title="Understanding kubernetes networking: pods and services" />
