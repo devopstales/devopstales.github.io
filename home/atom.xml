@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-03-13T09:52:24+00:00</updated>
+    <updated>2022-03-16T10:54:58+00:00</updated>
     
     
     <author>
@@ -17,6 +17,247 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Flagger NGINX Canary Deployments]]></title>
+            <link href="https://devopstales.github.io/home/flagger-nginx-canary-deployments/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/gitops-flux2-sops/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 and Mozilla SOPS to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/gitops-flux2/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 Install and Usage" />
+                <link href="https://devopstales.github.io/home/gitops-flux2-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="Flux2 and kubeseal to encrypt secrets" />
+                <link href="https://devopstales.github.io/home/argocd-image-updater/?utm_source=atom_feed" rel="related" type="text/html" title="Argo CD Image Updater for automate image update" />
+                <link href="https://devopstales.github.io/home/argocd-kubeseal/?utm_source=atom_feed" rel="related" type="text/html" title="ArgoCD and kubeseal to encrypt secrets" />
+            
+                <id>https://devopstales.github.io/home/flagger-nginx-canary-deployments/</id>
+            
+            
+            <published>2022-03-15T00:00:00+00:00</published>
+            <updated>2022-03-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this blog post, I will show you how you can install Flagger and use it to set up progressive delivery for the <code>podinfo</code> app to your Kubernetes cluster.</p>
+<H3>Parst of the K8S Gitops series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/k8s-gitops/">GitOps solutions for Kubernetes</a></li>
+     <li>Part2: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+     <li>Part3: <a href="../../kubernetes/argocd-image-updater/">Argo CD Image Updater for automate image update</a></li>
+<!-- ArgoCD notify
+https://blog.argoproj.io/notifications-for-argo-bb7338231604
+-->
+<!----------------------------------------------->
+     <li>Part4: <a href="../../kubernetes/gitops-flux2/">Flux2 Install and Usage</a></li>
+     <li>Part5: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+     <li>Part6: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a></li>
+<!-- Flux CD auto image update
+https://particule.io/en/blog/flux-auto-image-update/
+-->
+<!----------------------------------------------->
+<!-- Fleet -->
+<!----------------------------------------------->
+<!-- Canary Deployment:
+Canary Basics - https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments
+Canary with helm:
+  https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
+  https://github.com/stoehdoi/canary-demo/tree/master/deploy
+ArgoCD + Argo Rollouts for canary deploy:
+-->
+     <li>Part7: <a href="../../kubernetes/flagger-nginx-canary-deployments/">Flagger NGINX Canary Deployments</a></li>
+</ul>
+
+
+
+<h3 id="what-is-flagger">What is Flagger</h3>
+<p>Flagger is a progressive delivery operator for Kubernetes that resolves the outlined problem by gradually shifting traffic to the new release while monitoring configured metrics. It can perform automated analysis and testing on the new release, deciding whether to propagate it to the whole cluster or stop if issues are found. Flagger slowly increases the load on the new release while keeping the old one available, ensuring minimal downtime. It can send notifications to Slack, Microsoft Teams, and other platforms to notify you and your team of transpired events.</p>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>nginx ingress controller</li>
+<li>flagger</li>
+<li>flagger-loadtester</li>
+<li>prometheus</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add flagger https://flagger.app
+
+helm upgrade -i flagger flagger/flagger <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--namespace ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set prometheus.install<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set meshProvider<span style="color:#f92672">=</span>nginx
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+kubectl create ns ingress-nginx
+helm upgrade -i ingress-nginx ingress-nginx/ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--namespace ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.metrics.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.podAnnotations.<span style="color:#e6db74">&#34;prometheus\.io/scrape&#34;</span><span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.podAnnotations.<span style="color:#e6db74">&#34;prometheus\.io/port&#34;</span><span style="color:#f92672">=</span><span style="color:#ae81ff">10254</span>
+</code></pre></div><h3 id="deploying-an-app">Deploying an App</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns test
+
+kubectl apply -k https://github.com/fluxcd/flagger//kustomize/podinfo?ref<span style="color:#f92672">=</span>main
+</code></pre></div><pre tabindex="0"><code>kubectl get pods -n test
+#Output
+NAME                       READY   STATUS    RESTARTS   AGE
+podinfo-78fd6c49bf-jsjm5   1/1     Running   0          18s
+podinfo-78fd6c49bf-k2nh4   0/1     Running   0          3s
+</code></pre><p>Now that the pods are running, you’ll create an Ingress to expose the app at your domain. Open a file called <code>podinfo-ingress.yaml</code> for editing:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano podinfo-ingress.yaml
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: podinfo
+  namespace: test
+  labels:
+    app: podinfo
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: <span style="color:#e6db74">&#34;app.k8s.mydomain.intra&#34;</span>
+      http:
+        paths:
+          - pathType: Prefix
+            path: <span style="color:#e6db74">&#34;/&#34;</span>
+            backend:
+              service:
+                name: podinfo
+                port:
+                  number: <span style="color:#ae81ff">80</span>
+</code></pre></div><p>Before you create the canary, you’ll need to deploy Flagger’s load tester, which allows canary resources to test releases by sending HTTP requests.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f podinfo-ingress.yaml
+
+helm install flagger-loadtester flagger/loadtester -n test
+</code></pre></div><p>Note that the <code>podinfo</code> service does not yet exist in your cluster. It will be created later by Flagger automatically as part of the canary.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano podinfo-canary.yaml
+---
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: podinfo
+  namespace: test
+spec:
+  provider: nginx
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: podinfo
+  ingressRef:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    name: podinfo
+  progressDeadlineSeconds: <span style="color:#ae81ff">60</span>
+  service:
+    port: <span style="color:#ae81ff">80</span>
+    targetPort: <span style="color:#ae81ff">9898</span>
+  analysis:
+    interval: 10s
+    threshold: <span style="color:#ae81ff">10</span>
+    maxWeight: <span style="color:#ae81ff">50</span>
+    stepWeight: <span style="color:#ae81ff">5</span>
+    metrics:
+    - name: request-success-rate
+      thresholdRange:
+        min: <span style="color:#ae81ff">99</span>
+      interval: 1m
+    webhooks:
+      - name: acceptance-test
+        type: pre-rollout
+        url: http://flagger-loadtester.test/
+        timeout: 30s
+        metadata:
+          type: bash
+          cmd: <span style="color:#e6db74">&#34;curl -sd &#39;test&#39; http://podinfo-canary/token | grep token&#34;</span>
+      - name: load-test
+        url: http://flagger-loadtester.test/
+        timeout: 5s
+        metadata:
+          cmd: <span style="color:#e6db74">&#34;hey -z 1m -q 10 -c 2 http://app.k8s.mydomain.intra/&#34;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f podinfo-canary.yaml
+</code></pre></div><p>You can now navigate to <code>app.k8s.mydomain.intra</code>. You’ll see the <code>podinfo</code> app:</p>
+<p><img src="/img/include/flagger-nginx01.png" alt="appinfo"  class="zoomable" /></p>
+<p>You can press the <code>Ping</code> button to refresh version numbers of other pods. Run the following command to set a different version of podinfo:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl set image deployment/podinfo podinfod<span style="color:#f92672">=</span>stefanprodan/podinfo:6.0.3 -n test
+</code></pre></div><p>Flagger will detect that the deployment revision number changed, which you can check by listing the events associated with the <code>podinfo</code> canary:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl describe canary/podinfo -n test
+<span style="color:#75715e">#Output</span>
+Events:
+  Type     Reason  Age                From     Message
+  ----     ------  ----               ----     -------
+  Normal   Synced  117s               flagger  New revision detected! Scaling up podinfo.test
+  Warning  Synced  107s               flagger  canary deployment podinfo.test not ready: waiting <span style="color:#66d9ef">for</span> rollout to finish: <span style="color:#ae81ff">0</span> of <span style="color:#ae81ff">2</span> <span style="color:#f92672">(</span>readyThreshold 100%<span style="color:#f92672">)</span> updated replicas are available
+  Warning  Synced  97s                flagger  canary deployment podinfo.test not ready: waiting <span style="color:#66d9ef">for</span> rollout to finish: <span style="color:#ae81ff">1</span> of <span style="color:#ae81ff">2</span> <span style="color:#f92672">(</span>readyThreshold 100%<span style="color:#f92672">)</span> updated replicas are available
+  Normal   Synced  87s                flagger  Starting canary analysis <span style="color:#66d9ef">for</span> podinfo.test
+  Normal   Synced  87s                flagger  Pre-rollout check acceptance-test passed
+  Normal   Synced  87s                flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">5</span>
+  Warning  Synced  67s <span style="color:#f92672">(</span>x2 over 77s<span style="color:#f92672">)</span>  flagger  Halt advancement no values found <span style="color:#66d9ef">for</span> nginx metric request-success-rate probably podinfo.test is not receiving traffic: running query failed: no values found
+  Normal   Synced  57s                flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">10</span>
+  Normal   Synced  47s                flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">15</span>
+  Normal   Synced  37s                flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">20</span>
+  Normal   Synced  27s                flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">25</span>
+</code></pre></div><p>Return to your browser and watch the version numbers flicker as the app continually refreshes itself.</p>
+<p><img src="/img/include/flagger-nginx02.png" alt="appinfo"  class="zoomable" /></p>
+<p>Flagger denotes the traffic shifts with events starting with Advance podinfo.test canary weight, followed by the percentage of traffic being diverted:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl describe canary/podinfo -n test
+<span style="color:#75715e">#Output</span>
+Output
+...
+  Normal   Synced  116s                  flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">10</span>
+  Normal   Synced  106s                  flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">15</span>
+...
+</code></pre></div><p>After some time, the canary deployment should succeed and the version numbers will stabilize:</p>
+<p><img src="/img/include/flagger-nginx03.png" alt="appinfo"  class="zoomable" /></p>
+<p>The final event log of the canary will look similar to this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl describe canary/podinfo -n test
+<span style="color:#75715e">#Output</span>
+Events:
+  Type     Reason  Age                   From     Message
+  ----     ------  ----                  ----     -------
+  Normal   Synced  2m56s                 flagger  New revision detected! Scaling up podinfo.test
+  Warning  Synced  2m46s                 flagger  canary deployment podinfo.test not ready: waiting <span style="color:#66d9ef">for</span> rollout to finish: <span style="color:#ae81ff">0</span> of <span style="color:#ae81ff">2</span> <span style="color:#f92672">(</span>readyThreshold 100%<span style="color:#f92672">)</span> updated replicas are available
+  Warning  Synced  2m36s                 flagger  canary deployment podinfo.test not ready: waiting <span style="color:#66d9ef">for</span> rollout to finish: <span style="color:#ae81ff">1</span> of <span style="color:#ae81ff">2</span> <span style="color:#f92672">(</span>readyThreshold 100%<span style="color:#f92672">)</span> updated replicas are available
+  Normal   Synced  2m26s                 flagger  Starting canary analysis <span style="color:#66d9ef">for</span> podinfo.test
+  Normal   Synced  2m26s                 flagger  Pre-rollout check acceptance-test passed
+  Normal   Synced  2m26s                 flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">5</span>
+  Warning  Synced  2m6s <span style="color:#f92672">(</span>x2 over 2m16s<span style="color:#f92672">)</span>  flagger  Halt advancement no values found <span style="color:#66d9ef">for</span> nginx metric request-success-rate probably podinfo.test is not receiving traffic: running query failed: no values found
+  Normal   Synced  116s                  flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">10</span>
+  Normal   Synced  106s                  flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">15</span>
+  Normal   Synced  96s                   flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">20</span>
+  Normal   Synced  86s                   flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">25</span>
+  Normal   Synced  76s                   flagger  Advance podinfo.test canary weight <span style="color:#ae81ff">30</span>
+  Warning  Synced  16s                   flagger  podinfo-primary.test not ready: waiting <span style="color:#66d9ef">for</span> rollout to finish: <span style="color:#ae81ff">1</span> old replicas are pending termination
+  Normal   Synced  6s <span style="color:#f92672">(</span>x6 over 66s<span style="color:#f92672">)</span>      flagger  <span style="color:#f92672">(</span>combined from similar events<span style="color:#f92672">)</span>: Routing all traffic to primary
+</code></pre></div><h3 id="reporting-to-slack">Reporting to Slack</h3>
+<p>You can configure Flagger to send its logs to your Slack workspace. To use Slack integration, you’ll need to have an <a href="https://api.slack.com/messaging/webhooks">incoming webhook</a> on Slack for your workspace.</p>
+<p>To do so, first log in to Slack and navigate to the <a href="https://api.slack.com/apps?new_app=1">app creation</a> page. Pick a name that you’ll recognize, select the desired workspace, and click <code>Create App</code>.</p>
+<p>You’ll be redirected to the settings page for the new app. Click on <code>Incoming Webhooks</code> on the left navigation bar.</p>
+<p><img src="/img/include/flagger-nginx04.png" alt="slack webhook"  class="zoomable" /></p>
+<p>Enable webhooks by flipping the switch button next to the title <code>Activate Incoming Webhooks</code>.</p>
+<p><img src="/img/include/flagger-nginx05.png" alt="slack webhook"  class="zoomable" /></p>
+<p>To configure Flagger to send logs to Slack, you’ll need to update its Helm release by running:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm upgrade flagger flagger/flagger <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--reuse-values <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set slack.url<span style="color:#f92672">=</span>&lt;your_hook_URL&gt; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set slack.channel<span style="color:#f92672">=</span>&lt;your_channel_name&gt; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set slack.user<span style="color:#f92672">=</span>&lt;username&gt;
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl set image deployment/podinfo podinfod<span style="color:#f92672">=</span>stefanprodan/podinfo:3.1.1 -n test
+</code></pre></div><p>You’ll soon see messages appearing in Slack:</p>
+<p><img src="/img/include/flagger-nginx06.png" alt="slack messages"  class="zoomable" /></p>
+<p>When this release deploys, you’ll see a success message:</p>
+<p><img src="/img/include/flagger-nginx07.png" alt="slack messages"  class="zoomable" /></p>
+<p>For the new release, deploy the <code>6.0.3</code> version again by running:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl set image deployment/podinfo podinfod<span style="color:#f92672">=</span>stefanprodan/podinfo:6.0.3 -n test
+</code></pre></div><p>Run the following command to create a large number of HTTP 500 statuses:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">watch curl http://app.your_domain/status/500
+</code></pre></div><p>After some time, you’ll see that Flagger decided not to apply the new release.</p>
+<p><img src="/img/include/flagger-nginx08.png" alt="slack messages"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -13587,17 +13828,16 @@ https://particule.io/en/blog/flux-auto-image-update/
 -->
 <!----------------------------------------------->
 <!-- Fleet -->
-</ul>
-<!-- <H4>Canary Deployment</H4>
+<!----------------------------------------------->
+<!-- Canary Deployment:
 Canary Basics - https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments
 Canary with helm:
- https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
-https://github.com/stoehdoi/canary-demo/tree/master/deploy
-flagger for canary deployment:
-https://docs.flagger.app/tutorials/nginx-progressive-delivery
-https://docs.flagger.app/tutorials/prometheus-operator
+  https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
+  https://github.com/stoehdoi/canary-demo/tree/master/deploy
 ArgoCD + Argo Rollouts for canary deploy:
 -->
+     <li>Part7: <a href="../../kubernetes/flagger-nginx-canary-deployments/">Flagger NGINX Canary Deployments</a></li>
+</ul>
 
 
 
@@ -13791,17 +14031,16 @@ https://particule.io/en/blog/flux-auto-image-update/
 -->
 <!----------------------------------------------->
 <!-- Fleet -->
-</ul>
-<!-- <H4>Canary Deployment</H4>
+<!----------------------------------------------->
+<!-- Canary Deployment:
 Canary Basics - https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments
 Canary with helm:
- https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
-https://github.com/stoehdoi/canary-demo/tree/master/deploy
-flagger for canary deployment:
-https://docs.flagger.app/tutorials/nginx-progressive-delivery
-https://docs.flagger.app/tutorials/prometheus-operator
+  https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
+  https://github.com/stoehdoi/canary-demo/tree/master/deploy
 ArgoCD + Argo Rollouts for canary deploy:
 -->
+     <li>Part7: <a href="../../kubernetes/flagger-nginx-canary-deployments/">Flagger NGINX Canary Deployments</a></li>
+</ul>
 
 
 
@@ -13909,17 +14148,16 @@ https://particule.io/en/blog/flux-auto-image-update/
 -->
 <!----------------------------------------------->
 <!-- Fleet -->
-</ul>
-<!-- <H4>Canary Deployment</H4>
+<!----------------------------------------------->
+<!-- Canary Deployment:
 Canary Basics - https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments
 Canary with helm:
- https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
-https://github.com/stoehdoi/canary-demo/tree/master/deploy
-flagger for canary deployment:
-https://docs.flagger.app/tutorials/nginx-progressive-delivery
-https://docs.flagger.app/tutorials/prometheus-operator
+  https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
+  https://github.com/stoehdoi/canary-demo/tree/master/deploy
 ArgoCD + Argo Rollouts for canary deploy:
 -->
+     <li>Part7: <a href="../../kubernetes/flagger-nginx-canary-deployments/">Flagger NGINX Canary Deployments</a></li>
+</ul>
 
 
 
@@ -15022,17 +15260,16 @@ https://particule.io/en/blog/flux-auto-image-update/
 -->
 <!----------------------------------------------->
 <!-- Fleet -->
-</ul>
-<!-- <H4>Canary Deployment</H4>
+<!----------------------------------------------->
+<!-- Canary Deployment:
 Canary Basics - https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments
 Canary with helm:
- https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
-https://github.com/stoehdoi/canary-demo/tree/master/deploy
-flagger for canary deployment:
-https://docs.flagger.app/tutorials/nginx-progressive-delivery
-https://docs.flagger.app/tutorials/prometheus-operator
+  https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
+  https://github.com/stoehdoi/canary-demo/tree/master/deploy
 ArgoCD + Argo Rollouts for canary deploy:
 -->
+     <li>Part7: <a href="../../kubernetes/flagger-nginx-canary-deployments/">Flagger NGINX Canary Deployments</a></li>
+</ul>
 
 
 
@@ -15155,17 +15392,16 @@ https://particule.io/en/blog/flux-auto-image-update/
 -->
 <!----------------------------------------------->
 <!-- Fleet -->
-</ul>
-<!-- <H4>Canary Deployment</H4>
+<!----------------------------------------------->
+<!-- Canary Deployment:
 Canary Basics - https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments
 Canary with helm:
- https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
-https://github.com/stoehdoi/canary-demo/tree/master/deploy
-flagger for canary deployment:
-https://docs.flagger.app/tutorials/nginx-progressive-delivery
-https://docs.flagger.app/tutorials/prometheus-operator
+  https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
+  https://github.com/stoehdoi/canary-demo/tree/master/deploy
 ArgoCD + Argo Rollouts for canary deploy:
 -->
+     <li>Part7: <a href="../../kubernetes/flagger-nginx-canary-deployments/">Flagger NGINX Canary Deployments</a></li>
+</ul>
 
 
 
@@ -15377,17 +15613,16 @@ https://particule.io/en/blog/flux-auto-image-update/
 -->
 <!----------------------------------------------->
 <!-- Fleet -->
-</ul>
-<!-- <H4>Canary Deployment</H4>
+<!----------------------------------------------->
+<!-- Canary Deployment:
 Canary Basics - https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments
 Canary with helm:
- https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
-https://github.com/stoehdoi/canary-demo/tree/master/deploy
-flagger for canary deployment:
-https://docs.flagger.app/tutorials/nginx-progressive-delivery
-https://docs.flagger.app/tutorials/prometheus-operator
+  https://itnext.io/safe-and-automation-friendly-canary-deployments-with-helm-669394d2c48a
+  https://github.com/stoehdoi/canary-demo/tree/master/deploy
 ArgoCD + Argo Rollouts for canary deploy:
 -->
+     <li>Part7: <a href="../../kubernetes/flagger-nginx-canary-deployments/">Flagger NGINX Canary Deployments</a></li>
+</ul>
 
 
 
