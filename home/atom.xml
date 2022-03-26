@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-03-17T20:02:31+00:00</updated>
+    <updated>2022-03-26T12:19:25+00:00</updated>
     
     
     <author>
@@ -17,6 +17,579 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[kube-openid-connect 1.0]]></title>
+            <link href="https://devopstales.github.io/home/kube-openid-connect-1.0/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/kube-openid-connect-1.0/?utm_source=atom_feed" rel="related" type="text/html" title="kube-openid-connect 1.0" />
+                <link href="https://devopstales.github.io/home/k8s-central-oauth/?utm_source=atom_feed" rel="related" type="text/html" title="Central authentication with oauth2-proxy" />
+                <link href="https://devopstales.github.io/home/k8s-gangway/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gangway" />
+                <link href="https://devopstales.github.io/home/k8s-dasboard-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gatekeeper" />
+                <link href="https://devopstales.github.io/home/k8s-user-accounts/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Users in Kubernetes the right way?" />
+            
+                <id>https://devopstales.github.io/home/kube-openid-connect-1.0/</id>
+            
+            
+            <published>2022-03-25T00:00:00+00:00</published>
+            <updated>2022-03-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Today I&rsquo;am happy to announce the release of kube-openid-connect 1.0 and assign the first ever stable release number. This blog post focuses on the functionality provided by the kube-openid-connect 1.0 release.</p>
+<h3 id="what-is-kube-openid-connect">What is kube-openid-connect?</h3>
+<p>Kube OpenID Connect is an application that can be used to easily enable authentication flows via OIDC for a kubernetes cluster. Kubernetes supports <a href="https://kubernetes.io/docs/reference/access-authn-authz/authentication/#openid-connect-tokens">OpenID Connect Tokens</a> as a way to identify users who access the cluster. Kube OpenID Connect helps users with it&rsquo;s <code>kubectl</code> plugin to authenticate and get <code>kubectl</code> config.</p>
+<h3 id="how-it-works">How It Works</h3>
+<p>Kube OpenID Connect has two main component the server an the <code>kubectl plugin</code>. The server is written in python and the <code>kubectl plugin</code> in go for easier multi architecture build. When you want to login to a Kubernetes cluster you just simply use the <code>kubectl login</code> command to connect to the server component. It will open the OpenID authentication page in you browser. After you successfully logged in the server based on yout <code>JWT token</code> generates a <code>kubectl config</code> and push back to your <code>kubectl plugin</code>, that writes it to your config.</p>
+<h3 id="oidc-provider-setup">OIDC (Provider) Setup</h3>
+<p>You will need to obtain the OIDC details of the provider you need to use. This will contain the Issuer URL, Client ID and the Client Secret.
+In the case of Google (The provider which was used when initially creating this) go to the <a href="https://console.developers.google.com/apis/credentials">Developer / Credentials</a> console. You will need to add the ingress url to both</p>
+<ul>
+<li><em>Authorised JavaScript origins</em> - <a href="https://kubeauth.k8s.intra">https://kubeauth.k8s.intra</a></li>
+<li><em>Authorised redirect URIs</em> - <a href="https://kubeauth.k8s.intra/callback">https://kubeauth.k8s.intra/callback</a></li>
+</ul>
+<p>If you used kops the credentials you&rsquo;re after are</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kops/v1alpha2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Cluster</span>
+  <span style="color:#f92672">authorization</span>:
+    <span style="color:#f92672">rbac</span>: {}
+  <span style="color:#f92672">kubeAPIServer</span>:
+    <span style="color:#f92672">authorizationRbacSuperUser</span>: <span style="color:#ae81ff">admin</span>
+    <span style="color:#f92672">oidcClientID</span>: <span style="color:#ae81ff">UNIQUE_ID_REDACTED.apps.googleusercontent.com</span>
+    <span style="color:#f92672">oidcIssuerURL</span>: <span style="color:#ae81ff">https://accounts.google.com</span>
+    <span style="color:#f92672">oidcUsernameClaim</span>: <span style="color:#ae81ff">email</span>
+</code></pre></div><p>For G Suite :
+The redacted part of a ClientID is about 45 alphanumeric characters long (may also contain a hyphen or two)
+The client secret will be about 25 alphanumeric chacters (may also contain a hyphen or two)</p>
+<p>For manually configure the Kubernetes ApiServer integration with OpeniD provider:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano /etc/kubernetes/manifests/kube-apiserver.yaml</span>
+---
+...
+<span style="color:#f92672">command</span>:
+- <span style="color:#ae81ff">/hyperkube</span>
+- <span style="color:#ae81ff">apiserver</span>
+...
+- --<span style="color:#ae81ff">oidc-issuer-url={{ .Values.server.oidcServerURL }}</span>
+- --<span style="color:#ae81ff">oidc-client-id={{ .Values.server.oidcClientID }}</span>
+- --<span style="color:#ae81ff">oidc-username-claim=email</span>
+- --<span style="color:#ae81ff">oidc-groups-claim=groups</span>
+<span style="color:#75715e"># for self sign cert or custom ca</span>
+<span style="color:#75715e">#- --oidc-ca-file=/etc/kubernetes/pki/rootca.pem</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl restart kubelet
+</code></pre></div><h2 id="install-the-server">Install the server</h2>
+<p>To ease deployment I created a helm chart for kube-openid-connect.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add devopstales https://devopstales.github.io/helm-charts
+helm repo update
+</code></pre></div><p>Create a value file for deploy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;&#39;EOF&#39;&gt; values.yaml</span>
+<span style="color:#75715e"># Default values for kube-openid-connect.</span>
+<span style="color:#75715e"># This is a YAML-formatted file.</span>
+<span style="color:#75715e"># Declare variables to be passed into your templates.</span>
+
+<span style="color:#f92672">TimeZone</span>: <span style="color:#ae81ff">Europe/Budapest</span>
+
+<span style="color:#f92672">server</span>:
+  <span style="color:#f92672">debug</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">oidcRedirectUrlHttpScema</span>: <span style="color:#ae81ff">https</span>
+  <span style="color:#75715e"># redirect after logout</span>
+  <span style="color:#f92672">oidcOutURL</span>: <span style="color:#ae81ff">https://devopstales.github.io/tags/kube-openid-connect/</span>
+  <span style="color:#75715e"># http or https</span>
+  <span style="color:#f92672">oidcRedirectUrlHost</span>: <span style="color:#ae81ff">kubeauth.k8s.intra</span>
+  <span style="color:#75715e"># same es ingres host</span>
+  <span style="color:#f92672">oidcServerURL</span>: <span style="color:#ae81ff">https://sso.k8s.intra/auth/realms/homelab</span>
+  <span style="color:#f92672">oidcClientID</span>: <span style="color:#ae81ff">k8s-auth</span>
+  <span style="color:#f92672">oidcSecret</span>: <span style="color:#ae81ff">ashdkhsadhasdhakjshdakshdash</span>
+  <span style="color:#f92672">k8sContext</span>: <span style="color:#ae81ff">k8s-cl01</span>
+  <span style="color:#f92672">k8sApiServer</span>: <span style="color:#ae81ff">https://192.168.0.10:6443</span>
+  <span style="color:#75715e"># `k8sApiServer` is the url for kubectl</span>
+  <span style="color:#75715e">#   This is typically  https://api.fqdn</span>
+  <span style="color:#f92672">k8sCaCrt</span>: |-<span style="color:#e6db74">
+</span><span style="color:#e6db74">    -----BEGIN CERTIFICATE-----
+</span><span style="color:#e6db74">    CA
+</span><span style="color:#e6db74">    -----END CERTIFICATE-----</span>    
+<span style="color:#75715e"># `caCrt` is the public / CA cert for the cluster</span>
+<span style="color:#75715e"># cat /etc/kubernetes/pki/apiserver.crt</span>
+
+<span style="color:#f92672">ingress</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">className</span>: <span style="color:#e6db74">&#34;nginx&#34;</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+    <span style="color:#f92672">nginx.ingress.kubernetes.io/proxy-buffer-size</span>: <span style="color:#e6db74">&#34;64k&#34;</span>
+    <span style="color:#f92672">ingress.kubernetes.io/force-ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#f92672">hosts</span>:
+    - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">kubeauth.k8s.intra</span>
+      <span style="color:#f92672">paths</span>:
+        - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+          <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">ImplementationSpecific</span>
+  <span style="color:#f92672">tls</span>:
+    - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">kubeauth-tls</span>
+      <span style="color:#f92672">hosts</span>:
+        - <span style="color:#ae81ff">kubeauth.k8s.intra</span>
+
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>The following tables lists configurable parameters of the trivy-operator chart and their default values.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TimeZone</td>
+<td>Tomezone for container time</td>
+<td>Europe/Budapest</td>
+</tr>
+<tr>
+<td>server.debug</td>
+<td>enable debug logging</td>
+<td>false</td>
+</tr>
+<tr>
+<td>server.oidcOutURL</td>
+<td>Where to redirect after logout?</td>
+<td><a href="https://devopstales.github.io/tags/kube-openid-connect/">https://devopstales.github.io/tags/kube-openid-connect/</a></td>
+</tr>
+<tr>
+<td>server.oidcRedirectUrlHttpScema</td>
+<td>Ingress schema (http or https)</td>
+<td>http</td>
+</tr>
+<tr>
+<td>server.oidcRedirectUrlHost</td>
+<td>Ingress hostname</td>
+<td>chart-example.local</td>
+</tr>
+<tr>
+<td>server.oidcServerURL</td>
+<td>URL of OIDC provider endpoint</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>server.oidcClientID</td>
+<td>Your unique client ID</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>server.oidcSecret</td>
+<td>The password for the Client ID</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>server.k8sContext</td>
+<td>Context of the cluster in generated config</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>server.k8sApiServer</td>
+<td>The endpoint for kubectl to use</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>server.k8sCaCrt</td>
+<td>The Public CA cert for the cluster</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>image.repository</td>
+<td>image</td>
+<td>devopstales/trivy-operator</td>
+</tr>
+<tr>
+<td>image.pullPolicy</td>
+<td>pullPolicy</td>
+<td>Always</td>
+</tr>
+<tr>
+<td>image.tag</td>
+<td>image tag</td>
+<td>1.0</td>
+</tr>
+<tr>
+<td>imagePullSecrets</td>
+<td>imagePullSecrets list</td>
+<td><code>[]</code></td>
+</tr>
+<tr>
+<td>nameOverride</td>
+<td>Override the name part</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>fullnameOverride</td>
+<td>Override the full name</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>serviceAccount.create</td>
+<td>create serviceAccount</td>
+<td>true</td>
+</tr>
+<tr>
+<td>serviceAccount.annotations</td>
+<td>add annotation to serviceAccount</td>
+<td><code>{}</code></td>
+</tr>
+<tr>
+<td>serviceAccount.name</td>
+<td>name of the serviceAccount</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>podAnnotations</td>
+<td>add extra annotations for the pod</td>
+<td><code>{}</code></td>
+</tr>
+<tr>
+<td>podSecurityContext.fsGroup</td>
+<td>mount id</td>
+<td>10001</td>
+</tr>
+<tr>
+<td>securityContext</td>
+<td>add extra securityContext for the pod</td>
+<td><code>{}</code></td>
+</tr>
+<tr>
+<td>service.port</td>
+<td>port number</td>
+<td>5000</td>
+</tr>
+<tr>
+<td>service.type</td>
+<td>type of the service</td>
+<td>ClusterIP</td>
+</tr>
+<tr>
+<td>ingress.enabled</td>
+<td>enable ingress</td>
+<td>true</td>
+</tr>
+<tr>
+<td>ingress.className</td>
+<td>ingress calss</td>
+<td>Not Set</td>
+</tr>
+<tr>
+<td>ingress.annotations</td>
+<td>extra annotation to ingress</td>
+<td>Not set</td>
+</tr>
+<tr>
+<td>ingress.hosts.host</td>
+<td>hostname for ingress</td>
+<td>chart-example.local</td>
+</tr>
+<tr>
+<td>ingress.hosts.paths[0].path</td>
+<td>subpath on ingress</td>
+<td><code>\</code></td>
+</tr>
+<tr>
+<td>ingress.hosts.paths[0].pathType</td>
+<td>ingress path type</td>
+<td>ImplementationSpecific</td>
+</tr>
+<tr>
+<td>ingress.tls</td>
+<td>tls config for ingress</td>
+<td><code>[]</code></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns kubeauth
+kubens kubeauth
+helm upgrade --install kubelogin devopstales/kube-openid-connect -f values.yaml
+</code></pre></div><h3 id="install-the-kubectl-plugin">Install the Kubectl plugin</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Homebrew (macOS and Linux)</span>
+brew tap devopstales/devopstales
+brew install kubectl-login
+
+<span style="color:#75715e"># Krew (macOS, Linux, Windows and ARM)</span>
+kubectl krew install openid-connect
+
+<span style="color:#75715e"># Chocolatey (Windows)</span>
+choco install kubectl-login
+
+<span style="color:#75715e"># Binary release (Windows, macOS and Linux)</span>
+https://github.com/devopstales/kube-openid-connect/releases
+</code></pre></div><h3 id="use-the-plugin-to-login">Use the plugin to login:</h3>
+<p>Point the url to the ingress of the server component:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl login https://kubeauth.k8s.intra
+Configfile created with config <span style="color:#66d9ef">for</span> productioncluster to ~/.kube/config
+Happy Kubernetes interaction!
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to create Users in Kubernetes the right way?]]></title>
+            <link href="https://devopstales.github.io/home/k8s-user-accounts/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k8s-rbac-gen/?utm_source=atom_feed" rel="related" type="text/html" title="How to create kubeconfig?" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-user-accounts/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Users in Kubernetes the right way?" />
+                <link href="https://devopstales.github.io/home/trivy-operator-2.3/?utm_source=atom_feed" rel="related" type="text/html" title="trivy-operator 2.3: Patch release for Admisssion controller" />
+                <link href="https://devopstales.github.io/home/gke-gitlab-terraform/?utm_source=atom_feed" rel="related" type="text/html" title="Create K8S cluster with Terraform and GitlabCI" />
+                <link href="https://devopstales.github.io/home/multus-calico/?utm_source=atom_feed" rel="related" type="text/html" title="Use multus to separate metwork trafics" />
+            
+                <id>https://devopstales.github.io/home/k8s-user-accounts/</id>
+            
+            
+            <published>2022-03-22T00:00:00+00:00</published>
+            <updated>2022-03-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>I this post I will show you how you can create Users in Kubernetes the right way.</p>
+<H3>Parst of the K8S Security series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-cisa-install">Kubernetes Hardening Guide with CIS 1.6 Benchmark</a></li>
+     <li>Part3: <a href="../../kubernetes/rke2-airgap-install/">RKE2 The Secure Kubernetes Engine</a></li>
+     <li>Part4: <a href="../../kubernetes/rke2-cilium/">RKE2 Install With cilium</a></li>
+     <li>Part5: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
+<!-- RBAC -->
+     <li>Part6: <a href="../../kubernetes/k8s-secomp/">Hardening Kubernetes with seccomp</a></li>
+     <li>Part7a: <a href="../../kubernetes/rke2-psp/">RKE2 Pod Security Policy</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-ps/">Kubernetes Pod Security</a></li>
+<!-- # Policy -->
+     <li>Part8: <a href="../../kubernetes/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+     <li>Part9: <a href="../../kubernetes/kubernetes-policy/">Kubernetes Cluster Policy</a></li>
+<!-- # Admission Controllers -->
+     <li>Part10: <a href="../../kubernetes/admission-controllers/">Using Admission Controllers</a></li>
+<!-- ## Image Scan -->
+     <li>Part11a: <a href="../../kubernetes/image-security-admission-controller/">Image security Admission Controller</a></li>
+     <li>Part11b: <a href="../../kubernetes/image-security-admission-controller-v2/">Image security Admission Controller V2</a></li>
+     <li>Part11c: <a href="../../kubernetes/image-security-admission-controller-v3/">Image security Admission Controller V3</a></li>
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- # Scans & Monitoring -->
+     <li>Part12: <a href="../../kubernetes/continuous-image-security/">Continuous Image security</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
+<!-- kyverno logs and monitoring -->
+<!-- DAST Exporter?? -->
+<!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
+<!-- # Image Signature Verification -->
+     <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
+     <li>Part15b <a href="../../kubernetes/k8s-connaisseur-v2/">Image Signature Verification with Connaisseur 2.0</a></li>
+     <li>Part15c <a href="../../kubernetes/k8s-kyverno-cosign/">Image Signature Verification with Kyverno</a></li>
+<!-- # Backup -->
+     <li>Part16a <a href="../../kubernetes/k8s-backup/">Backup your Kubernetes Cluster</a></li>
+     <li>Part16b <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
+<!-- # Secrets -->
+     <li>Part17a <a href="../../kubernetes/k8s-vault/">Kubernetes and Vault integration</a></li>
+     <li>Part17b <a href="../../kubernetes/k8s-vault-v2/">Kubernetes External Vault integration</a></li>
+     <li>Part18a: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+     <li>Part18b: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+     <li>Part18c: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a></li>
+<!-- # Image Update -->
+<!-- keel -->
+     <li>Part19: <a href="../../kubernetes/argocd-image-updater/">ArgoCD auto image updater</a></li>
+<!-- flux image update -->
+     <li>Part20: <a href="../../kubernetes/k3s-gvisor/">Secure k3s with gVisor</a></li>
+<!-- # Image registry security -->
+     <li>Part21: <a href="../../kubernetes/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
+     <li>Part22: <a href="../../kubernetes/kyverno-image-mirror/">Automatically change registry in pod definition</a></li>
+
+<!-- sysdig falco -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+https://github.com/weaveworks/kured
+-->
+<!-- resource kvota -->
+</ul>
+
+
+
+<h3 id="users-in-kubernetes">Users in Kubernetes</h3>
+<p>All Kubernetes clusters have two categories of users: service accounts managed by Kubernetes, and normal users. Kubernetes does not have objects which represent normal user accounts. Normal users cannot be added to a cluster through an API call.</p>
+<h3 id="so-how-we-choud-create-an-user-account">So how we choud create an user account?</h3>
+<p>Any user that presents a valid certificate signed by the cluster&rsquo;s certificate authority (CA) is considered authenticated. So you need to create a certificate for you username.</p>
+<h3 id="why-i-need-a-user-account-insted-of-service-account">Why I need a user account insted of service account?</h3>
+<p>A service account is wisible and its token can be mounted in to a pod so theat pod has the same privileges as you.</p>
+<h3 id="generate-new-certificate">Generate new certificate</h3>
+<p>First, we have to generate a private key and a certificate signing request:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">openssl genrsa -out devopstales.pem
+openssl req -new -key devopstales.pem -out devopstales.csr -subj <span style="color:#e6db74">&#34;/CN=devopstales&#34;</span>
+</code></pre></div><p><code>devopstales</code> well be my username. You can add your user to specific groups by addin them as groups like <code>devops-groupe</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">openssl req -new -key ivnilv.pem -out ivnilv.csr -subj <span style="color:#e6db74">&#34;/CN=devopstales/O=devops-groupe&#34;</span>
+</code></pre></div><h3 id="signing-the-certificate">Signing the certificate</h3>
+<p>Use the csr file for generating a <code>CertificateSigningRequest</code> object n Kubernetes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat devopstales.csr | base64 | tr -d <span style="color:#e6db74">&#39;\n&#39;</span>
+
+cat <span style="color:#e6db74">&lt;&lt;&#39;EOF&#39;&gt; devopstales-csr.yaml
+</span><span style="color:#e6db74">apiVersion: certificates.k8s.io/v1beta1
+</span><span style="color:#e6db74">kind: CertificateSigningRequest
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: user-request-devopstales
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  groups:
+</span><span style="color:#e6db74">  - system:authenticated
+</span><span style="color:#e6db74">  request: LS0tLS1CRUdJTi...
+</span><span style="color:#e6db74">  usages:
+</span><span style="color:#e6db74">  - digital signature
+</span><span style="color:#e6db74">  - key encipherment
+</span><span style="color:#e6db74">  - client auth
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><p>Create the <code>CertificateSigningRequest</code> and approve it. Then the Kubernetes api server will generate the certificate theat you can use to authentication.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create -f devopstales-csr.yaml
+kubectl certificate approve user-request-devopstales
+
+kubectl get csr
+NAME                       AGE       REQUESTOR   CONDITION
+user-request-devopstales   1m        admin       Approved,Issued
+</code></pre></div><p>Now the certificate should be signed. You can download the new signed public key from the csr resource:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get csr devopstales -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.status.certificate}&#39;</span> | base64 -d &gt; devopstales-user.crt
+</code></pre></div><h3 id="create-new-user-config-file">Create new user config file</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl --kubeconfig ~/.kube/config-devopstales config set-cluster preprod --insecure-skip-tls-verify<span style="color:#f92672">=</span>true --server<span style="color:#f92672">=</span>https://KUBERNETES-API-ADDRESS
+kubectl --kubeconfig ~/.kube/config-devopstales config set-credentials devopstales --client-certificate<span style="color:#f92672">=</span>devopstales-user.crt --client-key<span style="color:#f92672">=</span>devopstales.pem --embed-certs<span style="color:#f92672">=</span>true
+kubectl --kubeconfig ~/.kube/config-devopstales config set-context default --cluster<span style="color:#f92672">=</span>preprod --user<span style="color:#f92672">=</span>devopstales
+kubectl --kubeconfig ~/.kube/config-devopstales config use-context default
+</code></pre></div><p>Ofcourse you need rbac for this user:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;&#39;EOF&#39;&gt; devopstales-rbac.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Namespace</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales-ns</span>
+<span style="color:#f92672">spec</span>: {}
+<span style="color:#f92672">status</span>: {}
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Role</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">devopstales-ns</span>
+<span style="color:#f92672">rules</span>:
+- <span style="color:#f92672">apiGroups</span>: [<span style="color:#e6db74">&#34;&#34;</span>, <span style="color:#e6db74">&#34;extensions&#34;</span>, <span style="color:#e6db74">&#34;apps&#34;</span>]
+  <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;*&#34;</span>]
+  <span style="color:#f92672">verbs</span>: [<span style="color:#e6db74">&#34;*&#34;</span>]
+- <span style="color:#f92672">apiGroups</span>: [<span style="color:#e6db74">&#34;batch&#34;</span>]
+  <span style="color:#f92672">resources</span>:
+  - <span style="color:#ae81ff">jobs</span>
+  - <span style="color:#ae81ff">cronjobs</span>
+  <span style="color:#f92672">verbs</span>: [<span style="color:#e6db74">&#34;*&#34;</span>]
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">RoleBinding</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">devopstales-ns</span>
+<span style="color:#f92672">subjects</span>:
+- <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">User</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+<span style="color:#f92672">roleRef</span>:
+  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Role</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+<span style="color:#ae81ff">EOF</span>
+
+<span style="color:#ae81ff">kubectl apply -f devopstales-rbac.yaml</span>
+</code></pre></div><p>Let’s test if the new kubeconfig we generated worked fine:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl --kubeconfig ~/.kube/config-devopstales get pods
+</code></pre></div><h3 id="conclusion">Conclusion</h3>
+<p>As we can see creating certificate for all the users is a hard task for the administratos if we hawe many users. A better solution to use an sso based authentication proxy like my <a href="/kubernetes/kube-openid-connect-1.0/">Kubectl OpenID Connect</a>.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Running and Building ARM Docker Containers on x86]]></title>
+            <link href="https://devopstales.github.io/home/running_and_building_multi_arch_containers/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/linux/running_and_building_multi_arch_containers/?utm_source=atom_feed" rel="related" type="text/html" title="Running and Building ARM Docker Containers on x86" />
+                <link href="https://devopstales.github.io/home/k8s-falco/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes audit logs and Falco" />
+                <link href="https://devopstales.github.io/home/k8s-cisa-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Hardening Guide with CISA 1.6 Benchmark" />
+                <link href="https://devopstales.github.io/home/docker-desktop-alternatives/?utm_source=atom_feed" rel="related" type="text/html" title="Free Docker Desktop Alternative For Mac And Windows" />
+                <link href="https://devopstales.github.io/home/k8s-seccomp/?utm_source=atom_feed" rel="related" type="text/html" title="Hardening Kubernetes with seccomp" />
+            
+                <id>https://devopstales.github.io/home/running_and_building_multi_arch_containers/</id>
+            
+            
+            <published>2022-03-20T00:00:00+00:00</published>
+            <updated>2022-03-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>I this post I will show you how you can run AMD Docker Containers on x86 environment adn build multi CPU architecture images.</p>
+<h3 id="running">Running</h3>
+<p>To run ARM based image on doncker we need to setup QEMU and Docker to set up our emulated environment. We’ll be using QEMU and Docker to set up our emulated environment. QEMU is an open source machine emulator and virtualizer. It allows users to to build ARM CUDA binaries on your x86 machine without needing a cross compiler.</p>
+<p><img src="/img/include/emulation_workflow2.png" alt="QEMU"  class="zoomable" /></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Install the qemu packages</span>
+sudo apt-get install qemu binfmt-support qemu-user-static
+
+<span style="color:#75715e"># This step will execute the registering scripts</span>
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+<span style="color:#75715e"># Testing the emulation environment</span>
+docker run --rm -t arm64v8/ubuntu uname -m
+</code></pre></div><h3 id="how-to-build-image">How to build image:</h3>
+<p>There are two ways to use Docker to build a multiarch image: using <code>docker manifest</code> or using <code>docker buildx</code>. I will use the first option.</p>
+<p>First we need to prepare the docker file to use multiple type base images. The base images for debian in different architectures are:</p>
+<ul>
+<li>debian:buster-slim</li>
+<li>amd64/debian:buster-slim</li>
+<li>arm32v7/debian:buster-slim</li>
+<li>arm64v8/debian:buster-slim</li>
+</ul>
+<p>As you can see there is a prefix before the standard image for the different architectures. We can use an argument to leverage this.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ nano Dockerfile
+
+ARG ARCH<span style="color:#f92672">=</span>
+FROM <span style="color:#e6db74">${</span>ARCH<span style="color:#e6db74">}</span>debian:buster-slim
+
+RUN apt-get update <span style="color:#f92672">&amp;&amp;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    apt-get install curl -y <span style="color:#f92672">&amp;&amp;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    rm -rf /var/lib/apt/list/*
+
+ENRYPOINT <span style="color:#f92672">[</span> <span style="color:#e6db74">&#34;curl&#34;</span> <span style="color:#f92672">]</span>
+</code></pre></div><p>Now give the architecture as argument at build:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker build -t devopstales/curl:1.0-amd64 --build-arg ARCH<span style="color:#f92672">=</span>amd64/ .
+docker pus devopstales/curl:1.0-amd64
+
+docker build -t devopstales/curl:1.0-arm32v7 --build-arg ARCH<span style="color:#f92672">=</span>arm32v7/ .
+docker pus devopstales/curl:1.0-arm32v7
+
+docker build -t devopstales/curl:1.0-arm64v8 --build-arg ARCH<span style="color:#f92672">=</span>arm64v8/ .
+docker pus devopstales/curl:1.0-arm64v8
+</code></pre></div><p>Now the hard part to push it as a single image. With <code>docker manifest</code> we can create the meta data theat points to the other images an push it to the registry.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker manifest create devopstales/curl:1.0
+    --amend devopstales/curl:1.0-amd64
+    --amend devopstales/curl:1.0-arm32v7
+    --amend devopstales/curl:1.0-arm64v8
+
+docker manifest push devopstales/curl:1.0
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -2130,7 +2703,7 @@ brew install tmux-cssh
             <updated>2022-02-04T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>Today I happy to announce the release of trivy-operator 2.3. This blog post focuses on the functionality provided by the trivy-operator 2.3 release.</p>
+            <content type="html"><![CDATA[<p>Today I&rsquo;am happy to announce the release of trivy-operator 2.3. This blog post focuses on the functionality provided by the trivy-operator 2.3 release.</p>
 <h3 id="what-is-trivy-operator">What is trivy-operator?</h3>
 <p>Trivy-operator is a Kubernetes Operator based on the open-source container vulnerability scanner Trivy. The goal of this project is to provide a vulnerability scanner that continuously scans containers deployed in a Kubernetes cluster. <a href="https://github.com/nolar/kopf">Built with Kubernetes Operator Pythonic Framework (Kopf)</a> There are a few solution for checking the images when you deploy them to the Kubernetes cluster, but fighting against vulnerabilities is a day to day task. Check once is not enough when every day is a new das for frats. That is why I created trivy-operator so you can create scheduled image scans on your running pods.</p>
 <h3 id="bugfixes">Bugfixes</h3>
@@ -2322,7 +2895,10 @@ helm repo update
 </tr>
 </tbody>
 </table>
-<h3 id="monitoring">Monitoring</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns kubeauth
+kubens kubeauth
+helm upgrade --install trivy devopstales/trivy-operator -f values.yaml
+</code></pre></div><h3 id="monitoring">Monitoring</h3>
 <p>Trivy-operatos has a prometheus endpoint op port <code>9115</code> and can be deployed wit <code>ServiceMonitor</code> for automated scrapping.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -s http://10.43.179.39:9115/metrics | grep trivy_vulnerabilities
 <span style="color:#75715e"># HELP trivy_vulnerabilities_sum Container vulnerabilities</span>
@@ -3480,7 +4056,7 @@ pinniped-concierge-kube-cert-agent-5dcccbbb4b-56jbj   1/1     Running   <span st
             <updated>2021-12-27T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>Today I happy to announce the release of trivy-operator 2.2. This blog post focuses on the functionality provided by the trivy-operator 2.2 release.</p>
+            <content type="html"><![CDATA[<p>Today I&rsquo;am happy to announce the release of trivy-operator 2.2. This blog post focuses on the functionality provided by the trivy-operator 2.2 release.</p>
 <h3 id="what-is-trivy-operator">What is trivy-operator?</h3>
 <p>Trivy-operator is a Kubernetes Operator based on the open-source container vulnerability scanner Trivy. The goal of this project is to provide a vulnerability scanner that continuously scans containers deployed in a Kubernetes cluster. <a href="https://github.com/nolar/kopf">Built with Kubernetes Operator Pythonic Framework (Kopf)</a> There are a few solution for checking the images when you deploy them to the Kubernetes cluster, but fighting against vulnerabilities is a day to day task. Check once is not enough when every day is a new das for frats. That is why I created trivy-operator so you can create scheduled image scans on your running pods.</p>
 <h3 id="bugfixes">Bugfixes</h3>
@@ -3671,7 +4247,10 @@ helm repo update
 </tr>
 </tbody>
 </table>
-<h3 id="monitoring">Monitoring</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns kubeauth
+kubens kubeauth
+helm upgrade --install trivy devopstales/trivy-operator -f values.yaml
+</code></pre></div><h3 id="monitoring">Monitoring</h3>
 <p>Trivy-operatos has a prometheus endpoint op port <code>9115</code> and can be deployed wit <code>ServiceMonitor</code> for automated scrapping.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -s http://10.43.179.39:9115/metrics | grep trivy_vulnerabilities
 <span style="color:#75715e"># HELP trivy_vulnerabilities_sum Container vulnerabilities</span>
@@ -3985,7 +4564,7 @@ trivy-operator                             devopstales           6h54m
             <updated>2021-12-17T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>Today I happy to announce the release of trivy-operator 2.1. This blog post focuses on the functionality provided by the trivy-operator 2.1 release.</p>
+            <content type="html"><![CDATA[<p>Today I&rsquo;am happy to announce the release of trivy-operator 2.1. This blog post focuses on the functionality provided by the trivy-operator 2.1 release.</p>
 <h3 id="what-is-trivy-operator">What is trivy-operator?</h3>
 <p>Trivy-operator is a Kubernetes Operator based on the open-source container vulnerability scanner Trivy. The goal of this project is to provide a vulnerability scanner that continuously scans containers deployed in a Kubernetes cluster. <a href="https://github.com/nolar/kopf">Built with Kubernetes Operator Pythonic Framework (Kopf)</a> There are a few solution for checking the images when you deploy them to the Kubernetes cluster, but fighting against vulnerabilities is a day to day task. Check once is not enough when every day is a new das for frats. That is why I created trivy-operator so you can create scheduled image scans on your running pods.</p>
 <h3 id="new-functions">New Functions</h3>
@@ -4170,7 +4749,10 @@ helm repo update
 </tr>
 </tbody>
 </table>
-<h3 id="monitoring">Monitoring</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns kubeauth
+kubens kubeauth
+helm upgrade --install trivy devopstales/trivy-operator -f values.yaml
+</code></pre></div><h3 id="monitoring">Monitoring</h3>
 <p>Trivy-operatos has a prometheus endpoint op port <code>9115</code> and can be deployed wit <code>ServiceMonitor</code> for automated scrapping.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -s http://10.43.179.39:9115/metrics | grep so_vulnerabilities
 
@@ -7156,7 +7738,7 @@ chmod <span style="color:#ae81ff">700</span> /var/lib/etcd
             <updated>2021-10-09T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>Today I happy to announce the release of trivy-operator 1.0 and assign the first ever stable release number. This blog post focuses on the functionality provided by the trivy-operator 1.0 release.</p>
+            <content type="html"><![CDATA[<p>Today I&rsquo;am happy to announce the release of trivy-operator 1.0 and assign the first ever stable release number. This blog post focuses on the functionality provided by the trivy-operator 1.0 release.</p>
 <h3 id="what-is-trivy-operator">What is trivy-operator?</h3>
 <p>Trivy-operator is a Kubernetes Operator based on the open-source container vulnerability scanner Trivy. The goal of this project is to provide a vulnerability scanner that continuously scans containers deployed in a Kubernetes cluster. <a href="https://github.com/nolar/kopf">Built with Kubernetes Operator Pythonic Framework (Kopf)</a> There are a few solution for checking the images when you deploy them to the Kubernetes cluster, but fighting against vulnerabilities is a day to day task. Check once is not enough when every day is a new das for frats. That is why I created trivy-operator so you can create scheduled image scans on your running pods.</p>
 <h3 id="scheduled-image-scans">Scheduled Image scans</h3>
@@ -7326,7 +7908,10 @@ helm repo update
 </tr>
 </tbody>
 </table>
-<h3 id="monitoring">Monitoring</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns kubeauth
+kubens kubeauth
+helm upgrade --install trivy devopstales/trivy-operator -f values.yaml
+</code></pre></div><h3 id="monitoring">Monitoring</h3>
 <p>Trivy-operatos has a prometheus endpoint op port <code>9115</code> and can be deployed wit <code>ServiceMonitor</code> for automated scrapping.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -s http://10.43.179.39:9115/metrics | grep so_vulnerabilities
 
