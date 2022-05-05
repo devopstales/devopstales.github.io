@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-05-05T07:49:42+00:00</updated>
+    <updated>2022-05-05T09:14:45+00:00</updated>
     
     
     <author>
@@ -20,14 +20,105 @@
     
         
         <entry>
+            <title type="html"><![CDATA[kubernetes 1.24: Install dockershim for docker]]></title>
+            <link href="https://devopstales.github.io/home/migrate-kubernetes-to-dockershim/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/migrate-docker-to-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to containerd" />
+                <link href="https://devopstales.github.io/home/migrate-docker-to-crio/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to cri-o" />
+                <link href="https://devopstales.github.io/kubernetes/migrate-kubernetes-to-dockershim/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Install dockershim for docker" />
+                <link href="https://devopstales.github.io/kubernetes/migrate-docker-to-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to containerd" />
+                <link href="https://devopstales.github.io/kubernetes/migrate-docker-to-crio/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to cri-o" />
+            
+                <id>https://devopstales.github.io/home/migrate-kubernetes-to-dockershim/</id>
+            
+            
+            <published>2022-05-05T00:00:00+00:00</published>
+            <updated>2022-05-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>With the new Kubernetes 1.24 and deprecation of dockershim, in this post I will show you how you can migrate your kubernetes cluster to use dockershim.</p>
+<h3 id="how-to-migrate">How to migrate</h3>
+<p>You have to be careful if you are on a single master node configuration. The cluster will be unavailable under the upgrade.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get nodes -o wide
+NAME    STATUS   ROLES                  AGE     VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION                             CONTAINER-RUNTIME
+k8s01   Ready    control-plane,master   78m     v1.20.4   10.65.79.164   &lt;none&gt;        CentOS Linux <span style="color:#ae81ff">8</span>       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+k8s02   Ready    control-plane,master   64m     v1.20.4   10.65.79.131   &lt;none&gt;        CentOS Linux <span style="color:#ae81ff">8</span>       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+k8s03   Ready    control-plane,master   4m16s   v1.20.4   10.65.79.244   &lt;none&gt;        CentOS Linux <span style="color:#ae81ff">8</span>       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+</code></pre></div><p>First we will cordon and drain the node:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl cordon k8s01
+kubectl drain k8s01 --ignore-daemonsets
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get nodes
+NAME    STATUS                      ROLES                  AGE    VERSION
+k8s01   Ready,SchedulingDisabled    control-plane,master   83m    v1.20.4
+k8s02   Ready                       control-plane,master   69m    v1.20.4
+k8s03   Ready                       control-plane,master   9m30s  v1.20.4
+</code></pre></div><p>Stop the kubelet sevice and remove docker:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo systemctl stop kubelet
+sudo systemctl status kubelet
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">apt purge docker-ce docker-ce-cli
+OR
+yum remove docker-ce docker-ce-cli
+</code></pre></div><h3 id="install-and-configure-dockershim">Install and configure dockershim:</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cd /tmp
+VER<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>curl -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest|grep tag_name | cut -d <span style="color:#e6db74">&#39;&#34;&#39;</span> -f 4<span style="color:#66d9ef">)</span>
+echo $VER
+
+wget https://github.com/Mirantis/cri-dockerd/releases/download/<span style="color:#e6db74">${</span>VER<span style="color:#e6db74">}</span>/cri-dockerd-<span style="color:#e6db74">${</span>VER<span style="color:#e6db74">}</span>-linux-amd64.tar.gz
+tar xvf cri-dockerd-<span style="color:#e6db74">${</span>VER<span style="color:#e6db74">}</span>-linux-amd64.tar.gz
+
+sudo mv cri-dockerd /usr/local/bin/
+
+cri-dockerd --version
+cri-dockerd 0.2.0 <span style="color:#f92672">(</span>HEAD<span style="color:#f92672">)</span>
+
+wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.service
+wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.socket
+sudo mv cri-docker.socket cri-docker.service /etc/systemd/system/
+sudo sed -i -e <span style="color:#e6db74">&#39;s,/usr/bin/cri-dockerd,/usr/local/bin/cri-dockerd,&#39;</span> /etc/systemd/system/cri-docker.service
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo systemctl daemon-reload
+sudo systemctl enable cri-docker.service
+sudo systemctl enable --now cri-docker.socket
+</code></pre></div><h3 id="configure-the-kubelet-to-use-cri-dockerd">Configure the kubelet to use cri-dockerd</h3>
+<p>test the socket connection:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo kubeadm config images pull --cri-socket /run/cri-dockerd.sock 
+<span style="color:#f92672">[</span>config/images<span style="color:#f92672">]</span> Pulled k8s.gcr.io/kube-apiserver:v1.23.5
+<span style="color:#f92672">[</span>config/images<span style="color:#f92672">]</span> Pulled k8s.gcr.io/kube-controller-manager:v1.23.5
+<span style="color:#f92672">[</span>config/images<span style="color:#f92672">]</span> Pulled k8s.gcr.io/kube-scheduler:v1.23.5
+<span style="color:#f92672">[</span>config/images<span style="color:#f92672">]</span> Pulled k8s.gcr.io/kube-proxy:v1.23.5
+<span style="color:#f92672">[</span>config/images<span style="color:#f92672">]</span> Pulled k8s.gcr.io/pause:3.6
+<span style="color:#f92672">[</span>config/images<span style="color:#f92672">]</span> Pulled k8s.gcr.io/etcd:3.5.1-0
+<span style="color:#f92672">[</span>config/images<span style="color:#f92672">]</span> Pulled k8s.gcr.io/coredns/coredns:v1.8.6
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/sysconfig/kubelet
+<span style="color:#75715e"># add the following flags to KUBELET_KUBEADM_ARGS variable</span>
+KUBELET_KUBEADM_ARGS<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;... --container-runtime=remote --container-runtime-endpoint=/run/cri-dockerd.sock&#34;</span>
+</code></pre></div><p>Start kubelet:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo systemctl start kubelet
+</code></pre></div><p>Check if the new runtime on the node:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl describe node k8s01
+</code></pre></div><p>Uncordon the node to mark it schedulable agen:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl uncordon k8s01
+</code></pre></div><p>Once you changed the runetime on all the nodes you are done.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
             <title type="html"><![CDATA[kubernetes 1.24: Migrate from docker to containerd]]></title>
             <link href="https://devopstales.github.io/home/migrate-docker-to-containerd/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/home/migrate-kubernetes-to-dockershim/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Install dockershim for docker" />
                 <link href="https://devopstales.github.io/home/migrate-docker-to-crio/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to cri-o" />
                 <link href="https://devopstales.github.io/kubernetes/migrate-docker-to-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to containerd" />
+                <link href="https://devopstales.github.io/kubernetes/migrate-kubernetes-to-dockershim/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Install dockershim for docker" />
                 <link href="https://devopstales.github.io/kubernetes/migrate-docker-to-crio/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to cri-o" />
-                <link href="https://devopstales.github.io/home/k8s-falco/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes audit logs and Falco" />
-                <link href="https://devopstales.github.io/home/k8s-cisa-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Hardening Guide with CISA 1.6 Benchmark" />
             
                 <id>https://devopstales.github.io/home/migrate-docker-to-containerd/</id>
             
@@ -140,11 +231,11 @@ kubectl describe node &lt;master_node_name&gt;
             <title type="html"><![CDATA[kubernetes 1.24: Migrate from docker to cri-o]]></title>
             <link href="https://devopstales.github.io/home/migrate-docker-to-crio/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/home/migrate-kubernetes-to-dockershim/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Install dockershim for docker" />
                 <link href="https://devopstales.github.io/home/migrate-docker-to-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to containerd" />
                 <link href="https://devopstales.github.io/kubernetes/migrate-docker-to-crio/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to cri-o" />
+                <link href="https://devopstales.github.io/kubernetes/migrate-kubernetes-to-dockershim/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Install dockershim for docker" />
                 <link href="https://devopstales.github.io/kubernetes/migrate-docker-to-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to containerd" />
-                <link href="https://devopstales.github.io/home/k8s-install-containerd-v2/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm V2" />
-                <link href="https://devopstales.github.io/home/k8s-test-tools/?utm_source=atom_feed" rel="related" type="text/html" title="Validate Kubernetes Deployment in CI/CD" />
             
                 <id>https://devopstales.github.io/home/migrate-docker-to-crio/</id>
             
