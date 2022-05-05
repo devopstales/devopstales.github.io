@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-05-05T07:37:59+00:00</updated>
+    <updated>2022-05-05T07:49:42+00:00</updated>
     
     
     <author>
@@ -231,7 +231,7 @@ cat <span style="color:#e6db74">&lt;&lt;EOF &gt;  /etc/sysctl.d/k8s.conf
 </span><span style="color:#e6db74">EOF</span>
 
 sysctl --system
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#34;runtime-endpoint: unix:///run/containerd/containerd.sock&#34;</span> &gt; /etc/crictl.yaml
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#34;runtime-endpoint: unix:///var/run/crio/crio.sock&#34;</span> &gt; /etc/crictl.yaml
 crictl ps
 
 <span style="color:#75715e"># Start cri-o</span>
@@ -240,23 +240,12 @@ systemctl status crio
 </code></pre></div><p>Change runtime in kubeadm config:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/sysconfig/kubelet
 <span style="color:#75715e"># add the following flags to KUBELET_KUBEADM_ARGS variable</span>
-KUBELET_KUBEADM_ARGS<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;... --container-runtime=remote --container-runtime-endpoint=unix:///var/run/crio/crio.sock --runtime-request-timeout=5m --cgroup-driver=systemd &#34;</span>
+KUBELET_KUBEADM_ARGS<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;... --container-runtime=remote --container-runtime-endpoint=/var/run/crio/crio.sock --runtime-request-timeout=5m --cgroup-driver=systemd &#34;</span>
 
 </code></pre></div><p>Start kubelet:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo systemctl start kubelet
 </code></pre></div><p>Check if the new runtime on the node:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl describe node k8s01
-System Info:
-  Machine ID:                 21a5dd31f86c4
-  System UUID:                4227EF55-BA3BCCB57BCE
-  Boot ID:                    77229747-9ea581ec6773
-  Kernel Version:             4.18.0-240.15.1.el8_3.centos.plus.x86_64
-  OS Image:                   CentOS Linux <span style="color:#ae81ff">8</span>
-  Operating System:           linux
-  Architecture:               amd64
-  Container Runtime Version:  containerd://1.4.3
-  Kubelet Version:            v1.20.4
-  Kube-Proxy Version:         v1.20.4
 </code></pre></div><p>Uncordon the node to mark it schedulable agen:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl uncordon k8s01
 </code></pre></div><p>Once you changed the runetime on all the nodes you are done.</p>]]></content>
