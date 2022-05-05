@@ -29,7 +29,7 @@
     "datePublished": "2022-05-05",
     "dateModified" : "2022-05-05",
     "url" : "https://devopstales.github.io/home/migrate-docker-to-crio/",
-    "wordCount" : "422",
+    "wordCount" : "455",
     "keywords" : [ "devops", "tales", "kubernetes deployment", "kubernetes vs docker", "docker", "cri-o", "migrate", "switch", "Blog" ]
     
 }
@@ -180,15 +180,27 @@ yum remove docker-ce docker-ce-cli
 </code></pre></div><h3 id="install-and-configure-cri-o">Install and configure cri-o:</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e">## Install cri-o to centos/alma linux/rocky linux</span>
 VERSION<span style="color:#f92672">=</span>1.24
-sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/CentOS_7/devel:kubic:libcontainers:stable.repo
-sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/CentOS_7/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
+OS<span style="color:#f92672">=</span>CentOS_7
+<span style="color:#75715e"># OR</span>
+OS<span style="color:#f92672">=</span>CentOS_8
+sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/$OS/devel:kubic:libcontainers:stable.repo
+sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/$OS/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
 
 yum install cri-o
 
 <span style="color:#75715e">## Install cri-o to ubuntu/debian</span>
-add-apt-repository ppa:projectatomic/ppa
-apt update
-apt install -y cri-o-<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>
+VERSION<span style="color:#f92672">=</span>1.24
+OS<span style="color:#f92672">=</span>Debian_Unstable
+<span style="color:#75715e"># OR</span>
+OS<span style="color:#f92672">=</span>xUbuntu_20.04
+echo <span style="color:#e6db74">&#34;deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/</span>$OS<span style="color:#e6db74">/ /&#34;</span> &gt; /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
+echo <span style="color:#e6db74">&#34;deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/</span>$VERSION<span style="color:#e6db74">/</span>$OS<span style="color:#e6db74">/ /&#34;</span> &gt; /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.list
+
+curl -L https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/$OS/Release.key | apt-key add -
+curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/Release.key | apt-key add -
+
+apt-get update
+apt-get install cri-o cri-o-runc
 </code></pre></div><p>You nee the same cgroup manager in cri-o and kubeadm. The default for <code>kubeadm</code> is <code>cgroupfs</code> and for <code>cri-o</code> the default is <code>systemd</code>. In this example I configured cri-o for cgroupfs.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/crio/crio.conf
 <span style="color:#f92672">[</span>crio.runtime<span style="color:#f92672">]</span>
