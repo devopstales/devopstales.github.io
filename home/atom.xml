@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-05-29T09:14:18+00:00</updated>
+    <updated>2022-06-08T10:03:23+00:00</updated>
     
     
     <author>
@@ -17,6 +17,74 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to Change IP on Kubernetes node.]]></title>
+            <link href="https://devopstales.github.io/home/k8s-change-ip/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-change-ip/?utm_source=atom_feed" rel="related" type="text/html" title="How to Change IP on Kubernetes node." />
+                <link href="https://devopstales.github.io/home/k8s-ps/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Pod Security" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller-v3/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V3" />
+                <link href="https://devopstales.github.io/home/continuous-image-security/?utm_source=atom_feed" rel="related" type="text/html" title="Continuous Image Security" />
+                <link href="https://devopstales.github.io/home/k8s-prometheus-stack/?utm_source=atom_feed" rel="related" type="text/html" title="K8S Logging And Monitoring" />
+            
+                <id>https://devopstales.github.io/home/k8s-change-ip/</id>
+            
+            
+            <published>2022-06-07T00:00:00+00:00</published>
+            <updated>2022-06-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how you can change th IP of the Kubernetes Nodes and Workers.</p>
+<p>On a Kubernetes cluster ther is a component called kube-apiserver. The kube-apiserver need to know the ip address on which to advertise the apiserver (<code>--apiserver-advertise-address</code>) to members of the cluster. At the <code>kubeadm init</code> there is a phase when the kubeadm generate self-signed certificate for the apiserver valid for the node ips and the ip of the loadbalancer if configures (<code>--control-plane-endpoint</code>). If the ip of the node or the loadbalancer (this is the external ip in a cloud environment) change the certificate is no longer valid for that and the <code>kubectl</code> won&rsquo;t connect.</p>
+<p>The soulution is to reinit the kubernetes cluster with the new ip and keeping the data of the etcd. The kubernetes keep all the objects and states in the etcd database.</p>
+<h3 id="backup-the-data-on-the-master">Backup the data on the master</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl stop kubelet docker
+
+mv /etc/kubernetes /etc/kubernetes-backup
+mv /var/lib/kubelet /var/lib/kubelet-backup
+</code></pre></div><h3 id="preper-for-the-new-cluster">Preper for the new Cluster</h3>
+<p>Create the new folderstructure and restore the needed certificates.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir /etc/kubernetes
+cp -r /etc/kubernetes-backup/pki /etc/kubernetes
+rm -f /etc/kubernetes/pki/<span style="color:#f92672">{</span>apiserver.*,etcd/peer.*<span style="color:#f92672">}</span>
+rm -f ~/.kube/config
+</code></pre></div><p>Now we can reinit control plane node with data in etcd using command below.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl start docker
+
+echo <span style="color:#e6db74">&#39;KUBELET_EXTRA_ARGS=&#34;--node-ip=172.17.8.101&#34;&#39;</span> &gt; /etc/sysconfig/kubelet
+
+<span style="color:#75715e"># add --kubernetes-version, --pod-network-cidr and --token options if needed</span>
+kubeadm init --control-plane-endpoint <span style="color:#e6db74">&#34;172.17.8.100:16443&#34;</span> --apiserver-advertise-address <span style="color:#e6db74">&#34;172.17.8.101&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--ignore-preflight-errors<span style="color:#f92672">=</span>DirAvailable--var-lib-etcd
+
+cp kubernetes/admin.conf ~/.kube/config
+
+<span style="color:#75715e"># Verify resutl</span>
+kubectl cluster-info
+
+<span style="color:#75715e"># wait for some time and delete old node</span>
+sleep <span style="color:#ae81ff">120</span>
+kubectl get nodes --sort-by<span style="color:#f92672">=</span>.metadata.creationTimestamp
+kubectl delete node <span style="color:#66d9ef">$(</span>kubectl get nodes -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.items[?(@.status.conditions[0].status==&#34;Unknown&#34;)].metadata.name}&#39;</span><span style="color:#66d9ef">)</span>
+</code></pre></div><p>Now reset the worker to kubernete cluster and change the ip in the config.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubeadm reset
+
+echo <span style="color:#e6db74">&#39;KUBELET_EXTRA_ARGS=&#34;--node-ip=172.17.8.102&#34;&#39;</span> &gt; /etc/sysconfig/kubelet
+</code></pre></div><p>Get the join  token from the master and use this on the workers to rejoin to the master.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubeadm token create --print-join-command
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
