@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-06-08T10:03:23+00:00</updated>
+    <updated>2022-06-16T07:10:02+00:00</updated>
     
     
     <author>
@@ -17,6 +17,203 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Secure your applications with Pomerium Ingress Controller]]></title>
+            <link href="https://devopstales.github.io/home/k8s-pomerium-ingress-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-pomerium-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Secure your applications with Pomerium Ingress Controller" />
+                <link href="https://devopstales.github.io/home/k8s-change-ip/?utm_source=atom_feed" rel="related" type="text/html" title="How to Change IP on Kubernetes node." />
+                <link href="https://devopstales.github.io/home/migrate-kubernetes-to-dockershim/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Install cri-dockerd for docker" />
+                <link href="https://devopstales.github.io/home/migrate-docker-to-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to containerd" />
+                <link href="https://devopstales.github.io/home/migrate-docker-to-crio/?utm_source=atom_feed" rel="related" type="text/html" title="kubernetes 1.24: Migrate from docker to cri-o" />
+            
+                <id>https://devopstales.github.io/home/k8s-pomerium-ingress-controller/</id>
+            
+            
+            <published>2022-06-14T00:00:00+00:00</published>
+            <updated>2022-06-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this blog post, I will show you how you can install Pomerium Ingress Controller and use it to secure your application.</p>
+<p>I a <a href="/kubernetes/k8s-central-oauth/">previous post</a> I showed how you can authenticate users for specific ingresses by oauth2-proxy and nginx ingress controller. That solution works grate, but it has a flow. If you want not just authenticate but authorize users based on groups, you need multiple oauth2-proxy. That is not ideal. But wit Pomerium Ingress Controller you can configure authentication and authorization by annotations on the ingress.</p>
+<p>Pomerium use certificate-manager to generates certificates for secure connections. So first I will install that:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns cert-manager
+kubens cert-manager
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager --namespace cert-manager <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--create-namespace --set installCRDs<span style="color:#f92672">=</span>true
+</code></pre></div><p>To install Pomerium Ingress Controller I will use it&rsquo;s helm chart:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns ingress-system
+kubens ingress-system
+helm repo add pomerium https://helm.pomerium.io
+helm repo update
+</code></pre></div><p>Now I will create the values file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano values.yaml</span>
+---
+<span style="color:#f92672">authenticate</span>:
+  <span style="color:#f92672">idp</span>:
+    <span style="color:#f92672">provider</span>: <span style="color:#e6db74">&#34;oidc&#34;</span>
+    <span style="color:#f92672">clientID</span>: <span style="color:#e6db74">&#34;oauth2_proxy&#34;</span>
+    <span style="color:#f92672">clientSecret</span>: <span style="color:#e6db74">&#34;1e8ee274-513e-41c0-903f-b3cg13147dgb&#34;</span>
+    <span style="color:#f92672">url</span>: <span style="color:#e6db74">&#34;https://sso.k8s.intra/auth/realms/cl12&#34;</span>
+    <span style="color:#f92672">serviceAccount</span>: <span style="color:#e6db74">&#34;pomerium-authenticate&#34;</span>
+  <span style="color:#f92672">ingress</span>:
+    <span style="color:#f92672">annotations</span>:
+      <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+    <span style="color:#f92672">tls</span>:
+      <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">authenticate.k8s.intra</span>
+<span style="color:#f92672">redis</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">generateTLS</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">ingressController</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">ingressClassResource</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">default</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;pomerium&#34;</span>
+<span style="color:#f92672">config</span>:
+  <span style="color:#f92672">rootDomain</span>: <span style="color:#ae81ff">k8s.intra</span> <span style="color:#75715e">#Change this to your reserved domain space.</span>
+  <span style="color:#f92672">generateTLS</span>: <span style="color:#66d9ef">true</span> <span style="color:#75715e"># On by default, disabled when cert-manager or another solution is in place.</span>
+<span style="color:#f92672">ingress</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm upgrade --install pomerium pomerium/pomerium --values ./pomerium-values.yaml
+</code></pre></div><p>To demonstrate the functionality of Pomerium Ingress Controller I will create a deo application:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano demo_app.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kuard</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">kuard</span>
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">kuard</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">gcr.io/kuar-demo/kuard-amd64:1</span>
+        <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">Always</span>
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kuard</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">8080</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kuard</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ports</span>:
+  - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+    <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">8080</span>
+    <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">kuard</span>
+</code></pre></div><p>Now I will show so a few Ingress examples for this app. I the firs example we wil allow the authentication for a specific user by its email.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">ingress.pomerium.io/policy</span>: <span style="color:#e6db74">&#39;[{&#34;allow&#34;:{&#34;and&#34;:[{&#34;email&#34;:{&#34;is&#34;:&#34;user@mydomain.intra&#34;}}]}}]&#39;</span> <span style="color:#75715e"># This can also be a yaml block quote</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">kuard.k8s.intra</span>
+    <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kuard</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</code></pre></div><p>As you can see you can add the policy as a yaml block quote.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">ingress.pomerium.io/policy</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">      - allow:
+</span><span style="color:#e6db74">          and:
+</span><span style="color:#e6db74">            - email:
+</span><span style="color:#e6db74">                is: user@mydomain.intra</span>      
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">kuard.k8s.intra</span>
+    <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kuard</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</code></pre></div><p>In the second example I will allow the authentication for all user from a specific domain.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">ingress.pomerium.io/policy</span>: <span style="color:#e6db74">&#39;[{&#34;allow&#34;:{&#34;and&#34;:[{&#34;email&#34;:{&#34;ends_with&#34;:&#34;@mydomain.intra&#34;}}]}}]&#39;</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">kuard.k8s.intra</span>
+    <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kuard</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</code></pre></div><p>The last example shows you how you can use regex in your ingress.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">cert-manager.io/issuer</span>: <span style="color:#ae81ff">example-issuer</span>
+    <span style="color:#f92672">ingress.pomerium.io/allowed_domains</span>: <span style="color:#e6db74">&#39;[&#34;mydomain.intra&#34;]&#39;</span>
+    <span style="color:#f92672">ingress.pomerium.io/path_regex</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">example</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">pomerium</span>
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">example.localhost.pomerium.io</span>
+    <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">example</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">^/(admin|superuser)/.*$</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">ImplementationSpecific</span>
+  <span style="color:#f92672">tls</span>:
+  - <span style="color:#f92672">hosts</span>:
+    - <span style="color:#ae81ff">example.localhost.pomerium.io</span>
+    <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">example-tls</span>
+</code></pre></div><p>As you can see Pomerium is a very versatile Ingress controller. For more examples fo to <a href="https://www.pomerium.com/docs/k8s/ingress.html">Pomerium&rsquo;s page</a>.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -2165,7 +2362,6 @@ Happy Kubernetes interaction!
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -3099,7 +3295,6 @@ hostpci0: 0000:09:00.0;0000:09:00.1
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -8144,7 +8339,6 @@ lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#a
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -9006,7 +9200,6 @@ kubectl port-forward svc/permission-manager <span style="color:#ae81ff">4000</sp
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -9290,7 +9483,6 @@ Forwarding from <span style="color:#f92672">[</span>::1<span style="color:#f9267
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -10577,7 +10769,6 @@ You will have to set it up on both nodes separately for the time being.</p>
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -11114,7 +11305,6 @@ cidr</p>
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -11278,7 +11468,6 @@ kubectl apply -f cronjob-git-key.yaml -n kube-dump
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -11662,7 +11851,6 @@ www-kata-qemu   1/1     Running   <span style="color:#ae81ff">0</span>          
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -11929,7 +12117,6 @@ Events:
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -12359,7 +12546,6 @@ www-kata-qemu   1/1     Running   <span style="color:#ae81ff">0</span>          
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -12625,7 +12811,6 @@ Events:
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -12890,7 +13075,6 @@ Events:
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -13071,7 +13255,6 @@ verify-image:
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -13641,7 +13824,6 @@ nerdctl push docker.io/devopstales/foo:1-esgz
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -14424,7 +14606,6 @@ adldaps1.png</p>
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -14634,7 +14815,6 @@ https://github.com/weaveworks/kured
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -14762,7 +14942,6 @@ curl -s http://10.43.179.39:9115/metrics | grep so_vulnerabilities
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -15191,7 +15370,6 @@ url: http://loki-stack.loki-stack:3100
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -15460,7 +15638,6 @@ kubectl exec <span style="color:#ae81ff">\
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -15773,7 +15950,6 @@ kubectl exec tiefighter -- curl -s -XPOST deathstar.default.svc.cluster.local/v1
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -16650,7 +16826,6 @@ flux create source git podinfo <span style="color:#ae81ff">\
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -16810,7 +16985,6 @@ node-csr-f2J5HT9hg4CIKP0-0BtsEffBzg28VlUbesKJ4p_2mi0   47m   kubernetes.io/kube-
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -18005,7 +18179,6 @@ helm -n fleet-system install --create-namespace --wait <span style="color:#ae81f
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -18307,7 +18480,6 @@ going to sleep...
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -18849,7 +19021,6 @@ kubectl create ns www
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -19710,7 +19881,6 @@ done
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -20002,7 +20172,6 @@ image-pull-secret   kubernetes.io/dockerconfigjson   <span style="color:#ae81ff"
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -20351,7 +20520,6 @@ clusterpolicyreport   <span style="color:#ae81ff">0</span>      <span style="col
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -20840,7 +21008,6 @@ spec:
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -21093,7 +21260,6 @@ busybox1   busybox1   <span style="color:#f92672">[</span>map<span style="color:
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -21311,7 +21477,6 @@ rules:
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -21529,7 +21694,6 @@ kubectl get node
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
@@ -21734,7 +21898,6 @@ kubectl edit psp global-restricted-psp
      <li>Part13: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
      <li>Part14: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
 <!-- kyverno logs and monitoring -->
-<!-- DAST Exporter?? -->
 <!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
 <!-- # Image Signature Verification -->
      <li>Part15a <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
