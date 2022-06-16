@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-06-16T07:10:02+00:00</updated>
+    <updated>2022-06-16T11:12:02+00:00</updated>
     
     
     <author>
@@ -204,6 +204,209 @@ helm repo update
     - <span style="color:#ae81ff">example.localhost.pomerium.io</span>
     <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">example-tls</span>
 </code></pre></div><p>As you can see Pomerium is a very versatile Ingress controller. For more examples fo to <a href="https://www.pomerium.com/docs/k8s/ingress.html">Pomerium&rsquo;s page</a>.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Influencing Kubernetes Scheduler Decisions]]></title>
+            <link href="https://devopstales.github.io/home/container-build-in-kubernetes/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/container-build-in-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Influencing Kubernetes Scheduler Decisions" />
+                <link href="https://devopstales.github.io/home/kube-openid-connect-1.0/?utm_source=atom_feed" rel="related" type="text/html" title="kube-openid-connect 1.0" />
+                <link href="https://devopstales.github.io/home/k8s-user-accounts/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Users in Kubernetes the right way?" />
+                <link href="https://devopstales.github.io/home/trivy-operator-2.3/?utm_source=atom_feed" rel="related" type="text/html" title="trivy-operator 2.3: Patch release for Admisssion controller" />
+                <link href="https://devopstales.github.io/home/gke-gitlab-terraform/?utm_source=atom_feed" rel="related" type="text/html" title="Create K8S cluster with Terraform and GitlabCI" />
+            
+                <id>https://devopstales.github.io/home/container-build-in-kubernetes/</id>
+            
+            
+            <published>2022-06-10T00:00:00+00:00</published>
+            <updated>2022-06-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this blogpost I will show you what tools you can user for privileged builds in Kubernetes.</p>
+<h3 id="rancker-kim">Rancker KIM</h3>
+<p><code>kim</code> is a Kubernetes-aware CLI that will install a small builder backend consisting of a <code>BuildKit</code> daemon bound to the Kubelet&rsquo;s underlying <code>containerd</code> socket (for building images) along with a small server-side agent that the CLI leverages for image management (think push, pull, etc) rather than talking to the backing containerd/CRI directly.</p>
+<p>Install:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">wget https://github.com/rancher/kim/releases/download/v0.1.0-beta.7/kim-linux-amd64
+chmod +x kim-linux-amd64
+mv kim-linux-amd64 /usr/local/bin/kim
+</code></pre></div><p>KIM also works as a kubectl drop-in pligin. To facilitate this, you can either copy or symlink the local kim binary to kubectl-image (and optionally kubectl-builder)</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cd /usr/local/bin
+ln -s kim /usr/local/bin/kubectl-image
+ln -s kim /usr/local/bin/kubectl-builder
+</code></pre></div><p>Deploy kim:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl crate ns kube-image
+<span style="color:#75715e"># run on local cluster</span>
+kim builder install -n kube-image --endpoint-addr 127.0.0.1
+<span style="color:#75715e"># run on a multi node cluster</span>
+kim builder install -n kube-image <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--selector kubernetes.io/hostname<span style="color:#f92672">=</span>k8s-m101.k8s.intra
+
+kubectl get po -n kube-image
+
+kubectl port-forward svc/builder 1233:1233 1234:124 --namespace kube-image
+</code></pre></div><p>Usage:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kim image ls
+IMAGE               TAG                 IMAGE ID            SIZE
+moby/buildkit       v0.8.3              cf14c5e88c0eb       56.5MB
+rancher/kim         v0.1.0-beta.2       fb018f26dd6ef       13.7MB
+
+kim build --tag local/project:tag .
+<span style="color:#75715e"># or</span>
+kim image build --tag local/project:tag .
+<span style="color:#75715e"># or</span>
+kubectl image build --tag local/project:tag .
+
+kim images
+IMAGE               TAG                 IMAGE ID            SIZE
+local/project       tag                 3e7bd55385a51       13MB
+moby/buildkit       v0.8.3              cf14c5e88c0eb       56.5MB
+rancher/kim         v0.1.0-beta.2       fb018f26dd6ef       13.7MB
+</code></pre></div><p>The image built by kim is on the kubernetes node so yo dint&rsquo;t need to pull it. In a local or a single node clusterit is an advantage but in a multi node cluster that means you must use a nde selector on the deployment to select tha same node as the kim server is running.</p>
+<h3 id="kaniko">Kaniko</h3>
+<p><code>kaniko</code> is an open-source container image-building tool created by Google. It does not require privileged access to the host for building container images.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano kaniko-git.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kaniko</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kaniko</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">gcr.io/kaniko-project/executor:debug</span>
+    <span style="color:#f92672">args</span>: [<span style="color:#e6db74">&#34;--context=git://github.com/devopstales/k8s-image-build-demo&#34;</span>,
+            <span style="color:#e6db74">&#34;--destination=devopstales/kaniko-git:1.0.0&#34;</span>,
+            <span style="color:#e6db74">&#34;--forcekgp&#34;</span>]
+    <span style="color:#f92672">volumeMounts</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kaniko-secret</span>
+        <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/kaniko/.docker</span>
+  <span style="color:#f92672">restartPolicy</span>: <span style="color:#ae81ff">Never</span>
+  <span style="color:#f92672">volumes</span>:
+    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kaniko-secret</span>
+      <span style="color:#f92672">secret</span>:
+        <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">regcred</span>
+        <span style="color:#f92672">items</span>:
+          - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">.dockerconfigjson</span>
+            <span style="color:#f92672">path</span>: <span style="color:#ae81ff">config.json</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create secret docker-registry regcred <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --docker-username<span style="color:#f92672">=</span>$REGISTRY_USER <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --docker-password<span style="color:#f92672">=</span>$REGISTRY_PASS <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --docker-server<span style="color:#f92672">=</span>$REGISTRY_URL
+
+kubectl apply -f kaniko-git.yaml
+
+kubectl wait <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --for condition<span style="color:#f92672">=</span>containersready <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    pod kaniko
+
+kubectl logs kaniko --follow
+</code></pre></div><p>It dose not meter  where Kaniko is running you need a registry to pus the images built by Kaniko and pull when you testing.</p>
+<h3 id="kpack">Kpack</h3>
+<p><code>kpack</code> extends Kubernetes and utilizes unprivileged kubernetes primitives to provide builds of OCI images as a platform implementation of <a href="https://buildpacks.io/">Cloud Native Buildpacks (CNB)</a>.</p>
+<p>To install <code>kpack</code> download the <a href="https://github.com/pivotal/kpack/releases">most recent github release</a>. The release.yaml is an asset on the release.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create namespace build
+kubens build
+kubectl apply -f https://github.com/pivotal/kpack/releases/download/v0.6.0/release-0.6.0.yaml
+
+<span style="color:#75715e"># create secret for push to your registry</span>
+kubectl create secret docker-registry regcred <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --docker-username<span style="color:#f92672">=</span>$REGISTRY_USER <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --docker-password<span style="color:#f92672">=</span>$REGISTRY_PASS <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --docker-server<span style="color:#f92672">=</span>$REGISTRY_URL <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --namespace build
+</code></pre></div><p>Create the configuration for your app docker build:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano  kpack-config.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ServiceAccount</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">registry-creds</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">build</span>
+<span style="color:#f92672">secrets</span>:
+- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">registry-creds</span>
+<span style="color:#f92672">imagePullSecrets</span>:
+- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">registry-creds</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kpack.io/v1alpha2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterStore</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">sources</span>:
+  - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">gcr.io/paketo-buildpacks/go</span>
+  - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">gcr.io/paketo-buildpacks/java</span>
+  - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">gcr.io/paketo-buildpacks/nodejs</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kpack.io/v1alpha2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterStack</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">base</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">id</span>: <span style="color:#e6db74">&#34;io.buildpacks.stacks.bionic&#34;</span>
+  <span style="color:#f92672">buildImage</span>:
+    <span style="color:#f92672">image</span>: <span style="color:#e6db74">&#34;paketobuildpacks/build:base-cnb&#34;</span>
+  <span style="color:#f92672">runImage</span>:
+    <span style="color:#f92672">image</span>: <span style="color:#e6db74">&#34;paketobuildpacks/run:base-cnb&#34;</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kpack.io/v1alpha2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Builder</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">silly-demo</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">build</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">serviceAccountName</span>: <span style="color:#ae81ff">regcred</span>
+  <span style="color:#f92672">tag</span>: <span style="color:#ae81ff">devopstales/kapck-build</span>
+  <span style="color:#f92672">stack</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">base</span>
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterStack</span>
+  <span style="color:#f92672">store</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default</span>
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterStore</span>
+  <span style="color:#f92672">order</span>:
+  - <span style="color:#f92672">group</span>:
+    - <span style="color:#f92672">id</span>: <span style="color:#ae81ff">paketo-buildpacks/go</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano kpack-image.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kpack.io/v1alpha2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Image</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">generateName</span>: <span style="color:#ae81ff">silly-demo-</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">build</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">tag</span>: <span style="color:#ae81ff">devopstales/kapck-demo</span>
+  <span style="color:#f92672">additionalTags</span>:
+  - <span style="color:#ae81ff">devopstales/kapck-demo:latest</span>
+  - <span style="color:#ae81ff">devopstales/kapck-demo:0.0.1</span>
+  <span style="color:#f92672">serviceAccountName</span>: <span style="color:#ae81ff">regcred</span>
+  <span style="color:#f92672">builder</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">silly-demo</span>
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Builder</span>
+  <span style="color:#f92672">source</span>:
+    <span style="color:#f92672">git</span>:
+      <span style="color:#f92672">url</span>: <span style="color:#ae81ff">https://github.com/devopstales/k8s-image-build-demo</span>
+      <span style="color:#f92672">revision</span>: <span style="color:#ae81ff">ebb790f3959c05e6c196e88016a243a0053f450a</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f kpack-config.yaml
+
+kg builder
+NAME         LATESTIMAGE                             READY
+silly-demo   devopstales/kapck-demo@sha256:f2290a3   True
+
+kubectl create -f kpack-image.yaml
+
+kubectl get pods
+kubectl get images
+</code></pre></div><p>All the source files can be find in <a href="https://github.com/devopstales/k8s-image-build-demo">my github repo</a>.</p>]]></content>
             
                  
                     
@@ -1818,7 +2021,7 @@ sudo semodule -i cilium.pp
             <updated>2022-04-01T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>In this post I will show you how you can influenc the Kubernetes Scheduler where to schedule a pod.</p>
+            <content type="html"><![CDATA[<p>In this post I will show you how you can influence the Kubernetes Scheduler where to schedule a pod.</p>
 <h3 id="kubernetes-scheduler">Kubernetes Scheduler</h3>
 <p>When the Kubernetes Scheduler schedule a pod it examines each node for whether or not it can host the Pod. The scheduler uses the following equation to calculate the available memory on a given node: <code>Usable memory = available memory - reserved memory</code></p>
 <p>The reserved memory refers to:</p>
