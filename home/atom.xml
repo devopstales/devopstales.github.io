@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-07-13T07:02:58+00:00</updated>
+    <updated>2022-07-15T05:55:58+00:00</updated>
     
     
     <author>
@@ -17,6 +17,362 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[CrowdSec Intrusion Detection System (IDS) for Kubernetes]]></title>
+            <link href="https://devopstales.github.io/home/k8s-crowdsec-ids/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-crowdsec-ids/?utm_source=atom_feed" rel="related" type="text/html" title="CrowdSec Intrusion Detection System (IDS) for Kubernetes" />
+                <link href="https://devopstales.github.io/home/trivy-operator-2.4/?utm_source=atom_feed" rel="related" type="text/html" title="trivy-operator 2.4: Patch release for Admisssion controller" />
+                <link href="https://devopstales.github.io/home/container-build-in-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Influencing Kubernetes Scheduler Decisions" />
+                <link href="https://devopstales.github.io/home/kube-openid-connect-1.0/?utm_source=atom_feed" rel="related" type="text/html" title="kube-openid-connect 1.0" />
+                <link href="https://devopstales.github.io/home/k8s-user-accounts/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Users in Kubernetes the right way?" />
+            
+                <id>https://devopstales.github.io/home/k8s-crowdsec-ids/</id>
+            
+            
+            <published>2022-07-08T00:00:00+00:00</published>
+            <updated>2022-07-08T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can install CrowdSec Intrusion Detection System (IDS) inside a Kubernetes cluster.</p>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>installes Kubernetes cluster</li>
+<li>installed nginx ingress controller</li>
+<li>kubectl</li>
+<li>helm</li>
+</ul>
+<h3 id="architecture">Architecture</h3>
+<p>Here’s an architecture overview of CrowdSec inside a K8s cluster.</p>
+<p><img src="/img/include/crowdsec_in_k8s.png" alt="CrowdSec Architecture"  class="zoomable" /></p>
+<h3 id="install-crowdsec">Install CrowdSec</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add crowdsec https://crowdsecurity.github.io/helm-charts
+helm repo update
+
+kubectl create ns crowdsec
+kubens crowdsec
+</code></pre></div><p>We can create a new file <code>crowdsec-values.yaml</code>, containing the CrowdSec chart configuration.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano crowdsec-values.yaml</span>
+---
+<span style="color:#f92672">agent</span>:
+  <span style="color:#75715e"># To specify each pod you want to process it logs (pods present in the node)</span>
+  <span style="color:#f92672">acquisition</span>:
+    <span style="color:#75715e"># The namespace where the pod is located</span>
+    - <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">ingress-nginx</span>
+      <span style="color:#75715e"># The pod name</span>
+      <span style="color:#f92672">podName</span>: <span style="color:#ae81ff">ingress-nginx-controller-*</span>
+      <span style="color:#75715e"># as in crowdsec configuration, we need to specify the program name so the parser will match and parse logs</span>
+      <span style="color:#f92672">program</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#75715e"># Those are ENV variables</span>
+  <span style="color:#f92672">env</span>:
+  <span style="color:#75715e"># As it&#39;s a test, we don&#39;t want to share signals with CrowdSec so disable the Online API.</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">DISABLE_ONLINE_API</span>
+    <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#75715e"># As we are running Nginx, we want to install the Nginx collection</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">COLLECTIONS</span>
+    <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;crowdsecurity/nginx&#34;</span>
+<span style="color:#f92672">lapi</span>:
+  <span style="color:#f92672">env</span>:
+    <span style="color:#75715e"># As it&#39;s a test, we don&#39;t want to share signals with CrowdSec, so disable the Online API.</span>
+    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">DISABLE_ONLINE_API</span>
+      <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</code></pre></div><p>Now we can install CrowdSec using our config file in the CrowdSec namespace we created previously.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm install crowdsec crowdsec/crowdsec -f crowdsec-values.yaml -n crowdsec
+kubectl get pods -n crowdsec
+</code></pre></div><h3 id="demo">Demo</h3>
+<p>Install HelloWorld application:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm install helloworld crowdsec/helloworld
+
+echo <span style="color:#e6db74">&#34;192.168.200.100 helloworld.mydomain.intra&#34;</span> | sudo tee -a /etc/hosts
+
+curl -v http://helloworld.mydomain.intra
+
+* Trying 192.168.200.100:80...
+* TCP_NODELAY set
+* Connected to helloworld.mydomain.intra <span style="color:#f92672">(</span>192.168.200.100<span style="color:#f92672">)</span> port <span style="color:#ae81ff">80</span> <span style="color:#f92672">(</span><span style="color:#75715e">#0)</span>
+&gt; GET / HTTP/1.1
+&gt; Host: helloworld.mydomain.intra
+&gt; User-Agent: curl/7.68.0
+&gt; Accept: */*
+&gt;
+* Mark bundle as not supporting multiuse
+&lt; HTTP/1.1 <span style="color:#ae81ff">200</span> OK
+&lt; Date: Mon, <span style="color:#ae81ff">20</span> Sep <span style="color:#ae81ff">2021</span> 10:38:21 GMT
+&lt; Content-Type: text/plain; charset<span style="color:#f92672">=</span>utf-8
+&lt; Content-Length: <span style="color:#ae81ff">13</span>
+&lt; Connection: keep-alive
+&lt; X-App-Name: http-echo
+&lt; X-App-Version: 0.2.3
+&lt;
+helloworld!
+* Connection <span style="color:#75715e">#0 to host helloworld.mydomain.intra left intact</span>
+</code></pre></div><p>To test whether CrowdSec detects attacks, we will simulate an attack on the HelloWorld application using Nikto and see CrowdSec metrics and alerts.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">./nikto.pl -host http://helloworld.mydomain.inta
+</code></pre></div><p>Now we can get a shell into the CrowdSec agent pod and see metrics and alerts:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get pods -n crowdsec
+kubectl -n crowdsec exec -it crowdsec-agent-vn4bp -- sh
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">/ <span style="color:#75715e"># cscli metrics</span>
+INFO<span style="color:#f92672">[</span>21-06-2022 09:39:50 AM<span style="color:#f92672">]</span> Buckets Metrics:                             
++-------------------------------------------+---------------+-----------+--------------+--------+---------+
+|                  BUCKET                   | CURRENT COUNT | OVERFLOWS | INSTANCIATED | POURED | EXPIRED |
++-------------------------------------------+---------------+-----------+--------------+--------+---------+
+| crowdsecurity/http-bad-user-agent         |             <span style="color:#ae81ff">3</span> |       <span style="color:#ae81ff">183</span> |          <span style="color:#ae81ff">186</span> |    <span style="color:#ae81ff">369</span> | -       |
+| crowdsecurity/http-crawl-non_statics      | -             |         <span style="color:#ae81ff">7</span> |            <span style="color:#ae81ff">9</span> |    <span style="color:#ae81ff">351</span> |       <span style="color:#ae81ff">2</span> |
+| crowdsecurity/http-path-traversal-probing | -             | -         |            <span style="color:#ae81ff">1</span> |      <span style="color:#ae81ff">2</span> |       <span style="color:#ae81ff">1</span> |
+| crowdsecurity/http-probing                |             <span style="color:#ae81ff">1</span> | -         |            <span style="color:#ae81ff">2</span> |      <span style="color:#ae81ff">2</span> |       <span style="color:#ae81ff">1</span> |
+| crowdsecurity/http-sensitive-files        | -             |         <span style="color:#ae81ff">3</span> |            <span style="color:#ae81ff">4</span> |     <span style="color:#ae81ff">17</span> |       <span style="color:#ae81ff">1</span> |
++-------------------------------------------+---------------+-----------+--------------+--------+---------+
+INFO<span style="color:#f92672">[</span>21-06-2022 09:39:50 AM<span style="color:#f92672">]</span> Acquisition Metrics:                         
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+--------------+----------------+------------------------+
+|                                                                             SOURCE                                                                              | LINES READ | LINES PARSED | LINES UNPARSED | LINES POURED TO BUCKET |
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+--------------+----------------+------------------------+
+| file:/var/log/containers/ingress-nginx-controller-fd7bb8d66-llxc9_ingress-nginx_controller-c536915796f13bbf66d1a8ab7159dbd055773dbbf89ab4d9653043591dfaef1f.log |        <span style="color:#ae81ff">371</span> |          <span style="color:#ae81ff">371</span> | -              |                    <span style="color:#ae81ff">741</span> |
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+--------------+----------------+------------------------+
+INFO<span style="color:#f92672">[</span>21-06-2022 09:39:50 AM<span style="color:#f92672">]</span> Parser Metrics:                              
++--------------------------------+------+--------+----------+
+|            PARSERS             | HITS | PARSED | UNPARSED |
++--------------------------------+------+--------+----------+
+| child-crowdsecurity/http-logs  | <span style="color:#ae81ff">1113</span> |    <span style="color:#ae81ff">738</span> |      <span style="color:#ae81ff">375</span> |
+| child-crowdsecurity/nginx-logs |  <span style="color:#ae81ff">371</span> |    <span style="color:#ae81ff">371</span> | -        |
+| crowdsecurity/dateparse-enrich |  <span style="color:#ae81ff">371</span> |    <span style="color:#ae81ff">371</span> | -        |
+| crowdsecurity/docker-logs      |  <span style="color:#ae81ff">371</span> |    <span style="color:#ae81ff">371</span> | -        |
+| crowdsecurity/geoip-enrich     |  <span style="color:#ae81ff">371</span> |    <span style="color:#ae81ff">371</span> | -        |
+| crowdsecurity/http-logs        |  <span style="color:#ae81ff">371</span> |    <span style="color:#ae81ff">360</span> |       <span style="color:#ae81ff">11</span> |
+| crowdsecurity/nginx-logs       |  <span style="color:#ae81ff">371</span> |    <span style="color:#ae81ff">371</span> | -        |
+| crowdsecurity/whitelists       |  <span style="color:#ae81ff">371</span> |    <span style="color:#ae81ff">371</span> | -        |
++--------------------------------+------+--------+----------+
+</code></pre></div><h3 id="install-crowdsec-lua-bouncer-plugin">Install Crowdsec Lua bouncer plugin</h3>
+<p>Naow we can integrate CrowdSec with nginx ingress controller to block atackers.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl -n crowdsec exec -it crowdsec-agent-vn4bp -- sh
+
+cscli bouncers add ingress-nginx
+
+Api key <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;ingress-nginx&#39;</span>:
+
+   e00b2155a7e43dd8e8d9294305bd9741
+
+Please keep this key since you will not be able to retrieve it!
+</code></pre></div><p>You will get an API key, you need to keep it and save it for the ingress-nginx bouncer. Now we can patch our ingress-nginx helm chart to add and enable the crowdsec lua plugin using the following configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano crowdsec-ingress-bouncer.yaml</span>
+---
+<span style="color:#f92672">controller</span>:
+  <span style="color:#f92672">extraVolumes</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">crowdsec-bouncer-plugin</span>
+    <span style="color:#f92672">emptyDir</span>: {}
+  <span style="color:#f92672">extraInitContainers</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">init-clone-crowdsec-bouncer</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">crowdsec-lua</span>
+    <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
+    <span style="color:#f92672">env</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">API_URL</span>
+        <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;http://crowdsec-service.crowdsec.svc.cluster.local:8080&#34;</span>
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">API_KEY</span>
+        <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;e00b2155a7e43dd8e8d9294305bd9741&#34;</span>
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">DISABLE_RUN</span>
+        <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">BOUNCER_CONFIG</span>
+        <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;/crowdsec/crowdsec-bouncer.conf&#34;</span>
+    <span style="color:#f92672">command</span>: [<span style="color:#e6db74">&#39;sh&#39;</span>, <span style="color:#e6db74">&#39;-c&#39;</span>, <span style="color:#e6db74">&#34;sh /docker_start.sh; mkdir -p /lua_plugins/crowdsec/; cp /crowdsec/* /lua_plugins/crowdsec/&#34;</span>]
+    <span style="color:#f92672">volumeMounts</span>:
+    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">crowdsec-bouncer-plugin</span>
+      <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/lua_plugins</span>
+  <span style="color:#f92672">extraVolumeMounts</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">crowdsec-bouncer-plugin</span>
+    <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/etc/nginx/lua/plugins/crowdsec</span>
+    <span style="color:#f92672">subPath</span>: <span style="color:#ae81ff">crowdsec</span>
+  <span style="color:#f92672">config</span>:
+    <span style="color:#f92672">plugins</span>: <span style="color:#e6db74">&#34;crowdsec&#34;</span>
+    <span style="color:#f92672">lua-shared-dicts</span>: <span style="color:#e6db74">&#34;crowdsec_cache: 50m&#34;</span>
+</code></pre></div><p>Once we have this patch we can upgrade the ingress-nginx chart:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm -n ingress-system upgrade <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>-f ingress-nginx-values.yaml <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>-f crowdsec-ingress-bouncer.yaml <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>ingress-nginx ingress-nginx/ingress-nginx
+</code></pre></div><h3 id="demo-2">Demo 2</h3>
+<p>Now we have our ingress controller patched with CrowdSec Lua bouncer plugin. We&rsquo;ll start an attack again using Nikto</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">./nikto.pl -host http://helloworld.mydomain.intra
+</code></pre></div><p>Getting a shell in the CrowdSec agent pod and listing the alerts:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"> <span style="color:#75715e"># cscli decisions list</span>
++----+----------+-------------------+--------------------------------------+--------+---------+-------------+--------+--------------------+----------+
+| ID |  SOURCE  |    SCOPE:VALUE    |                REASON                | ACTION | COUNTRY |     AS      | EVENTS |     EXPIRATION     | ALERT ID |
++----+----------+-------------------+--------------------------------------+--------+---------+-------------+--------+--------------------+----------+
+|  <span style="color:#ae81ff">3</span> | crowdsec | Ip:192.168.200.5  | crowdsecurity/http-crawl-non_statics | ban    | FR      | <span style="color:#ae81ff">0123</span> Orange |     <span style="color:#ae81ff">43</span> | 3h59m44.053908518s |        <span style="color:#ae81ff">3</span> |
++----+----------+-------------------+--------------------------------------+--------+---------+-------------+--------+--------------------+----------+
+</code></pre></div><p>Now, if we try to access the helloworld app using CURL</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ curl -v http://helloworld.mydomain.intra
+*   Trying 192.168.200.100:80...
+* TCP_NODELAY set
+* Connected to helloworld.mydomain.intra <span style="color:#f92672">(</span>192.168.200.100<span style="color:#f92672">)</span> port <span style="color:#ae81ff">80</span> <span style="color:#f92672">(</span><span style="color:#75715e">#0)</span>
+&gt; GET / HTTP/1.1
+&gt; Host: helloworld.mydomain.intra
+&gt; User-Agent: curl/7.68.0
+&gt; Accept: */*
+&gt; 
+* Mark bundle as not supporting multiuse
+&lt; HTTP/1.1 <span style="color:#ae81ff">403</span> Forbidden
+&lt; Date: Mon, <span style="color:#ae81ff">27</span> Dec <span style="color:#ae81ff">2021</span> 16:14:26 GMT
+&lt; Content-Type: text/html
+&lt; Content-Length: <span style="color:#ae81ff">146</span>
+&lt; Connection: keep-alive
+&lt; 
+
+<span style="color:#ae81ff">403</span> Forbidden
+nginx
+
+* Connection <span style="color:#75715e">#0 to host helloworld.mydomain.intra left intact</span>
+</code></pre></div><p>To make the app accessible again, from the crowdsec-agent pod, we just need to delete the decision on our IP.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ cscli decisions delete --ip 192.168.200.5
+INFO<span style="color:#f92672">[</span>21-06-2022 04:17:10 PM<span style="color:#f92672">]</span> <span style="color:#ae81ff">4</span> decision<span style="color:#f92672">(</span>s<span style="color:#f92672">)</span> deleted
+</code></pre></div><p>And CURL the helloworld app again.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ curl -v http://helloworld.mydomain.intra
+*   Trying 192.168.200.100:80...
+* TCP_NODELAY set
+* Connected to helloworld.mydomain.intra <span style="color:#f92672">(</span>192.168.200.100<span style="color:#f92672">)</span> port <span style="color:#ae81ff">80</span> <span style="color:#f92672">(</span><span style="color:#75715e">#0)</span>
+&gt; GET / HTTP/1.1
+&gt; Host: helloworld.mydomain.intra
+&gt; User-Agent: curl/7.68.0
+&gt; Accept: */*
+&gt; 
+* Mark bundle as not supporting multiuse
+&lt; HTTP/1.1 <span style="color:#ae81ff">200</span> OK
+&lt; Date: Mon, <span style="color:#ae81ff">27</span> Dec <span style="color:#ae81ff">2021</span> 16:18:17 GMT
+&lt; Content-Type: text/plain; charset<span style="color:#f92672">=</span>utf-8
+&lt; Content-Length: <span style="color:#ae81ff">13</span>
+&lt; Connection: keep-alive
+&lt; X-App-Name: http-echo
+&lt; X-App-Version: 0.2.3
+&lt; 
+helloworld !
+* Connection <span style="color:#75715e">#0 to host helloworld.mydomain.intra left intact</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Ubuntu 22.04 - Microsoft's Active Directory  Group Policy]]></title>
+            <link href="https://devopstales.github.io/home/ubuntu-22.04-ad-join/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/windows/ubuntu-22.04-ad-join/?utm_source=atom_feed" rel="related" type="text/html" title="Ubuntu 22.04 - Microsoft&#39;s Active Directory  Group Policy" />
+                <link href="https://devopstales.github.io/home/trivy-operator-2.4/?utm_source=atom_feed" rel="related" type="text/html" title="trivy-operator 2.4: Patch release for Admisssion controller" />
+                <link href="https://devopstales.github.io/home/k8s-pomerium-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Secure your applications with Pomerium Ingress Controller" />
+                <link href="https://devopstales.github.io/home/container-build-in-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Influencing Kubernetes Scheduler Decisions" />
+                <link href="https://devopstales.github.io/home/k8s-change-ip/?utm_source=atom_feed" rel="related" type="text/html" title="How to Change IP on Kubernetes node." />
+            
+                <id>https://devopstales.github.io/home/ubuntu-22.04-ad-join/</id>
+            
+            
+            <published>2022-07-05T00:00:00+00:00</published>
+            <updated>2022-07-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you the new Active Directory  Group Policy integration in Ubuntu 22.04.</p>
+<h3 id="environment">Environment</h3>
+<ul>
+<li>AD Server:
+<ul>
+<li>Domain Server: Windows Server 20119</li>
+<li>Domain Name: devopstales.intra</li>
+<li>Hostname: dc01.devopstales.intra</li>
+<li>NetBIOS Name: DC01</li>
+<li>Realm: DEVOPSTALES.INTRA</li>
+</ul>
+</li>
+</ul>
+<h3 id="join-the-ubuntu-2204-to-active-directory">Join the Ubuntu 22.04 to Active Directory</h3>
+<p>First install some required packages.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo apt install sssd-ad sssd-tools realmd adcli adsys -y
+</code></pre></div><p>Change the DNS and NTP server to the Active Directory Domain Controller</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo vi /etc/netplan/01-netcfg.yaml 
+---
+...
+    nameservers:
+        addresses: <span style="color:#f92672">[</span>192.168.100.100<span style="color:#f92672">]</span>
+
+sudo netplan apply
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo vi /etc/ntp.conf
+...
+server 192.168.100.100 iburst
+
+sudo systemctl restart ntp
+
+ntpq -p
+</code></pre></div><p>Test Active Directory Domain Connection</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">realm discover dc01.devopstales.intra
+
+devopstales.intra
+  type: kerberos
+  realm-name: DEVOPSTALES.INTRA
+  domain-name: devopstales.intra
+  configured: no
+  server-software: active-directory
+  client-software: sssd
+  required-package: sssd-tools
+  required-package: sssd
+  required-package: libnss-sss
+  required-package: libpam-sss
+  required-package: adcli
+  required-package: samba-common-bin
+</code></pre></div><p>Join to the Active Directory Domain</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo realm join dc01.devopstales.intra
+Password <span style="color:#66d9ef">for</span> Administrator:
+
+id developer-user@devopstales.intra
+uid<span style="color:#f92672">=</span>1259201103<span style="color:#f92672">(</span>developer-user@devopstales.intra<span style="color:#f92672">)</span> gid<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users@devopstales.intra<span style="color:#f92672">)</span> groups<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users@devopstales.intra<span style="color:#f92672">)</span>,1259200512<span style="color:#f92672">(</span>domain admins@devopstales.intra<span style="color:#f92672">)</span>,1259200572<span style="color:#f92672">(</span>denied rodc password replication group@devopstales.intra<span style="color:#f92672">)</span>
+</code></pre></div><p>If you want to cut down the domain name from the username:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo vi /etc/sssd/sssd.conf
+ use_fully_qualified_names <span style="color:#f92672">=</span> False
+
+systemctl restart sssd
+
+id Administrator
+uid<span style="color:#f92672">=</span>1259200500<span style="color:#f92672">(</span>administrator<span style="color:#f92672">)</span> gid<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users<span style="color:#f92672">)</span> groups<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users<span style="color:#f92672">)</span>,1259200572<span style="color:#f92672">(</span>denied rodc password replication group<span style="color:#f92672">)</span>,1259200512<span style="color:#f92672">(</span>domain admins<span style="color:#f92672">)</span>,1259200518<span style="color:#f92672">(</span>schema admins<span style="color:#f92672">)</span>,1259200520<span style="color:#f92672">(</span>group policy creator owners<span style="color:#f92672">)</span>,1259200519<span style="color:#f92672">(</span>enterprise admins<span style="color:#f92672">)</span>
+</code></pre></div><p>Enable home folder creation for domain users:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo pam-auth-update --enable mkdir
+</code></pre></div><p>Now you can login wit and AD user to the Ubuntu:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">exit
+
+Ubuntu 22.04 LTS dlp.srv.world ttyS0
+
+ubuntu-client login: developer-user@devopstales.intra
+Password:
+Welcome to Ubuntu 22.04 LTS <span style="color:#f92672">(</span>GNU/Linux 5.15.0-25-generic x86_64<span style="color:#f92672">)</span>
+</code></pre></div><h3 id="manage-linux-gpo-from-windows-ad">Manage Linux GPO from Windows AD</h3>
+<p>To manage Linux clients from AD Group Policy we need to install the custom Group Policies to the AD Domain Controller <code>sysvol</code> folder.</p>
+<p>Firs we generate the custom Group Policy files:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo adsysctl policy admx all
+</code></pre></div><p>On AD Domain Controller copy these files to:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">.admx C:<span style="color:#ae81ff">\W</span>indows<span style="color:#ae81ff">\S</span>YSWOL<span style="color:#ae81ff">\d</span>omain<span style="color:#ae81ff">\P</span>olicies<span style="color:#ae81ff">\P</span>olicyDefinitions<span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>.adml C:<span style="color:#ae81ff">\W</span>indows<span style="color:#ae81ff">\S</span>YSWOL<span style="color:#ae81ff">\d</span>omain<span style="color:#ae81ff">\P</span>olicies<span style="color:#ae81ff">\P</span>olicyDefinitions<span style="color:#ae81ff">\e</span>n-US<span style="color:#ae81ff">\
+</span></code></pre></div><h3 id="create-gpo-for-sudo">Create GPO for sudo</h3>
+<p>On the Windows Active Directory Domain Controller open  <code>Group Policy Management Console</code></p>
+<p>Create a new GPO and right click <code>Edit</code></p>
+<p>Go to <code>Computer Configuration &gt; Policies &gt; Administrative Templates &gt; Ubuntu &gt; Client Management &gt; Privilege Authorization</code>. Then Select <code>Client Administrators</code> Select <code>Enable</code> and add the usernames.</p>
+<p>Now force sync the GPOs on the Ubuntu client:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">adsysctl policy update -av
+
+adsysctl policy applied --details
+</code></pre></div><p>Now you can sudo with the selected user.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -80,7 +436,7 @@ kubectl port-forward service/policy-reporter-ui 8082:8080 -n policy-reporter
         <span style="color:#f92672">trivy.security.devopstales.io/critical</span>: <span style="color:#e6db74">&#34;2&#34;</span>
 ...
 </code></pre></div><h3 id="where-you-can-find">Where you can find:</h3>
-<p>With the release of trivy-operator 2.3 I published trivy-operator with OperatorFramework to OperatorHub:</p>
+<p>With the release of trivy-operator 2.4 I published trivy-operator with OperatorFramework to OperatorHub:</p>
 <p><img src="/img/include/trivy-operator-OH.png" alt="OperatorHub"  class="zoomable" /></p>
 <p><img src="/img/include/trivy-operator-OH2.png" alt="OperatorHub"  class="zoomable" /></p>
 <h2 id="usage">Usage</h2>
