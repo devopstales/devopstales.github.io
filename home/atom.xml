@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-07-21T09:35:10+00:00</updated>
+    <updated>2022-08-11T08:02:04+00:00</updated>
     
     
     <author>
@@ -17,6 +17,102 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to install ESXi nested inside ProxMox VE]]></title>
+            <link href="https://devopstales.github.io/home/install-vmware-in-proxmox/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/virtualization/install-vmware-in-proxmox/?utm_source=atom_feed" rel="related" type="text/html" title="How to install ESXi nested inside ProxMox VE" />
+                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Kubernetes In-Tree vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/openshift-restrict-access/?utm_source=atom_feed" rel="related" type="text/html" title="Restrict access to OpenShift routes by IP address" />
+                <link href="https://devopstales.github.io/home/ros-pppoe-server/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: PPPOE Server" />
+            
+                <id>https://devopstales.github.io/home/install-vmware-in-proxmox/</id>
+            
+            
+            <published>2022-07-20T00:00:00+00:00</published>
+            <updated>2022-07-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Int his post I will show you how you can install an vmware ESX host in Proxmox VE.</p>
+<h3 id="the-issue">The Issue</h3>
+<p>I need o test a vmware environment so I will install vmware ESX 7.0 as a VM in Proxmox VE 7.2. The problem is that, with wrong selection of virtual devices, vSphere will not be able to see the virtual hard drive, and will not be star the install.</p>
+<h3 id="enable-nested-virtualization-on-proxmox">Enable nested virtualization on Proxmox:</h3>
+<p>First we need to make sure nested virtualization is enabled on PVE host:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat /sys/module/kvm_intel/parameters/nested
+</code></pre></div><p>If it returns <code>N</code>, that means it&rsquo;s disabled:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Intel</span>
+echo <span style="color:#e6db74">&#34;options kvm-intel nested=Y&#34;</span> &gt; /etc/modprobe.d/kvm-intel.conf
+<span style="color:#75715e"># AMD</span>
+echo <span style="color:#e6db74">&#34;options kvm-amd nested=1&#34;</span> &gt; /etc/modprobe.d/kvm-amd.conf
+</code></pre></div><p>Then you need to reenable the kvm kernel module. Fot this you need to stop all the virtual machines on the host or reboot the host after run the commands:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">modprobe -r kvm_intel
+modprobe kvm_intel
+<span style="color:#75715e"># AMD</span>
+modprobe -r kvm_amd
+modprobe kvm_amd
+</code></pre></div><p>Check again:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Intel</span>
+echo <span style="color:#e6db74">&#34;options kvm-intel nested=Y&#34;</span> &gt; /etc/modprobe.d/kvm-intel.conf
+<span style="color:#75715e"># AMD</span>
+echo <span style="color:#e6db74">&#34;options kvm-amd nested=1&#34;</span> &gt; /etc/modprobe.d/kvm-amd.conf
+</code></pre></div><h3 id="creating-the-virtual-machine">Creating the Virtual Machine</h3>
+<p>This step is quite straightforward: you just need to create the new virtual machine, but you need to pay attention to the options:</p>
+<ul>
+<li>&lsquo;OS Tab&rsquo;
+<ul>
+<li>&lsquo;Type:&rsquo; Linux</li>
+<li>&lsquo;Version:&rsquo; 5.x – 2.6 Kernel</li>
+</ul>
+</li>
+<li>&lsquo;System Tab&rsquo;
+<ul>
+<li>&lsquo;Graphic card:&rsquo; Default</li>
+<li>&lsquo;SCSI Controller:&rsquo; VMware PVSCSI</li>
+<li>&lsquo;BIOS:&rsquo; SeaBIOS</li>
+<li>&lsquo;Machine:&rsquo; q35</li>
+</ul>
+</li>
+<li>&lsquo;Hard Disk Tab&rsquo;
+<ul>
+<li>&lsquo;Bus/Device:&rsquo; SATA</li>
+<li>&lsquo;SSD emulation:&rsquo; Check</li>
+<li>&lsquo;Discard:&rsquo; Check</li>
+</ul>
+</li>
+<li>&lsquo;CPU Tab&rsquo;
+<ul>
+<li>&lsquo;Cores:&rsquo; 4</li>
+<li>&lsquo;Sockets:&rsquo; 2</li>
+<li>&lsquo;Type:&rsquo; host</li>
+<li>&lsquo;Enable NUMA:&rsquo; Check if our system supports</li>
+</ul>
+</li>
+<li>&lsquo;Memory Tab&rsquo;
+<ul>
+<li>&lsquo;Memory (MiB):&rsquo; At least 4096 but to run vcenter 16384</li>
+<li>&lsquo;Ballooning Device:&rsquo; Uncheck</li>
+</ul>
+</li>
+<li>&lsquo;Network Tab&rsquo;
+<ul>
+<li>&lsquo;Model:&rsquo; VMware vmxnet3</li>
+</ul>
+</li>
+</ul>
+<p>Start the vSphere VM</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -4486,7 +4582,7 @@ curl -X GET https://api.okd.mydomain.intra:6443/healthz -k
             <title type="html"><![CDATA[Enable Proxmox PCIe Passthrough]]></title>
             <link href="https://devopstales.github.io/home/proxmox-pci-passthrough/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/linux/proxmox-pci-passthrough/?utm_source=atom_feed" rel="related" type="text/html" title="Enable Proxmox PCIe Passthrough" />
+                <link href="https://devopstales.github.io/virtualization/proxmox-pci-passthrough/?utm_source=atom_feed" rel="related" type="text/html" title="Enable Proxmox PCIe Passthrough" />
                 <link href="https://devopstales.github.io/home/k8s-test-tools/?utm_source=atom_feed" rel="related" type="text/html" title="Validate Kubernetes Deployment in CI/CD" />
                 <link href="https://devopstales.github.io/home/aws-eks-ecr/?utm_source=atom_feed" rel="related" type="text/html" title="Elastic Container Registry Integration with EKS" />
                 <link href="https://devopstales.github.io/home/aws-s2s-vpn/?utm_source=atom_feed" rel="related" type="text/html" title="AWS - pfsense: Site-to-site VPN using static routes" />
@@ -22848,7 +22944,7 @@ https://github.com/weaveworks/kured
                 <link href="https://devopstales.github.io/kubernetes/kubernetes-deprecated-docker-containderd-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes deprecated Docker? Containderd is the new Docker!!" />
                 <link href="https://devopstales.github.io/home/rke2-airgap-install/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 The Secure Kubernetes Engine" />
                 <link href="https://devopstales.github.io/home/k8s-security/?utm_source=atom_feed" rel="related" type="text/html" title="Best Practices to keeping Kubernetes Clusters Secure" />
-                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure K8S vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Kubernetes In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
             
                 <id>https://devopstales.github.io/home/kubernetes-deprecated-docker-containderd-docker/</id>
@@ -23746,7 +23842,7 @@ metadata:
                 <link href="https://devopstales.github.io/cloud/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
                 <link href="https://devopstales.github.io/home/jitsi-meet/?utm_source=atom_feed" rel="related" type="text/html" title="Install Jitsi meet" />
                 <link href="https://devopstales.github.io/home/jitsi-jibri/?utm_source=atom_feed" rel="related" type="text/html" title="Install recording fot Jitsi" />
-                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure K8S vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Kubernetes In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
             
                 <id>https://devopstales.github.io/home/aks/</id>
@@ -23865,7 +23961,7 @@ kubectl get nodes
             <link href="https://devopstales.github.io/home/jitsi-jibri/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/home/jitsi-meet/?utm_source=atom_feed" rel="related" type="text/html" title="Install Jitsi meet" />
-                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure K8S vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Kubernetes In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
                 <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
                 <link href="https://devopstales.github.io/home/install-unifi-controller/?utm_source=atom_feed" rel="related" type="text/html" title="How to setup Unifi Controller on Debian 10" />
@@ -23993,7 +24089,7 @@ systemctl enable jibri
             <link href="https://devopstales.github.io/home/jitsi-meet/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/jitsi-meet/?utm_source=atom_feed" rel="related" type="text/html" title="Install Jitsi meet" />
-                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure K8S vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Kubernetes In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
                 <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
                 <link href="https://devopstales.github.io/home/install-unifi-controller/?utm_source=atom_feed" rel="related" type="text/html" title="How to setup Unifi Controller on Debian 10" />
@@ -24118,14 +24214,14 @@ var config = {
     
         
         <entry>
-            <title type="html"><![CDATA[Configure K8S vSphere Cloud Provider]]></title>
+            <title type="html"><![CDATA[Configure Kubernetes In-Tree vSphere Cloud Provider]]></title>
             <link href="https://devopstales.github.io/home/k8s-vmware/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Kubernetes In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/k8s-ipvs/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with IPVS mode" />
                 <link href="https://devopstales.github.io/home/k8s-calico-ebpf/?utm_source=atom_feed" rel="related" type="text/html" title="Install k8s with calico&#39;s eBPF mode" />
                 <link href="https://devopstales.github.io/home/openshift-rbd-fsck/?utm_source=atom_feed" rel="related" type="text/html" title="How to fixing filesystem corruption on a Kubernetes Ceph RBD PersistentVolume" />
-                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
-                <link href="https://devopstales.github.io/home/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
             
                 <id>https://devopstales.github.io/home/k8s-vmware/</id>
             
@@ -32346,7 +32442,7 @@ endpoint = http://localhost/api
             <title type="html"><![CDATA[Restrict access to OpenShift routes by IP address]]></title>
             <link href="https://devopstales.github.io/home/openshift-restrict-access/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
                 <link href="https://devopstales.github.io/home/ansible-operator-overview/?utm_source=atom_feed" rel="related" type="text/html" title="Ansible Operator Overview" />
                 <link href="https://devopstales.github.io/home/openshift-add-node/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Add Nodes to a Cluster" />
@@ -36379,7 +36475,7 @@ service nagios restart
                 <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
-                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
             
                 <id>https://devopstales.github.io/home/openshift-hostalreadyclaimed/</id>
@@ -37878,7 +37974,7 @@ Then the poller will ativated.
                 <link href="https://devopstales.github.io/kubernetes/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
                 <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
                 <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
-                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
             
                 <id>https://devopstales.github.io/home/openshift-gitlabrunner/</id>
@@ -37984,7 +38080,7 @@ oc deploy gitlab-runner-template.yml
             <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Change Certificates in Openshift" />
-                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
@@ -38190,7 +38286,7 @@ docker push harbor.devopstales.intra/test/nginx:V2
             <title type="html"><![CDATA[Change Certificates in Openshift]]></title>
             <link href="https://devopstales.github.io/home/openshift-cert/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
@@ -38264,13 +38360,13 @@ ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/openshi
     
         
         <entry>
-            <title type="html"><![CDATA[Configure Openshift vSphere Cloud Provider]]></title>
+            <title type="html"><![CDATA[Configure Openshift In-Tree vSphere Cloud Provider]]></title>
             <link href="https://devopstales.github.io/home/openshift-vmware/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/kubernetes/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/home/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
                 <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
-                <link href="https://devopstales.github.io/kubernetes/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift vSphere Cloud Provider" />
                 <link href="https://devopstales.github.io/kubernetes/openshift-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Helm" />
             
                 <id>https://devopstales.github.io/home/openshift-vmware/</id>
@@ -40714,7 +40810,7 @@ kubectl config use-context work-dev
                 <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/home/proxmox-node-remove/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox node removal" />
                 <link href="https://devopstales.github.io/home/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
-                <link href="https://devopstales.github.io/linux/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
+                <link href="https://devopstales.github.io/virtualization/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
             
                 <id>https://devopstales.github.io/home/proxmox-backup-pve-zsync/</id>
             
@@ -40761,7 +40857,7 @@ pve-zsync sync --source 107 --dest 192.168.10.50:tank --verbose --maxsnap 14 --n
                 <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/home/proxmox-node-remove/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox node removal" />
                 <link href="https://devopstales.github.io/home/kubectl-multi-cluster-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configure kubectl for multiple clusters" />
-                <link href="https://devopstales.github.io/linux/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
+                <link href="https://devopstales.github.io/virtualization/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
             
                 <id>https://devopstales.github.io/home/proxmox-backup-sanoid/</id>
             
@@ -40838,7 +40934,7 @@ nano /etc/crontab
             <title type="html"><![CDATA[Proxmox backup with znapzend]]></title>
             <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/linux/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
+                <link href="https://devopstales.github.io/virtualization/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-pve-zsync/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with pve-zsync" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/home/proxmox-node-remove/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox node removal" />
