@@ -29,7 +29,7 @@
     "datePublished": "2021-10-15",
     "dateModified" : "2021-10-15",
     "url" : "https://devopstales.github.io/kubernetes/k8s-cisa-install/",
-    "wordCount" : "800",
+    "wordCount" : "828",
     "keywords" : [ "kubernetes deployment", "seccomp", "docker", "containerd", "CRI-O", "Kubernetes", "CISA", "NSA", "best practices", "Kubernetes Hardening Guide", "Blog" ]
     
 }
@@ -400,16 +400,23 @@ kube-bench | grep <span style="color:#e6db74">&#34;\[FAIL\]&#34;</span>
 </code></pre></div><p>There is no FAIL jusk WARNING. Jeee.</p>
 <h3 id="join-nodes">join nodes</h3>
 <p>Firs we need to get the join command from the master:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># master1</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master1</span>
 kubeadm token create --print-join-command
 kubeadm join 172.17.9.10:6443 --token c2t0rj.cofbfnwwrb387890 <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span> --discovery-token-ca-cert-hash sha256:a52f4c16a6ce9ef72e3d6172611d17d9752dfb1c3870cf7c8ad4ce3bcb97547e
 </code></pre></div><p>If the next node is a worke we can just use the command what we get. If a next node is a master we need to generate a certificate-key. You need a separate certificate-key for every new master.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># master1</span>
-kubeadm init phase upload-certs --upload-certs
-<span style="color:#f92672">[</span>upload-certs<span style="color:#f92672">]</span> Using certificate key:
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master1</span>
+<span style="color:#75715e">## generate cert key</span>
+kubeadm certs certificate-key
 29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># master2</span>
+
+<span style="color:#75715e">## store cert key in secret</span>
+kubeadm init phase upload-certs --upload-certs --certificate-key<span style="color:#f92672">=</span>29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master2</span>
+kubeadm join 172.17.9.10:6443 --token c2t0rj.cofbfnwwrb387890 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--discovery-token-ca-cert-hash sha256:a52f4c16a6ce9ef72e3d6172611d17d9752dfb1c3870cf7c8ad4ce3bcb97547e <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--control-plane --certificate-key 29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master3</span>
 kubeadm join 172.17.9.10:6443 --token c2t0rj.cofbfnwwrb387890 <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--discovery-token-ca-cert-hash sha256:a52f4c16a6ce9ef72e3d6172611d17d9752dfb1c3870cf7c8ad4ce3bcb97547e <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--control-plane --certificate-key 29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
