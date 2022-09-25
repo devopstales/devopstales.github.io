@@ -29,7 +29,7 @@
     "datePublished": "2022-03-22",
     "dateModified" : "2022-03-22",
     "url" : "https://devopstales.github.io/home/k8s-user-accounts/",
-    "wordCount" : "663",
+    "wordCount" : "715",
     "keywords" : [ "devops", "tales", "Kubernetes", "User", "RBAC", "Blog" ]
     
 }
@@ -277,6 +277,25 @@ cat <span style="color:#e6db74">&lt;&lt;&#39;EOF&#39;&gt; devopstales-csr.yaml
 </span><span style="color:#e6db74">  - key encipherment
 </span><span style="color:#e6db74">  - client auth
 </span><span style="color:#e6db74">EOF</span>
+</code></pre></div><p>OR from Kubernetes v1.22 (in this example it will expire after 10 years):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat devopstales.csr | base64 | tr -d <span style="color:#e6db74">&#39;\n&#39;</span>
+
+cat <span style="color:#e6db74">&lt;&lt;&#39;EOF&#39;&gt; devopstales-csr.yaml
+</span><span style="color:#e6db74">apiVersion: certificates.k8s.io/v1
+</span><span style="color:#e6db74">kind: CertificateSigningRequest
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: user-request-devopstales
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  groups:
+</span><span style="color:#e6db74">  - system:authenticated
+</span><span style="color:#e6db74">  request: LS0tLS1CRUdJTi...
+</span><span style="color:#e6db74">  signerName: kubernetes.io/kube-apiserver-client
+</span><span style="color:#e6db74">  expirationSeconds: 315569260
+</span><span style="color:#e6db74">  usages:
+</span><span style="color:#e6db74">  - digital signature
+</span><span style="color:#e6db74">  - key encipherment
+</span><span style="color:#e6db74">  - client auth
+</span><span style="color:#e6db74">EOF</span>
 </code></pre></div><p>Create the <code>CertificateSigningRequest</code> and approve it. Then the Kubernetes api server will generate the certificate theat you can use to authentication.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create -f devopstales-csr.yaml
 kubectl certificate approve user-request-devopstales
@@ -285,7 +304,7 @@ kubectl get csr
 NAME                       AGE       REQUESTOR   CONDITION
 user-request-devopstales   1m        admin       Approved,Issued
 </code></pre></div><p>Now the certificate should be signed. You can download the new signed public key from the csr resource:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get csr devopstales -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.status.certificate}&#39;</span> | base64 -d &gt; devopstales-user.crt
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get csr user-request-devopstales -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.status.certificate}&#39;</span> | base64 -d &gt; devopstales-user.crt
 </code></pre></div><h3 id="create-new-user-config-file">Create new user config file</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl --kubeconfig ~/.kube/config-devopstales config set-cluster preprod --insecure-skip-tls-verify<span style="color:#f92672">=</span>true --server<span style="color:#f92672">=</span>https://KUBERNETES-API-ADDRESS
 kubectl --kubeconfig ~/.kube/config-devopstales config set-credentials devopstales --client-certificate<span style="color:#f92672">=</span>devopstales-user.crt --client-key<span style="color:#f92672">=</span>devopstales.pem --embed-certs<span style="color:#f92672">=</span>true
