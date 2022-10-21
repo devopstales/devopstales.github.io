@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-10-02T10:30:15+00:00</updated>
+    <updated>2022-10-21T14:02:07+00:00</updated>
     
     
     <author>
@@ -17,6 +17,167 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes volume expansion with Ceph RBD CSI driver]]></title>
+            <link href="https://devopstales.github.io/home/k8s-ceph-csi-extand/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k8s-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD for dynamic provisioning" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-ceph-csi-extand/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes volume expansion with Ceph RBD CSI driver" />
+                <link href="https://devopstales.github.io/home/ceph_backup_benji/?utm_source=atom_feed" rel="related" type="text/html" title="CEPH backup with Benji" />
+                <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
+                <link href="https://devopstales.github.io/home/who-mapping-rbd-device/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph: who&#39;s mapping a RBD device" />
+            
+                <id>https://devopstales.github.io/home/k8s-ceph-csi-extand/</id>
+            
+            
+            <published>2022-10-20T00:00:00+00:00</published>
+            <updated>2022-10-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how can you use CEPH RBD CSI driver as persistent storage end enable volume expansion on Kubernetes.</p>
+<H3>Parst of the Kubernetes series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/ansible-k8s-install/">Install K8S with ansible</a></li>
+     <li>Part1b: <a href="../../kubernetes/k8s-install/">Install K8S with kubeadm</a></li>
+     <li>Part1c: <a href="../../kubernetes/k8s-install-containerd/">Install K8S with containerd and kubeadm</a></li>
+     <li>Part1d: <a href="../../kubernetes/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb/">Intall metal-lb with K8S</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-nginx-ingress/">Install Nginx ingress to K8S</a></li>
+<!--      <li>Part3b: k8s-multiple-nginx-ingress -->
+<!--      <li>Part3c: k8s-contour-ingress -->
+     <li>Part4: <a href="../../kubernetes/k8s-cert-manager/">Install cert-manager to K8S</a></li>
+<!-- local folder (+ autoprovisioning ) -->
+     <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+     <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+     <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... -->
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+<!-- istio-install.md -->
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+<!-- TICSK stack monitoring -->
+<!-- grafana loki -->
+<!-- logs to graylog -->
+</ul>
+
+
+
+<p>Firt we need to install the <a href="https://github.com/kubernetes-csi/external-resizer">csi-resizer</a>. This is a sidecar container that watches Kubernetes PersistentVolumeClaims objects and triggers controller side expansion operation against a CSI endpoint</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubens ceph-csi-rbd
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-resizer/master/deploy/kubernetes/rbac.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-resizer/master/deploy/kubernetes/deployment.yaml
+</code></pre></div><p>Create or edit a StorageClass with the peccary parameters like (<code>csi.storage.k8s.io/controller-expand-secret-namespace: default</code>,<code>csi.storage.k8s.io/controller-expand-secret-name: csi-rbd-secret</code>,<code>allowVolumeExpansion: true</code>):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">storage.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">StorageClass</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">k8s-etc</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">storageclass.kubernetes.io/is-default-class</span>: <span style="color:#e6db74">&#39;true&#39;</span>
+<span style="color:#f92672">provisioner</span>: <span style="color:#ae81ff">rbd.csi.ceph.com</span>
+<span style="color:#f92672">parameters</span>:
+  <span style="color:#f92672">pool</span>: <span style="color:#ae81ff">k8s-etc</span>
+  <span style="color:#f92672">clusterID</span>: <span style="color:#ae81ff">e285a458-7c95-4187-8129-fbd6c370c537</span>
+  <span style="color:#f92672">imageFeatures</span>: <span style="color:#ae81ff">layering</span>
+  <span style="color:#f92672">csi.storage.k8s.io/fstype</span>: <span style="color:#ae81ff">ext4</span>
+  <span style="color:#f92672">csi.storage.k8s.io/provisioner-secret-namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">csi.storage.k8s.io/provisioner-secret-name</span>: <span style="color:#ae81ff">csi-rbd-secret</span>
+  <span style="color:#f92672">csi.storage.k8s.io/node-stage-secret-namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">csi.storage.k8s.io/node-stage-secret-name</span>: <span style="color:#ae81ff">csi-rbd-secret</span>
+  <span style="color:#f92672">csi.storage.k8s.io/controller-expand-secret-namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">csi.storage.k8s.io/controller-expand-secret-name</span>: <span style="color:#ae81ff">csi-rbd-secret</span>
+<span style="color:#f92672">volumeBindingMode</span>: <span style="color:#ae81ff">Immediate</span>
+<span style="color:#f92672">reclaimPolicy</span>: <span style="color:#ae81ff">Delete</span>
+<span style="color:#f92672">allowVolumeExpansion</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">mountOptions</span>:
+  - <span style="color:#ae81ff">discard</span>
+</code></pre></div><p>Create demo app for expansion:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano testclaim.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PersistentVolumeClaim</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-claim</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">accessModes</span>:
+    - <span style="color:#ae81ff">ReadWriteOnce</span>
+  <span style="color:#f92672">resources</span>:
+    <span style="color:#f92672">requests</span>:
+      <span style="color:#f92672">storage</span>: <span style="color:#ae81ff">1Gi</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano testpod.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ReplicationController</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">spec</span>:
+<span style="color:#75715e">#      securityContext:</span>
+<span style="color:#75715e">#        fsGroupChangePolicy: ReadWriteOnceWithFSType</span>
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/var/lib/www/html</span>
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mypvc</span>
+      <span style="color:#f92672">volumes</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mypvc</span>
+          <span style="color:#f92672">persistentVolumeClaim</span>:
+            <span style="color:#f92672">claimName</span>: <span style="color:#ae81ff">test-claim</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f testclaim.yaml
+kubectl apply -f testpod.yaml
+
+kgp
+NAME          READY   STATUS    RESTARTS   AGE
+nginx-qsw7x   1/1     Running   <span style="color:#ae81ff">0</span>          <span style="color:#ae81ff">115</span>
+
+kubectl exec -ti nginx-qsw7x -- df -kh|grep var
+/dev/rbd7                974M   24K  958M   1% /var/lib/www/html
+
+kgpvc
+NAME         STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+test-claim   Bound    pvc-da8019f5-cf01-4ede-8e36-90dd8a79564b   1Gi        RWO            k8s-etc     11m
+</code></pre></div><p>Now we can change the size of the pvc and the operator will extend teh pv fo it automatically:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl patch pvc test-claim -p <span style="color:#e6db74">&#39;{&#34;spec&#34;: {&#34;resources&#34;: {&#34;requests&#34;: {&#34;storage&#34;: &#34;5Gi&#34;}}}}&#39;</span>
+
+kgpvc
+NAME         STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+test-claim   Bound    pvc-da8019f5-cf01-4ede-8e36-90dd8a79564b   5Gi        RWO            k8s-etc     11m
+
+kubectl exec -ti nginx-qsw7x -- df -kh|grep var
+/dev/rbd7                4.9G   24K  4.9G   1% /var/lib/www/html
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -3370,22 +3531,24 @@ KUBELET_KUBEADM_ARGS<span style="color:#f92672">=</span><span style="color:#e6db
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">192.168.1.41  kubernetes01 <span style="color:#75715e"># master node</span>
@@ -11221,22 +11384,24 @@ lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#a
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">192.168.1.41  kubernetes01 <span style="color:#75715e"># master node</span>
@@ -16589,22 +16754,24 @@ git push origin gh-pages
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>CoreDNS is the DNS server in kubernetes. I some situation I need to add custom hosts to be resolvable in the kubernetes netwok.</p>
@@ -25278,22 +25445,24 @@ var config = {
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="vsphere-configuration">vSphere Configuration</h3>
@@ -25523,22 +25692,24 @@ kubectl aplay -f vmware-sc.yml
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="wthat-is-kube-proxy">Wthat is kube-proxy</h3>
@@ -25645,22 +25816,24 @@ calicoctl patch felixconfiguration default --patch='{&quot;spec&quot;: {&quot;bp
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="wthat-is-kube-proxy">Wthat is kube-proxy</h3>
@@ -26411,22 +26584,24 @@ curl -sfL https://get.k3s.io | sh -
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="what-is-cri-o">What is CRI-O?</h3>
@@ -26726,22 +26901,24 @@ systemctl restart NetworkManager
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="metallb">Metallb</h3>
@@ -27454,22 +27631,24 @@ oc get csr -o name | xargs oc adm certificate approve
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>On all host we have an unused unpartitioned disk called sdb.</p>
@@ -27980,22 +28159,24 @@ knife client list
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <pre tabindex="0"><code>172.17.8.100  # kubernetes cluster ip
@@ -29591,22 +29772,24 @@ sudo -u postgres psql -x -c &quot;select * from pg_stat_replication&quot;
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>You can install Longhorn on an existing Kubernetes cluster with one <code>kubectl apply</code> command or using Helm charts. Once Longhorn is installed, it adds persistent volume support to the Kubernetes cluster.</p>
@@ -29749,22 +29932,24 @@ echo 8 &gt; /sys/module/zfs/parameters/zfs_vdev_async_write_min_active
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>For a production environment this is not an ideal structure because if you store the data on a single host if the host dies your data will be lost. For this Demo I will use a separate disk for storing the PV&rsquo;s folders. So you can backup or replicate this disk separately.</p>
@@ -29901,22 +30086,24 @@ testpvc   Bound     pvc-145c785e-ab83-11e7-9432-4201ac1fd019   50Gi       RWX   
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/kubernetes/manifests/kube-apiserver.yaml
@@ -30081,22 +30268,24 @@ helm upgrade --install kuberos devopstales/kuberos --namespace kuberos -f values
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/kubernetes/manifests/kube-apiserver.yaml
@@ -30387,22 +30576,24 @@ systemctl restart docker kubelet
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>Kubernetes does not have its own user management and relies on external providers like Keycloak. First we need to integrate an OpeniD prodiver (for me keycloak) with the kubernetes api server.</p>
@@ -30639,22 +30830,24 @@ kubectl port-forward -n loki-stack service/grafana 3000:80
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="how-its-work">How it&rsquo;s work</h3>
@@ -30827,22 +31020,24 @@ kubectl get po -n nginx-example
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>cert-manager is a native Kubernetes certificate management controller. It can help with issuing certificates from a variety of sources, such as Let’s Encrypt, HashiCorp Vault, Venafi, a simple signing key pair, or self signed.</p>
@@ -32756,22 +32951,24 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>The Container Storage Interface (CSI) is a standard for exposing arbitrary block and file storage storage systems to Kubernetes. Using CSI third-party storage providers can write and deploy plugins exposing storage systems in Kubernetes. Bbefore we begin lets ensure that we have the following requirements:</p>
@@ -33018,22 +33215,24 @@ demo1-backup  demo-project-223110                      READY
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="environment">Environment</h3>
@@ -33687,22 +33886,24 @@ curl -XGET 'localhost:9200/_snapshot/my_backup/_all?pretty'
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="enviroment">Enviroment</h3>
@@ -33889,22 +34090,24 @@ s3cmd setpolicy ./bucket-policy.json s3://devopstales
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>Since Helm v2, helm got a server part called The Tiller Server which is interacts with the helm client, and the Kubernetes API server. By default helm init installs a Tiller deployment to Kubernetes clusters and communicates via gRPC.</p>
@@ -33974,22 +34177,24 @@ export HELM_HOST=localhost:44134
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="environment">Environment</h3>
@@ -34548,22 +34753,24 @@ firewall-cmd --reload
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <h3 id="environment">Environment</h3>
@@ -34711,22 +34918,24 @@ token:      XXXXXXXXXXXXXXXXXXXXXXXXXX
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <pre tabindex="0"><code>192.168.1.41  kubernetes01 # master node
@@ -39746,22 +39955,24 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
      <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
      <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
 <!-- linstore (based on drbd) -->
 <!-- kubernetes netwoking caliko vs ... -->
-     <li>Part6a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
-     <li>Part6b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
-     <li>Part7: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
-     <li>Part8: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
-     <li>Part9: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
-     <li>Part10: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
-     <li>Part11: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part12: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
 <!-- TICSK stack monitoring -->
 <!-- grafana loki -->
 <!-- logs to graylog -->
 </ul>
+
 
 
 <p>I whant to use helm on Openshift but firt I startid with the basics of helm and Role-based access control (RBAC) on a simple Kubernestes cluster. Most people seem to be running Helm with their own credentials or a dedicated service account with cluster-admin permissions. This isn’t very good from a security perspective, especially so if it’s being run within CI/CD.</p>
