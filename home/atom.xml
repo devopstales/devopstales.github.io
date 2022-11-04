@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-10-21T14:02:07+00:00</updated>
+    <updated>2022-11-04T13:46:56+00:00</updated>
     
     
     <author>
@@ -17,6 +17,211 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Linux user namespace management wit CRI-O in Kubernetes]]></title>
+            <link href="https://devopstales.github.io/home/k8s-user-namespace/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/container-runtimes/?utm_source=atom_feed" rel="related" type="text/html" title="Containers and Container runtimes for Beginners" />
+                <link href="https://devopstales.github.io/home/k8s-falco/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes audit logs and Falco" />
+                <link href="https://devopstales.github.io/home/k8s-cisa-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Hardening Guide with CISA 1.6 Benchmark" />
+                <link href="https://devopstales.github.io/home/k8s-seccomp/?utm_source=atom_feed" rel="related" type="text/html" title="Hardening Kubernetes with seccomp" />
+                <link href="https://devopstales.github.io/home/k3s-crio/?utm_source=atom_feed" rel="related" type="text/html" title="Install K3S with CRI-O and kadalu" />
+            
+                <id>https://devopstales.github.io/home/k8s-user-namespace/</id>
+            
+            
+            <published>2022-11-02T00:00:00+00:00</published>
+            <updated>2022-11-02T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this blog post I will introduce user namespaces, then I will show you how you can use it in Kubernetes.</p>
+<h1 id="what-are-user-namespaces">What are user namespaces?</h1>
+<p>As we talked about in a <a href="">prewious post</a> container engines uses the linux kernels namespaces to isolate the conatiners. For example, two containers in different network namespaces will not see each other’s network interfaces. Two containers in different PID namespaces will not see each other’s processes.</p>
+<p>On Linux, all files and all processes are owned by a specific user id and group id, usually defined in <code>/etc/passwd</code> and <code>/etc/group</code>. <a href="https://man7.org/linux/man-pages/man7/user_namespaces.7.html">User namespaces</a>  are isolates user IDs and group IDs from each other. With user namespaces the container engine can let a container only see a subset of the host’s user IDs and group IDs.</p>
+<h2 id="why-this-is-important">Why this is important</h2>
+<p>By default the container engines share the same user namespace in the container as the host use. So If I use the root user with the 0 user ID in a container it is the same ID as he root user use on the host. So if an unprivileged user on a hos has the ability to run containers with this security loophole it can make changes on the host without sudo privilege on the host:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ docker run -v /etc/:/etc/ -ti ubuntu
+root@6803a66e58d0:/# passwd
+New password:
+Retype new password:
+passwd: password updated successfully
+root@6803a66e58d0:/# exit
+
+$ su -
+Password:
+Hello, DevOpsTales! You are a sysadmin now
+<span style="color:#75715e">#</span>
+</code></pre></div><h2 id="the-solution-rootless-mode">The solution rootless mode</h2>
+<p>The firs container engine that can be used in rootless mode was <strong>podman</strong> they used the <code>subuid</code> and <code>bunguid</code> to run containers in rootless mode. Normally a user or group has only one ID, but wit <code>subuid</code> and <code>bunguid</code> you can allocate an ID segment for the user or groupe.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">====================================================================</span>
+User Specification
+<span style="color:#f92672">====================================================================</span>
+
+<span style="color:#75715e"># The following below commands allocates the UIDs and GIDs from 100000to 165535 to the podman user and group respectively.</span>
+
+$ sudo touch /etc/<span style="color:#f92672">{</span>subgid,subuid<span style="color:#f92672">}</span>
+$ sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 <span style="color:#e6db74">${</span>USER<span style="color:#e6db74">}</span>
+$ grep <span style="color:#e6db74">${</span>USER<span style="color:#e6db74">}</span> /etc/subuid /etc/subgid
+/etc/subuid:<span style="color:#e6db74">${</span>USER<span style="color:#e6db74">}</span>:100000:65536
+/etc/subgid:<span style="color:#e6db74">${</span>USER<span style="color:#e6db74">}</span>:100000:65536
+</code></pre></div><p>Now bot <strong>podman</strong> and <strong>docker</strong> can be installed in rootless mode. The only problem with rootless mode that Kubernets can not use it.</p>
+<h2 id="kubernetes-user-namespace-management-with-cri-o">Kubernetes user namespace management with CRI-O</h2>
+<p>To solve this problem <strong>CRI-O</strong> <a href="https://github.com/cri-o/cri-o/pull/3944">added support</a> for user namespace configuration through pod annotations.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">VERSION<span style="color:#f92672">=</span>1.25
+
+sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/CentOS_8/devel:kubic:libcontainers:stable.repo
+sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/CentOS_8/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
+
+yum install cri-o cri-tools nano wget iproute-tc
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bas" data-lang="bas">cat <span style="color:#f92672">&lt;&lt;</span><span style="color:#75715e">&#39;EOF&#39; | sudo tee /etc/modules-load.d/crio.conf &gt; /dev/null</span>
+overlay
+br_netfilter
+<span style="color:#66d9ef">EOF</span>
+
+modprobe overlay
+modprobe br_netfilter
+
+cat <span style="color:#f92672">&lt;&lt;</span><span style="color:#66d9ef">EOF</span> <span style="color:#f92672">&gt;</span>  <span style="color:#f92672">/</span>etc<span style="color:#f92672">/</span>sysctl<span style="color:#f92672">.</span>d<span style="color:#f92672">/</span>k8s<span style="color:#f92672">.</span>conf
+net<span style="color:#f92672">.</span>bridge<span style="color:#f92672">.</span>bridge<span style="color:#f92672">-</span>nf<span style="color:#f92672">-</span>call<span style="color:#f92672">-</span>ip6tables <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+net<span style="color:#f92672">.</span>bridge<span style="color:#f92672">.</span>bridge<span style="color:#f92672">-</span>nf<span style="color:#f92672">-</span>call<span style="color:#f92672">-</span>iptables <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+net<span style="color:#f92672">.</span>ipv6<span style="color:#f92672">.</span>conf<span style="color:#f92672">.</span>all<span style="color:#f92672">.</span>disable_ipv6 <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+net<span style="color:#f92672">.</span>ipv6<span style="color:#f92672">.</span>conf<span style="color:#f92672">.</span>default<span style="color:#f92672">.</span>disable_ipv6 <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+net<span style="color:#f92672">.</span>ipv4<span style="color:#f92672">.</span>ip_forward                 <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+net<span style="color:#f92672">.</span>bridge<span style="color:#f92672">.</span>bridge<span style="color:#f92672">-</span>nf<span style="color:#f92672">-</span>call<span style="color:#f92672">-</span>ip6tables <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+<span style="color:#66d9ef">EOF</span>
+
+sysctl <span style="color:#f92672">--</span>system
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">free -h
+swapoff -a
+swapoff -a
+sed -i.bak -r <span style="color:#e6db74">&#39;s/(.+ swap .+)/#\1/&#39;</span> /etc/fstab
+free -h
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir /etc/crio/crio.conf.d/
+cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/crio/crio.conf.d/01-userns-workload.conf
+</span><span style="color:#e6db74">[crio.runtime.workloads.userns]
+</span><span style="color:#e6db74">activation_annotation = &#34;io.kubernetes.cri-o.userns-mode&#34;
+</span><span style="color:#e6db74">allowed_annotations = [&#34;io.kubernetes.cri-o.userns-mode&#34;]
+</span><span style="color:#e6db74">EOF</span>
+
+nano /etc/containers/registries.conf
+unqualified-search-registries <span style="color:#f92672">=</span> <span style="color:#f92672">[</span><span style="color:#e6db74">&#34;registry.access.redhat.com&#34;</span>, <span style="color:#e6db74">&#34;registry.redhat.io&#34;</span>, <span style="color:#e6db74">&#34;quay.io&#34;</span>, <span style="color:#e6db74">&#34;docker.io&#34;</span><span style="color:#f92672">]</span>
+
+sed -i.bak -r <span style="color:#e6db74">&#39;s/network_backend = &#34;cni&#34;/#network_backend = &#34;&#34;/&#39;</span> /usr/share/containers/containers.conf
+</code></pre></div><p>The <strong>CRI-O</strong> will run the containers with the <code>containers</code> user so I need to create <code>/etc/subuid</code> and <code>/etc/subgid</code> on nodes.</p>
+<blockquote>
+<p>subuid is &hellip;</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#34;containers:200000:268435456&#34;</span> &gt;&gt; /etc/subuid
+echo <span style="color:#e6db74">&#34;containers:200000:268435456&#34;</span> &gt;&gt; /etc/subgid
+</code></pre></div><blockquote>
+<p>First I created the id ranges for <code>root</code> user because <strong>CRI-O</strong> runs as <code>root</code> Fu the I find the fallowing ERROR in the <strong>CRI-O</strong> log:</p>
+<pre tabindex="0"><code></code></pre></blockquote>
+<p>Cannot find mappings for user &quot;containers&quot;: No subuid
+ranges found for user &quot;containers&quot; in /etc/subuid&quot;</p>
+<pre tabindex="0"><code>
+### Install Kubernetes
+
+```bash
+cat &lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+</code></pre><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">CRIP_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>crio --version | egrep ^Version | awk <span style="color:#e6db74">&#39;{print $2}&#39;</span><span style="color:#66d9ef">)</span>
+yum install kubelet-$CRIP_VERSION kubeadm-$CRIP_VERSION kubectl-$CRIP_VERSION -y
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">IP<span style="color:#f92672">=</span>192.168.200.10
+<span style="color:#75715e"># for multi interface configuration</span>
+echo <span style="color:#e6db74">&#39;KUBELET_EXTRA_ARGS=&#34;--node-ip=&#39;</span>$IP<span style="color:#e6db74">&#39;&#34;&#39;</span> &gt; /etc/sysconfig/kubelet
+
+systemctl enable kubelet.service
+systemctl enable --now crio
+kubeadm config images pull --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION
+kubeadm init --pod-network-cidr<span style="color:#f92672">=</span>10.244.0.0/16 --apiserver-advertise-address<span style="color:#f92672">=</span>$IP  --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown <span style="color:#66d9ef">$(</span>id -u<span style="color:#66d9ef">)</span>:<span style="color:#66d9ef">$(</span>id -g<span style="color:#66d9ef">)</span> $HOME/.kube/config
+
+
+crictl info
+kubectl get node -o wide
+kubectl get po --all-namespaces
+
+kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
+</code></pre></div><pre tabindex="0"><code>kubectl taint nodes --all node-role.kubernetes.io/master-
+kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+</code></pre><p>and <strong>docker/containerd</strong> can be install in rootless mode.  user namespaces it.</p>
+<h3 id="demo-time">Demo time</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano pod.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: not-userns-pod
+  annotations:
+    io.kubernetes.cri-o.userns-mode: <span style="color:#e6db74">&#34;auto&#34;</span> <span style="color:#75715e"># this will not work</span>
+spec:
+  containers:
+  - command:
+    - sleep
+    - 2d
+    image: registry.fedoraproject.org/fedora-minimal
+    name: not-userns-ctr
+    imagePullPolicy: IfNotPresent
+status: <span style="color:#f92672">{}</span>
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: standard-pod
+spec:
+  containers:
+  - command:
+    - sleep
+    - 3d
+    image: registry.fedoraproject.org/fedora-minimal
+    name: not-userns-ctr
+    imagePullPolicy: IfNotPresent
+status: <span style="color:#f92672">{}</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl aply -f pod.yaml
+
+ps -eo args,pid | grep sleep
+sleep 2d                      <span style="color:#ae81ff">57277</span>
+sleep 3d                      <span style="color:#ae81ff">58878</span>
+grep --color<span style="color:#f92672">=</span>auto sleep       <span style="color:#ae81ff">58918</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># standard container</span>
+cat /proc/58878/uid_map
+         <span style="color:#ae81ff">0</span>          <span style="color:#ae81ff">0</span> <span style="color:#ae81ff">4294967295</span>
+
+<span style="color:#75715e"># namespaced container</span>
+cat /proc/57277/uid_map
+         <span style="color:#ae81ff">0</span>     <span style="color:#ae81ff">200000</span>      <span style="color:#ae81ff">65536</span>
+</code></pre></div><p>As you can see the container&rsquo;s uid range is shifted.</p>
+<hr>
+<ul>
+<li><a href="https://asciinema.org/a/367050">https://asciinema.org/a/367050</a></li>
+<li><a href="https://asciinema.org/a/351396">https://asciinema.org/a/351396</a></li>
+<li><a href="https://frasertweedale.github.io/blog-redhat/posts/2020-12-01-openshift-crio-userns.html">https://frasertweedale.github.io/blog-redhat/posts/2020-12-01-openshift-crio-userns.html</a></li>
+<li><a href="https://github.com/cri-o/cri-o/blob/main/tutorials/userns.md">https://github.com/cri-o/cri-o/blob/main/tutorials/userns.md</a></li>
+<li><a href="https://www.lightnetics.com/topic/35553/blog-kubernetes-1-25-alpha-support-for-running-pods-with-user-namespaces">https://www.lightnetics.com/topic/35553/blog-kubernetes-1-25-alpha-support-for-running-pods-with-user-namespaces</a></li>
+<li><a href="https://www.freecodecamp.org/news/build-your-on-custom-container-without-docker/">https://www.freecodecamp.org/news/build-your-on-custom-container-without-docker/</a></li>
+</ul>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -78,7 +283,12 @@
 
 <p>Firt we need to install the <a href="https://github.com/kubernetes-csi/external-resizer">csi-resizer</a>. This is a sidecar container that watches Kubernetes PersistentVolumeClaims objects and triggers controller side expansion operation against a CSI endpoint</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubens ceph-csi-rbd
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-resizer/master/deploy/kubernetes/rbac.yaml
+wget https://raw.githubusercontent.com/kubernetes-csi/external-resizer/master/deploy/kubernetes/rbac.yaml
+
+<span style="color:#75715e"># chaneg namespace to your namespace in my case ceph-csi-rbd</span>
+nano rbac.yaml
+
+kubectl apply -f rbac.yaml
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-resizer/master/deploy/kubernetes/deployment.yaml
 </code></pre></div><p>Create or edit a StorageClass with the peccary parameters like (<code>csi.storage.k8s.io/controller-expand-secret-namespace: default</code>,<code>csi.storage.k8s.io/controller-expand-secret-name: csi-rbd-secret</code>,<code>allowVolumeExpansion: true</code>):</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">storage.k8s.io/v1</span>
