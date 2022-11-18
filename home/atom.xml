@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2022-11-18T15:38:19+00:00</updated>
+    <updated>2022-11-18T16:33:59+00:00</updated>
     
     
     <author>
@@ -17,6 +17,66 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to: Configure Firefox to use Windows Certificate Store via GPO]]></title>
+            <link href="https://devopstales.github.io/home/configure-firefox-to-use-windows-certificate-store-via-gpo/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/windows/configure-firefox-to-use-windows-certificate-store-via-gpo/?utm_source=atom_feed" rel="related" type="text/html" title="How to: Configure Firefox to use Windows Certificate Store via GPO" />
+                <link href="https://devopstales.github.io/home/pfsense-suidproxy/?utm_source=atom_feed" rel="related" type="text/html" title="Configure squid transparent proxy on pfsense" />
+                <link href="https://devopstales.github.io/linux/pfsense-suidproxy/?utm_source=atom_feed" rel="related" type="text/html" title="Configure squid transparent proxy on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-ipsec-mss-clamping/?utm_source=atom_feed" rel="related" type="text/html" title="pfsense: IPSec SSH connectivity issue" />
+                <link href="https://devopstales.github.io/home/ros-pppoe-server/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: PPPOE Server" />
+            
+                <id>https://devopstales.github.io/home/configure-firefox-to-use-windows-certificate-store-via-gpo/</id>
+            
+            
+            <published>2022-11-16T00:00:00+00:00</published>
+            <updated>2022-11-16T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>I ran into an issue when I enabled HTTPS Inspection on our transparent proxy and Firefox had a certificate error for everyone.</p>
+<h3 id="distribute-ca-certificate-with-gpo">Distribute CA Certificate with GPO</h3>
+<p>You need to place the certificate file to the shared network folder and all users must have a read access to it. Then start the <strong>Group Policy Management console (gpmc.msc).</strong> Select an OU then right click and select <strong>Create a GPO in this domain and Link it here…</strong></p>
+<p><img src="/img/include/ssl-gpo001.jpg" alt="create gpo"  class="zoomable" /></p>
+<p>In the GPO Editor, go to the section <strong>Computer Configuration -&gt; Policies -&gt; Windows Settings -&gt; Security Settings -&gt; Public Key Policies -&gt; Trusted Root Certification Authorities.</strong></p>
+<p>Right-click in the right part of the GPO editor window and select Import.</p>
+<p><img src="/img/include/ssl-gpo002.jpg" alt="import cert to gpo"  class="zoomable" /></p>
+<p>Specify the path to the imported certificate file, which you have placed in the shared folder.</p>
+<p>In the corresponding step of the wizard (Place all certificates in the following store), do specify that it has to be placed in the <strong>Trusted Root Certification Authorities.</strong></p>
+<p><img src="/img/include/ssl-gpo003.jpg" alt="import cert to gpo"  class="zoomable" /></p>
+<p>The certificate distribution policy created. Let’s test the group policy settings  by running <code>gpupdate /force</code> on the client.  Verify that your certificate has appeared in the list of trusted certificates. In the Internet Explorer settings (<strong>Internet Options -&gt; Content -&gt; Certificates -&gt; Trusted Root Certification Authorities</strong>).</p>
+<h3 id="configure-firefox-to-use-windows-certificate-store-via-gpo">Configure Firefox to use Windows Certificate Store via GPO</h3>
+<p>The previous GPO did not solved all my problem, but by default Firefox does not look at the Windows Certificate Store. So I looked around on the inter nat. Since Firefox 49 there is some support for Windows CA certificates and support for Active Directory provided enterprise root certificates since Firefox 52. It is also supported in macOS to read from the Keychain since version 63.</p>
+<p>Since Firefox 68 this feature is enabled by default in the ESR (enterprise) version, but not in the (standard) rapid release.</p>
+<p>When Firefox opens, it runs any .js scripts in the following location:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">C:<span style="color:#ae81ff">\P</span>rogram Files <span style="color:#f92672">(</span>x86<span style="color:#f92672">)</span><span style="color:#ae81ff">\M</span>ozilla Firefox<span style="color:#ae81ff">\D</span>efaults<span style="color:#ae81ff">\P</span>ref<span style="color:#ae81ff">\ </span>- <span style="color:#ae81ff">64</span> Bit Machine 
+C:<span style="color:#ae81ff">\P</span>rogram Files<span style="color:#ae81ff">\M</span>ozilla Firefox<span style="color:#ae81ff">\D</span>efaults<span style="color:#ae81ff">\P</span>ref<span style="color:#ae81ff">\ </span>- <span style="color:#ae81ff">32</span> Bit Machine
+</code></pre></div><p>You will need to create a file called <code>Enableroot.js</code> (or similar) with the following contents:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-js" data-lang="js"><span style="color:#75715e">/* Allows Firefox reading Windows certificates */</span>
+<span style="color:#a6e22e">pref</span>(<span style="color:#a6e22e">security</span>.<span style="color:#a6e22e">enterprise_roots</span>.<span style="color:#a6e22e">enabled</span>, <span style="color:#66d9ef">true</span>);
+</code></pre></div><p>First place the js in the same shared folder then create a new GPO. I had already created a GPO to deploy a CA cert across our domain, so I just edited this one.</p>
+<p>Edit GPO, and navigate to: <strong>Computer Config -&gt; Preferences -&gt; Windows Settings -&gt; Files</strong></p>
+<p>Right click, select New then File.</p>
+<ul>
+<li>Set the Action to Create.</li>
+<li>In Source File type the UNC path to the shared <code>Enableroot.js</code> mentioned before.</li>
+<li>In Destination file you want one of the following: <code>C:\Program Files (x86)\Mozilla Firefox\Defaults\Pref\enableroot.js</code></li>
+</ul>
+<blockquote>
+<p>If you have both 32 and 64 bit machines you can make a copy of this with the festination file path <code>C:\Program Files\Mozilla Firefox\Defaults\Pref\enableroot.js</code></p>
+</blockquote>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -57,6 +117,291 @@
 <p><img src="/img/include/pfSense_squid004.png" alt="logging config"  class="zoomable" /></p>
 <p>Under the Real Time tab you can see the latest access logs regarding requested destinations from the clients.</p>
 <p><img src="/img/include/pfSense_squid006.png" alt="real time logs"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to Manage Kubernetes Resource Limits]]></title>
+            <link href="https://devopstales.github.io/home/k8s-limits/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-limits/?utm_source=atom_feed" rel="related" type="text/html" title="How to Manage Kubernetes Resource Limits" />
+                <link href="https://devopstales.github.io/home/k8s-crowdsec-ids/?utm_source=atom_feed" rel="related" type="text/html" title="CrowdSec Intrusion Detection System (IDS) for Kubernetes" />
+                <link href="https://devopstales.github.io/home/trivy-operator-2.4/?utm_source=atom_feed" rel="related" type="text/html" title="trivy-operator 2.4: Patch release for Admisssion controller" />
+                <link href="https://devopstales.github.io/home/container-build-in-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="How to build containers in Kubernetes" />
+                <link href="https://devopstales.github.io/home/kube-openid-connect-1.0/?utm_source=atom_feed" rel="related" type="text/html" title="kube-openid-connect 1.0" />
+            
+                <id>https://devopstales.github.io/home/k8s-limits/</id>
+            
+            
+            <published>2022-11-08T00:00:00+00:00</published>
+            <updated>2022-11-08T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you the usage of the Kubernetes limits and requests.</p>
+<p>Kubernetes schedule and orchestrate containers on the underlying shared set of physical resources. By default, a pod in Kubernetes will run with no limits on CPU and memory in a namespace. However, this can create several problems related to resources. So there is no control of how much resources each pod can use. Some a hungry container can eat the resources from other container on the node.</p>
+<h3 id="resource-types">Resource types</h3>
+<p>CPU and memory are each a resource type. Every resource type has a base unit. CPU represents compute processing and is specified in units of CPU cores. 1 physical CPU core, or 1 virtual core, depending on whether the node is a physical host or a virtual machine running inside a physical machine. You can use a fraction of a cpu by setting to <code>0.5</code> For CPU resource units, the quantity expression 0.1 is equivalent to the expression 100m, which can be read as &ldquo;one hundred millicpu&rdquo;.</p>
+<p>The other common resource is memory. Memory is specified in units of bytes. You can express memory as a plain integer or as a fixed-point number using one of these quantity suffixes: E, P, T, G, M, k or Ei, Pi, Ti, Gi, Mi, Ki. For example, the following represent roughly the same value:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">128974848, 129e6, 129M,  128974848000m, 123Mi
+</code></pre></div><h3 id="understanding-requests">Understanding Requests</h3>
+<p>A request is the amount of resources that the system will guarantee for the container. Kubernetes will use this value to decide on which node to place the pod. In the case that request is not set for a container, the defaults is the same as the resource limit. The Kubelet reserves the
+requested amount of system resource. That means no mather the container use the requested resource or not other containers can not use that reserved resources.</p>
+<h3 id="understanding-limits">Understanding Limits</h3>
+<p>A limit is the maximum amount of resources that Kubernetes will allow the container to use. For example: when a process in the container tries to consume more than the allowed amount of memory, the system kernel terminates the process that attempted the allocation, with an out of memory (OOM) error. If limit is not set, then the default is to  set 0 (unbounded).</p>
+<p><img src="/img/include/container-resource-1.png" alt="Request vs Limit"  class="zoomable" /></p>
+<h3 id="examples">Examples</h3>
+<p>Below is an example of a pod configuration file with requests and limits set for CPU and memory of two containers in a pod.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo1</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">resources</span>:
+      <span style="color:#f92672">requests</span>:
+        <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;16Mi&#34;</span>
+        <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;100m&#34;</span>
+      <span style="color:#f92672">limits</span>:
+        <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;32Mi&#34;</span>
+        <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;200m&#34;</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo2</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">mysql</span>
+    <span style="color:#f92672">resources</span>:
+      <span style="color:#f92672">requests</span>:
+        <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;64Mi&#34;</span>
+        <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;200m&#34;</span>
+      <span style="color:#f92672">limits</span>:
+        <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+        <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;400m&#34;</span>
+</code></pre></div><p>Run the following command to inspect the resources used by the pod:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl top pods
+NAME          CPU<span style="color:#f92672">(</span>cores<span style="color:#f92672">)</span>   MEMORY<span style="color:#f92672">(</span>bytes<span style="color:#f92672">)</span>
+demo          201m         27Mi
+</code></pre></div><p>You can do a similar test for nodes or namespaces:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl top node
+
+NAME                         CPU<span style="color:#f92672">(</span>cores<span style="color:#f92672">)</span>   CPU%   MEMORY<span style="color:#f92672">(</span>bytes<span style="color:#f92672">)</span>   MEMORY%
+k8s-m101                     1338m        66%    3586Mi          45%
+k8s-w102                     2488m        31%    18918Mi         58%
+</code></pre></div><p>Yo can use a handy tool called <a href="https://github.com/robscott/kube-capacity"><code>kube-capacity</code></a> that provides an overview of the resource requests, limits, and utilization in a Kubernetes cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl krew install resource-capacity
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kube-capacity
+
+NODE        CPU REQUESTS    CPU LIMITS    MEMORY REQUESTS    MEMORY LIMITS
+*           560m <span style="color:#f92672">(</span>28%<span style="color:#f92672">)</span>      130m <span style="color:#f92672">(</span>7%<span style="color:#f92672">)</span>     572Mi <span style="color:#f92672">(</span>9%<span style="color:#f92672">)</span>         770Mi <span style="color:#f92672">(</span>13%<span style="color:#f92672">)</span>
+k8s-m101    220m <span style="color:#f92672">(</span>22%<span style="color:#f92672">)</span>      10m <span style="color:#f92672">(</span>1%<span style="color:#f92672">)</span>      192Mi <span style="color:#f92672">(</span>6%<span style="color:#f92672">)</span>         360Mi <span style="color:#f92672">(</span>12%<span style="color:#f92672">)</span>
+k8s-w102    340m <span style="color:#f92672">(</span>34%<span style="color:#f92672">)</span>      120m <span style="color:#f92672">(</span>12%<span style="color:#f92672">)</span>    380Mi <span style="color:#f92672">(</span>13%<span style="color:#f92672">)</span>        410Mi <span style="color:#f92672">(</span>14%<span style="color:#f92672">)</span>
+</code></pre></div><h3 id="finding-the-right-requests-and-limits">Finding the right requests and limits</h3>
+<p>For this demo I will use a Python app using the Flask framework. A simple cache service which has two endpoints, one to cache the data and another for retrieving it.</p>
+<p>Before you start, make sure that your cluster has the metrics server installed. In my case I use minikube and I can enable it as a plugin:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ minikube addons enable metrics-server
+</code></pre></div><p>You can deploy the application with the following YAML file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano deployment.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cache-service</span>
+          <span style="color:#f92672">image</span>: <span style="color:#ae81ff">xasag94215/flask-cache</span>
+          <span style="color:#f92672">ports</span>:
+            - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">5000</span>
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">rest</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+  <span style="color:#f92672">ports</span>:
+    - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">5000</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">limit-demo.mydomain.intra</span>
+    <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl top pods
+
+NAME                           CPU<span style="color:#f92672">(</span>cores<span style="color:#f92672">)</span>   MEMORY<span style="color:#f92672">(</span>bytes<span style="color:#f92672">)</span>
+flask-cache-8484fd74dd-sxpk7   188m         151Mi
+</code></pre></div><p>Requests and limits depend on how much memory and CPU the application uses. An application that serves static pages might have a memory and CPU mostly static. It is common o have metrics server and prometheus database to store your metrics. The you can get max and min of the CPU and memory and extrapolate requests and limits. But there&rsquo;s a quicker way.</p>
+<h3 id="vertical-pod-autoscaler">Vertical Pod Autoscaler</h3>
+<p>The SIG-autoscaling group developed a tool that can do that automatically: the <a href="https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler">Vertical Pod Autoscaler (VPA)</a>. The Vertical Pod Autoscaler is a Kubernetes Operator that estimates the correct requests and limits for Pod.</p>
+<blockquote>
+<p><strong>Limitations:</strong></p>
+<ul>
+<li>Vertical Pod autoscaling supports a maximum of 500 VerticalPodAutoscaler objects per cluster.</li>
+<li>Vertical Pod autoscaling is not ready for use with JVM-based workloads due to limited visibility into actual memory usage of the workload.</li>
+</ul>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+helm upgrade --install vpa fairwinds-stable/vpa <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--namespace vpa-system --create-namespace <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set admissionController.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set updater.extraArgs.min-replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</code></pre></div><p>So if you want to the Vertical Pod Autoscaler (VPA) to estimate limits and requests for your Flask app, you should create the following YAML file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano vpa.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;autoscaling.k8s.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">VerticalPodAutoscaler</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">targetRef</span>:
+    <span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;apps/v1&#34;</span>
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+  <span style="color:#f92672">updatePolicy</span>:
+    <span style="color:#f92672">updateMode</span>: <span style="color:#e6db74">&#34;Off&#34;</span>
+</code></pre></div><p>You can query the vpa object with:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl describe vpa flask-cache
+...
+Status:
+  Conditions:
+    Last Transition Time:  2022-11-14T13:58:08Z
+    Status:                True
+    Type:                  RecommendationProvided
+  Recommendation:
+    Container Recommendations:
+      Container Name:  cache-service
+      Lower Bound:
+        Cpu:     25m
+        Memory:  60194k
+      Target:
+        Cpu:     410m
+        Memory:  262144k
+      Uncapped Target:
+        Cpu:     410m
+        Memory:  262144k
+      Upper Bound:
+        Cpu:     <span style="color:#ae81ff">1</span>
+        Memory:  500Mi
+Events:          &lt;none&gt;
+</code></pre></div><p>In the lower part of the output, the autoscaler has three sections:</p>
+<ul>
+<li>The <strong>lower bound</strong> is the minimum estimation for the container.</li>
+<li>The <strong>upper bound</strong> is the maximum recommended resource estimation for the container.</li>
+<li><strong>Target</strong> estimation is the one we will use for setting resource requests.</li>
+<li>All of these estimations are capped based on min allowed and max allowed container policies.</li>
+<li>The <strong>uncapped target</strong> estimation is a target estimation produced if there were no minAllowed and maxAllowed restrictions.</li>
+</ul>
+<p>You can start a load tester and keep inspecting the Vertical Pod Autoscaler (VPA) recommendation. Once the recommendations are stable, you can apply them back to your deployment:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cache-service</span>
+          <span style="color:#f92672">image</span>: <span style="color:#ae81ff">xasag94215/flask-cache</span>
+          <span style="color:#f92672">ports</span>:
+            - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">5000</span>
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">rest</span>
+            <span style="color:#f92672">resources</span>:
+              <span style="color:#f92672">requests</span>:
+                <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">25m</span>
+                <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
+              <span style="color:#f92672">limits</span>:
+                <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">410m</span>
+                <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">512Mi</span>
+</code></pre></div><p>If <code>updateMode: &quot;Auto&quot;</code> is set then the VerticalPodAutoscaler automatically patch the pod at next creation.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano vpa.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;autoscaling.k8s.io/v1&#34;</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">VerticalPodAutoscaler</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">targetRef</span>:
+    <span style="color:#f92672">apiVersion</span>: <span style="color:#e6db74">&#34;apps/v1&#34;</span>
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flask-cache</span>
+  <span style="color:#f92672">updatePolicy</span>:
+    <span style="color:#f92672">updateMode</span>: <span style="color:#e6db74">&#34;Auto&#34;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl delete po flask-cache-8484fd74dd-hpmhh --force
+
+kubectl get po -o yaml flask-cache-8484fd74dd-cdxkn | grep vpa
+    vpaObservedContainers: cache-service
+    vpaUpdates: <span style="color:#960050;background-color:#1e0010">&#39;</span>Pod resources updated by flask-cache: container 0: cpu request, memory
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">kubectl get po -o yaml flask-cache-8484fd74dd-cdxkn</span>
+...
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">xasag94215/flask-cache</span>
+    <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">Always</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cache-service</span>
+    <span style="color:#f92672">ports</span>:
+    - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">5000</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">rest</span>
+      <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+    <span style="color:#f92672">resources</span>:
+      <span style="color:#f92672">requests</span>:
+        <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">350m</span>
+        <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;248153480&#34;</span>
+</code></pre></div><h3 id="visualising-limits-and-requests-recommendations">Visualising limits and requests recommendations</h3>
+<p>If you prefer to use a graphical interface to inspect VPA you can use <a href="https://github.com/FairwindsOps/goldilocks">Goldilocks dashboard</a></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano goldilocks-values.yaml</span>
+<span style="color:#f92672">dashboard</span>:
+  <span style="color:#f92672">ingress</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">hosts</span>:
+      - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">goldilocks.mydomain.intra</span>
+        <span style="color:#f92672">paths</span>:
+          - <span style="color:#f92672">path</span>: <span style="color:#e6db74">&#34;/&#34;</span>
+            <span style="color:#f92672">type</span>: <span style="color:#e6db74">&#34;ImplementationSpecific&#34;</span>
+---
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm upgrade --install goldilocks --namespace vpa-system fairwinds-stable/goldilocks -f goldilocks-values.yaml
+
+kubectl label ns goldilocks goldilocks.fairwinds.com/enabled<span style="color:#f92672">=</span>true
+</code></pre></div><p>If you want Goldilocks to display Vertical Pod Autoscaler (VPA) recommendations, you should tag the namespace with a particular label:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl label namespace default goldilocks.fairwinds.com/enabled<span style="color:#f92672">=</span>true
+</code></pre></div>]]></content>
             
                  
                     
