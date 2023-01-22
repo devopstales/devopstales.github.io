@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-01-12T11:55:00+00:00</updated>
+    <updated>2023-01-22T12:10:25+00:00</updated>
     
     
     <author>
@@ -17,6 +17,351 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GitLab CI: artifacts management]]></title>
+            <link href="https://devopstales.github.io/home/gitlab-ci-artifacts/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/devops/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+                <link href="https://devopstales.github.io/home/what-is-devops/?utm_source=atom_feed" rel="related" type="text/html" title="What is DevOps?" />
+                <link href="https://devopstales.github.io/devops/what-is-devops/?utm_source=atom_feed" rel="related" type="text/html" title="What is DevOps?" />
+            
+                <id>https://devopstales.github.io/home/gitlab-ci-artifacts/</id>
+            
+            
+            <published>2023-01-16T00:00:00+00:00</published>
+            <updated>2023-01-16T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can pass artifacts between  in gitlab CI.</p>
+<p>In the <a href="">previous post</a> we learned the basics of Gitlab CI. I used docker image as an example of artifact in the previous post, but sometimes you need to create other kind of artifacts lik rpm, deb, or a binary, and use this artifacts in the next stage.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+  - <span style="color:#ae81ff">deploy</span>
+
+<span style="color:#f92672">build</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">echo &#34;File 1&#34; &gt;&gt; ./file1.txt</span>
+    - <span style="color:#ae81ff">echo &#34;File 2&#34; &gt;&gt; ./file2.txt</span>
+    - <span style="color:#ae81ff">mkdir dir1</span>
+    - <span style="color:#ae81ff">echo &#34;dir1 File&#34; &gt;&gt; ./dir1/file.txt</span>
+    - <span style="color:#ae81ff">mkdir dir2</span>
+    - <span style="color:#ae81ff">echo &#34;dir2 File&#34; &gt;&gt; ./dir2/file.txt</span>
+  <span style="color:#f92672">artifacts</span>:
+    <span style="color:#f92672">paths</span>:
+    - <span style="color:#ae81ff">file1.txt</span>
+    - <span style="color:#ae81ff">dir1/</span>
+
+<span style="color:#f92672">deploy</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">deploy</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">ls</span>
+    - <span style="color:#ae81ff">ls dir1</span>
+    - <span style="color:#ae81ff">cat file1.txt</span>
+    - <span style="color:#ae81ff">cat dir1/file.txt</span>
+</code></pre></div><p>We defined a build with a <code>build</code> and a <code>deploy</code> stage and both has a job with tha same name as tha stage.</p>
+<p>In <code>build</code> we create 4 files:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">├── dir1
+│   └── file.txt
+├── dir2
+│   └── file.txt
+├── file1.txt
+└── file2.txt
+</code></pre></div><p>We can use the <code>artifact</code> property in the <code>.gitlab-ci.yml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">  <span style="color:#f92672">artifacts</span>:
+    <span style="color:#f92672">paths</span>:
+    - <span style="color:#ae81ff">file1.txt</span>
+    - <span style="color:#ae81ff">dir1/</span>
+    <span style="color:#f92672">expire_in</span>: <span style="color:#ae81ff">1</span> <span style="color:#ae81ff">week</span>
+</code></pre></div><p>Artifacts is used to specify a list of files and directories which should be attached to the build after success. In this example we keep this files for <code>1 week</code></p>
+<p>In <code>deploy</code>, the following files files - created in <code>build</code> - are available:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">├── dir1
+│   └── file.txt
+├── file1.txt
+</code></pre></div><p>Then we can use the same file in the deploy stage</p>
+<h3 id="download-job-artifacts">Download job artifacts</h3>
+<p>You can download job artifacts or view the job archive:</p>
+<ul>
+<li>On the Pipelines page, to the right of the pipeline:</li>
+</ul>
+<p><img src="/img/include/gitlab-artifacts01.webp" alt="Gitlab artifacts"  class="zoomable" /></p>
+<h3 id="upload-artifact-to-gitlab-generic-package-registry">Upload artifact to Gitlab Generic package registry</h3>
+<p>Gitlab has its own package registries to store common types of packages for a longer time:</p>
+<ul>
+<li>Composer</li>
+<li>Conan</li>
+<li>Generic</li>
+<li>Maven</li>
+<li>npm</li>
+<li>NuGet</li>
+<li>PyPI</li>
+<li>RubyGems</li>
+</ul>
+<p>In the nex example I will use the Generic package registry to store files:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">image</span>: <span style="color:#ae81ff">curlimages/curl:latest</span>
+
+<span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">upload</span>
+  - <span style="color:#ae81ff">download</span>
+
+<span style="color:#f92672">upload</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">upload</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#e6db74">&#39;curl --header &#34;JOB-TOKEN: $CI_JOB_TOKEN&#34; --upload-file file1.txt &#34;${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/my_package/0.0.1/file1.txt&#34;&#39;</span>
+
+<span style="color:#f92672">download</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">download</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#e6db74">&#39;wget --header=&#34;JOB-TOKEN: $CI_JOB_TOKEN&#34; ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/my_package/0.0.1/file1.txt&#39;</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Introduction to GitLab CI/CD]]></title>
+            <link href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/devops/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+                <link href="https://devopstales.github.io/home/what-is-devops/?utm_source=atom_feed" rel="related" type="text/html" title="What is DevOps?" />
+                <link href="https://devopstales.github.io/devops/what-is-devops/?utm_source=atom_feed" rel="related" type="text/html" title="What is DevOps?" />
+                <link href="https://devopstales.github.io/home/install-prometheus-for-gitlab/?utm_source=atom_feed" rel="related" type="text/html" title="Install Prometheus for Gitlab" />
+                <link href="https://devopstales.github.io/home/proxmox-dark-theme/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox: Customize Web UI with dark theme" />
+            
+                <id>https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/</id>
+            
+            
+            <published>2023-01-15T00:00:00+00:00</published>
+            <updated>2023-01-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you the basics of using gitlab as a Continuous Integration and Continuous Deployments (CI/CD) tool.</p>
+<h3 id="what-is-a-gitlab">What Is a GitLab?</h3>
+<p>GitLab is a collaborative DevOps platform and open source code repository for large software development projects. GitLab provides an online code storage location, as well as CI/CD and issue tracking capabilities.</p>
+<p>GitLab pipelines are the basic building blocks of CI/CD—a pipeline is a top-level component for continuous integration and delivery/deployment. A pipeline includes the following components:</p>
+<ul>
+<li><em><strong>Jobs</strong></em> — these define the desired actions, such as compiling or testing code. A runner executes each job, and you can run multiple parallel jobs if you have concurrent runners.</li>
+<li><em><strong>Stages</strong></em> — these determine when each job runs, such as the code compilation stage followed by the test running stage.</li>
+</ul>
+<h3 id="create-a-project-on-gitlab">Create a Project on GitLab</h3>
+<p>First, we need to create a project on GitLab. A Project is represent a git repository to store your code. You can run Gitlab on your own hardware or use the Gitlab.com the cloud service of Gitlab. In a <a href="/linux/gitlab-install/">previous post</a> I showed how to install an on-premise Gitlab server.</p>
+<h3 id="gitlab-runners">Gitlab Runners</h3>
+<p>Gitlab runners, re separate machines connected to the Gitlab server, which are actually the ones executing the pipelines.</p>
+<p><img src="/img/include/gitlab-runners01.webp" alt="Gitlab Runners"  class="zoomable" /></p>
+<p>Gitlab.com cloud service offers pre-installed runners to use. On a self hosted Gitlab server you need to create your own. To Install a new self hosted runner is easy. You just select the <code>Settings &gt; CI/CD</code> menu in your project and select <code>Runners</code>. You need tp copy the registration token from the <code>Set up a specific runner manually</code> menu:</p>
+<p><img src="/img/include/gitlab-runner1.webp" alt="Gitlab Runners Registration"  class="zoomable" /></p>
+<p>Then on a linux Server install the runner:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo curl -L --output /usr/local/bin/gitlab-runner https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64
+
+sudo chmod +x /usr/local/bin/gitlab-runner
+
+<span style="color:#75715e"># add local user for the runner</span>
+sudo useradd --comment <span style="color:#e6db74">&#39;GitLab Runner&#39;</span> --create-home gitlab-runner --shell /bin/bash
+
+sudo gitlab-runner install --user<span style="color:#f92672">=</span>gitlab-runner --working-directory<span style="color:#f92672">=</span>/home/gitlab-runner
+sudo gitlab-runner start
+</code></pre></div><p>Register the runner to the Gitlab Server. Change <code>&lt;REGISTRATION-TOKEN&gt;</code> to the token ypu previously copied.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo gitlab-runner register -n <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--url https://gitlab.mydomain.intra/ <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--executor docker <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--docker-privileged <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--docker-image <span style="color:#e6db74">&#34;docker:stable&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--docker-volumes <span style="color:#e6db74">&#34;/var/run/docker.sock:/var/run/docker.sock&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--registration-token &lt;REGISTRATION-TOKEN&gt;
+</code></pre></div><p>This will register a docker based runner in Gitlab. This means all the build and pipeline job will run in a docker container. Of course to do this you need to install docker engine on your runner. In a <a href="/kubernetes/openshift-gitlabrunner/">previous post</a> I shoved how to install Gitlab Runners in an Openshift environment.</p>
+<h3 id="create-a-yaml-configuration-file-for-cicd">Create a YAML Configuration File for CI/CD</h3>
+<p>Gitlab use a file called <code>.gitlab-ci.yml</code> to configure your CI/CD pipeline.</p>
+<p>Below is a snippet of what your <code>.gitlab-ci.yml</code> file should look like:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">image</span>: <span style="color:#ae81ff">docker:stable</span>
+
+<span style="color:#f92672">variables</span>:
+  <span style="color:#f92672">DOCKER_TAG_LATEST</span>: <span style="color:#ae81ff">$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest</span>
+  <span style="color:#f92672">DOCKER_TAG_COMMIT</span>: <span style="color:#ae81ff">$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA</span>
+
+<span style="color:#f92672">cache</span>:
+  <span style="color:#f92672">paths</span>:
+    - <span style="color:#ae81ff">node_modules/</span>
+
+<span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+  - <span style="color:#ae81ff">deploy</span>
+
+<span style="color:#f92672">build</span>:
+  <span style="color:#f92672">image</span>: <span style="color:#ae81ff">docker:latest</span>
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">services</span>:
+    - <span style="color:#ae81ff">docker:dind</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span>
+    - <span style="color:#ae81ff">docker</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">echo &#34;Starting to build&#34;</span>
+    - <span style="color:#ae81ff">docker build -t $DOCKER_TAG_COMMIT -t $DOCKER_TAG_LATEST .</span>
+    - <span style="color:#ae81ff">docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY</span>
+    - <span style="color:#ae81ff">docker push $DOCKER_TAG_COMMIT</span>
+    - <span style="color:#ae81ff">docker push $DOCKER_TAG_LATEST</span>
+    - <span style="color:#ae81ff">echo $DOCKER_TAG_COMMIT</span>
+
+<span style="color:#f92672">deploy</span>:
+  <span style="color:#f92672">image</span>: <span style="color:#ae81ff">alpine:latest</span>
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">deploy</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span>
+    - <span style="color:#ae81ff">docker</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">echo &#34;Starting to deploy&#34;</span>
+    - <span style="color:#ae81ff">chmod og= $SSH_PRIVATE_KEY</span>
+    - <span style="color:#ae81ff">apk update &amp;&amp; apk add openssh-client</span>
+    - <span style="color:#ae81ff">ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP &#34;docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY&#34;</span>
+    - <span style="color:#ae81ff">ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP &#34;docker pull $DOCKER_TAG_COMMIT&#34;</span>
+    - <span style="color:#ae81ff">ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP &#34;docker container rm -f my-project || true&#34;</span>
+    - <span style="color:#ae81ff">ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP &#34;docker run -d -i -p 3000:3000 --name my-project $DOCKER_TAG_COMMIT&#34;</span>
+  <span style="color:#f92672">environment</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">production</span>
+    <span style="color:#f92672">url</span>: <span style="color:#ae81ff">http://$SERVER_IP</span>
+  <span style="color:#f92672">only</span>:
+    - <span style="color:#ae81ff">main</span>
+</code></pre></div><p>Here is a quick overview of how each part works to aid the deployment process:</p>
+<p>The image defines the Docker image to be used:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">image</span>: <span style="color:#ae81ff">docker:stable</span>
+</code></pre></div><p>In the variables section, you’re creating two tags for the Docker image. The <code>DOCKER_TAG_LATEST</code> variable will add the latest tag to the latest built Docker image, while the <code>DOCKER_TAG_COMMIT</code> variable will use the first eight characters of the commit SHA to tag the Docker image.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"></code></pre></div><p>The cache defines the file or list of files that should be cached between subsequent runs.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">cache</span>:
+  <span style="color:#f92672">paths</span>:
+    - <span style="color:#ae81ff">node_modules/</span>
+</code></pre></div><p>The stages define the order of jobs that would be in the pipeline. Here, there are two stages of the <code>build</code> and <code>deploy</code> as seen above.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+  - <span style="color:#ae81ff">deploy</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">build</span>:
+  <span style="color:#f92672">image</span>: <span style="color:#ae81ff">docker:latest</span> <span style="color:#75715e"># Defines the Docker image to be used</span>
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span> <span style="color:#75715e"># The stage assigns the current job to the build stage.</span>
+  <span style="color:#f92672">services</span>: <span style="color:#75715e"># link to another docker image. This allows you to use the Docker executor to build your Docker image.</span>
+    - <span style="color:#ae81ff">docker:dind</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span> <span style="color:#75715e"># run on runner with tag docker</span>
+    - <span style="color:#ae81ff">docker</span>
+  <span style="color:#f92672">script</span>: <span style="color:#75715e"># In script sou add the command that the build will execute. In this case we build a docker image and used the built-in variables to login and push the image to the Gitlab docker registry.</span>
+    - <span style="color:#ae81ff">echo &#34;Starting to build&#34;</span>
+    - <span style="color:#ae81ff">docker build -t $DOCKER_TAG_COMMIT -t $DOCKER_TAG_LATEST .</span>
+    - <span style="color:#ae81ff">docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY</span>
+    - <span style="color:#ae81ff">docker push $DOCKER_TAG_COMMIT</span>
+    - <span style="color:#ae81ff">docker push $DOCKER_TAG_LATEST</span>
+    - <span style="color:#ae81ff">echo $DOCKER_TAG_COMMIT</span>
+</code></pre></div><p>The Deployment job is similar to the build except the fallowing snippet.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">  <span style="color:#f92672">environment</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">production</span>
+    <span style="color:#f92672">url</span>: <span style="color:#ae81ff">http://$SERVER_IP</span>
+  <span style="color:#f92672">only</span>: <span style="color:#75715e"># can run only on main branch</span>
+    - <span style="color:#ae81ff">main</span>
+  <span style="color:#f92672">dependencies</span>: <span style="color:#75715e"># only runs if the build job is successful</span>
+  - <span style="color:#ae81ff">build</span>
+</code></pre></div><h1 id="start-a-cicd-pipeline">Start a CI/CD pipeline</h1>
+<p>To activate the pipeline you need to place the <code>.gitlab-ci.yml</code> file in the root of your git repository.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cd myrepo
+nano .gitlab-ci.yml
+git add -A
+git commit -m <span style="color:#e6db74">&#34;add .gitlab-ci.yaml&#34;</span>
+git push
+</code></pre></div><p>At the web-ui go to sour project and select <code>CI/CD &gt; pipelines</code> menu to check your pipeline. It will start automatically.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[What is DevOps?]]></title>
+            <link href="https://devopstales.github.io/home/what-is-devops/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/devops/what-is-devops/?utm_source=atom_feed" rel="related" type="text/html" title="What is DevOps?" />
+                <link href="https://devopstales.github.io/home/proxmox-dark-theme/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox: Customize Web UI with dark theme" />
+                <link href="https://devopstales.github.io/home/proxmox-fail2ban/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox: Potect your server with fail2ban" />
+                <link href="https://devopstales.github.io/home/microk8s-expired-cert/?utm_source=atom_feed" rel="related" type="text/html" title="Microk8s: Unable to connect to the server: x509: certificate has expired or is not yet valid" />
+                <link href="https://devopstales.github.io/home/proxmox-custom-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox: Set custom certificate" />
+            
+                <id>https://devopstales.github.io/home/what-is-devops/</id>
+            
+            
+            <published>2023-01-14T00:00:00+00:00</published>
+            <updated>2023-01-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>This blog post is the first post of my new series where we will learn the use of the most popular CI/CD tools. But first we will understand tha philosophy behind this tools.</p>
+<h2 id="what-is-devops">What is DevOps?</h2>
+<p>The word <strong>DevOps</strong> is a combination of the terms <strong>development</strong> (Dev) and <strong>operations</strong> (Ops), meant to represent a collaborative or shared approach to the tasks performed by a company&rsquo;s application development and IT operations teams.</p>
+<h2 id="devops-explained">DevOps explained</h2>
+<p>In its broadest meaning, DevOps is a philosophy that automate and integrate the processes between software development and IT teams. It emphasizes team empowerment, cross-team communication and collaboration, and technology automation. In its most narrow interpretation, DevOps describes the adoption of iterative software development, automation, and programmable infrastructure deployment and maintenance.</p>
+<p>The DevOps movement began around 2007 when the software development and IT operations communities raised concerns about the traditional software development model, where developers who wrote code worked apart from operations who deployed and supported the code.</p>
+<h2 id="how-does-devops-work">How does DevOps work?</h2>
+<p>A DevOps team includes developers and IT operators working together, in order to increase the speed and quality of software deployment. It’s a new way of working, a cultural shift, that has significant implications for teams and the organizations they work for.</p>
+<p>Under a DevOps model, development and operations teams are no longer &ldquo;siloed.&rdquo; Sometimes, these two teams merge into a single team or every development team get a new member wo is a devops engineer.</p>
+<p>DevOps teams use tools to automate and accelerate processes, which helps to increase reliability. A DevOps toolchain helps teams tackle important DevOps fundamentals including continuous integration, continuous delivery, automation, and collaboration.</p>
+<p>DevOps values are sometimes applied to teams other than development. When security teams adopt a DevOps approach, security is an active and integrated part of the development process. This is called DevSecOps.</p>
+<h2 id="devops-and-the-application-lifecycle">DevOps and the application lifecycle</h2>
+<p>DevOps influences the application lifecycle throughout its planning, development, delivery, and operations phases. Each phase relies on the other phases, and the phases aren&rsquo;t role-specific. A DevOps culture involves all roles in each phase to some extent.</p>
+<p><img src="/img/include/devops01.webp" alt="Devops"  class="zoomable" /></p>
+<h3 id="discover">Discover</h3>
+<p>Building software is a team sport. In preparation for the upcoming sprint, teams must workshop to explore, organize, and prioritize ideas. Ideas must align to strategic goals and deliver customer impact. Agile can help guide DevOps teams.</p>
+<h3 id="planning">Planning</h3>
+<p>DevOps teams should adopt agile practices to improve speed and quality. Agile is an iterative approach to project management and software development that helps teams break work into smaller pieces to deliver incremental value.</p>
+<h3 id="build">Build</h3>
+<p>Git is a free and open source version control system. It offers excellent support for branching, merging, and rewriting repository history, which has led to many innovative and powerful workflows and tools for the development build process.</p>
+<h3 id="test">Test</h3>
+<p>Continuous integration (CI) allows multiple developers to contribute to a single shared repository. When code changes are merged, automated tests are run to ensure correctness before integration. Merging and testing code often help development teams gain reassurance in the quality and predictability of code once deployed.</p>
+<h3 id="deploy">Deploy</h3>
+<p>Continuous deployment (CD) allows teams to release features frequently into production in an automated fashion. Teams also have the option to deploy with feature flags, delivering new code to users steadily and methodically rather than all at once. This approach improves velocity, productivity, and sustainability of software development teams.</p>
+<h3 id="operate">Operate</h3>
+<p>Manage the end-to-end delivery of IT services to customers. This includes the practices involved in design, implementation, configuration, deployment, and maintenance of all IT infrastructure that supports an organization’s services.</p>
+<h3 id="observe">Observe</h3>
+<p>Quickly identify and resolve issues that impact product uptime, speed, and functionality. Automatically notify your team of changes, high-risk actions, or failures, so you can keep services on.</p>
+<h3 id="continuous-feedback">Continuous feedback</h3>
+<p>DevOps teams should evaluate each release and generate reports to improve future releases. By gathering continuous feedback, teams can improve their processes and incorporate customer feedback to improve the next release.</p>
+<h2 id="benefits-of-devops">Benefits of DevOps</h2>
+<h3 id="speed">Speed</h3>
+<p>Move at high velocity so you can innovate for customers faster, adapt to changing markets better, and grow more efficient at driving business results. The DevOps model enables your developers and operations teams to achieve these results. For example, microservices and continuous delivery let teams take ownership of services and then release updates to them quicker.</p>
+<h3 id="rapid-delivery">Rapid Delivery</h3>
+<p>Increase the frequency and pace of releases so you can innovate and improve your product faster. The quicker you can release new features and fix bugs, the faster you can respond to your customers’ needs and build competitive advantage. Continuous integration and continuous delivery are practices that automate the software release process, from build to deploy.</p>
+<h3 id="scale">Scale</h3>
+<p>Operate and manage your infrastructure and development processes at scale. Automation and consistency help you manage complex or changing systems efficiently and with reduced risk. For example, infrastructure as code helps you manage your development, testing, and production environments in a repeatable and more efficient manner.</p>
+<h3 id="improved-collaboration">Improved Collaboration</h3>
+<p>Build more effective teams under a DevOps cultural model, which emphasizes values such as ownership and accountability. Developers and operations teams collaborate closely, share many responsibilities, and combine their workflows. This reduces inefficiencies and saves time (e.g. reduced handover periods between developers and operations, writing code that takes into account the environment in which it is run).</p>
+<h3 id="security">Security</h3>
+<p>Move quickly while retaining control and preserving compliance. You can adopt a DevOps model without sacrificing security by using automated compliance policies, fine-grained controls, and configuration management techniques. For example, using infrastructure as code and policy as code, you can define and then track compliance at scale. Sometimes they called this DevSecOps.</p>
+<h3 id="reliability">Reliability</h3>
+<p>Ensure the quality of application updates and infrastructure changes so you can reliably deliver at a more rapid pace while maintaining a positive experience for end users. Use practices like continuous integration and continuous delivery to test that each change is functional and safe. Monitoring and logging practices help you stay informed of performance in real-time.</p>
+<h2 id="why-devops-matters">Why DevOps Matters</h2>
+<p>Software and the Internet have transformed the world and its industries, from shopping to entertainment to banking. Software no longer merely supports a business; rather it becomes an integral component of every part of a business. Companies interact with their customers through software delivered as online services or applications and on all sorts of devices. They also use software to increase operational efficiencies by transforming every part of the value chain, such as logistics, communications, and operations. In a similar way that physical goods companies transformed how they design, build, and deliver products using industrial automation throughout the 20th century, companies in today’s world must transform how they build and deliver software.</p>
+<h2 id="devops-tools">DevOps Tools</h2>
+<p>The DevOps model relies on effective tooling to help teams rapidly and reliably deploy and innovate for their customers. These tools automate manual tasks, help teams manage complex environments at scale, and keep engineers in control of the high velocity that is enabled by DevOps. In the next posts we will learn hiw to use this tools.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
