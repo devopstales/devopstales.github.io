@@ -29,7 +29,7 @@
     "datePublished": "2021-12-13",
     "dateModified" : "2021-12-13",
     "url" : "https://devopstales.github.io/home/openshift4-auth/",
-    "wordCount" : "374",
+    "wordCount" : "521",
     "keywords" : [ "devops", "tales", "openshift 4.2", "openshift okd4", "openshift container platform", "rad hat openshift", "Blog" ]
     
 }
@@ -206,6 +206,7 @@ if (!doNotTrack) {
       <ul>
         <li><a href="#create-a-cluster-admin-user">Create a Cluster Admin User</a></li>
         <li><a href="#enable-oauth-on-okd-cluster">Enable Oauth On OKD Cluster</a></li>
+        <li><a href="#fix-x509-certificate-signed-by-unknown-authority">Fix: x509: certificate signed by unknown authority</a></li>
       </ul>
     </li>
   </ul>
@@ -217,12 +218,15 @@ if (!doNotTrack) {
 <ul>
      <li>Part1a: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
      <li>Part1b: <a href="../../kubernetes/openshift4-calico/">Install Opeshift 4 with calico</a></li>
+     <li>Part1c: <a href="../../kubernetes/openshift4-cilium/">Install Opeshift 4 with cilium</a></li>
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
      <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
      <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
 </ul>
+
 
 
 <h3 id="create-a-cluster-admin-user">Create a Cluster Admin User</h3>
@@ -332,6 +336,40 @@ oc apply -f htpasswd_provider.yaml
         <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#39;https://sso.mydomain.intra/auth/realms/okd&#39;</span>
       <span style="color:#f92672">type</span>: <span style="color:#ae81ff">OpenID</span>
 </code></pre></div><p>Then apply the config <code>oc apply -f oauth-config.yaml</code></p>
+<h3 id="fix-x509-certificate-signed-by-unknown-authority">Fix: x509: certificate signed by unknown authority</h3>
+<p>If you get the fallowing error: The authentication operator can&rsquo;t honor OAuth configuration due to an <code>x509: certificate signed by unknown authority</code> error</p>
+<p>Check the <code>openshift-authentication-operator</code> pod log:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc -n openshift-authentication-operator logs <span style="color:#66d9ef">$(</span>oc -n openshift-authentication-operator get pods -l app<span style="color:#f92672">=</span>authentication-operator -o<span style="color:#f92672">=</span>custom-columns<span style="color:#f92672">=</span>NAME:.metadata.name --no-headers<span style="color:#66d9ef">)</span>
+<span style="color:#f92672">[</span>...<span style="color:#f92672">]</span>
+E1125 15:31:27.093873       <span style="color:#ae81ff">1</span> oauth.go:69<span style="color:#f92672">]</span> failed to honor IDP v1.IdentityProvider<span style="color:#f92672">{</span>Name:<span style="color:#e6db74">&#34;sso&#34;</span>, MappingMethod:<span style="color:#e6db74">&#34;claim&#34;</span>, IdentityProviderConfig:v1.IdentityProviderConfig<span style="color:#f92672">{</span>Type:<span style="color:#e6db74">&#34;OpenID&#34;</span>, BasicAuth:<span style="color:#f92672">(</span>*v1.BasicAuthIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)</span>, GitHub:<span style="color:#f92672">(</span>*v1.GitHubIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)</span>, GitLab:<span style="color:#f92672">(</span>*v1.GitLabIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)</span>, Google:<span style="color:#f92672">(</span>*v1.GoogleIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)</span>, HTPasswd:<span style="color:#f92672">(</span>*v1.HTPasswdIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)</span>, Keystone:<span style="color:#f92672">(</span>*v1.KeystoneIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)</span>, LDAP:<span style="color:#f92672">(</span>*v1.LDAPIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)</span>, OpenID:<span style="color:#f92672">(</span>*v1.OpenIDIdentityProvider<span style="color:#f92672">)(</span>0xc010181ef0<span style="color:#f92672">)</span>, RequestHeader:<span style="color:#f92672">(</span>*v1.RequestHeaderIdentityProvider<span style="color:#f92672">)(</span>nil<span style="color:#f92672">)}}</span>: x509: certificate signed by unknown authority
+I1125 15:31:28.369400       <span style="color:#ae81ff">1</span> status_controller.go:165<span style="color:#f92672">]</span> clusteroperator/authentication diff <span style="color:#f92672">{</span><span style="color:#e6db74">&#34;status&#34;</span>:<span style="color:#f92672">{</span><span style="color:#e6db74">&#34;conditions&#34;</span>:<span style="color:#f92672">[{</span><span style="color:#e6db74">&#34;lastTransitionTime&#34;</span>:<span style="color:#e6db74">&#34;2019-11-20T10:17:18Z&#34;</span>,<span style="color:#e6db74">&#34;message&#34;</span>:<span style="color:#e6db74">&#34;IdentityProviderConfigDegraded: failed to apply IDP sso config: x509: certificate signed by unknown authority&#34;</span>,<span style="color:#e6db74">&#34;reason&#34;</span>:<span style="color:#e6db74">&#34;AsExpected&#34;</span>,<span style="color:#e6db74">&#34;status&#34;</span>:<span style="color:#e6db74">&#34;False&#34;</span>,<span style="color:#e6db74">&#34;type&#34;</span>:<span style="color:#e6db74">&#34;Degraded&#34;</span><span style="color:#f92672">}</span>,<span style="color:#f92672">{</span><span style="color:#e6db74">&#34;lastTransitionTime&#34;</span>:<span style="color:#e6db74">&#34;2019-11-22T11:41:09Z&#34;</span>,<span style="color:#e6db74">&#34;reason&#34;</span>:<span style="color:#e6db74">&#34;AsExpected&#34;</span>,<span style="color:#e6db74">&#34;status&#34;</span>:<span style="color:#e6db74">&#34;False&#34;</span>,<span style="color:#e6db74">&#34;type&#34;</span>:<span style="color:#e6db74">&#34;Progressing&#34;</span><span style="color:#f92672">}</span>,<span style="color:#f92672">{</span><span style="color:#e6db74">&#34;lastTransitionTime&#34;</span>:<span style="color:#e6db74">&#34;2019-10-26T16:15:59Z&#34;</span>,<span style="color:#e6db74">&#34;reason&#34;</span>:<span style="color:#e6db74">&#34;AsExpected&#34;</span>,<span style="color:#e6db74">&#34;status&#34;</span>:<span style="color:#e6db74">&#34;True&#34;</span>,<span style="color:#e6db74">&#34;type&#34;</span>:<span style="color:#e6db74">&#34;Available&#34;</span><span style="color:#f92672">}</span>,<span style="color:#f92672">{</span><span style="color:#e6db74">&#34;lastTransitionTime&#34;</span>:<span style="color:#e6db74">&#34;2019-10-26T13:30:53Z&#34;</span>,<span style="color:#e6db74">&#34;reason&#34;</span>:<span style="color:#e6db74">&#34;AsExpected&#34;</span>,<span style="color:#e6db74">&#34;status&#34;</span>:<span style="color:#e6db74">&#34;True&#34;</span>,<span style="color:#e6db74">&#34;type&#34;</span>:<span style="color:#e6db74">&#34;Upgradeable&#34;</span><span style="color:#f92672">}]}}</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano oauth-config.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">config.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">OAuth</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">identityProviders</span>:
+    - <span style="color:#f92672">mappingMethod</span>: <span style="color:#ae81ff">add</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">sso.mydomain.intra</span>
+      <span style="color:#f92672">openID</span>:
+        <span style="color:#f92672">ca</span>:
+          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">sso-ca-config-map</span>
+...
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">ca.crt</span>: |+<span style="color:#e6db74">
+</span><span style="color:#e6db74">    -----BEGIN CERTIFICATE-----
+</span><span style="color:#e6db74">    MIIEFTCCAv2gAwIBAgIGSUEs...
+</span><span style="color:#e6db74">    -----END CERTIFICATE-----</span>    
+
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ConfigMap</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">sso-ca-config-map</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-config</span>
+</code></pre></div>
 		</div>
 	</article>
 </main>
@@ -482,6 +520,7 @@ oc apply -f htpasswd_provider.yaml
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-tekton/">Deploying Tekton on OpenShift 4</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gitlab-ci-artifacts/">GitLab CI: artifacts management</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/">Introduction to GitLab CI/CD</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/what-is-devops/">What is DevOps?</a></li>
@@ -491,7 +530,6 @@ oc apply -f htpasswd_provider.yaml
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-custom-certificate/">Proxmox: Set custom certificate</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-cluster-join-error/">Proxmox: local node address: cannot use IP</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog5-pfsense/">Analyzing PFsense logs in Graylog5</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog5-install/">Install Graylog5</a></li>
 		</ul>
 	</div>
 </div>

@@ -29,7 +29,7 @@
     "datePublished": "2021-12-13",
     "dateModified" : "2021-12-13",
     "url" : "https://devopstales.github.io/kubernetes/openshift4-install/",
-    "wordCount" : "877",
+    "wordCount" : "984",
     "keywords" : [ "openshift 4.2", "openshift okd4", "openshift container platform", "rad hat openshift", "Blog" ]
     
 }
@@ -228,12 +228,15 @@ if (!doNotTrack) {
 <ul>
      <li>Part1a: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
      <li>Part1b: <a href="../../kubernetes/openshift4-calico/">Install Opeshift 4 with calico</a></li>
+     <li>Part1c: <a href="../../kubernetes/openshift4-cilium/">Install Opeshift 4 with cilium</a></li>
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
      <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
      <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
 </ul>
+
 
 
 <h3 id="infrastructure">Infrastructure</h3>
@@ -417,12 +420,12 @@ mkdir /var/lib/tftpboot/pxelinux.cfg
 </code></pre></div><p>Then run: <code>systemctl enable --now tftp.service</code></p>
 <h3 id="create-okd-config">Create okd config</h3>
 <blockquote>
-<p>find the iso:
+<p>find the raw image:
 <a href="https://getfedora.org/en/coreos/download?tab=metal_virtualized&amp;stream=stable">https://getfedora.org/en/coreos/download?tab=metal_virtualized&amp;stream=stable</a>
-4K vs non 4K</p>
+4K vs non 4K
+For Proxmox you need the 4K version</p>
 </blockquote>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">wget fedora-coreos-33.20210117.3.2-live.x86_64.iso
-wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz
 wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/33.20210117.3.2/x86_64/fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz.sig
 cp fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz /var/www/html/fcos.raw.xz
 cp fedora-coreos-33.20210117.3.2-metal.x86_64.raw.xz.sig /var/www/html/fcos.raw.xz.sig
@@ -440,41 +443,55 @@ oc version
 openshift-install version
 
 mkdir install_dir
-</code></pre><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat &gt; install_dir/install-config.yaml <span style="color:#e6db74">&lt;&lt; EOF
-</span><span style="color:#e6db74">apiVersion: v1
-</span><span style="color:#e6db74">baseDomain: mydomain.intra
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  name: okd
-</span><span style="color:#e6db74">
-</span><span style="color:#e6db74">compute:
-</span><span style="color:#e6db74">- hyperthreading: Enabled
-</span><span style="color:#e6db74">  name: worker
-</span><span style="color:#e6db74">  replicas: 0
-</span><span style="color:#e6db74">
-</span><span style="color:#e6db74">controlPlane:
-</span><span style="color:#e6db74">  hyperthreading: Enabled
-</span><span style="color:#e6db74">  name: master
-</span><span style="color:#e6db74">  replicas: 3
-</span><span style="color:#e6db74">
-</span><span style="color:#e6db74">networking:
-</span><span style="color:#e6db74">  clusterNetwork:
-</span><span style="color:#e6db74">  - cidr: 10.128.0.0/14
-</span><span style="color:#e6db74">    hostPrefix: 23
-</span><span style="color:#e6db74">  networkType: OpenShiftSDN
-</span><span style="color:#e6db74">  serviceNetwork:
-</span><span style="color:#e6db74">  - 172.30.0.0/16
-</span><span style="color:#e6db74">
-</span><span style="color:#e6db74">platform:
-</span><span style="color:#e6db74">  none: {}
-</span><span style="color:#e6db74">
-</span><span style="color:#e6db74">fips: false
-</span><span style="color:#e6db74">
-</span><span style="color:#e6db74">pullSecret: &#39;{&#34;auths&#34;:{&#34;fake&#34;:{&#34;auth&#34;: &#34;bar&#34;}}}&#39;
-</span><span style="color:#e6db74">sshKey: &#39;ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDK7lDozs9WLJD14H+nz...&#39; 
-</span><span style="color:#e6db74">EOF</span>
+</code></pre><p>You can obtain the image <a href="https://console.redhat.com/openshift/install/pull-secret">pull secret from the Red Hat OpenShift Cluster Manager</a>. This pull secret is called <code>pullSecret</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &gt; install_dir/install-config.yaml &lt;&lt; EOF</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">baseDomain</span>: <span style="color:#ae81ff">mydomain.intra</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">okd</span>
+
+<span style="color:#f92672">compute</span>:
+- <span style="color:#f92672">hyperthreading</span>: <span style="color:#ae81ff">Enabled</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">worker</span>
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">0</span>
+
+<span style="color:#f92672">controlPlane</span>:
+  <span style="color:#f92672">hyperthreading</span>: <span style="color:#ae81ff">Enabled</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">master</span>
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">3</span>
+
+<span style="color:#f92672">networking</span>:
+  <span style="color:#f92672">clusterNetwork</span>:
+  - <span style="color:#f92672">cidr</span>: <span style="color:#ae81ff">10.128.0.0</span><span style="color:#ae81ff">/14</span>
+    <span style="color:#f92672">hostPrefix</span>: <span style="color:#ae81ff">23</span>
+  <span style="color:#f92672">networkType</span>: <span style="color:#ae81ff">OpenShiftSDN</span>
+  <span style="color:#f92672">serviceNetwork</span>:
+  - <span style="color:#ae81ff">172.30.0.0</span><span style="color:#ae81ff">/16</span>
+
+<span style="color:#f92672">platform</span>:
+  <span style="color:#f92672">none</span>: {}
+
+<span style="color:#f92672">fips</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">pullSecret</span>: <span style="color:#e6db74">&#39;{&#34;auths&#34;:{&#34;fake&#34;:{&#34;auth&#34;: &#34;bar&#34;}}}&#39;</span>
+<span style="color:#f92672">sshKey</span>: <span style="color:#e6db74">&#39;ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDK7lDozs9WLJD14H+nz...&#39;</span> 
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>If you are in an aire-gapped environment and you need to use a local registry mirror you can do this by adding the dollowind to the end of the install-confg:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">pullSecret</span>: <span style="color:#e6db74">&#39;{&#34;auths&#34;:{&#34;registry.mydomain.intra:18443&#34;: {&#34;auth&#34;: &#34;YWRtaW46SGFyYm9yMTIzNDU=&#34;,&#34;email&#34;: &#34;&#34;}}}&#39;</span>
+<span style="color:#f92672">imageContentSources</span>:
+- <span style="color:#f92672">mirrors</span>:
+  - <span style="color:#ae81ff">registry.mydomain.intra:18443/openshift/okd</span>
+  <span style="color:#f92672">source</span>: <span style="color:#ae81ff">quay.io/openshift/okd</span>
+- <span style="color:#f92672">mirrors</span>:
+  - <span style="color:#ae81ff">registry.mydomain.intra:18443/openshift/okd</span>
+  <span style="color:#f92672">source</span>: <span style="color:#ae81ff">quay.io/openshift/okd-content</span>
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">openshift-install create manifests --dir<span style="color:#f92672">=</span>install_dir/
 
-sed -i <span style="color:#e6db74">&#39;s/mastersSchedulable: true/mastersSchedulable: False/&#39;</span> install_dir/manifests/cluster-scheduler-02-config.yml
+<span style="color:#75715e"># remove .app from url</span>
+sed -i <span style="color:#e6db74">&#39;s/apps.okd.mydomain.intra/okd.mydomain.intra/&#39;</span> install_dir/manifests/cluster-ingress-02-config.yml
+
+<span style="color:#75715e"># this is how to disable workload on master nodes</span>
+<span style="color:#75715e">#sed -i &#39;s/mastersSchedulable: true/mastersSchedulable: False/&#39; install_dir/manifests/cluster-scheduler-02-config.yml</span>
 
 openshift-install create ignition-configs --dir<span style="color:#f92672">=</span>install_dir/
 
@@ -489,29 +506,29 @@ sudo chmod -R <span style="color:#ae81ff">755</span> /var/www/html/
 <p>It&rsquo;s time to start the VMs. Select the okd4-bootstrap VM and navigate to Console. Start the VM. Then one by one the masters and the workers too.</p>
 <h3 id="bootstrap-okd-cluster">Bootstrap OKD Cluster</h3>
 <p>You can monitor the installation progress by running the following command.</p>
-<pre tabindex="0"><code>openshift-install --dir=install_dir/ wait-for bootstrap-complete --log-level=info
-</code></pre><blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">openshift-install --dir<span style="color:#f92672">=</span>install_dir/ wait-for bootstrap-complete --log-level<span style="color:#f92672">=</span>info
+</code></pre></div><blockquote>
 <p>The certificates in the cluster is not authomaticle approved so I use the abow <code>tmux</code> command to approve</p>
 </blockquote>
-<pre tabindex="0"><code>tmux
-export KUBECONFIG=~/install_dir/auth/kubeconfig
-while true; do echo `oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{&quot;\n&quot;}}{{end}}{{end}}' | xargs -r oc adm certificate approve`; sleep 60; done
-</code></pre><p>Once the bootstrap process completes, you should see the following messages.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">tmux
+export KUBECONFIG<span style="color:#f92672">=</span>~/install_dir/auth/kubeconfig
+<span style="color:#66d9ef">while</span> true; <span style="color:#66d9ef">do</span> echo <span style="color:#e6db74">`</span>oc get csr -o go-template<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{{range .items}}{{if not .status}}{{.metadata.name}}{{&#34;\n&#34;}}{{end}}{{end}}&#39;</span> | xargs -r oc adm certificate approve<span style="color:#e6db74">`</span>; sleep 60; <span style="color:#66d9ef">done</span>
+</code></pre></div><p>Once the bootstrap process completes, you should see the following messages.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">INFO It is now safe to remove the bootstrap resources
 </code></pre></div><p>Then stop the bootstrap node.</p>
-<pre tabindex="0"><code># debug command to check the health of the cluster.
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># debug command to check the health of the cluster.</span>
 watch oc get csr
 watch oc get node
 
 oc get clusteroperator
 oc get clusterversion
 
-watch &quot;oc get clusteroperator&quot;
-watch &quot;oc get po -A | grep -v Running | grep -v Completed&quot;
+watch <span style="color:#e6db74">&#34;oc get clusteroperator&#34;</span>
+watch <span style="color:#e6db74">&#34;oc get po -A | grep -v Running | grep -v Completed&#34;</span>
 
 
 curl -X GET https://api.okd.mydomain.intra:6443/healthz -k
-</code></pre><p>Wait for the console to be available. Once it is available, we can point a browser to <a href="https://console-openshift-console.okd.mydomain.intra">https://console-openshift-console.okd.mydomain.intra</a></p>
+</code></pre></div><p>Wait for the console to be available. Once it is available, we can point a browser to <a href="https://console-openshift-console.okd.mydomain.intra">https://console-openshift-console.okd.mydomain.intra</a></p>
 <p>You will get an SSL error because the certificate is not valid for this domain. That&rsquo;s normal. Just bypass the SSL error.</p>
 <p>Login with user &ldquo;kubeadmin&rdquo;.You can find the kubeadmin password in a file generated during the installation.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat install_dir/auth/kubeadmin-password
@@ -680,6 +697,7 @@ curl -X GET https://api.okd.mydomain.intra:6443/healthz -k
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-tekton/">Deploying Tekton on OpenShift 4</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gitlab-ci-artifacts/">GitLab CI: artifacts management</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/">Introduction to GitLab CI/CD</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/what-is-devops/">What is DevOps?</a></li>
@@ -689,7 +707,6 @@ curl -X GET https://api.okd.mydomain.intra:6443/healthz -k
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-custom-certificate/">Proxmox: Set custom certificate</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-cluster-join-error/">Proxmox: local node address: cannot use IP</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog5-pfsense/">Analyzing PFsense logs in Graylog5</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog5-install/">Install Graylog5</a></li>
 		</ul>
 	</div>
 </div>

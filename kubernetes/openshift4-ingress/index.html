@@ -29,7 +29,7 @@
     "datePublished": "2021-12-13",
     "dateModified" : "2021-12-13",
     "url" : "https://devopstales.github.io/kubernetes/openshift4-ingress/",
-    "wordCount" : "343",
+    "wordCount" : "394",
     "keywords" : [ "openshift 4.2", "openshift okd4", "openshift container platform", "rad hat openshift", "Blog" ]
     
 }
@@ -222,12 +222,15 @@ if (!doNotTrack) {
 <ul>
      <li>Part1a: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
      <li>Part1b: <a href="../../kubernetes/openshift4-calico/">Install Opeshift 4 with calico</a></li>
+     <li>Part1c: <a href="../../kubernetes/openshift4-cilium/">Install Opeshift 4 with cilium</a></li>
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
      <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
      <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
 </ul>
+
 
 
 <h3 id="what-is-ingress-operator">What is Ingress Operator</h3>
@@ -239,13 +242,26 @@ if (!doNotTrack) {
 LS0tLS1CRUdJTiBDRVJUSUZ...
 cat tls.key | base64
 LS0tLS1CRUdJTiBQUklWQVR...
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano cert.yaml</span>
+</code></pre></div><blockquote>
+<p>Always use the full certificate chain for thi ingress secret</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano cert.yaml</span>
 ---
 <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
 <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
 <span style="color:#f92672">metadata</span>:
   <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default-tls-cert</span>
   <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-ingress</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">tls.crt</span>: <span style="color:#ae81ff">LS0tLS1CRUdJTiBDRVJUSUZ...</span>
+  <span style="color:#f92672">tls.key</span>: <span style="color:#ae81ff">LS0tLS1CRUdJTiBQUklWQVR...</span>
+<span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default-tls-cert</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-config</span>
 <span style="color:#f92672">data</span>:
   <span style="color:#f92672">tls.crt</span>: <span style="color:#ae81ff">LS0tLS1CRUdJTiBDRVJUSUZ...</span>
   <span style="color:#f92672">tls.key</span>: <span style="color:#ae81ff">LS0tLS1CRUdJTiBQUklWQVR...</span>
@@ -293,7 +309,8 @@ oc label nodes okd4-worker-4 node-role.kubernetes.io/ingress-public<span style="
 
 oc apply -f cert.yaml
 oc apply -f ingress/
-oc patch ingresscontroller.operator default --type<span style="color:#f92672">=</span>merge -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;defaultCertificate&#34;: {&#34;name&#34;: &#34;mydióomain-intra-certs&#34;}}}&#39;</span> -n openshift-ingress-operator
+oc patch ingresscontroller.operator default --type<span style="color:#f92672">=</span>merge -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;defaultCertificate&#34;: {&#34;name&#34;: &#34;default-tls-cert&#34;}}}&#39;</span> -n openshift-ingress-operator
+oc patch consoles.operator.openshift.io cluster --type<span style="color:#f92672">=</span>merge -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;route&#34;:{&#34;secret&#34;:{&#34;name&#34;: &#34;default-tls-cert&#34;}}}}&#39;</span> -n openshift-config
 </code></pre></div><h3 id="enable-http2">enable HTTP/2</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc annotate ingresses.config/cluster ingress.operator.openshift.io/default-enable-http2<span style="color:#f92672">=</span>true
 </code></pre></div><h3 id="add-okd-311-type-conole-url">Add OKD 3.11 type conole url</h3>
@@ -484,6 +501,7 @@ oc patch ingresscontroller.operator default --type<span style="color:#f92672">=<
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-tekton/">Deploying Tekton on OpenShift 4</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gitlab-ci-artifacts/">GitLab CI: artifacts management</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/">Introduction to GitLab CI/CD</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/what-is-devops/">What is DevOps?</a></li>
@@ -493,7 +511,6 @@ oc patch ingresscontroller.operator default --type<span style="color:#f92672">=<
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-custom-certificate/">Proxmox: Set custom certificate</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-cluster-join-error/">Proxmox: local node address: cannot use IP</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog5-pfsense/">Analyzing PFsense logs in Graylog5</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog5-install/">Install Graylog5</a></li>
 		</ul>
 	</div>
 </div>
