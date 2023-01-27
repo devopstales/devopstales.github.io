@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-01-26T07:16:52+00:00</updated>
+    <updated>2023-01-27T08:31:27+00:00</updated>
     
     
     <author>
@@ -17,6 +17,345 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Understand OKD OpenShift 4 Buildconfig Configurations]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-buildconfig/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuring OKD OpenShift 4 registry for bare metal" />
+                <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
+            
+                <id>https://devopstales.github.io/home/openshift4-buildconfig/</id>
+            
+            
+            <published>2023-01-25T00:00:00+00:00</published>
+            <updated>2023-01-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can install rad hat openshift pipelines (Tekton) on OpenShift4.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part1b: <a href="../../kubernetes/openshift4-calico/">Install Opeshift 4 with calico</a></li>
+     <li>Part1c: <a href="../../kubernetes/openshift4-cilium/">Install Opeshift 4 with cilium</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
+</ul>
+
+
+
+<h3 id="what-is-buildconfig">What is Buildconfig?</h3>
+<p>Openshift has introduced a new resource called <code>BuildConfig</code>, to support Build Config Openshift developed a new technology called Source-to-Image (S2I) to build pods. S2I provides Openshift capabilities equivalent to Jenkins.</p>
+<h3 id="understand-buildconfig-definition">Understand Buildconfig definition</h3>
+<p>In a Buildconfig definition, there a list of directives to be fill. A sample Buildconfig definition looks like below:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">build.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">BuildConfig</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">maven-webapp-build</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">runPolicy</span>: <span style="color:#ae81ff">&lt;... list the run policy ...&gt;</span>
+  <span style="color:#f92672">triggers</span>:
+    <span style="color:#ae81ff">&lt;... list of triggers ...&gt; </span>
+  <span style="color:#f92672">source</span>:
+    <span style="color:#ae81ff">&lt;... input parameters or source ...&gt;</span>
+  <span style="color:#f92672">strategy</span>:
+    <span style="color:#ae81ff">&lt;... build strategy to use ...&gt;</span>
+  <span style="color:#f92672">output</span>:
+    <span style="color:#ae81ff">&lt;... repository details ...&gt;</span>
+  <span style="color:#f92672">postCommit</span>:
+    <span style="color:#ae81ff">&lt;... optinal build hooks ...&gt;</span>
+</code></pre></div><p>Under the <code>spec</code> section source, <code>strategy</code> and <code>output</code> must be filled in order to run the build config.</p>
+<ul>
+<li><code>triggers</code> - Webhooks like GitHub/GitLab webhooks can be used to trigger this build.</li>
+<li><code>source</code> - Here you can define the source code repository.</li>
+<li><code>strategy</code> - This can be <code>Docker Build</code>, <code>Source-to-Image</code> or <code>Custom Build</code></li>
+<li><code>output</code> - This directive is used to set an image output repository. This can be either Openshift build in a repository, on-premise private registry or docker hub.</li>
+</ul>
+<h3 id="source-to-image-s2i-build">Source-to-Image (S2I) Build</h3>
+<p>Red Hat introduced Source-to-Image technology in order to reduce workload from developers and allow them to focus on the code.  Openshift provides a list of pre-built language images.  Those images are built with S2I binary, all the essential libraries, and tools needed for the development environment.</p>
+<h3 id="openshift-imagestream-configuration-example">Openshift ImageStream Configuration Example</h3>
+<p>First we ned to create an <code>ImageStream</code> to store the image. This is a folder in OKD&rsquo;s local dcker registry.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano ImageStream.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">image.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ImageStream</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">maven-webapp</span>
+</code></pre></div><h3 id="openshift-buildconfig-configuration-example---1">Openshift BuildConfig Configuration Example - 1</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano BuildConfig.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">build.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">BuildConfig</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">maven-webapp-build</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">source</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Dockerfile</span>
+    <span style="color:#f92672">dockerfile</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">      FROM docker.io/tomcat
+</span><span style="color:#e6db74">      RUN wget https://tomcat.apache.org/tomcat-7.0-doc/appdev/sample/sample.war -O /usr/local/tomcat/webapps/maven-webapp.war
+</span><span style="color:#e6db74">      CMD [&#34;catalina.sh&#34;, &#34;run&#34;]</span>      
+  <span style="color:#f92672">strategy</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Docker</span>
+  <span style="color:#f92672">output</span>:
+    <span style="color:#f92672">to</span>:
+      <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ImageStreamTag</span>
+      <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;maven-webapp:latest&#39;</span>
+</code></pre></div><p>I this <code>BuildConfig</code> I created a Docker build this is the name of the <code>strategy</code> too. For Docker build the <code>source</code> is a Dockerfile. As you can see the content of the Dockerfile is directly in the object. In the end the <code>output</code> is an <code>ImageStream</code>.</p>
+<p><img src="/img/include/openshift4-buildconfig01.webp" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/openshift4-buildconfig02.webp" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/openshift4-buildconfig03.webp" alt="Example image"  class="zoomable" /></p>
+<h3 id="openshift-buildconfig-configuration-example---2">Openshift BuildConfig Configuration Example - 2</h3>
+<p>In this example, I will explain how to use <code>Docker Build Strategy</code> and <code>Git repositories</code>. In this, I hosted all resources on the Github repository.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano BuildConfig2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">build.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">BuildConfig</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">maven-webapp-build2</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">source</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Git</span>
+    <span style="color:#f92672">git</span>:
+      <span style="color:#f92672">uri</span>: <span style="color:#e6db74">&#39;https://github.com/devopstales/maven-web-project.git&#39;</span>
+      <span style="color:#f92672">ref</span>: <span style="color:#ae81ff">main</span>
+    <span style="color:#f92672">contextDir</span>: <span style="color:#ae81ff">sample</span>
+  <span style="color:#f92672">strategy</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Docker</span>
+    <span style="color:#75715e">#With this you can set a path to the docker file</span>
+    <span style="color:#75715e">#dockerStrategy:</span>
+    <span style="color:#75715e"># dockerfilePath: dockerfile</span>
+  <span style="color:#f92672">output</span>:
+    <span style="color:#f92672">to</span>:
+      <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ImageStreamTag</span>
+      <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;maven-webapp:latest&#39;</span>
+</code></pre></div><h3 id="openshift-buildconfig-configuration-example---3">Openshift BuildConfig Configuration Example - 3</h3>
+<p>In this example, I am using  the <strong>source</strong> <code>strategy</code> for Source-to-Image (S2I) Build:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano BuildConfig3.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">BuildConfig</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">build.openshift.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">centos-s2i</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">build-test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">output</span>:
+    <span style="color:#f92672">to</span>:
+      <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ImageStreamTag</span>
+      <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;maven-webapp:latest&#39;</span>
+  <span style="color:#f92672">strategy</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Docker</span>
+    <span style="color:#f92672">dockerStrategy</span>:
+      <span style="color:#f92672">dockerfilePath</span>: <span style="color:#ae81ff">Dockerfile</span>
+  <span style="color:#f92672">source</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Git</span>
+    <span style="color:#f92672">git</span>:
+      <span style="color:#f92672">uri</span>: <span style="color:#e6db74">&#39;https://github.com/devopstales/maven-web-project&#39;</span>
+      <span style="color:#f92672">ref</span>: <span style="color:#ae81ff">main</span>
+    <span style="color:#f92672">contextDir</span>: <span style="color:#ae81ff">/S2I</span>
+</code></pre></div><h1 id="the-build-pods">The build pods</h1>
+<p>Openshift Use pods to uild the images so if a bild is unsuccessfull the build pod stuck in <code>Error</code> status:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get pods
+
+NAME                          READY   STATUS       RESTARTS   AGE
+maven-webapp-build-1-build    0/1     Error        <span style="color:#ae81ff">0</span>          66m
+maven-webapp-build-2-build    0/1     Error        <span style="color:#ae81ff">0</span>          44m
+maven-webapp-build-3-build    0/1     Error        <span style="color:#ae81ff">0</span>          42m
+maven-webapp-build-4-build    0/1     Completed    <span style="color:#ae81ff">0</span>          39m
+maven-webapp-build2-1-build   0/1     Init:Error   <span style="color:#ae81ff">0</span>          31m
+maven-webapp-build2-2-build   0/1     Error        <span style="color:#ae81ff">0</span>          28m
+maven-webapp-build2-3-build   0/1     Init:Error   <span style="color:#ae81ff">0</span>          5m50s
+maven-webapp-build2-4-build   0/1     Completed    <span style="color:#ae81ff">0</span>          5m14s
+</code></pre></div><h3 id="how-tu-use-the-imagestream-to-automatcle-update-image-in-deployment">How tu use the ImageStream to Automatcle update image in Deployment?</h3>
+<p>You can define an <code>ImageStream</code> in the <code>DeploymentConfig</code> object to trigger image update:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano DeploymentConfig.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps.openshift.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">DeploymentConfig</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">maven-webapp</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">maven-webapp</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">maven-webapp</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">maven-webapp</span>
+        <span style="color:#f92672">image</span>: <span style="color:#e6db74">&#39;&#39;</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">8080</span>
+          <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+  <span style="color:#f92672">triggers</span>:
+  - <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ConfigChange </span>
+  - <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ImageChange</span>
+    <span style="color:#f92672">imageChangeParams</span>:
+      <span style="color:#f92672">automatic</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#f92672">containerNames</span>:
+      - <span style="color:#ae81ff">maven-webapp</span>
+      <span style="color:#f92672">from</span>:
+        <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ImageStreamTag</span>
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">maven-webapp:latest</span>
+</code></pre></div><h3 id="set-up-a-github-webhook">Set up a GitHub webhook</h3>
+<p>Add <code>GitHub</code> type trigger for your <code>BuildConfig</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano BuildConfig3.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">BuildConfig</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">build.openshift.io/v1</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">centos-s2i</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">build-test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">output</span>:
+    <span style="color:#f92672">to</span>:
+      <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ImageStreamTag</span>
+      <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;maven-webapp:latest&#39;</span>
+  <span style="color:#f92672">strategy</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Docker</span>
+    <span style="color:#f92672">dockerStrategy</span>:
+      <span style="color:#f92672">dockerfilePath</span>: <span style="color:#ae81ff">Dockerfile</span>
+  <span style="color:#f92672">source</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Git</span>
+    <span style="color:#f92672">git</span>:
+      <span style="color:#f92672">uri</span>: <span style="color:#e6db74">&#39;https://github.com/devopstales/maven-web-project&#39;</span>
+      <span style="color:#f92672">ref</span>: <span style="color:#ae81ff">main</span>
+    <span style="color:#f92672">contextDir</span>: <span style="color:#ae81ff">/S2I</span>
+  <span style="color:#f92672">triggers</span>:
+    - <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Generic</span>
+      <span style="color:#f92672">generic</span>:
+        <span style="color:#f92672">secretReference</span>:
+          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">centos-s2i-generic-webhook-secret</span>
+    - <span style="color:#f92672">type</span>: <span style="color:#ae81ff">GitHub</span>
+      <span style="color:#f92672">github</span>:
+        <span style="color:#f92672">secretReference</span>:
+          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">centos-s2i-github-webhook-secret</span>
+    - <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ConfigChange</span>
+</code></pre></div><p>GitHub webhooks allow external services to be notified when certain events happen. To automatically deploy a new pod when updates to the GitHub Dockerfile occur, you must configure your GitHub repo with the webhook that OpenShift provides as part of the BuildConfig.</p>
+<ul>
+<li>In the <code>Development</code> UI go to <code>Builds</code>, select your <code>BuildConfig</code></li>
+<li>Go to the Webhooks section and click Copy URL with Secret for the Generic webhook type.</li>
+</ul>
+<p><img src="/img/include/openshift4-buildconfig04.webp" alt="Example image"  class="zoomable" /></p>
+<ul>
+<li>Open your GitHub repo and navigate to <code>Settings</code>.</li>
+<li>Select <code>Webhooks</code> from the Options menu and click <code>Add Webhook</code>.</li>
+</ul>
+<p><img src="/img/include/openshift4-buildconfig05.webp" alt="Example image"  class="zoomable" /></p>
+<ul>
+<li>On the <code>Add webhook</code> page, paste the URL that you copied earlier into the <code>Payload URL</code> field.</li>
+<li>In the <code>Content type</code> field, select the <code>application/json</code> option.</li>
+<li>Click <code>Add webhook</code>.</li>
+</ul>
+<p><img src="/img/include/openshift4-buildconfig06.webp" alt="Example image"  class="zoomable" /></p>
+<p>Select your newly added webhook to see its details. The Recent Deliveries section displays an entry for a ping test that is prefixed with a tick mark, which indicates that the ping test was successful.</p>
+<p><img src="/img/include/openshift4-buildconfig07.webp" alt="Example image"  class="zoomable" /></p>
+<p>Click the entry to view more details about the REST API call and the associated response for the ping test. A successful ping test indicates that GitHub is able to connect with your OpenShift cluster.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Configuring OKD OpenShift 4 registry for bare metal]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuring OKD OpenShift 4 registry for bare metal" />
+                <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
+                <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
+                <link href="https://devopstales.github.io/home/openshift4-ceph-rbd-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 Ceph Persisten Storage" />
+                <link href="https://devopstales.github.io/home/openshift4-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 authentication" />
+            
+                <id>https://devopstales.github.io/home/openshift4-registry/</id>
+            
+            
+            <published>2023-01-23T00:00:00+00:00</published>
+            <updated>2023-01-23T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can configure the enbedded rad hat quay docker registry in Openshift.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part1b: <a href="../../kubernetes/openshift4-calico/">Install Opeshift 4 with calico</a></li>
+     <li>Part1c: <a href="../../kubernetes/openshift4-cilium/">Install Opeshift 4 with cilium</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
+</ul>
+
+
+
+<p>On platforms that do not provide shareable object storage, the OpenShift Image Registry Operator bootstraps itself as <code>Removed</code>. This allows <code>openshift-installer</code> to complete installations on these platform types.</p>
+<h3 id="changing-the-image-registrys-management-state">Changing the image registry’s management state</h3>
+<p>To start the image registry, you must change the Image Registry Operator configuration’s <code>managementState</code> from <code>Removed</code> to <code>Managed</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc project openshift-image-registry
+oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;managementState&#34;:&#34;Managed&#34;}}&#39;</span>
+</code></pre></div><h3 id="image-registry-storage-configuration">Image registry storage configuration</h3>
+<p>The Image Registry Operator is not initially available for platforms that do not provide default storage. After installation, you must configure your registry to use storage so that the Registry Operator is made available. I configured ceph storage in a <a href="">previous post</a>.</p>
+<p>Edit the registry configuration and add <code>image-registry-storage</code> PVC.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;storage&#34;:{&#34;pvc&#34;:{&#34;claim&#34;:&#34;image-registry-storage&#34;}}}}&#39;</span>
+</code></pre></div><p>You must configure storage for the Image Registry Operator. For non-production clusters, you can set the image registry to an empty directory. If you do so, all images are lost if you restart the registry.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;storage&#34;:{&#34;emptyDir&#34;:{}}}}&#39;</span>
+</code></pre></div><p>To allow the image registry to use block storage types such as RBD or vSphere Virtual Machine Disk (VMDK) during upgrades as a cluster administrator, you can use the Recreate rollout strategy.</p>
+<blockquote>
+<p>Block storage volumes are supported but not recommended for use with image registry on production clusters. An installation where the registry is configured on block storage is not highly available because the registry cannot have more than one replica.</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc patch config.imageregistry.operator.openshift.io/cluster --type<span style="color:#f92672">=</span>merge -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;rolloutStrategy&#34;:&#34;Recreate&#34;,&#34;replicas&#34;:1}}&#39;</span>
+</code></pre></div><p>Provision the PV for the block storage device, and create a PVC for that volume.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano pvc.yaml
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: image-registry-storage 
+spec:
+  accessModes:
+  - ReadWriteOnce 
+  resources:
+    requests:
+      storage: 100Gi 
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc apply -f pvc.yaml
+
+oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;storage&#34;:{&#34;emptyDir&#34;:{}}}}&#39;</span>
+</code></pre></div><h3 id="exposing-openshift-container-registry">Exposing OpenShift Container Registry</h3>
+<p>The first step in setting up an OpenShift Container Registry is to expose the registry through the default or customized route. You can do so by running the following command.</p>
+<pre tabindex="0"><code>oc patch configs.imageregistry.operator.openshift.io/cluster --type=merge --patch '{&quot;spec&quot;:{&quot;defaultRoute&quot;:true}}'
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -45,9 +384,11 @@
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -6862,9 +7203,11 @@ systemctl status serial-getty@ttyS0.service
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -6943,7 +7286,7 @@ systemctl status serial-getty@ttyS0.service
 </tbody>
 </table>
 <h3 id="dns-config">DNS Config</h3>
-<pre tabindex="0"><code>; OpenShift Container Platform Cluster - A records
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">; OpenShift Container Platform Cluster - A records
 pfsense.okd.mydomain.intra.          IN      A      192.168.1.1
 okd4-bootstrap.okd.mydomain.intra.   IN      A      192.168.1.210
 
@@ -6967,11 +7310,11 @@ okd.mydomain.intra.                IN      A      192.168.1.1
 *.okd.mydomain.intra.              IN      A      192.168.1.1
 
 ; OpenShift internal cluster IPs - SRV records
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-0.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-1.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-2.okd.mydomain.intra.
-</code></pre><h3 id="dhcp-config">DHCP Config:</h3>
-<pre tabindex="0"><code>32:89:07:57:27:00  192.168.1.200 	okd4-services
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-0.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-1.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-2.okd.mydomain.intra.
+</code></pre></div><h3 id="dhcp-config">DHCP Config:</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">32:89:07:57:27:00  192.168.1.200 	okd4-services
 32:89:07:57:27:10  192.168.1.210 	okd4-bootstrap
 32:89:07:57:27:01  192.168.1.201 	okd4-mastr-1
 32:89:07:57:27:02  192.168.1.202 	okd4-mastr-2
@@ -6980,26 +7323,27 @@ _etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    
 32:89:07:57:27:05  192.168.1.205 	okd4-worker-2
 32:89:07:57:27:06  192.168.1.206 	okd4-worker-3
 32:89:07:57:27:07  192.168.1.207 	okd4-worker-4
-</code></pre><pre tabindex="0"><code>Next Server: 192.168.1.200
+</code></pre></div><p>PXE bootserver config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">Next Server: 192.168.1.200
 Default BIOS file name: pxelinux.0
-</code></pre><h2 id="haproxy-config">HAPROXY Config:</h2>
-<pre tabindex="0"><code>192.168.201.1 6443  --&gt;  192.168.1.210   6443
-192.168.201.1 6443  --&gt;  192.168.1.201  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 22623 --&gt;  192.168.1.210   22623
-192.168.201.1 22623 --&gt;  192.168.1.201  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 80    --&gt;  192.168.1.204  80
-192.168.201.1 80    --&gt;  192.168.1.205  80
-192.168.201.1 443   --&gt;  192.168.1.204  443
-192.168.201.1 443   --&gt;  192.168.1.205  443
-&lt;publicip&gt; 80    --&gt;  192.168.1.206  80
-&lt;publicip&gt; 80    --&gt;  192.168.1.207  80
-&lt;publicip&gt; 443   --&gt;  192.168.1.206  443
-&lt;publicip&gt; 443   --&gt;  192.168.1.207  443
-</code></pre><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
+</code></pre></div><h2 id="haproxy-config">HAPROXY Config:</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.210   <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.201  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.210   <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.201  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.204  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.205  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.204  <span style="color:#ae81ff">443</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.205  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.206  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.207  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.206  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.207  <span style="color:#ae81ff">443</span>
+</code></pre></div><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh okd4-services
 
 yum install epel-release -y
@@ -8310,9 +8654,11 @@ Events:
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -8391,7 +8737,7 @@ Events:
 </tbody>
 </table>
 <h3 id="dns-config">DNS Config</h3>
-<pre tabindex="0"><code>; OpenShift Container Platform Cluster - A records
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">; OpenShift Container Platform Cluster - A records
 pfsense.okd.mydomain.intra.          IN      A      192.168.1.1
 okd4-bootstrap.okd.mydomain.intra.   IN      A      192.168.1.210
 
@@ -8415,11 +8761,11 @@ okd.mydomain.intra.                IN      A      192.168.1.1
 *.okd.mydomain.intra.              IN      A      192.168.1.1
 
 ; OpenShift internal cluster IPs - SRV records
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-0.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-1.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-2.okd.mydomain.intra.
-</code></pre><h3 id="dhcp-config">DHCP Config:</h3>
-<pre tabindex="0"><code>32:89:07:57:27:00  192.168.1.200 	okd4-services
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-0.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-1.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-2.okd.mydomain.intra.
+</code></pre></div><h3 id="dhcp-config">DHCP Config:</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">32:89:07:57:27:00  192.168.1.200 	okd4-services
 32:89:07:57:27:10  192.168.1.210 	okd4-bootstrap
 32:89:07:57:27:01  192.168.1.201 	okd4-mastr-1
 32:89:07:57:27:02  192.168.1.202 	okd4-mastr-2
@@ -8428,26 +8774,26 @@ _etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    
 32:89:07:57:27:05  192.168.1.205 	okd4-worker-2
 32:89:07:57:27:06  192.168.1.206 	okd4-worker-3
 32:89:07:57:27:07  192.168.1.207 	okd4-worker-4
-</code></pre><pre tabindex="0"><code>Next Server: 192.168.1.200
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">Next Server: 192.168.1.200
 Default BIOS file name: pxelinux.0
-</code></pre><h2 id="haproxy-config">HAPROXY Config:</h2>
-<pre tabindex="0"><code>192.168.201.1 6443  --&gt;  192.168.1.210   6443
-192.168.201.1 6443  --&gt;  192.168.1.201  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 22623 --&gt;  192.168.1.210   22623
-192.168.201.1 22623 --&gt;  192.168.1.201  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 80    --&gt;  192.168.1.204  80
-192.168.201.1 80    --&gt;  192.168.1.205  80
-192.168.201.1 443   --&gt;  192.168.1.204  443
-192.168.201.1 443   --&gt;  192.168.1.205  443
-&lt;publicip&gt; 80    --&gt;  192.168.1.206  80
-&lt;publicip&gt; 80    --&gt;  192.168.1.207  80
-&lt;publicip&gt; 443   --&gt;  192.168.1.206  443
-&lt;publicip&gt; 443   --&gt;  192.168.1.207  443
-</code></pre><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
+</code></pre></div><h2 id="haproxy-config">HAPROXY Config:</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.210   <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.201  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.210   <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.201  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.204  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.205  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.204  <span style="color:#ae81ff">443</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.205  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.206  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.207  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.206  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.207  <span style="color:#ae81ff">443</span>
+</code></pre></div><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh okd4-services
 
 yum install epel-release -y
@@ -12467,9 +12813,11 @@ Done with success
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -12653,9 +13001,11 @@ I1125 15:31:28.369400       <span style="color:#ae81ff">1</span> status_controll
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -12906,9 +13256,11 @@ node-ca-r5jnx                                      1/1       Running   <span sty
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -13055,9 +13407,11 @@ oc patch consoles.operator.openshift.io cluster --type<span style="color:#f92672
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -13136,7 +13490,7 @@ oc patch consoles.operator.openshift.io cluster --type<span style="color:#f92672
 </tbody>
 </table>
 <h3 id="dns-config">DNS Config</h3>
-<pre tabindex="0"><code>; OpenShift Container Platform Cluster - A records
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">; OpenShift Container Platform Cluster - A records
 pfsense.okd.mydomain.intra.          IN      A      192.168.1.1
 okd4-bootstrap.okd.mydomain.intra.   IN      A      192.168.1.210
 
@@ -13160,11 +13514,11 @@ okd.mydomain.intra.                IN      A      192.168.1.1
 *.okd.mydomain.intra.              IN      A      192.168.1.1
 
 ; OpenShift internal cluster IPs - SRV records
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-0.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-1.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-2.okd.mydomain.intra.
-</code></pre><h3 id="dhcp-config">DHCP Config:</h3>
-<pre tabindex="0"><code>32:89:07:57:27:00  192.168.1.200 	okd4-services
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-0.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-1.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-2.okd.mydomain.intra.
+</code></pre></div><h3 id="dhcp-config">DHCP Config:</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">32:89:07:57:27:00  192.168.1.200 	okd4-services
 32:89:07:57:27:10  192.168.1.210 	okd4-bootstrap
 32:89:07:57:27:01  192.168.1.201 	okd4-mastr-1
 32:89:07:57:27:02  192.168.1.202 	okd4-mastr-2
@@ -13173,26 +13527,27 @@ _etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    
 32:89:07:57:27:05  192.168.1.205 	okd4-worker-2
 32:89:07:57:27:06  192.168.1.206 	okd4-worker-3
 32:89:07:57:27:07  192.168.1.207 	okd4-worker-4
-</code></pre><pre tabindex="0"><code>Next Server: 192.168.1.200
+</code></pre></div><p>PXE Bootserver Config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">Next Server: 192.168.1.200
 Default BIOS file name: pxelinux.0
-</code></pre><h2 id="haproxy-config">HAPROXY Config:</h2>
-<pre tabindex="0"><code>192.168.201.1 6443  --&gt;  192.168.1.210   6443
-192.168.201.1 6443  --&gt;  192.168.1.201  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 22623 --&gt;  192.168.1.210   22623
-192.168.201.1 22623 --&gt;  192.168.1.201  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 80    --&gt;  192.168.1.204  80
-192.168.201.1 80    --&gt;  192.168.1.205  80
-192.168.201.1 443   --&gt;  192.168.1.204  443
-192.168.201.1 443   --&gt;  192.168.1.205  443
-&lt;publicip&gt; 80    --&gt;  192.168.1.206  80
-&lt;publicip&gt; 80    --&gt;  192.168.1.207  80
-&lt;publicip&gt; 443   --&gt;  192.168.1.206  443
-&lt;publicip&gt; 443   --&gt;  192.168.1.207  443
-</code></pre><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
+</code></pre></div><h2 id="haproxy-config">HAPROXY Config:</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.210   <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.201  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.210   <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.201  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.204  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.205  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.204  <span style="color:#ae81ff">443</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.205  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.206  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.207  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.206  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.207  <span style="color:#ae81ff">443</span>
+</code></pre></div><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh okd4-services
 
 yum install epel-release -y
@@ -13394,9 +13749,11 @@ curl -X GET https://api.okd.mydomain.intra:6443/healthz -k
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 

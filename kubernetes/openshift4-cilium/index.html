@@ -29,7 +29,7 @@
     "datePublished": "2022-04-06",
     "dateModified" : "2022-04-06",
     "url" : "https://devopstales.github.io/kubernetes/openshift4-cilium/",
-    "wordCount" : "1118",
+    "wordCount" : "1137",
     "keywords" : [ "OpenShift", "OpenShift 4", "Cilium", "OKD", "OKD4", "Blog" ]
     
 }
@@ -232,9 +232,11 @@ if (!doNotTrack) {
      <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
      <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
      <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
-     <li>Part5a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
-     <li>Part5b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
-     <li>Part6: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4 </a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/"></a>Configuring OKD OpenShift 4 registry for bare metal</li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
 </ul>
 
 
@@ -313,7 +315,7 @@ if (!doNotTrack) {
 </tbody>
 </table>
 <h3 id="dns-config">DNS Config</h3>
-<pre tabindex="0"><code>; OpenShift Container Platform Cluster - A records
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">; OpenShift Container Platform Cluster - A records
 pfsense.okd.mydomain.intra.          IN      A      192.168.1.1
 okd4-bootstrap.okd.mydomain.intra.   IN      A      192.168.1.210
 
@@ -337,11 +339,11 @@ okd.mydomain.intra.                IN      A      192.168.1.1
 *.okd.mydomain.intra.              IN      A      192.168.1.1
 
 ; OpenShift internal cluster IPs - SRV records
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-0.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-1.okd.mydomain.intra.
-_etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    2380    etcd-2.okd.mydomain.intra.
-</code></pre><h3 id="dhcp-config">DHCP Config:</h3>
-<pre tabindex="0"><code>32:89:07:57:27:00  192.168.1.200 	okd4-services
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-0.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-1.okd.mydomain.intra.
+_etcd-server-ssl._tcp.okd.mydomain.intra.    <span style="color:#ae81ff">86400</span>     IN    SRV     <span style="color:#ae81ff">0</span>    <span style="color:#ae81ff">10</span>    <span style="color:#ae81ff">2380</span>    etcd-2.okd.mydomain.intra.
+</code></pre></div><h3 id="dhcp-config">DHCP Config:</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">32:89:07:57:27:00  192.168.1.200 	okd4-services
 32:89:07:57:27:10  192.168.1.210 	okd4-bootstrap
 32:89:07:57:27:01  192.168.1.201 	okd4-mastr-1
 32:89:07:57:27:02  192.168.1.202 	okd4-mastr-2
@@ -350,26 +352,27 @@ _etcd-server-ssl._tcp.okd.mydomain.intra.    86400     IN    SRV     0    10    
 32:89:07:57:27:05  192.168.1.205 	okd4-worker-2
 32:89:07:57:27:06  192.168.1.206 	okd4-worker-3
 32:89:07:57:27:07  192.168.1.207 	okd4-worker-4
-</code></pre><pre tabindex="0"><code>Next Server: 192.168.1.200
+</code></pre></div><p>PXE bootserver config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">Next Server: 192.168.1.200
 Default BIOS file name: pxelinux.0
-</code></pre><h2 id="haproxy-config">HAPROXY Config:</h2>
-<pre tabindex="0"><code>192.168.201.1 6443  --&gt;  192.168.1.210   6443
-192.168.201.1 6443  --&gt;  192.168.1.201  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 6443  --&gt;  192.168.1.202  6443
-192.168.201.1 22623 --&gt;  192.168.1.210   22623
-192.168.201.1 22623 --&gt;  192.168.1.201  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 22623 --&gt;  192.168.1.202  22623
-192.168.201.1 80    --&gt;  192.168.1.204  80
-192.168.201.1 80    --&gt;  192.168.1.205  80
-192.168.201.1 443   --&gt;  192.168.1.204  443
-192.168.201.1 443   --&gt;  192.168.1.205  443
-&lt;publicip&gt; 80    --&gt;  192.168.1.206  80
-&lt;publicip&gt; 80    --&gt;  192.168.1.207  80
-&lt;publicip&gt; 443   --&gt;  192.168.1.206  443
-&lt;publicip&gt; 443   --&gt;  192.168.1.207  443
-</code></pre><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
+</code></pre></div><h2 id="haproxy-config">HAPROXY Config:</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.210   <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.201  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">6443</span>  --&gt;  192.168.1.202  <span style="color:#ae81ff">6443</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.210   <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.201  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">22623</span> --&gt;  192.168.1.202  <span style="color:#ae81ff">22623</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.204  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.205  <span style="color:#ae81ff">80</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.204  <span style="color:#ae81ff">443</span>
+192.168.201.1 <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.205  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.206  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">80</span>    --&gt;  192.168.1.207  <span style="color:#ae81ff">80</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.206  <span style="color:#ae81ff">443</span>
+&lt;publicip&gt; <span style="color:#ae81ff">443</span>   --&gt;  192.168.1.207  <span style="color:#ae81ff">443</span>
+</code></pre></div><h3 id="install-and-configure-pxeboot">Install and configure pxeboot</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ssh okd4-services
 
 yum install epel-release -y
@@ -628,6 +631,22 @@ sudo semodule -i cilium.pp
 	</article>
 </main>
 
+<div class=coffee_box>
+  <div class=coffee_box_wrapper>
+    <h3 class=coffee_box_heading>
+      Your support is our everlasting motivation,<br>
+      that cup of coffee is what keeps us going!
+    </h3>
+    <hr>
+    <p class=coffee_box_content>As we continue to grow, we would wish to reach and impact more people who visit and take advantage of the guides we have on our blog. This is a big task for us and we are so far extremely grateful for the kind people who have shown amazing support for our work over the time we have been online.
+    <p class=coffee_box_content>Thank You for your support as we work to give you the best of guides and articles. Click below to buy us a coffee.
+    <div class=coffee_box_img>
+      <a href=https://www.buymeacoffee.com/devopstales target=_blank>
+        <img src="https://devopstales.github.io/img/design/coffee-logo.png" alt="Coffee Box" >
+      </a>
+    </div>
+  </div>
+</div>
 
 
 <script src="https://utteranc.es/client.js"
@@ -774,6 +793,8 @@ sudo semodule -i cilium.pp
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-registry/">Configuring OKD OpenShift 4 registry for bare metal</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-tekton/">Deploying Tekton on OpenShift 4</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gitlab-ci-artifacts/">GitLab CI: artifacts management</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/">Introduction to GitLab CI/CD</a></li>
@@ -782,8 +803,6 @@ sudo semodule -i cilium.pp
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-fail2ban/">Proxmox: Potect your server with fail2ban</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/microk8s-expired-cert/">Microk8s: Unable to connect to the server: x509: certificate has expired or is not yet valid</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-custom-certificate/">Proxmox: Set custom certificate</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-cluster-join-error/">Proxmox: local node address: cannot use IP</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/graylog5-pfsense/">Analyzing PFsense logs in Graylog5</a></li>
 		</ul>
 	</div>
 </div>
