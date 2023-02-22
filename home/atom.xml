@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-01-27T10:26:19+00:00</updated>
+    <updated>2023-02-22T14:10:07+00:00</updated>
     
     
     <author>
@@ -17,6 +17,265 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GitLab CI: How to Build Docker Images in Kubernetes]]></title>
+            <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+                <link href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+            
+                <id>https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/</id>
+            
+            
+            <published>2023-02-10T00:00:00+00:00</published>
+            <updated>2023-02-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>One of the most common use case is to build a Docker image with Gitlab. In a <a href="">previous post</a> we used dedicated docker runners for this job. But howe can we build images in a Kubernetes runner? In this post we well se this.</p>
+<p>Using docker engine to build a container is a good solution but in some case can be unsafe. With the privilege to use a docker command you can create or delete any container. With the deprecation of dockershim in kubernetes this option is no longer usable. You can use multiple tools for this but in this case I will use <code>Kaniko</code>.</p>
+<h3 id="what-is-kaniko">What is Kaniko?</h3>
+<p><code>kaniko</code> builds container images from a <code>Dockerfile</code> inside a container or Kubernetes cluster. It doesn’t depend on a Docker daemon, and it executes each <code>Dockerfile</code> command completely in userspace. This  allows you to build container images in environments that can’t easily or securely run a Docker daemon — such as standard Kubernetes clusters.</p>
+<h3 id="build-images-with-kaniko">Build images with Kaniko</h3>
+<p>To build docker images with Kaniko in a Kubernetes Gitlab runner you just simply use its image as the image for the build job:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+- <span style="color:#ae81ff">build</span>
+- <span style="color:#ae81ff">deploy_to_kubernetes</span>
+
+<span style="color:#f92672">variables</span>:
+  <span style="color:#f92672">CACHE_TTL</span>: <span style="color:#ae81ff">2190h0m0s</span> <span style="color:#75715e"># three months</span>
+  <span style="color:#f92672">IMAGE_NAME</span>: <span style="color:#ae81ff">app</span>
+
+<span style="color:#f92672">before_script</span>:
+  - <span style="color:#ae81ff">echo &#34;{\&#34;auths\&#34;:{\&#34;$CI_REGISTRY\&#34;:{\&#34;auth\&#34;:\&#34;$(printf &#34;%s:%s&#34; &#34;${CI_REGISTRY_USER}&#34; &#34;${CI_REGISTRY_PASSWORD}&#34; | base64 | tr -d &#39;\n&#39;)\&#34;},\&#34;$CI_DEPENDENCY_PROXY_SERVER\&#34;:{\&#34;auth\&#34;:\&#34;$(printf &#34;%s:%s&#34; ${CI_DEPENDENCY_PROXY_USER} &#34;${CI_DEPENDENCY_PROXY_PASSWORD}&#34; | base64 | tr -d &#39;\n&#39;)\&#34;}}}&#34; &gt; /kaniko/.docker/config.json</span>
+
+<span style="color:#f92672">build-backend</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span>
+    - <span style="color:#ae81ff">kubernetes</span>
+  <span style="color:#f92672">image</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gcr.io/kaniko-project/executor:v1.9.0-debug</span>
+    <span style="color:#f92672">entrypoint</span>: [<span style="color:#e6db74">&#34;&#34;</span>]
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">/kaniko/executor \</span>
+      --<span style="color:#ae81ff">context &#34;${CI_PROJECT_DIR}&#34; \</span>
+      --<span style="color:#ae81ff">dockerfile &#34;${CI_PROJECT_DIR}/Dockerfile&#34; \</span>
+      --<span style="color:#ae81ff">destination &#34;${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${CI_COMMIT_TAG}&#34; \</span>
+      --<span style="color:#ae81ff">cache-repo ${CONTAINER_REGISTRY}/${IMAGE_NAME} \</span>
+      --<span style="color:#ae81ff">cache=true \</span>
+      --<span style="color:#ae81ff">cache-ttl $CACHE_TTL</span>
+</code></pre></div><p>GitLab provides a functionality to cache commonly used images. It helps you stay within Docker Hub’s rate limits. This will also improve the performance of your builds. To enable Dependency Proxy Go to your project&rsquo;s parent group <code>Settings &gt; Packages &amp; Registries &gt; Dependency Proxy</code></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+- <span style="color:#ae81ff">build</span>
+- <span style="color:#ae81ff">deploy_to_kubernetes</span>
+
+<span style="color:#f92672">variables</span>:
+  <span style="color:#f92672">CACHE_TTL</span>: <span style="color:#ae81ff">2190h0m0s</span> <span style="color:#75715e"># three months</span>
+  <span style="color:#f92672">IMAGE_NAME</span>: <span style="color:#ae81ff">app</span>
+
+<span style="color:#f92672">before_script</span>:
+  - <span style="color:#ae81ff">echo &#34;{\&#34;auths\&#34;:{\&#34;$CI_REGISTRY\&#34;:{\&#34;auth\&#34;:\&#34;$(printf &#34;%s:%s&#34; &#34;${CI_REGISTRY_USER}&#34; &#34;${CI_REGISTRY_PASSWORD}&#34; | base64 | tr -d &#39;\n&#39;)\&#34;},\&#34;$CI_DEPENDENCY_PROXY_SERVER\&#34;:{\&#34;auth\&#34;:\&#34;$(printf &#34;%s:%s&#34; ${CI_DEPENDENCY_PROXY_USER} &#34;${CI_DEPENDENCY_PROXY_PASSWORD}&#34; | base64 | tr -d &#39;\n&#39;)\&#34;}}}&#34; &gt; /kaniko/.docker/config.json</span>
+
+<span style="color:#f92672">build-backend</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span>
+    - <span style="color:#ae81ff">kubernetes</span>
+  <span style="color:#f92672">image</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">$CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX/executor:v1.9.0-debug</span>
+    <span style="color:#f92672">entrypoint</span>: [<span style="color:#e6db74">&#34;&#34;</span>]
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">/kaniko/executor \</span>
+      --<span style="color:#ae81ff">context &#34;${CI_PROJECT_DIR}&#34; \</span>
+      --<span style="color:#ae81ff">dockerfile &#34;${CI_PROJECT_DIR}/Dockerfile&#34; \</span>
+      --<span style="color:#ae81ff">destination &#34;${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${CI_COMMIT_TAG}&#34; \</span>
+      --<span style="color:#ae81ff">registry-mirror &#34;$CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX&#34; \</span>
+      --<span style="color:#ae81ff">cache-repo ${CONTAINER_REGISTRY}/${IMAGE_NAME} \</span>
+      --<span style="color:#ae81ff">cache=true \</span>
+      --<span style="color:#ae81ff">cache-ttl $CACHE_TTL</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GitLab CI: How to Build Docker Images in Docker]]></title>
+            <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/devops/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+            
+                <id>https://devopstales.github.io/home/gitlab-ci-docker-bild/</id>
+            
+            
+            <published>2023-02-06T00:00:00+00:00</published>
+            <updated>2023-02-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>One of the most common use case is to build a Docker image with Gitlab. In this post I will show you how to set up Docker builds in CI.</p>
+<h3 id="shell-executor">Shell Executor</h3>
+<p>The easiest way to build a docker image is by using the Shell executor. For this you need a standard linux based Gitlab Runner with Docker installed on it. Then the gitlab runner user needs to be in the <code>docker group</code> to execute docker commands.</p>
+<p>To build a Docker image you mast store the <code>Dockerfile</code> in your repository. Here is the <code>.gitlab-ci.yaml</code> for this build:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+
+<span style="color:#f92672">docker_build</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">docker build -t example.com/example-image:latest .</span>
+    - <span style="color:#ae81ff">docker push example.com/example-image:latest</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span> 
+    - <span style="color:#ae81ff">docker</span>
+</code></pre></div><p>To push an image to a docker registry you need to authenticate. Luckily Gitlab has it&rsquo;s own docker registry and automatically gives access to the runners. So you can use the built-in variables for this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+
+<span style="color:#f92672">docker_build</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY</span>
+    - <span style="color:#ae81ff">docker build -t $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:latest .</span>
+    - <span style="color:#ae81ff">docker push $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:latest</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span> 
+    - <span style="color:#ae81ff">docker</span>
+</code></pre></div><p>The next problem is to identify your images, which image belongs to which build.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+
+<span style="color:#f92672">docker_build</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">script</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">    docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+</span><span style="color:#e6db74">    if [[ &#34;$CI_BUILD_REF_NAME&#34; == &#34;master&#34; ]]; then
+</span><span style="color:#e6db74">      DOCKER_TAG=&#34;latest&#34;
+</span><span style="color:#e6db74">    else
+</span><span style="color:#e6db74">      DOCKER_TAG=$CI_COMMIT_REF_SLUG
+</span><span style="color:#e6db74">    fi
+</span><span style="color:#e6db74">    docker build -t $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:latest .
+</span><span style="color:#e6db74">    docker push $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:latest
+</span><span style="color:#e6db74">    echo $DOCKER_TAG</span>    
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span> 
+    - <span style="color:#ae81ff">docker</span>
+</code></pre></div><p>It is a best practice to use the commit hash as the tag. For release you can use the git release tag as tag:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+
+<span style="color:#f92672">docker_build</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">script</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">    docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+</span><span style="color:#e6db74">    if [[ &#34;$CI_BUILD_REF_NAME&#34; == &#34;master&#34; ]]; then
+</span><span style="color:#e6db74">      DOCKER_TAG=&#34;latest&#34;
+</span><span style="color:#e6db74">    else
+</span><span style="color:#e6db74">      DOCKER_TAG=$CI_COMMIT_SHA
+</span><span style="color:#e6db74">    fi
+</span><span style="color:#e6db74">    docker build -t $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:$DOCKER_TAG .
+</span><span style="color:#e6db74">    docker push $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:$DOCKER_TAG
+</span><span style="color:#e6db74">    echo $DOCKER_TAG</span>    
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span> 
+    - <span style="color:#ae81ff">docker</span>
+
+<span style="color:#f92672">docker_release</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">script</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">    docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+</span><span style="color:#e6db74">    docker build -t $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:$CI_COMMIT_TAG .
+</span><span style="color:#e6db74">    docker push $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/example-image:$CI_COMMIT_TAG
+</span><span style="color:#e6db74">    echo $CI_COMMIT_TAG</span>    
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span> 
+    - <span style="color:#ae81ff">docker</span>
+  <span style="color:#f92672">only</span>:
+    - <span style="color:#ae81ff">master</span>
+    - <span style="color:#ae81ff">tags</span>
+    - <span style="color:#ae81ff">/^release-.*$/</span>
+</code></pre></div><p>Usually you build your app in a separate job dan put your artifact in the docker image, but multistage docker build you can do thi in tha same job. For this you need t edit your <code>Dockerfile</code> to have an application build.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">FROM node:8 AS builder</span>
+
+<span style="color:#ae81ff">ADD package*.json /app/</span>
+<span style="color:#ae81ff">WORKDIR /app</span>
+<span style="color:#ae81ff">RUN npm install</span>
+
+<span style="color:#ae81ff">ADD . /app</span>
+<span style="color:#ae81ff">RUN npm run-script build</span>
+
+<span style="color:#ae81ff">FROM nginx</span>
+<span style="color:#ae81ff">COPY --from=builder /app/dist/* /usr/share/nginx/html/</span>
+<span style="color:#ae81ff">COPY --from=builder /app/dist/assets /usr/share/nginx/html/assets</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">stages</span>:
+  - <span style="color:#ae81ff">build</span>
+
+<span style="color:#f92672">variables</span>:
+  <span style="color:#f92672">IMAGE_TAG</span>: <span style="color:#ae81ff">$CI_REGISTRY_IMAGE:$CI_PIPELINE_ID</span>
+
+<span style="color:#f92672">before_script</span>:
+  - <span style="color:#ae81ff">docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY</span>
+
+<span style="color:#f92672">docker_build</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">script</span>:
+    <span style="color:#75715e"># Here we try to download a Docker image with the :builder tag (which contains all the layers from the last build)</span>
+    - <span style="color:#ae81ff">docker pull $CI_REGISTRY_IMAGE:builder || true</span>
+    <span style="color:#75715e"># It will run the first part of the Dockerfile. Also we tell Docker to use the cache layers from the previous build.</span>
+    - <span style="color:#ae81ff">docker build --pull --cache-from $CI_REGISTRY_IMAGE:builder --target builder -t $CI_REGISTRY_IMAGE:builder .</span>
+    - <span style="color:#ae81ff">docker build --pull --cache-from $CI_REGISTRY_IMAGE:builder --cache-from $IMAGE_TAG -t $IMAGE_TAG -t $CI_REGISTRY_IMAGE:latest .</span>
+    - <span style="color:#ae81ff">docker push $CI_REGISTRY_IMAGE:builder</span>
+    - <span style="color:#ae81ff">docker push $CI_REGISTRY_IMAGE:latest</span>
+    - <span style="color:#ae81ff">docker push $IMAGE_TAG</span>
+  <span style="color:#f92672">tags</span>:
+<span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span> 
+    - <span style="color:#ae81ff">docker</span>
+</code></pre></div><h3 id="building-with-the-docker-executor">Building With the Docker Executor</h3>
+<p>You can use docker as an environment to run all the scripts to provide a completely clean environment for each job. For this you need to use gitlab runner in a so called Docker-in-Docker (DinD) mode. In a normal docker environment yo can not use docker commands in the container. When you use the docker cli it needs to connect to the docker engine unix socket. To do this you need to mount the docker socket in the container and run as privileged mode.</p>
+<p>Register your runner in DinD mode:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo gitlab-runner register -n 
+  --url https://example.com 
+  --registration-token $GITLAB_REGISTRATION_TOKEN 
+  --executor docker 
+  --description <span style="color:#e6db74">&#34;Docker Runner&#34;</span> 
+  --docker-image <span style="color:#e6db74">&#34;docker:20.10&#34;</span> 
+  --docker-volumes <span style="color:#e6db74">&#34;/certs/client&#34;</span> 
+  --docker-privileged
+</code></pre></div><p>When you configure CI/CD, you specify an image, which is used to create the container where your jobs run. To specify this image, you use the <code>image</code> keyword. ou can specify an additional image by using the <code>services</code> keyword. Within your CI pipeline, add the <code>docker:dind</code> image as a <code>service</code>. This gives a separate image to communicate with the docker engine.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">services</span>:
+  - <span style="color:#ae81ff">docker:dind</span>
+
+<span style="color:#f92672">docker_build</span>:
+  <span style="color:#f92672">stage</span>: <span style="color:#ae81ff">build</span>
+  <span style="color:#f92672">image</span>: <span style="color:#ae81ff">docker:latest</span>
+  <span style="color:#f92672">script</span>:
+    - <span style="color:#ae81ff">docker build -t example-image:latest .</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -36398,8 +36657,8 @@ systemctl enable --now haproxy
                 <link href="https://devopstales.github.io/home/alerta-on-centos7/?utm_source=atom_feed" rel="related" type="text/html" title="Install alerta on Centos7" />
                 <link href="https://devopstales.github.io/monitoring/alerta-on-centos8/?utm_source=atom_feed" rel="related" type="text/html" title="Install alerta on Centos8" />
                 <link href="https://devopstales.github.io/monitoring/alerta-on-centos7/?utm_source=atom_feed" rel="related" type="text/html" title="Install alerta on Centos7" />
-                <link href="https://devopstales.github.io/home/gitlab-install/?utm_source=atom_feed" rel="related" type="text/html" title="Gitlab Install" />
                 <link href="https://devopstales.github.io/home/prometheus-alertmanagger/?utm_source=atom_feed" rel="related" type="text/html" title="Install Alertmanagger" />
+                <link href="https://devopstales.github.io/home/openshift-restrict-access/?utm_source=atom_feed" rel="related" type="text/html" title="Restrict access to OpenShift routes by IP address" />
             
                 <id>https://devopstales.github.io/home/alerta-on-centos8/</id>
             
@@ -36553,10 +36812,10 @@ alerta query
             <link href="https://devopstales.github.io/home/alerta-on-centos7/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/monitoring/alerta-on-centos7/?utm_source=atom_feed" rel="related" type="text/html" title="Install alerta on Centos7" />
-                <link href="https://devopstales.github.io/home/gitlab-install/?utm_source=atom_feed" rel="related" type="text/html" title="Gitlab Install" />
                 <link href="https://devopstales.github.io/home/prometheus-alertmanagger/?utm_source=atom_feed" rel="related" type="text/html" title="Install Alertmanagger" />
                 <link href="https://devopstales.github.io/home/openshift-restrict-access/?utm_source=atom_feed" rel="related" type="text/html" title="Restrict access to OpenShift routes by IP address" />
                 <link href="https://devopstales.github.io/home/openshift-kompose/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Run docker-compoe in Openshift" />
+                <link href="https://devopstales.github.io/home/elasticsearch-backup/?utm_source=atom_feed" rel="related" type="text/html" title="How to backup Graylog logs from elasticsearch" />
             
                 <id>https://devopstales.github.io/home/alerta-on-centos7/</id>
             
@@ -38537,9 +38796,9 @@ openshift00.devopstales.intra containerized=true
             
                 <link href="https://devopstales.github.io/linux/graylog3-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Graylog3" />
                 <link href="https://devopstales.github.io/home/grafana-loki/?utm_source=atom_feed" rel="related" type="text/html" title="Grafana Loki" />
-                <link href="https://devopstales.github.io/home/gitlab-install/?utm_source=atom_feed" rel="related" type="text/html" title="Gitlab Install" />
                 <link href="https://devopstales.github.io/home/openshift-sso2/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO with Gitlab" />
                 <link href="https://devopstales.github.io/home/install-prometheus-for-gitlab/?utm_source=atom_feed" rel="related" type="text/html" title="Install Prometheus for Gitlab" />
+                <link href="https://devopstales.github.io/home/install-mattermost-for-gitlab/?utm_source=atom_feed" rel="related" type="text/html" title="Install mattermost for Gitlab" />
             
                 <id>https://devopstales.github.io/home/graylog3-install/</id>
             
@@ -39294,11 +39553,11 @@ server {
             <title type="html"><![CDATA[Gitlab Install]]></title>
             <link href="https://devopstales.github.io/home/gitlab-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/linux/gitlab-install/?utm_source=atom_feed" rel="related" type="text/html" title="Gitlab Install" />
-                <link href="https://devopstales.github.io/home/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
                 <link href="https://devopstales.github.io/home/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
                 <link href="https://devopstales.github.io/home/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
                 <link href="https://devopstales.github.io/home/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
+                <link href="https://devopstales.github.io/home/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
+                <link href="https://devopstales.github.io/home/hashicorp-vault/?utm_source=atom_feed" rel="related" type="text/html" title="Install hashicorp vault" />
             
                 <id>https://devopstales.github.io/home/gitlab-install/</id>
             
@@ -39317,7 +39576,7 @@ sudo ntpdate 0.hu.pool.ntp.org
 sudo service ntpd start
 </code></pre><h3 id="install-postgresql">Install postgresql</h3>
 <p>In a previous post I wrote about how to <a href="/linux/install-postgresql/#install-postgresql-10-on-centos-7">Install PostgreSQL 10</a></p>
-<pre tabindex="0"><code>su - postgres
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">su - postgres
 createdb -U postgres gitlab
 createdb -U postgres gitlab_ci
 createdb -U postgres mattermost
@@ -39327,85 +39586,85 @@ createuser ciuser
 createuser mmuser
 
 psql -U postgres gitlab
-ALTER USER &quot;gituser&quot; WITH PASSWORD 'Password1';
+ALTER USER <span style="color:#e6db74">&#34;gituser&#34;</span> WITH PASSWORD <span style="color:#e6db74">&#39;Password1&#39;</span>;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gituser;
 ALTER ROLE gituser CREATEROLE SUPERUSER;
-\q
+<span style="color:#ae81ff">\q</span>
 
 psql -U postgres gitlab_ci
-ALTER USER &quot;ciuser&quot; WITH PASSWORD 'Password1';
+ALTER USER <span style="color:#e6db74">&#34;ciuser&#34;</span> WITH PASSWORD <span style="color:#e6db74">&#39;Password1&#39;</span>;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ciuser;
-\q
+<span style="color:#ae81ff">\q</span>
 
 psql -U postgres mattermost
-ALTER USER &quot;mmuser&quot; WITH PASSWORD 'Password1';
+ALTER USER <span style="color:#e6db74">&#34;mmuser&#34;</span> WITH PASSWORD <span style="color:#e6db74">&#39;Password1&#39;</span>;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mmuser;
-\q
-</code></pre><h3 id="install-nginx">install nginx</h3>
-<pre tabindex="0"><code>yum install -y nginx
+<span style="color:#ae81ff">\q</span>
+</code></pre></div><h3 id="install-nginx">install nginx</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install -y nginx
 mkdir /var/log/gitlab/nginx/
 
-echo 'upstream gitlab-workhorse {
-        server unix:/var/opt/gitlab/gitlab-workhorse/socket;
-}
-
-server {
-        listen *:80;
-#  listen *:443 ssl;
-        server_name gitlab.devopstales.intra;
-        server_tokens off;
-        root /opt/gitlab/embedded/service/gitlab-rails/public;
-
-        client_max_body_size 256m;
-
-        real_ip_header X-Forwarded-For;
-
-        access_log /var/log/gitlab/nginx/gitlab_access.log;
-        error_log  /var/log/gitlab/nginx/gitlab_error.log;
-
- # ssl_certificate   /etc/nginx/ssl.d/gitlab.pem;
- # ssl_certificate_key   /etc/nginx/ssl.d/gitlab.key;
-
-
-        location / {
-                proxy_read_timeout	300;
-                proxy_connect_timeout   300;
-                proxy_redirect          off;
-
-                proxy_buffering off;
-
-                proxy_set_header    Host                $http_host;
-                proxy_set_header    X-Real-IP           $remote_addr;
-                proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
-                proxy_set_header    X-Forwarded-Proto   $scheme;
-
-                proxy_pass http://gitlab-workhorse;
-
-    proxy_request_buffering off;
-    proxy_http_version 1.1;
-        }
-
-        location ~ ^/(assets)/ {
-                root /opt/gitlab/embedded/service/gitlab-rails/public;
-                gzip_static on; # to serve pre-gzipped version
-                        expires max;
-               	add_header Cache-Control public;
-        }
-
-        error_page 502 /502.html;
-}' &gt; /etc/nginx/conf.d/gitlab.conf
+echo <span style="color:#e6db74">&#39;upstream gitlab-workhorse {
+</span><span style="color:#e6db74">        server unix:/var/opt/gitlab/gitlab-workhorse/socket;
+</span><span style="color:#e6db74">}
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">server {
+</span><span style="color:#e6db74">        listen *:80;
+</span><span style="color:#e6db74">#  listen *:443 ssl;
+</span><span style="color:#e6db74">        server_name gitlab.devopstales.intra;
+</span><span style="color:#e6db74">        server_tokens off;
+</span><span style="color:#e6db74">        root /opt/gitlab/embedded/service/gitlab-rails/public;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        client_max_body_size 256m;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        real_ip_header X-Forwarded-For;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        access_log /var/log/gitlab/nginx/gitlab_access.log;
+</span><span style="color:#e6db74">        error_log  /var/log/gitlab/nginx/gitlab_error.log;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74"> # ssl_certificate   /etc/nginx/ssl.d/gitlab.pem;
+</span><span style="color:#e6db74"> # ssl_certificate_key   /etc/nginx/ssl.d/gitlab.key;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        location / {
+</span><span style="color:#e6db74">                proxy_read_timeout	300;
+</span><span style="color:#e6db74">                proxy_connect_timeout   300;
+</span><span style="color:#e6db74">                proxy_redirect          off;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">                proxy_buffering off;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">                proxy_set_header    Host                $http_host;
+</span><span style="color:#e6db74">                proxy_set_header    X-Real-IP           $remote_addr;
+</span><span style="color:#e6db74">                proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
+</span><span style="color:#e6db74">                proxy_set_header    X-Forwarded-Proto   $scheme;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">                proxy_pass http://gitlab-workhorse;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">    proxy_request_buffering off;
+</span><span style="color:#e6db74">    proxy_http_version 1.1;
+</span><span style="color:#e6db74">        }
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        location ~ ^/(assets)/ {
+</span><span style="color:#e6db74">                root /opt/gitlab/embedded/service/gitlab-rails/public;
+</span><span style="color:#e6db74">                gzip_static on; # to serve pre-gzipped version
+</span><span style="color:#e6db74">                        expires max;
+</span><span style="color:#e6db74">               	add_header Cache-Control public;
+</span><span style="color:#e6db74">        }
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        error_page 502 /502.html;
+</span><span style="color:#e6db74">}&#39;</span> &gt; /etc/nginx/conf.d/gitlab.conf
 
 nano /etc/nginx/nginx.conf
-log_format gitlab_access '$remote_addr - $remote_user [$time_local] &quot;$request&quot; $status $body_bytes_sent &quot;$http_referer&quot; &quot;$http_user_agent&quot;';
-log_format gitlab_ci_access '$remote_addr - $remote_user [$time_local] &quot;$request&quot; $status $body_bytes_sent &quot;$http_referer&quot; &quot;$http_user_agent&quot;';
-log_format gitlab_mattermost_access '$remote_addr - $remote_user [$time_local] &quot;$request&quot; $status $body_bytes_sent &quot;$http_referer&quot; &quot;$http_user_agent&quot;';
+log_format gitlab_access <span style="color:#e6db74">&#39;$remote_addr - $remote_user [$time_local] &#34;$request&#34; $status $body_bytes_sent &#34;$http_referer&#34; &#34;$http_user_agent&#34;&#39;</span>;
+log_format gitlab_ci_access <span style="color:#e6db74">&#39;$remote_addr - $remote_user [$time_local] &#34;$request&#34; $status $body_bytes_sent &#34;$http_referer&#34; &#34;$http_user_agent&#34;&#39;</span>;
+log_format gitlab_mattermost_access <span style="color:#e6db74">&#39;$remote_addr - $remote_user [$time_local] &#34;$request&#34; $status $body_bytes_sent &#34;$http_referer&#34; &#34;$http_user_agent&#34;&#39;</span>;
 
 nginx -t
 nginx -s reload
 
 sudo usermod -aG gitlab-www nginx
-</code></pre><h3 id="install-gitlab">install gitlab</h3>
-<pre tabindex="0"><code>curl -sS https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.rpm.sh | sudo bash
+</code></pre></div><h3 id="install-gitlab">install gitlab</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -sS https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.rpm.sh | sudo bash
 sudo yum install gitlab-ce -y
 
 cd /opt/gitlab/embedded/bin
@@ -39415,34 +39674,34 @@ mv pg_dump pg_dump_moved
 which pg_dump psql
 
 ln -s /usr/bin/pg_dump /usr/bin/psql /opt/gitlab/embedded/bin/
-</code></pre><pre tabindex="0"><code>nano /etc/gitlab/gitlab.rb
-external_url 'http://gitlab.devopstales.intra'
-gitlab_rails['time_zone'] = 'Europe/Budapest'
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-rb" data-lang="rb">nano <span style="color:#e6db74">/etc/</span>gitlab<span style="color:#f92672">/</span>gitlab<span style="color:#f92672">.</span>rb
+external_url <span style="color:#e6db74">&#39;http://gitlab.devopstales.intra&#39;</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;time_zone&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;Europe/Budapest&#39;</span>
 
-gitlab_rails['db_adapter'] = &quot;postgresql&quot;
-gitlab_rails['db_encoding'] = &quot;unicode&quot;
-gitlab_rails['db_database'] = &quot;gitlab&quot;
-gitlab_rails['db_pool'] = 10
-gitlab_rails['db_username'] = &quot;gituser&quot;
-gitlab_rails['db_password'] = &quot;Password1&quot;
-gitlab_rails['db_host'] = '127.0.0.1'
-gitlab_rails['db_port'] = 5432
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_adapter&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;postgresql&#34;</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_encoding&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;unicode&#34;</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_database&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;gitlab&#34;</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_pool&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_username&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;gituser&#34;</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_password&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;Password1&#34;</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_host&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;127.0.0.1&#39;</span>
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_port&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">5432</span>
 
-gitlab_rails['redis_socket'] = &quot;/var/opt/gitlab/redis/redis.socket&quot;
+gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;redis_socket&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/var/opt/gitlab/redis/redis.socket&#34;</span>
 
-unicorn['socket'] = '/var/opt/gitlab/gitlab-rails/sockets/gitlab.socket'
-unicorn['log_directory'] = &quot;/var/log/gitlab/unicorn&quot;
-unicorn['port'] = 8081
+unicorn<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;socket&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;/var/opt/gitlab/gitlab-rails/sockets/gitlab.socket&#39;</span>
+unicorn<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;log_directory&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/var/log/gitlab/unicorn&#34;</span>
+unicorn<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;port&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">8081</span>
 
-user['username'] = &quot;git&quot;
-user['group'] = &quot;git&quot;
+user<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;username&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;git&#34;</span>
+user<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;group&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;git&#34;</span>
 
-postgresql['enable'] = false
+postgresql<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;enable&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span>
 
-nginx['enable'] = false
-web_server['external_users'] = ['nginx']
-</code></pre><pre tabindex="0"><code>gitlab-ctl reconfigure
-</code></pre>]]></content>
+nginx<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;enable&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span>
+web_server<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;external_users&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#f92672">[</span><span style="color:#e6db74">&#39;nginx&#39;</span><span style="color:#f92672">]</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">gitlab-ctl reconfigure
+</code></pre></div>]]></content>
             
                  
                     
