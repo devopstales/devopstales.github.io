@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-03-23T13:54:58+00:00</updated>
+    <updated>2023-03-23T14:17:18+00:00</updated>
     
     
     <author>
@@ -17,6 +17,113 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Azure Key Vault AKS integration with akv2k8s]]></title>
+            <link href="https://devopstales.github.io/home/aks-azure-key-vault-akv2k8s/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
+                <link href="https://devopstales.github.io/home/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to AKS" />
+                <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+                <link href="https://devopstales.github.io/cloud/aks-azure-key-vault-akv2k8s/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Key Vault AKS integration with akv2k8s" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/aks-azure-key-vault-akv2k8s/</id>
+            
+            
+            <published>2023-03-05T00:00:00+00:00</published>
+            <updated>2023-03-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can use Service Serving Certificate on OpenShift4.</p>
+<p>AKV2K8s, which stands for Azure Key Vault to Kubernetes, employs two primary elements - the Azure Key Vault Controller and the Azure Key Vault Env Injector. These components enable the injection of secrets, keys, or certificates as environment variables that are exclusively accessible to the main process of the container.</p>
+<h1 id="install-akv2k8s">Install akv2k8s</h1>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns akv2k8s
+
+helm repo add spv-charts http://charts.spvapi.no
+helm repo update
+
+<span style="color:#75715e"># install the controller</span>
+helm install azure-key-vault-controller <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  spv-charts/azure-key-vault-controller <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --namespace akv2k8s
+
+<span style="color:#75715e"># install injector</span>
+helm install azure-key-vault-env-injector <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  spv-charts/azure-key-vault-env-injector <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --set installCrd<span style="color:#f92672">=</span>false <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --namespace akv2k8s
+</code></pre></div><h1 id="use-akv2k8s-injector">Use akv2k8s injector</h1>
+<p>For the injector part to work you need to add the <code>azure-key-vault-env-injection: enabled</code> label for your namespace:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Namespace</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">akv2k8s-test</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">azure-key-vault-env-injection</span>: <span style="color:#ae81ff">enabled</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Now we can create a <code>“AzureKeyVaultSecret”</code> CRD to sync secret from Key Vault with akv2k8s</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">spv.no/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AzureKeyVaultSecret</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">akv2k8s-test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">vault</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_NAME}            </span> <span style="color:#75715e"># name of key vault</span>
+    <span style="color:#f92672">object</span>:
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}   </span> <span style="color:#75715e"># name of the akv object</span>
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">secret                     </span> <span style="color:#75715e"># akv object type</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">akv2k8s-test</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">akv2k8s-test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">akv2k8s-env-test</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">spvest/akv2k8s-env-test:2.0.1</span>
+    <span style="color:#f92672">args</span>: [<span style="color:#e6db74">&#34;TEST_SECRET&#34;</span>]
+    <span style="color:#f92672">env</span>:
+    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">TEST_SECRET</span>
+      <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;${KEY_VAULT_SECRET_NAME}@azurekeyvault&#34;</span> <span style="color:#75715e"># ref to akvs</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>If you try to access the environment variable using <code>kubectl exec</code> you won’t be able to see the value (only the container main process have access to it)</p>
+<h1 id="sync-secret-from-key-vault-as-aks-secret">Sync secret from Key vault as AKS Secret</h1>
+<p>To generate Kubernetes Secret Objects from Key vault you need to create the fallowing <code>“AzureKeyVaultSecret”</code> CRD</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">spv.no/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AzureKeyVaultSecret</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">akv2k8s-test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">vault</span>:
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_NAME}            </span> <span style="color:#75715e"># name of key vault</span>
+    <span style="color:#f92672">object</span>:
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}   </span> <span style="color:#75715e"># name of the akv object</span>
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">secret                     </span> <span style="color:#75715e"># akv object type</span>
+  <span style="color:#f92672">output</span>: 
+    <span style="color:#f92672">secret</span>: 
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">akv-secret-name1           </span> <span style="color:#75715e"># kubernetes secret name</span>
+      <span style="color:#f92672">dataKey</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}</span> <span style="color:#75715e"># key to store object value in kubernetes apiVersion: v1</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
