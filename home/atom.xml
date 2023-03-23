@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-02-22T14:10:07+00:00</updated>
+    <updated>2023-03-23T13:54:58+00:00</updated>
     
     
     <author>
@@ -17,6 +17,139 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[OKD OpenShift 4: Service Serving Certificate]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
+                <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+            
+                <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
+            
+            
+            <published>2023-02-25T00:00:00+00:00</published>
+            <updated>2023-02-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can use Service Serving Certificate on OpenShift4.</p>
+<h3 id="what-is-service-serving-certificate">What is Service Serving Certificate?</h3>
+<p>Service serving certificates are intended to support complex middleware applications that require encryption. Openshift automaticle generate a <code>x509.SHA256WithRSA</code> signature CA certificate stored in <code>service-ca</code> secret. These certificates are issued as TLS web server certificates. The service CA certificate, which issues the service certificates, is valid for 26 months and is automatically rotated when there is less than 13 months validity left. The generated certificate is only valid for the internal service DNS name <code>&lt;service.name&gt;.&lt;service.namespace&gt;.svc</code>, and is only valid for internal communications.</p>
+<h3 id="openshift-service-ca-operator">OpenShift Service CA Operator</h3>
+<p>The openshift-service-ca-operator is an OpenShift Cluster Operator that runs in the cluster by default:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$  oc get co service-ca
+NAME         VERSION   AVAILABLE   PROGRESSING   DEGRADED   SINCE
+service-ca   4.4.12    True        False         False      4d4h
+</code></pre></div><p>The Service CA Operator runs the operator in the openshift-service-ca-operator namespace:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ oc get pod
+NAME                                   READY   STATUS    RESTARTS   AGE
+service-ca-operator-5f596775f8-gwlpj   1/1     Running   <span style="color:#ae81ff">1</span>          2d7h
+</code></pre></div><p>The OpenShift Service CA Operator runs the following OpenShift controllers:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ oc get pod -n openshift-service-ca
+NAME                                            READY   STATUS    RESTARTS   AGE
+apiservice-cabundle-injector-64cfdd7645-h4dqf   1/1     Running   <span style="color:#ae81ff">3</span>          2d7h
+configmap-cabundle-injector-67ffc677d5-prn7b    1/1     Running   <span style="color:#ae81ff">3</span>          2d7h
+service-serving-cert-signer-b5665b6f5-lx7bl     1/1     Running   <span style="color:#ae81ff">3</span>          2d7h
+</code></pre></div><p>For OpenShift 4.x the service ca certificates are managed by the service CA operator.</p>
+<p>The key and certificate are in a secret in the namespace openshift-service-ca as signing-key secret:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ oc get secrets -n openshift-service-ca signing-key -o <span style="color:#e6db74">&#34;jsonpath={.data[&#39;tls\.crt&#39;]}&#34;</span> |  base64 -d | openssl x509 -text
+Certificate:
+    Data:
+        Version: <span style="color:#ae81ff">3</span> <span style="color:#f92672">(</span>0x2<span style="color:#f92672">)</span>
+        Serial Number: <span style="color:#ae81ff">1181511372096086528</span> <span style="color:#f92672">(</span>0x106592553fdf2200<span style="color:#f92672">)</span>
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: CN <span style="color:#f92672">=</span> openshift-service-serving-signer@1596638040
+        Validity
+            Not Before: Aug  <span style="color:#ae81ff">5</span> 14:34:00 <span style="color:#ae81ff">2020</span> GMT
+            Not After : Oct  <span style="color:#ae81ff">4</span> 14:34:01 <span style="color:#ae81ff">2022</span> GMT
+        Subject: CN <span style="color:#f92672">=</span> openshift-service-serving-signer@1596638040
+...
+</code></pre></div><h3 id="how-to-use-service-serving-certificate">How to use Service Serving Certificate?</h3>
+<p>To activate Service Serving Certificate you need to annotate the service with <code>service.beta.openshift.io/serving-cert-secret-name</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ oc annotate service service-serving-cert service.beta.openshift.io/serving-cert-secret-name<span style="color:#f92672">=</span>service-serving-cert
+</code></pre></div><p>Example Service:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">service-serving-cert</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">service.alpha.openshift.io/serving-cert-secret-name</span>: <span style="color:#ae81ff">service-serving-cert</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ports</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">service-serving-cert</span>
+    <span style="color:#f92672">port</span>: <span style="color:#ae81ff">443</span>
+    <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">8443</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">service-serving-cert</span>
+
+</code></pre></div><p>Check certificate:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ oc get secret service-serving-cert -o json | jq -r <span style="color:#e6db74">&#39;.data.&#34;tls.crt&#34;&#39;</span> | base64 --decode &gt; service-serving-cert.pem
+$ openssl crl2pkcs7 -nocrl -certfile service-serving-cert.pem | openssl pkcs7 -print_certs  -noout
+
+subject<span style="color:#f92672">=</span>/CN<span style="color:#f92672">=</span>service-serving-cert.rbo.svc
+issuer<span style="color:#f92672">=</span>/CN<span style="color:#f92672">=</span>openshift-service-serving-signer@1545507973
+
+subject<span style="color:#f92672">=</span>/CN<span style="color:#f92672">=</span>openshift-service-serving-signer@1545507973
+issuer<span style="color:#f92672">=</span>/CN<span style="color:#f92672">=</span>openshift-service-serving-signer@1545507973
+</code></pre></div><p>Now the communication between the pods (truth a service as a proxy) is encrypted by a <strong>self signed certificate</strong> managed by Openshift. The applications wont see the certificate as valid because it is self signed. So we need to add the root certificate (CA) as trusted in the app.
+To do this you can generate and mount as configmap.</p>
+<h3 id="add-the-service-ca-bundle-to-a-config-map">Add the service CA bundle to a config map</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ oc create -f - <span style="color:#e6db74">&lt;&lt;EOF
+</span><span style="color:#e6db74">apiVersion: v1
+</span><span style="color:#e6db74">kind: ConfigMap
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: service-trustbundle-ca
+</span><span style="color:#e6db74">  annotations:
+</span><span style="color:#e6db74">    service.beta.openshift.io/inject-cabundle: &#34;true&#34;
+</span><span style="color:#e6db74">data: {}
+</span><span style="color:#e6db74">EOF</span>
+
+$ oc get configmap/service-trustbundle-ca -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{.data.service-ca\.crt}&#34;</span>  | openssl x509 -noout -subject -issuer -dates
+subject<span style="color:#f92672">=</span> /CN<span style="color:#f92672">=</span>openshift-service-serving-signer@1593524307
+issuer<span style="color:#f92672">=</span> /CN<span style="color:#f92672">=</span>openshift-service-serving-signer@1593524307
+notBefore<span style="color:#f92672">=</span>Jun <span style="color:#ae81ff">30</span> 13:38:26 <span style="color:#ae81ff">2020</span> GMT
+notAfter<span style="color:#f92672">=</span>Aug <span style="color:#ae81ff">29</span> 13:38:27 <span style="color:#ae81ff">2022</span> GMT
+</code></pre></div><h3 id="mount-the-configmap-in-your-client-container">Mount the configMap in your client container</h3>
+<p>You need to map the configMap in your client container which is service-A so that service-A gets access to client certificate.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;my-service-a&#34;</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">service-a</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">service-a</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">volumes</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">client-certs-config</span>
+        <span style="color:#f92672">configMap</span>:
+          <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;service-trustbundle-ca&#34;</span>
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">service-a-pod</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">my-image-repo/my-image-name:my-image-tag</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/etc/servicea/client-certs</span>
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">client-certs-config</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
