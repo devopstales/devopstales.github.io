@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-04-03T11:40:22+00:00</updated>
+    <updated>2023-04-20T07:15:38+00:00</updated>
     
     
     <author>
@@ -17,6 +17,232 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Influencing Kubernetes Scheduler Decisions]]></title>
+            <link href="https://devopstales.github.io/home/k8s-pod-locations/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-pod-locations/?utm_source=atom_feed" rel="related" type="text/html" title="Influencing Kubernetes Scheduler Decisions" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+            
+                <id>https://devopstales.github.io/home/k8s-pod-locations/</id>
+            
+            
+            <published>2023-04-10T00:00:00+00:00</published>
+            <updated>2023-04-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can influence the Kubernetes Scheduler where to schedule a pod.</p>
+<h3 id="kubernetes-scheduler">Kubernetes Scheduler</h3>
+<p>When the Kubernetes Scheduler schedule a pod it examines each node for whether or not it can host the Pod. The scheduler uses the following equation to calculate the available memory on a given node: <code>Usable memory = available memory - reserved memory</code></p>
+<p>The reserved memory refers to:</p>
+<ul>
+<li>Memory used by Kubernetes daemons like kubelet, containerd (or another container runtime).</li>
+<li>Memory is used by the node’s operating system. For example, kernel daemons.</li>
+</ul>
+<p>If you are following the best practices you are declaring the amount of CPU and memory your Pods require through requests and limits.</p>
+<h3 id="influencing-the-scheduling-process">Influencing the Scheduling Process</h3>
+<p>You have multiple ways to influence the scheduler. In the simplest way is to force a Pod to run on one - and only one - node by specifying its name in the <code>.spec.nodeName</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+<span style="color:#f92672">spec</span>:
+ <span style="color:#f92672">containers</span>:
+ - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+ <span style="color:#f92672">nodeName</span>: <span style="color:#ae81ff">app-prod01</span>
+</code></pre></div><h3 id="taints-and-tolerations">Taints and Tolerations</h3>
+<p>Suppose we didn’t want any pods to run on a specific node. You might need to do this for a variety of reasons. Whatever the particular reason, we need a way to ensure our pods are not placed on a certain node. That’s where a taint comes in.</p>
+<p>When a node is <code>tainted</code>, no Pod can be scheduled to it unless the Pod <code>tolerates</code> the taint. You can taint a node with a command like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl taint nodes <span style="color:#f92672">[</span>node name<span style="color:#f92672">]</span> <span style="color:#f92672">[</span>key<span style="color:#f92672">=</span>value<span style="color:#f92672">]</span>:NoSchedule
+
+kubectl taint nodes worker-01 locked<span style="color:#f92672">=</span>true:NoSchedule
+</code></pre></div><p>The definition for a Pod that has the necessary toleration to get scheduled on the tainted node look like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mypod</span>
+<span style="color:#f92672">spec</span>:
+ <span style="color:#f92672">containers</span>:
+ - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mycontainer</span>
+   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+ <span style="color:#f92672">tolerations</span>:
+ - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;locked&#34;</span>
+   <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Equal&#34;</span>
+   <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+   <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+</code></pre></div><h3 id="node-affinity">Node Affinity</h3>
+<p>Node Affinity gives you more flexible way to choose a node by allowing you to define hard and soft node-requirements. The hard requirements must be matched on the node to be selected, but the soft requirements allows you to add more weight to nodes with specific labels. The mos basic example for this scenario to choose a node with ssd for your database instance:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">db</span>
+<span style="color:#f92672">spec</span>:
+ <span style="color:#f92672">affinity</span>:
+   <span style="color:#f92672">nodeAffinity</span>:
+     <span style="color:#f92672">requiredDuringSchedulingIgnoredDuringExecution</span>:
+       <span style="color:#f92672">nodeSelectorTerms</span>:
+       - <span style="color:#f92672">matchExpressions</span>:
+         - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">disk-type</span>
+           <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
+           <span style="color:#f92672">values</span>:
+           - <span style="color:#ae81ff">ssd</span>
+     <span style="color:#f92672">preferredDuringSchedulingIgnoredDuringExecution</span>:
+     - <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
+       <span style="color:#f92672">preference</span>:
+         <span style="color:#f92672">matchExpressions</span>:
+         - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">zone</span>
+           <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
+           <span style="color:#f92672">values</span>:
+           - <span style="color:#ae81ff">zone1</span>
+           - <span style="color:#ae81ff">zone2</span>
+ <span style="color:#f92672">containers</span>:
+ - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">db</span>
+   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">mysql</span>
+</code></pre></div><p>The <code>requiredDuringSchedulingIgnoredDuringExecution</code> is the hard requirement and the <code>preferredDuringSchedulingIgnoredDuringExecution</code> is the soft requirement. You can add Affinity not just for a nod but the pods themselves.</p>
+<h3 id="pod-affinity">Pod Affinity</h3>
+<p>You can yous hard (<code>requiredDuringSchedulingIgnoredDuringExecution</code>) and soft (<code>preferredDuringSchedulingIgnoredDuringExecution</code>) requirements for the pods too:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">middleware</span>
+<span style="color:#f92672">spec</span>:
+ <span style="color:#f92672">affinity</span>:
+   <span style="color:#f92672">podAffinity</span>:
+     <span style="color:#f92672">requiredDuringSchedulingIgnoredDuringExecution</span>:
+     - <span style="color:#f92672">labelSelector</span>:
+         <span style="color:#f92672">matchExpressions</span>:
+         - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">role</span>
+           <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
+           <span style="color:#f92672">values</span>:
+           - <span style="color:#ae81ff">frontend</span>
+       <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">kubernetes.io/hostname</span>
+   <span style="color:#f92672">podAntiAffinity</span>:
+     <span style="color:#f92672">preferredDuringSchedulingIgnoredDuringExecution</span>:
+     - <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">100</span>
+       <span style="color:#f92672">podAffinityTerm</span>:
+         <span style="color:#f92672">labelSelector</span>:
+           <span style="color:#f92672">matchExpressions</span>:
+           - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">role</span>
+             <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
+             <span style="color:#f92672">values</span>:
+             - <span style="color:#ae81ff">auth</span>
+         <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">kubernetes.io/hostname</span>
+ <span style="color:#f92672">containers</span>:
+ - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">middleware</span>
+   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">redis</span>
+</code></pre></div><p>You may have noticed that both the hard and soft requirements have the IgnoredDuringExecution suffix. It means that after the scheduling decision has been made, the scheduler will not attempt to change already-placed Pods even if the conditions changed.</p>
+<p>For example if your application has multiple replicas and you did&rsquo;t want to schedule two pod from this app to the same host:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">extensions/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">5</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:                                            
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx                                   </span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">affinity</span>:
+        <span style="color:#f92672">podAntiAffinity</span>:                                 
+          <span style="color:#f92672">requiredDuringSchedulingIgnoredDuringExecution</span>:
+          - <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">kubernetes.io/hostname</span>
+            <span style="color:#f92672">labelSelector</span>:                               
+              <span style="color:#f92672">matchLabels</span>:                               
+                <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx        </span>
+      <span style="color:#f92672">container</span>:
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
+</code></pre></div><h3 id="pod-topology-spread-constraints">Pod Topology Spread Constraints</h3>
+<p>You can use topology spread constraints to control how Pods are spread across your cluster among failure-domains such as regions, zones, nodes.</p>
+<p>Suppose you have a 4-node cluster with the following labels:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">NAME    STATUS   ROLES    AGE     VERSION   LABELS
+node1   Ready    &lt;none&gt;   4m26s   v1.16.0   node<span style="color:#f92672">=</span>node1,zone<span style="color:#f92672">=</span>zoneA
+node2   Ready    &lt;none&gt;   3m58s   v1.16.0   node<span style="color:#f92672">=</span>node2,zone<span style="color:#f92672">=</span>zoneA
+node3   Ready    &lt;none&gt;   3m17s   v1.16.0   node<span style="color:#f92672">=</span>node3,zone<span style="color:#f92672">=</span>zoneB
+node4   Ready    &lt;none&gt;   2m43s   v1.16.0   node<span style="color:#f92672">=</span>node4,zone<span style="color:#f92672">=</span>zoneB
+</code></pre></div><p>You can define one or multiple <code>topologySpreadConstraint</code> to instruct the kube-scheduler how to place each incoming Pod in relation to the existing Pods across your cluster. If we want an incoming Pod to be evenly spread with existing Pods across zones, the spec can be something like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">nginx</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">8</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">topologySpreadConstraints</span>:
+        - <span style="color:#f92672">maxSkew</span>: <span style="color:#ae81ff">1</span>
+          <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">zone</span>
+          <span style="color:#f92672">whenUnsatisfiable</span>: <span style="color:#ae81ff">ScheduleAnyway</span>
+          <span style="color:#f92672">labelSelector</span>:
+            <span style="color:#f92672">matchLabels</span>:
+              <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
+</code></pre></div><p>Besides the usual deployment specification, we have additionally defined <code>TopologySpreadConstraints</code> as such:</p>
+<ul>
+<li><strong>maxSkew</strong>: 1 — distribute pods in an absolute even manner</li>
+<li><strong>topologyKey</strong>: <code>kubernetes.io/hostname</code> —use the hostname as topology domain</li>
+<li><strong>whenUnsatisfiable</strong>: ScheduleAnyway — always schedule pods even if it can’t satisfy even distribution of pods</li>
+<li><strong>labelSelector</strong> —only act on Pods that match this selector</li>
+</ul>
+<p>You can use 2 <code>TopologySpreadConstraints</code> to control the Pods spreading on both zone and node:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">nginx</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">8</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">topologySpreadConstraints</span>:
+        - <span style="color:#f92672">maxSkew</span>: <span style="color:#ae81ff">1</span>
+          <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">zone</span>
+          <span style="color:#f92672">whenUnsatisfiable</span>: <span style="color:#ae81ff">ScheduleAnyway</span>
+          <span style="color:#f92672">labelSelector</span>:
+            <span style="color:#f92672">matchLabels</span>:
+              <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+        - <span style="color:#f92672">maxSkew</span>: <span style="color:#ae81ff">1</span>
+          <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">node</span>
+          <span style="color:#f92672">whenUnsatisfiable</span>: <span style="color:#ae81ff">ScheduleAnyway</span>
+          <span style="color:#f92672">labelSelector</span>:
+            <span style="color:#f92672">matchLabels</span>:
+              <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
+</code></pre></div><p>Ofcourse, you can use the default <code>kubernetes.io/hostname</code> label for <code>topologyKey</code>.</p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -8710,208 +8936,6 @@ sudo checkmodule -M -m -o cilium.mod cilium.te
 sudo semodule_package -o cilium.pp -m cilium.mod
 sudo semodule -i cilium.pp
 </code></pre></div><p>Now you should be able the see data in the hubble-ui.</p>]]></content>
-            
-                 
-                    
-                 
-                    
-                 
-                    
-                
-            
-        </entry>
-    
-        
-        <entry>
-            <title type="html"><![CDATA[Influencing Kubernetes Scheduler Decisions]]></title>
-            <link href="https://devopstales.github.io/home/k8s-pod-locations/?utm_source=atom_feed" rel="alternate" type="text/html" />
-            
-                <link href="https://devopstales.github.io/kubernetes/k8s-pod-locations/?utm_source=atom_feed" rel="related" type="text/html" title="Influencing Kubernetes Scheduler Decisions" />
-                <link href="https://devopstales.github.io/home/kube-openid-connect-1.0/?utm_source=atom_feed" rel="related" type="text/html" title="kube-openid-connect 1.0" />
-                <link href="https://devopstales.github.io/home/k8s-user-accounts/?utm_source=atom_feed" rel="related" type="text/html" title="How to create Users in Kubernetes the right way?" />
-                <link href="https://devopstales.github.io/home/running_and_building_multi_arch_containers/?utm_source=atom_feed" rel="related" type="text/html" title="Running and Building ARM Docker Containers on x86" />
-                <link href="https://devopstales.github.io/home/flagger-nginx-canary-deployments/?utm_source=atom_feed" rel="related" type="text/html" title="Flagger NGINX Canary Deployments" />
-            
-                <id>https://devopstales.github.io/home/k8s-pod-locations/</id>
-            
-            
-            <published>2022-04-01T00:00:00+00:00</published>
-            <updated>2022-04-01T00:00:00+00:00</updated>
-            
-            
-            <content type="html"><![CDATA[<p>In this post I will show you how you can influence the Kubernetes Scheduler where to schedule a pod.</p>
-<h3 id="kubernetes-scheduler">Kubernetes Scheduler</h3>
-<p>When the Kubernetes Scheduler schedule a pod it examines each node for whether or not it can host the Pod. The scheduler uses the following equation to calculate the available memory on a given node: <code>Usable memory = available memory - reserved memory</code></p>
-<p>The reserved memory refers to:</p>
-<ul>
-<li>Memory used by Kubernetes daemons like kubelet, containerd (or another container runtime).</li>
-<li>Memory is used by the node’s operating system. For example, kernel daemons.</li>
-</ul>
-<p>If you are following the best practices you are declaring the amount of CPU and memory your Pods require through requests and limits.</p>
-<h3 id="influencing-the-scheduling-process">Influencing the Scheduling Process</h3>
-<p>Youhavwe multiple ways to influence the scheduler. In the simplest way is to force a Pod to run on one - and only one - node by specifying its name in the <code>.spec.nodeName</code>.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">metadata</span>:
- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-<span style="color:#f92672">spec</span>:
- <span style="color:#f92672">containers</span>:
- - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
- <span style="color:#f92672">nodeName</span>: <span style="color:#ae81ff">app-prod01</span>
-</code></pre></div><h3 id="taints-and-tolerations">Taints and Tolerations</h3>
-<p>Suppose we didn’t want any pods to run on a specific node. You might need to do this for a variety of reasons. Whatever the particular reason, we need a way to ensure our pods are not placed on a certain node. That’s where a taint comes in.</p>
-<p>When a node is <code>tainted</code>, no Pod can be scheduled to it unless the Pod <code>tolerates</code> the taint. You can taintt a node with a command like this:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl taint nodes <span style="color:#f92672">[</span>node name<span style="color:#f92672">]</span> <span style="color:#f92672">[</span>key<span style="color:#f92672">=</span>value<span style="color:#f92672">]</span>:NoSchedule
-
-kubectl taint nodes worker-01 locked<span style="color:#f92672">=</span>true:NoSchedule
-</code></pre></div><p>The definition for a Pod that has the necessary toleration to get scheduled on the tainted node look like this:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">metadata</span>:
- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mypod</span>
-<span style="color:#f92672">spec</span>:
- <span style="color:#f92672">containers</span>:
- - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mycontainer</span>
-   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
- <span style="color:#f92672">tolerations</span>:
- - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;locked&#34;</span>
-   <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Equal&#34;</span>
-   <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;true&#34;</span>
-   <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
-</code></pre></div><h3 id="node-affinity">Node Affinity</h3>
-<p>Node Affinity gives you more flexible way to chouse a node by allowing you to define hard and soft node-requirements. The hard requirements must be matched on the node to be selected, but the soft requirements allows you to add more weight to nodes with specific labels. The mos basic examle for this scenario to chouse a node with ssd for your database instance:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">metadata</span>:
- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">db</span>
-<span style="color:#f92672">spec</span>:
- <span style="color:#f92672">affinity</span>:
-   <span style="color:#f92672">nodeAffinity</span>:
-     <span style="color:#f92672">requiredDuringSchedulingIgnoredDuringExecution</span>:
-       <span style="color:#f92672">nodeSelectorTerms</span>:
-       - <span style="color:#f92672">matchExpressions</span>:
-         - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">disk-type</span>
-           <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
-           <span style="color:#f92672">values</span>:
-           - <span style="color:#ae81ff">ssd</span>
-     <span style="color:#f92672">preferredDuringSchedulingIgnoredDuringExecution</span>:
-     - <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
-       <span style="color:#f92672">preference</span>:
-         <span style="color:#f92672">matchExpressions</span>:
-         - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">zone</span>
-           <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
-           <span style="color:#f92672">values</span>:
-           - <span style="color:#ae81ff">zone1</span>
-           - <span style="color:#ae81ff">zone2</span>
- <span style="color:#f92672">containers</span>:
- - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">db</span>
-   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">mysql</span>
-</code></pre></div><p>The <code>requiredDuringSchedulingIgnoredDuringExecution</code> is the hard requirement and the <code>preferredDuringSchedulingIgnoredDuringExecution</code> is the soft requirement. You can add Affinity not just for a nod but the pods themselves.</p>
-<h3 id="pod-affinity">Pod Affinity</h3>
-<p>You can yous hard (<code>requiredDuringSchedulingIgnoredDuringExecution</code>) and soft (<code>preferredDuringSchedulingIgnoredDuringExecution</code>) requirements for the pods too:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">metadata</span>:
- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">middleware</span>
-<span style="color:#f92672">spec</span>:
- <span style="color:#f92672">affinity</span>:
-   <span style="color:#f92672">podAffinity</span>:
-     <span style="color:#f92672">requiredDuringSchedulingIgnoredDuringExecution</span>:
-     - <span style="color:#f92672">labelSelector</span>:
-         <span style="color:#f92672">matchExpressions</span>:
-         - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">role</span>
-           <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
-           <span style="color:#f92672">values</span>:
-           - <span style="color:#ae81ff">frontend</span>
-       <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">kubernetes.io/hostname</span>
-   <span style="color:#f92672">podAntiAffinity</span>:
-     <span style="color:#f92672">preferredDuringSchedulingIgnoredDuringExecution</span>:
-     - <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">100</span>
-       <span style="color:#f92672">podAffinityTerm</span>:
-         <span style="color:#f92672">labelSelector</span>:
-           <span style="color:#f92672">matchExpressions</span>:
-           - <span style="color:#f92672">key</span>: <span style="color:#ae81ff">role</span>
-             <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">In</span>
-             <span style="color:#f92672">values</span>:
-             - <span style="color:#ae81ff">auth</span>
-         <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">kubernetes.io/hostname</span>
- <span style="color:#f92672">containers</span>:
- - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">middleware</span>
-   <span style="color:#f92672">image</span>: <span style="color:#ae81ff">redis</span>
-</code></pre></div><p>You may have noticed that both the hard and soft requirements have the IgnoredDuringExecution suffix. It means that after the scheduling decision has been made, the scheduler will not attempt to change already-placed Pods even if the conditions changed.</p>
-<p>For example if your application has multiple replicas and you did&rsquo;t want to shedule two pod from this app to the same host:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">extensions/v1beta1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
-<span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-<span style="color:#f92672">spec</span>:
-  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">5</span>
-  <span style="color:#f92672">template</span>:
-    <span style="color:#f92672">metadata</span>:
-      <span style="color:#f92672">labels</span>:                                            
-        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx                                   </span>
-    <span style="color:#f92672">spec</span>:
-      <span style="color:#f92672">affinity</span>:
-        <span style="color:#f92672">podAntiAffinity</span>:                                 
-          <span style="color:#f92672">requiredDuringSchedulingIgnoredDuringExecution</span>:
-          - <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">kubernetes.io/hostname</span>
-            <span style="color:#f92672">labelSelector</span>:                               
-              <span style="color:#f92672">matchLabels</span>:                               
-                <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx        </span>
-      <span style="color:#f92672">container</span>:
-        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
-</code></pre></div><h3 id="pod-topology-spread-constraints">Pod Topology Spread Constraints</h3>
-<p>You can use topology spread constraints to control how Pods are spread across your cluster among failure-domains such as regions, zones, nodes.</p>
-<p>Suppose you have a 4-node cluster with the following labels:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">NAME    STATUS   ROLES    AGE     VERSION   LABELS
-node1   Ready    &lt;none&gt;   4m26s   v1.16.0   node<span style="color:#f92672">=</span>node1,zone<span style="color:#f92672">=</span>zoneA
-node2   Ready    &lt;none&gt;   3m58s   v1.16.0   node<span style="color:#f92672">=</span>node2,zone<span style="color:#f92672">=</span>zoneA
-node3   Ready    &lt;none&gt;   3m17s   v1.16.0   node<span style="color:#f92672">=</span>node3,zone<span style="color:#f92672">=</span>zoneB
-node4   Ready    &lt;none&gt;   2m43s   v1.16.0   node<span style="color:#f92672">=</span>node4,zone<span style="color:#f92672">=</span>zoneB
-</code></pre></div><p>You can define one or multiple topologySpreadConstraint to instruct the kube-scheduler how to place each incoming Pod in relation to the existing Pods across your cluster. If we want an incoming Pod to be evenly spread with existing Pods across zones, the spec can be sometin like this:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-  <span style="color:#f92672">labels</span>:
-    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
-<span style="color:#f92672">spec</span>:
-  <span style="color:#f92672">topologySpreadConstraints</span>:
-  - <span style="color:#f92672">maxSkew</span>: <span style="color:#ae81ff">1</span>
-    <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">zone</span>
-    <span style="color:#f92672">whenUnsatisfiable</span>: <span style="color:#ae81ff">DoNotSchedule</span>
-    <span style="color:#f92672">labelSelector</span>:
-      <span style="color:#f92672">matchLabels</span>:
-        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
-  <span style="color:#f92672">containers</span>:
-  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
-</code></pre></div><p>You can use 2 TopologySpreadConstraints to control the Pods spreading on both zone and node:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-  <span style="color:#f92672">labels</span>:
-    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
-<span style="color:#f92672">spec</span>:
-  <span style="color:#f92672">topologySpreadConstraints</span>:
-  - <span style="color:#f92672">maxSkew</span>: <span style="color:#ae81ff">1</span>
-    <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">zone</span>
-    <span style="color:#f92672">whenUnsatisfiable</span>: <span style="color:#ae81ff">DoNotSchedule</span>
-    <span style="color:#f92672">labelSelector</span>:
-      <span style="color:#f92672">matchLabels</span>:
-        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
-  - <span style="color:#f92672">maxSkew</span>: <span style="color:#ae81ff">1</span>
-    <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">node</span>
-    <span style="color:#f92672">whenUnsatisfiable</span>: <span style="color:#ae81ff">DoNotSchedule</span>
-    <span style="color:#f92672">labelSelector</span>:
-      <span style="color:#f92672">matchLabels</span>:
-        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
-  <span style="color:#f92672">containers</span>:
-  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
-</code></pre></div>]]></content>
             
                  
                     
