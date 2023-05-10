@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-05-03T06:06:57+00:00</updated>
+    <updated>2023-05-10T07:58:55+00:00</updated>
     
     
     <author>
@@ -17,6 +17,421 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Create VM in Azure with Terraform]]></title>
+            <link href="https://devopstales.github.io/home/azure-terraform/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/proxmox-terraform/?utm_source=atom_feed" rel="related" type="text/html" title="Create Proxmox VM with Terraform" />
+                <link href="https://devopstales.github.io/home/aks-azure-key-vault-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Key Vault AKS integration with CSI Driver" />
+                <link href="https://devopstales.github.io/home/aks-azure-key-vault-akv2k8s/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Key Vault AKS integration with akv2k8s" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+            
+                <id>https://devopstales.github.io/home/azure-terraform/</id>
+            
+            
+            <published>2023-05-03T00:00:00+00:00</published>
+            <updated>2023-05-03T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how how you can create a VM in Azure with Terraform.</p>
+<p>With Azure we can use Azure blob storage as a shared storage for the Terraform states. So firs we need to create a storage account for this purpose:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az group create --name tf-state-rg <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --location westeurope
+
+export STORAGE_ACCOUNT_NAME<span style="color:#f92672">=</span>tfstatesa<span style="color:#66d9ef">$(</span>dd bs<span style="color:#f92672">=</span><span style="color:#ae81ff">4</span> count<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#66d9ef">if</span><span style="color:#f92672">=</span>/dev/urandom 2&gt;/dev/null | xxd -p<span style="color:#66d9ef">)</span>
+
+echo $STORAGE_ACCOUNT_NAME
+tfstatesa273b9cdf
+
+az storage account create --name $STORAGE_ACCOUNT_NAME <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --location westeurope <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --resource-group tf-state-rg
+
+az storage container create --account-name $STORAGE_ACCOUNT_NAME <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --name tfstate <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --public-access off
+
+az storage account key list --resource-group tf-state-rg --account-name $STORAGE_ACCOUNT_NAME
+</code></pre></div><p>Create provider config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">providers.tf</span>
+<span style="color:#960050;background-color:#1e0010">terraform</span> {
+  <span style="color:#960050;background-color:#1e0010">required_version</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;&gt;=0.12&#34;</span>
+
+  <span style="color:#960050;background-color:#1e0010">required_providers</span> {
+    <span style="color:#960050;background-color:#1e0010">azurerm</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">{</span>
+      <span style="color:#960050;background-color:#1e0010">source</span>  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;hashicorp/azurerm&#34;</span>
+      <span style="color:#960050;background-color:#1e0010">version</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;~&gt;2.0&#34;</span>
+    }
+  }
+
+  <span style="color:#960050;background-color:#1e0010">backend</span> <span style="color:#e6db74">&#34;azurerm&#34;</span> {
+    <span style="color:#960050;background-color:#1e0010">resource_group_name</span>  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;tf-state-rg&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">storage_account_name</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;tfstatesa273b9cdf&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">container_name</span>       <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;tfstate&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">key</span>                  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;terraform.tfstate&#34;</span>
+  }
+
+<span style="color:#960050;background-color:#1e0010">}</span>
+
+<span style="color:#960050;background-color:#1e0010">provider</span> <span style="color:#e6db74">&#34;azurerm&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">features</span> <span style="color:#960050;background-color:#1e0010">{</span>}
+<span style="color:#960050;background-color:#1e0010">}</span>
+</code></pre></div><p>Create output config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">outputs.tf</span>
+<span style="color:#960050;background-color:#1e0010">output</span> <span style="color:#e6db74">&#34;resource_group_name&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">value</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">output</span> <span style="color:#e6db74">&#34;public_ip_address&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">value</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_linux_virtual_machine.my_terraform_vm.public_ip_address</span>
+}
+</code></pre></div><p>Create variable config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">variables.tf</span>
+<span style="color:#960050;background-color:#1e0010">variable</span> <span style="color:#e6db74">&#34;resource_group_location&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">type</span>        <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">string</span>
+  <span style="color:#960050;background-color:#1e0010">default</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;westeurope&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">description</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Location of the resource group.&#34;</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">variable</span> <span style="color:#e6db74">&#34;resource_group_name&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">type</span>        <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">string</span>
+  <span style="color:#960050;background-color:#1e0010">default</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;egis-terraform-demo&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">description</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Name of the resource group.&#34;</span>
+}
+
+
+<span style="color:#960050;background-color:#1e0010">variable</span> <span style="color:#e6db74">&#34;ssh_key&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">default</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;ssh-rsa AAAAB3NzaC1yc2EAAAADAQABA...&#34;</span>
+}
+</code></pre></div><p>Create the main Terraform config file vit the resource definitions:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">main.tf</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_resource_group&#34;</span> <span style="color:#e6db74">&#34;rg&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">location</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">var.resource_group_location</span>
+  <span style="color:#960050;background-color:#1e0010">name</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">var.resource_group_name</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Create</span> <span style="color:#960050;background-color:#1e0010">virtual</span> <span style="color:#960050;background-color:#1e0010">network</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_virtual_network&#34;</span> <span style="color:#e6db74">&#34;my_terraform_network&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">name</span>                <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;myVnet&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">address_space</span>       <span style="color:#960050;background-color:#1e0010">=</span> [<span style="color:#e6db74">&#34;10.0.0.0/16&#34;</span>]
+  <span style="color:#960050;background-color:#1e0010">location</span>            <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.location</span>
+  <span style="color:#960050;background-color:#1e0010">resource_group_name</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Create</span> <span style="color:#960050;background-color:#1e0010">subnet</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_subnet&#34;</span> <span style="color:#e6db74">&#34;my_terraform_subnet&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">name</span>                 <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;mySubnet&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">resource_group_name</span>  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+  <span style="color:#960050;background-color:#1e0010">virtual_network_name</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_virtual_network.my_terraform_network.name</span>
+  <span style="color:#960050;background-color:#1e0010">address_prefixes</span>     <span style="color:#960050;background-color:#1e0010">=</span> [<span style="color:#e6db74">&#34;10.0.1.0/24&#34;</span>]
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Create</span> <span style="color:#960050;background-color:#1e0010">public</span> <span style="color:#960050;background-color:#1e0010">IPs</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_public_ip&#34;</span> <span style="color:#e6db74">&#34;my_terraform_public_ip&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">name</span>                <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;myPublicIP&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">location</span>            <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.location</span>
+  <span style="color:#960050;background-color:#1e0010">resource_group_name</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+  <span style="color:#960050;background-color:#1e0010">allocation_method</span>   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Dynamic&#34;</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Create</span> <span style="color:#960050;background-color:#1e0010">Network</span> <span style="color:#960050;background-color:#1e0010">Security</span> <span style="color:#960050;background-color:#1e0010">Group</span> <span style="color:#960050;background-color:#1e0010">and</span> <span style="color:#960050;background-color:#1e0010">rule</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_network_security_group&#34;</span> <span style="color:#e6db74">&#34;my_terraform_nsg&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">name</span>                <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;myNetworkSecurityGroup&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">location</span>            <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.location</span>
+  <span style="color:#960050;background-color:#1e0010">resource_group_name</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+
+  <span style="color:#960050;background-color:#1e0010">security_rule</span> {
+    <span style="color:#960050;background-color:#1e0010">name</span>                       <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;SSH&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">priority</span>                   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#ae81ff">1001</span>
+    <span style="color:#960050;background-color:#1e0010">direction</span>                  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Inbound&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">access</span>                     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Allow&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">protocol</span>                   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Tcp&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">source_port_range</span>          <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;*&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">destination_port_range</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;22&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">source_address_prefix</span>      <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;*&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">destination_address_prefix</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;*&#34;</span>
+  }
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Create</span> <span style="color:#960050;background-color:#1e0010">network</span> <span style="color:#960050;background-color:#1e0010">interface</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_network_interface&#34;</span> <span style="color:#e6db74">&#34;my_terraform_nic&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">name</span>                <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;myNIC&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">location</span>            <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.location</span>
+  <span style="color:#960050;background-color:#1e0010">resource_group_name</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+
+  <span style="color:#960050;background-color:#1e0010">ip_configuration</span> {
+    <span style="color:#960050;background-color:#1e0010">name</span>                          <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;my_nic_configuration&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">subnet_id</span>                     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_subnet.my_terraform_subnet.id</span>
+    <span style="color:#960050;background-color:#1e0010">private_ip_address_allocation</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Dynamic&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">public_ip_address_id</span>          <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_public_ip.my_terraform_public_ip.id</span>
+  }
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Connect</span> <span style="color:#960050;background-color:#1e0010">the</span> <span style="color:#960050;background-color:#1e0010">security</span> <span style="color:#960050;background-color:#1e0010">group</span> <span style="color:#960050;background-color:#1e0010">to</span> <span style="color:#960050;background-color:#1e0010">the</span> <span style="color:#960050;background-color:#1e0010">network</span> <span style="color:#960050;background-color:#1e0010">interface</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_network_interface_security_group_association&#34;</span> <span style="color:#e6db74">&#34;example&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">network_interface_id</span>      <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_network_interface.my_terraform_nic.id</span>
+  <span style="color:#960050;background-color:#1e0010">network_security_group_id</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_network_security_group.my_terraform_nsg.id</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Generate</span> <span style="color:#960050;background-color:#1e0010">random</span> <span style="color:#960050;background-color:#1e0010">text</span> <span style="color:#960050;background-color:#1e0010">for</span> <span style="color:#960050;background-color:#1e0010">a</span> <span style="color:#960050;background-color:#1e0010">unique</span> <span style="color:#960050;background-color:#1e0010">storage</span> <span style="color:#960050;background-color:#1e0010">account</span> <span style="color:#960050;background-color:#1e0010">name</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;random_id&#34;</span> <span style="color:#e6db74">&#34;random_id&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">keepers</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">{</span>
+    <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Generate</span> <span style="color:#960050;background-color:#1e0010">a</span> <span style="color:#960050;background-color:#1e0010">new</span> <span style="color:#960050;background-color:#1e0010">ID</span> <span style="color:#960050;background-color:#1e0010">only</span> <span style="color:#960050;background-color:#1e0010">when</span> <span style="color:#960050;background-color:#1e0010">a</span> <span style="color:#960050;background-color:#1e0010">new</span> <span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#960050;background-color:#1e0010">group</span> <span style="color:#960050;background-color:#1e0010">is</span> <span style="color:#960050;background-color:#1e0010">defined</span>
+    <span style="color:#960050;background-color:#1e0010">resource_group</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+  }
+
+  <span style="color:#960050;background-color:#1e0010">byte_length</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#ae81ff">8</span>
+<span style="color:#960050;background-color:#1e0010">}</span>
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Create</span> <span style="color:#960050;background-color:#1e0010">storage</span> <span style="color:#960050;background-color:#1e0010">account</span> <span style="color:#960050;background-color:#1e0010">for</span> <span style="color:#960050;background-color:#1e0010">boot</span> <span style="color:#960050;background-color:#1e0010">diagnostics</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_storage_account&#34;</span> <span style="color:#e6db74">&#34;my_storage_account&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">name</span>                     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;diag${random_id.random_id.hex}&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">location</span>                 <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.location</span>
+  <span style="color:#960050;background-color:#1e0010">resource_group_name</span>      <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+  <span style="color:#960050;background-color:#1e0010">account_tier</span>             <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Standard&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">account_replication_type</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;LRS&#34;</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">Create</span> <span style="color:#960050;background-color:#1e0010">virtual</span> <span style="color:#960050;background-color:#1e0010">machine</span>
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;azurerm_linux_virtual_machine&#34;</span> <span style="color:#e6db74">&#34;my_terraform_vm&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">name</span>                  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;myVM&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">location</span>              <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.location</span>
+  <span style="color:#960050;background-color:#1e0010">resource_group_name</span>   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_resource_group.rg.name</span>
+  <span style="color:#960050;background-color:#1e0010">network_interface_ids</span> <span style="color:#960050;background-color:#1e0010">=</span> [<span style="color:#960050;background-color:#1e0010">azurerm_network_interface.my_terraform_nic.id</span>]
+  <span style="color:#960050;background-color:#1e0010">size</span>                  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Standard_DS1_v2&#34;</span>
+
+  <span style="color:#960050;background-color:#1e0010">os_disk</span> {
+    <span style="color:#960050;background-color:#1e0010">name</span>                 <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;myOsDisk&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">caching</span>              <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;ReadWrite&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">storage_account_type</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;Premium_LRS&#34;</span>
+  }
+
+  <span style="color:#960050;background-color:#1e0010">source_image_reference</span> {
+    <span style="color:#960050;background-color:#1e0010">publisher</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;Canonical&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">offer</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;0001-com-ubuntu-server-jammy&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">sku</span>       <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;22_04-lts-gen2&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">version</span>   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;latest&#34;</span>
+  }
+
+  <span style="color:#960050;background-color:#1e0010">computer_name</span>                   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;myvm&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">admin_username</span>                  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;azureuser&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">disable_password_authentication</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#66d9ef">true</span>
+
+  <span style="color:#960050;background-color:#1e0010">admin_ssh_key</span> {
+    <span style="color:#960050;background-color:#1e0010">username</span>   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;azureuser&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">public_key</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">var.ssh_key</span>
+  }
+
+  <span style="color:#960050;background-color:#1e0010">boot_diagnostics</span> {
+    <span style="color:#960050;background-color:#1e0010">storage_account_uri</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">azurerm_storage_account.my_storage_account.primary_blob_endpoint</span>
+  }
+}
+</code></pre></div><p>Now we can create the VM:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az login
+
+<span style="color:#75715e"># init modules</span>
+terraform init -upgrade
+
+<span style="color:#75715e"># plan creation</span>
+terraform plan -out main.tfplan
+
+<span style="color:#75715e"># apply plan</span>
+terraform apply main.tfplan
+
+<span style="color:#75715e"># cleanup</span>
+terraform plan -destroy -out main.destroy.tfplan
+terraform apply main.destroy.tfplan
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Create Proxmox VM with Terraform]]></title>
+            <link href="https://devopstales.github.io/home/proxmox-terraform/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+                <link href="https://devopstales.github.io/home/github-actions-basics/?utm_source=atom_feed" rel="related" type="text/html" title="GitHub Actions: Basics" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/home/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+            
+                <id>https://devopstales.github.io/home/proxmox-terraform/</id>
+            
+            
+            <published>2023-04-20T00:00:00+00:00</published>
+            <updated>2023-04-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how how you can create a Proxmox VMs with Terraform.</p>
+<p>To ease the creation of the VMs in Proxmox I will use predefined VM templates. So our first task is create the template. To do this login to one of the proxmox nodes.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># installing libguestfs-tools only required once, prior to first run</span>
+sudo apt update -y
+sudo apt install libguestfs-tools -y
+
+<span style="color:#75715e"># download a debian cloud-init disk image:</span>
+wget http://cloud.debian.org/images/cloud/bullseye/latest/debian-11-generic-amd64.qcow2
+
+sudo virt-customize -a debian-11-generic-amd64.qcow2 --install qemu-guest-agent
+sudo qm create <span style="color:#ae81ff">100200</span> --name <span style="color:#e6db74">&#34;debian11.vm.shiwaforce.com&#34;</span> --memory <span style="color:#ae81ff">2048</span> --cores <span style="color:#ae81ff">2</span> --net0 virtio,bridge<span style="color:#f92672">=</span>vmbr0
+
+sudo qm importdisk <span style="color:#ae81ff">100200</span> debian-11-generic-amd64.qcow2 zfs-vm-none
+sudo qm set <span style="color:#ae81ff">100200</span> --scsihw virtio-scsi-pci --scsi0 zfs-vm-none:vm-100200-disk-0
+sudo qm set <span style="color:#ae81ff">100200</span> --boot c --bootdisk scsi0
+sudo qm set <span style="color:#ae81ff">100200</span> --ide2 zfs-vm-none:cloudinit
+sudo qm set <span style="color:#ae81ff">100200</span> --serial0 socket --vga serial0
+sudo qm set <span style="color:#ae81ff">100200</span> --agent enabled<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+sudo qm template <span style="color:#ae81ff">100200</span>
+
+rm debian-11-generic-amd64.qcow2
+</code></pre></div><h2 id="determine-authentication-method-use-api-keys">Determine Authentication Method (use API keys)</h2>
+<p>The next step is to create a service account in proxmox for authentication and generate an authentication token:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">pveum role add TerraformProv -privs <span style="color:#e6db74">&#34;Pool.Allocate VM.Console VM.Allocate VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Cloudinit VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Monitor VM.Audit VM.PowerMgmt Datastore.AllocateSpace Datastore.Audit&#34;</span>
+pveum user add tfuser@pve
+pveum aclmod / -user tfuser@pve -role TerraformProv
+pveum user token add tfuser@pve terraform --privsep <span style="color:#ae81ff">0</span>
+
+<span style="color:#75715e"># Please save the token secret as there isn&#39;t any way to fetch it at a later point.</span>
+</code></pre></div><h2 id="create-teh-terraform-config-files">Create teh Terraform config files</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir terraform
+cd terraform
+</code></pre></div><p>Create backend config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">backend.tf</span> 
+<span style="color:#960050;background-color:#1e0010">terraform</span> {
+  <span style="color:#960050;background-color:#1e0010">required_providers</span> <span style="color:#960050;background-color:#1e0010">{</span>
+    <span style="color:#960050;background-color:#1e0010">proxmox</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">{</span>
+      <span style="color:#960050;background-color:#1e0010">source</span>  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;telmate/proxmox&#34;</span>
+      <span style="color:#960050;background-color:#1e0010">version</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;2.9.11&#34;</span>
+    }
+  <span style="color:#960050;background-color:#1e0010">}</span>
+  <span style="color:#960050;background-color:#1e0010">backend</span> <span style="color:#e6db74">&#34;local&#34;</span> {
+  }
+<span style="color:#960050;background-color:#1e0010">}</span>
+</code></pre></div><p>Create provider config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">provider.tf</span>
+<span style="color:#960050;background-color:#1e0010">provider</span> <span style="color:#e6db74">&#34;proxmox&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">pm_api_url</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;https://proxmox.mydomain.intra:8006/api2/json&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">api</span> <span style="color:#960050;background-color:#1e0010">token</span> <span style="color:#960050;background-color:#1e0010">id</span> <span style="color:#960050;background-color:#1e0010">is</span> <span style="color:#960050;background-color:#1e0010">in</span> <span style="color:#960050;background-color:#1e0010">the</span> <span style="color:#960050;background-color:#1e0010">form</span> <span style="color:#960050;background-color:#1e0010">of</span>: <span style="color:#960050;background-color:#1e0010">&lt;username&gt;@pam!&lt;tokenId&gt;</span>
+  <span style="color:#960050;background-color:#1e0010">pm_api_token_id</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;tfuser@pve!terraform&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">this</span> <span style="color:#960050;background-color:#1e0010">is</span> <span style="color:#960050;background-color:#1e0010">the</span> <span style="color:#960050;background-color:#1e0010">full</span> <span style="color:#960050;background-color:#1e0010">secret</span> <span style="color:#960050;background-color:#1e0010">wrapped</span> <span style="color:#960050;background-color:#1e0010">in</span> <span style="color:#960050;background-color:#1e0010">quotes.</span>
+  <span style="color:#960050;background-color:#1e0010">pm_api_token_secret</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">var.PROXMOX_API_SECRET</span>
+  <span style="color:#960050;background-color:#1e0010">pm_tls_insecure</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#66d9ef">true</span>
+
+  <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#960050;background-color:#1e0010">debug</span> <span style="color:#960050;background-color:#1e0010">log</span>
+  <span style="color:#960050;background-color:#1e0010">#</span>  <span style="color:#960050;background-color:#1e0010">pm_log_enable</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#66d9ef">true</span>
+  <span style="color:#960050;background-color:#1e0010">#</span>  <span style="color:#960050;background-color:#1e0010">pm_log_file</span>   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;terraform-plugin-proxmox.log&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">#</span>  <span style="color:#960050;background-color:#1e0010">pm_debug</span>      <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#66d9ef">true</span>
+  <span style="color:#960050;background-color:#1e0010">#</span>  <span style="color:#960050;background-color:#1e0010">pm_log_levels</span> <span style="color:#960050;background-color:#1e0010">=</span> {
+  <span style="color:#960050;background-color:#1e0010">#</span>    <span style="color:#960050;background-color:#1e0010">_default</span>    <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;debug&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">#</span>    <span style="color:#960050;background-color:#1e0010">_capturelog</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">#</span>  }
+}
+</code></pre></div><p>The auth token will be ised from the <code>PROXMOX_API_SECRET</code> linux environment variable. Now create the terraform variable file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">vars.tf</span>
+<span style="color:#960050;background-color:#1e0010">variable</span> <span style="color:#e6db74">&#34;PROXMOX_API_SECRET&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">type</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">string</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">variable</span> <span style="color:#e6db74">&#34;ssh_key&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">default</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;ssh-rsa AAAAB3NzaC1y...&#34;</span>
+}
+
+<span style="color:#960050;background-color:#1e0010">variable</span> <span style="color:#e6db74">&#34;proxmox_host&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">default</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;proxmox&#34;</span>
+}
+<span style="color:#960050;background-color:#1e0010">variable</span> <span style="color:#e6db74">&#34;template_name&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">default</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;debian11.vm.shiwaforce.com&#34;</span>
+}
+
+</code></pre></div><p>Create the main Terraform config file vit the resource definitions:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">touch</span> <span style="color:#960050;background-color:#1e0010">main.tf</span> 
+
+<span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">k</span><span style="color:#ae81ff">8</span><span style="color:#960050;background-color:#1e0010">s-master.tf</span> 
+<span style="color:#960050;background-color:#1e0010">resource</span> <span style="color:#e6db74">&#34;proxmox_vm_qemu&#34;</span> <span style="color:#e6db74">&#34;k8s-master&#34;</span> {
+  <span style="color:#960050;background-color:#1e0010">count</span>       <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">3</span>
+  <span style="color:#960050;background-color:#1e0010">name</span>        <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;k8s0${count.index + 1}.mydomain.intra&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">target_node</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">var.proxmox_host</span>
+  <span style="color:#960050;background-color:#1e0010">vmid</span>        <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;101${count.index + 1}&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">clone</span>       <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">var.template_name</span>
+  <span style="color:#960050;background-color:#1e0010">os_type</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;cloud-init&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">cpu</span>         <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;kvm64&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">cores</span>       <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#ae81ff">2</span>
+  <span style="color:#960050;background-color:#1e0010">sockets</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#ae81ff">1</span>
+  <span style="color:#960050;background-color:#1e0010">memory</span>      <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#ae81ff">6144</span>
+  <span style="color:#960050;background-color:#1e0010">scsihw</span>      <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;virtio-scsi-pci&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">bootdisk</span>    <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;scsi0&#34;</span>
+
+  <span style="color:#960050;background-color:#1e0010">disk</span> {
+    <span style="color:#960050;background-color:#1e0010">slot</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">0</span>
+    <span style="color:#960050;background-color:#1e0010">size</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;50G&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">type</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;scsi&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">storage</span>  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;zfs-vm-etc&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">iothread</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#ae81ff">1</span>
+  }
+
+  <span style="color:#960050;background-color:#1e0010">network</span> {
+    <span style="color:#960050;background-color:#1e0010">model</span>     <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#f92672">&#34;virtio&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">bridge</span>    <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;vmbr0&#34;</span>
+    <span style="color:#960050;background-color:#1e0010">tag</span>       <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#ae81ff">101</span>
+    <span style="color:#960050;background-color:#1e0010">firewall</span>  <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#66d9ef">false</span>
+    <span style="color:#960050;background-color:#1e0010">link_down</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#66d9ef">false</span>
+  }
+
+  <span style="color:#960050;background-color:#1e0010">ipconfig</span><span style="color:#ae81ff">0</span> <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;ip=192.168.10.1${count.index + 1}/22,gw=192.168.10.1&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">ciuser</span>    <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#e6db74">&#34;terraform&#34;</span>
+  <span style="color:#960050;background-color:#1e0010">sshkeys</span>   <span style="color:#960050;background-color:#1e0010">=</span> <span style="color:#960050;background-color:#1e0010">&lt;&lt;EOF</span>
+  <span style="color:#960050;background-color:#1e0010">$</span>{<span style="color:#960050;background-color:#1e0010">var.ssh_key</span>}
+  <span style="color:#960050;background-color:#1e0010">EOF</span>
+}
+</code></pre></div><p>If you created all the files it looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cd ..
+tree .
+.
+└── terraform
+    ├── backend.tf
+    ├── provider.tf
+    ├── outputs.tf
+    ├── k8s-master.tf 
+    └── vars.tf
+
+<span style="color:#ae81ff">1</span> directory, <span style="color:#ae81ff">5</span> files
+</code></pre></div><p>Now we can create the VMs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export PROXMOX_API_SECRET<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;9f881350-175c-4a09-a25c-bce726ada447&#34;</span>
+
+<span style="color:#75715e"># inicialise the terraform modules</span>
+terraform init --upgrade
+
+<span style="color:#75715e"># generate a terraform plan</span>
+terraform plan -out k8s-master.tfplan
+
+<span style="color:#75715e"># deploym the VMs</span>
+terraform apply -parallelism<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> -auto-approve k8s-master.tfplan
+
+<span style="color:#75715e"># cleanup</span>
+terraform plan -destroy -out k8s-master.destroy.tfplan
+terraform apply k8s-master.destroy.tfplan
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -686,6 +1101,156 @@ echo <span style="color:#e6db74">&#34;{
     
         
         <entry>
+            <title type="html"><![CDATA[Azure Key Vault AKS integration with CSI Driver]]></title>
+            <link href="https://devopstales.github.io/home/aks-azure-key-vault-csi/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/aks-azure-key-vault-akv2k8s/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Key Vault AKS integration with akv2k8s" />
+                <link href="https://devopstales.github.io/home/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
+                <link href="https://devopstales.github.io/home/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to AKS" />
+                <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
+                <link href="https://devopstales.github.io/cloud/aks-azure-key-vault-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Key Vault AKS integration with CSI Driver" />
+            
+                <id>https://devopstales.github.io/home/aks-azure-key-vault-csi/</id>
+            
+            
+            <published>2023-03-08T00:00:00+00:00</published>
+            <updated>2023-03-08T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can use CSI Driver to mount secrets from Azure Key Vault to AKS.</p>
+<p>First we need to create a key store</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az aks enable-addons <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--addons<span style="color:#f92672">=</span>azure-keyvault-secrets-provider <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name<span style="color:#f92672">=</span>$CLUSTER <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--resource-group<span style="color:#f92672">=</span>$RG
+
+<span style="color:#75715e"># create the key vault and turn on Azure RBAC; we will grant a managed identity access to this key vault below</span>
+az keyvault create <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name $KV <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--resource-group $RG <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--location westeurope <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--enable-rbac-authorization true
+
+<span style="color:#75715e"># get the subscription id</span>
+SUBSCRIPTION_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az account show --query id -o tsv<span style="color:#66d9ef">)</span>
+ 
+<span style="color:#75715e"># get your user object id</span>
+USER_OBJECT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az ad signed-in-user show --query objectId -o tsv<span style="color:#66d9ef">)</span>
+ 
+<span style="color:#75715e"># grant yourself access to key vault</span>
+az role assignment create <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--assignee-object-id $USER_OBJECT_ID <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role <span style="color:#e6db74">&#34;Key Vault Administrator&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--scope /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV
+ 
+<span style="color:#75715e"># add a secret to the key vault</span>
+az keyvault secret set --vault-name $KV --name $SECRET --value $VALUE
+</code></pre></div><p>After you granted access to yourself to the key vault you need to grant access to a managed identity:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># grab the managed identity principalId assuming it is in the default</span>
+<span style="color:#75715e"># MC_ group for your cluster and resource group</span>
+IDENTITY_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az identity show -g MC<span style="color:#ae81ff">\_</span>$RG<span style="color:#ae81ff">\_</span>$CLUSTER<span style="color:#ae81ff">\_</span>westeurope --name azurekeyvaultsecretsprovider-$CLUSTER --query principalId -o tsv<span style="color:#66d9ef">)</span>
+ 
+<span style="color:#75715e"># grant access rights on Key Vault</span>
+az role assignment create <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--assignee-object-id $IDENTITY_ID <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role <span style="color:#e6db74">&#34;Key Vault Administrator&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--scope /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV
+</code></pre></div><p>Create a SecretProviderClass:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">AZURE_TENANT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az account show --query tenantId -o tsv<span style="color:#66d9ef">)</span>
+CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az aks show -g $RG -n $CLUSTER --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv<span style="color:#66d9ef">)</span>
+ 
+cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
+</span><span style="color:#e6db74">apiVersion: secrets-store.csi.x-k8s.io/v1
+</span><span style="color:#e6db74">kind: SecretProviderClass
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: demo-secret
+</span><span style="color:#e6db74">  namespace: default
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  provider: azure
+</span><span style="color:#e6db74">  secretObjects:
+</span><span style="color:#e6db74">  - secretName: demosecret
+</span><span style="color:#e6db74">    type: Opaque
+</span><span style="color:#e6db74">    data:
+</span><span style="color:#e6db74">    - objectName: &#34;demosecret&#34;
+</span><span style="color:#e6db74">      key: demosecret
+</span><span style="color:#e6db74">  parameters:
+</span><span style="color:#e6db74">    usePodIdentity: &#34;false&#34;
+</span><span style="color:#e6db74">    useVMManagedIdentity: &#34;true&#34;
+</span><span style="color:#e6db74">    userAssignedIdentityID: &#34;$CLIENT_ID&#34;
+</span><span style="color:#e6db74">    keyvaultName: &#34;$KV&#34;
+</span><span style="color:#e6db74">    objects: |
+</span><span style="color:#e6db74">      array:
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;demosecret&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">    tenantId: &#34;$AZURE_TENANT_ID&#34;
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><p>Mount the secrets in pods</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
+</span><span style="color:#e6db74">apiVersion: apps/v1
+</span><span style="color:#e6db74">kind: Deployment
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  labels:
+</span><span style="color:#e6db74">    app: secretpods
+</span><span style="color:#e6db74">  name: secretpods
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  replicas: 1
+</span><span style="color:#e6db74">  selector:
+</span><span style="color:#e6db74">    matchLabels:
+</span><span style="color:#e6db74">      app: secretpods
+</span><span style="color:#e6db74">  template:
+</span><span style="color:#e6db74">    metadata:
+</span><span style="color:#e6db74">      labels:
+</span><span style="color:#e6db74">        app: secretpods
+</span><span style="color:#e6db74">    spec:
+</span><span style="color:#e6db74">      containers:
+</span><span style="color:#e6db74">      - image: nginx
+</span><span style="color:#e6db74">        name: nginx
+</span><span style="color:#e6db74">        env:
+</span><span style="color:#e6db74">          - name:  demosecret
+</span><span style="color:#e6db74">            valueFrom:
+</span><span style="color:#e6db74">              secretKeyRef:
+</span><span style="color:#e6db74">                name:  demosecret
+</span><span style="color:#e6db74">                key:  demosecret
+</span><span style="color:#e6db74">        volumeMounts:
+</span><span style="color:#e6db74">          - name:  secret-store
+</span><span style="color:#e6db74">            mountPath:  &#34;mnt/secret-store&#34;
+</span><span style="color:#e6db74">            readOnly: true
+</span><span style="color:#e6db74">      volumes:
+</span><span style="color:#e6db74">        - name:  secret-store
+</span><span style="color:#e6db74">          csi:
+</span><span style="color:#e6db74">            driver: secrets-store.csi.k8s.io
+</span><span style="color:#e6db74">            readOnly: true
+</span><span style="color:#e6db74">            volumeAttributes:
+</span><span style="color:#e6db74">              secretProviderClass: &#34;demo-secret&#34;
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><p>Now we you can werify the secret in the pod:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export POD_NAME<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>kubectl get pods -l <span style="color:#e6db74">&#34;app=secretpods&#34;</span> -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{.items[0].metadata.name}&#34;</span><span style="color:#66d9ef">)</span>
+ 
+<span style="color:#75715e"># if this does not work, check the status of the pod</span>
+<span style="color:#75715e"># if still in ContainerCreating there might be an issue</span>
+kubectl exec -it $POD_NAME -- sh
+ 
+cd /mnt/secret-store
+ls <span style="color:#75715e"># the file containing the secret is listed</span>
+cat demosecret; echo <span style="color:#75715e"># demovalue is revealed</span>
+ 
+<span style="color:#75715e"># echo the value of the environment variable</span>
+echo $demosecret <span style="color:#75715e"># demovalue is revealed</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
             <title type="html"><![CDATA[Azure Key Vault AKS integration with akv2k8s]]></title>
             <link href="https://devopstales.github.io/home/aks-azure-key-vault-akv2k8s/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
@@ -704,23 +1269,17 @@ echo <span style="color:#e6db74">&#34;{
             
             <content type="html"><![CDATA[<p>In this Post I will show you how you can use akv2k8s to synchronize secrets from Azure Key Vault to AKS.</p>
 <p>AKV2K8s, which stands for Azure Key Vault to Kubernetes, employs two primary elements - the Azure Key Vault Controller and the Azure Key Vault Env Injector. These components enable the injection of secrets, keys, or certificates as environment variables that are exclusively accessible to the main process of the container.</p>
-<h1 id="install-akv2k8s">Install akv2k8s</h1>
+<h2 id="install-akv2k8s">Install akv2k8s</h2>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns akv2k8s
 
 helm repo add spv-charts http://charts.spvapi.no
 helm repo update
 
 <span style="color:#75715e"># install the controller</span>
-helm install azure-key-vault-controller <span style="color:#ae81ff">\
-</span><span style="color:#ae81ff"></span>  spv-charts/azure-key-vault-controller <span style="color:#ae81ff">\
+helm upgrade --install akv2k8s <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  spv-charts/akv2k8s <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>  --namespace akv2k8s
-
-<span style="color:#75715e"># install injector</span>
-helm install azure-key-vault-env-injector <span style="color:#ae81ff">\
-</span><span style="color:#ae81ff"></span>  spv-charts/azure-key-vault-env-injector <span style="color:#ae81ff">\
-</span><span style="color:#ae81ff"></span>  --set installCrd<span style="color:#f92672">=</span>false <span style="color:#ae81ff">\
-</span><span style="color:#ae81ff"></span>  --namespace akv2k8s
-</code></pre></div><h1 id="use-akv2k8s-injector">Use akv2k8s injector</h1>
+</code></pre></div><h2 id="use-akv2k8s-injector">Use akv2k8s injector</h2>
 <p>For the injector part to work you need to add the <code>azure-key-vault-env-injection: enabled</code> label for your namespace:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF | kubectl apply -f -</span>
 <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
@@ -735,13 +1294,13 @@ helm install azure-key-vault-env-injector <span style="color:#ae81ff">\
 <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">spv.no/v1alpha1</span>
 <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AzureKeyVaultSecret</span>
 <span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">my-secret</span>
   <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">akv2k8s-test</span>
 <span style="color:#f92672">spec</span>:
   <span style="color:#f92672">vault</span>:
-    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_NAME}            </span> <span style="color:#75715e"># name of key vault</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">akv2k8s-test            </span> <span style="color:#75715e"># name of key vault</span>
     <span style="color:#f92672">object</span>:
-      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}   </span> <span style="color:#75715e"># name of the akv object</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">my-secret   </span> <span style="color:#75715e"># name of the akv object</span>
       <span style="color:#f92672">type</span>: <span style="color:#ae81ff">secret                     </span> <span style="color:#75715e"># akv object type</span>
 <span style="color:#ae81ff">EOF</span>
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF | kubectl apply -f -</span>
@@ -757,27 +1316,27 @@ helm install azure-key-vault-env-injector <span style="color:#ae81ff">\
     <span style="color:#f92672">args</span>: [<span style="color:#e6db74">&#34;TEST_SECRET&#34;</span>]
     <span style="color:#f92672">env</span>:
     - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">TEST_SECRET</span>
-      <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;${KEY_VAULT_SECRET_NAME}@azurekeyvault&#34;</span> <span style="color:#75715e"># ref to akvs</span>
+      <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;my-secret@azurekeyvault&#34;</span> <span style="color:#75715e"># ref to akvs</span>
 <span style="color:#ae81ff">EOF</span>
 </code></pre></div><p>If you try to access the environment variable using <code>kubectl exec</code> you won’t be able to see the value (only the container main process have access to it)</p>
-<h1 id="sync-secret-from-key-vault-as-aks-secret">Sync secret from Key vault as AKS Secret</h1>
+<h2 id="sync-secret-from-key-vault-as-aks-secret">Sync secret from Key vault as AKS Secret</h2>
 <p>To generate Kubernetes Secret Objects from Key vault you need to create the fallowing <code>“AzureKeyVaultSecret”</code> CRD</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF | kubectl apply -f -</span>
 <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">spv.no/v1alpha1</span>
 <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AzureKeyVaultSecret</span>
 <span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">my-secret</span>
   <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">akv2k8s-test</span>
 <span style="color:#f92672">spec</span>:
   <span style="color:#f92672">vault</span>:
-    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_NAME}            </span> <span style="color:#75715e"># name of key vault</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">akv2k8s-test            </span> <span style="color:#75715e"># name of key vault</span>
     <span style="color:#f92672">object</span>:
-      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}   </span> <span style="color:#75715e"># name of the akv object</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">my-secret   </span> <span style="color:#75715e"># name of the akv object</span>
       <span style="color:#f92672">type</span>: <span style="color:#ae81ff">secret                     </span> <span style="color:#75715e"># akv object type</span>
   <span style="color:#f92672">output</span>: 
     <span style="color:#f92672">secret</span>: 
       <span style="color:#f92672">name</span>: <span style="color:#ae81ff">akv-secret-name1           </span> <span style="color:#75715e"># kubernetes secret name</span>
-      <span style="color:#f92672">dataKey</span>: <span style="color:#ae81ff">${KEY_VAULT_SECRET_NAME}</span> <span style="color:#75715e"># key to store object value in kubernetes apiVersion: v1</span>
+      <span style="color:#f92672">dataKey: my-secret # key to store object value in kubernetes apiVersion</span>: <span style="color:#ae81ff">v1</span>
 <span style="color:#ae81ff">EOF</span>
 </code></pre></div>]]></content>
             
@@ -800,7 +1359,7 @@ helm install azure-key-vault-env-injector <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
@@ -1273,8 +1832,8 @@ notAfter<span style="color:#f92672">=</span>Aug <span style="color:#ae81ff">29</
             
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
             
                 <id>https://devopstales.github.io/home/openshift4-buildconfig/</id>
@@ -47352,110 +47911,6 @@ scrape_configs:
 systemctl start prometheus
 systemctl status prometheus
 </code></pre>]]></content>
-            
-                 
-                    
-                 
-                    
-                 
-                    
-                
-            
-        </entry>
-    
-        
-        <entry>
-            <title type="html"><![CDATA[]]></title>
-            <link href="https://devopstales.github.io/home/azure-devops-basics/?utm_source=atom_feed" rel="alternate" type="text/html" />
-            
-            
-                <id>https://devopstales.github.io/home/azure-devops-basics/</id>
-            
-            
-            <published>0001-01-01T00:00:00+00:00</published>
-            <updated>0001-01-01T00:00:00+00:00</updated>
-            
-            
-            <content type="html"><![CDATA[<pre><code>Azure DevOps
-Azure Pipelines
-</code></pre>
-<p>Azure DevOps Microsoft&rsquo;s Cloud based software development life cycle management platform. This platform offers solution for all the management of a development team. A typical development team is consists of software developmers, testers, DevOps engineers, and architects. Azure DevOps provides the fallowing components for your development team:</p>
-<ul>
-<li>Azure Bords for ticket management</li>
-<li>Azure Repositories for source code version control</li>
-<li>Azure Pipeline for continuous integration</li>
-<li>Azure Testing for test authorization</li>
-<li>Azure Artifact for artifact storage</li>
-</ul>
-<p>To use Azure DevOps first, you need to sign up at <a href="https://dev.azure.com">https://dev.azure.com</a></p>
-<p>azure-devops-basics-01
-azure-devops-basics-02</p>
-<h3 id="create-a-new-azure-devops-repository">Create a new Azure DevOps Repository</h3>
-<p>Azure DevOps Repository automaticle create a git repository for you with tha same name as your Azure DevOps project. You can create a new auth token/ssh key at the ui or upload your own ssh key at your profile.</p>
-<p>azure-devops-basics-03</p>
-<h3 id="building-an-azure-devops-build-pipeline">Building an Azure DevOps Build Pipeline</h3>
-<pre tabindex="0"><code>nano azure-pipelines.yaml
----
-trigger:
-- master
-
-jobs:
-- job: build
-  pool:
-    vmImage: 'Ubuntu 20.04'
-  steps:
-    - script: |
-
-</code></pre><hr>
-<ul>
-<li><a href="https://adamtheautomator.com/azure-pipelines/">https://adamtheautomator.com/azure-pipelines/</a>*</li>
-</ul>
-]]></content>
-            
-                 
-                    
-                 
-                    
-                 
-                    
-                
-            
-        </entry>
-    
-        
-        <entry>
-            <title type="html"><![CDATA[]]></title>
-            <link href="https://devopstales.github.io/home/k8s-kubeadm-as-the-new-docker-compose/?utm_source=atom_feed" rel="alternate" type="text/html" />
-            
-            
-                <id>https://devopstales.github.io/home/k8s-kubeadm-as-the-new-docker-compose/</id>
-            
-            
-            <published>0001-01-01T00:00:00+00:00</published>
-            <updated>0001-01-01T00:00:00+00:00</updated>
-            
-            
-            <content type="html"><![CDATA[<h1 id="yaml">yaml</h1>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># /etc/kubernetes/manifests/nginx.yaml</span>
----
-<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-<span style="color:#f92672">spec</span>:
-  <span style="color:#f92672">containers</span>:
-  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
-    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:1.14.2</span>
-    <span style="color:#f92672">ports</span>:
-    - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
-</code></pre></div><h2 id="install-containerd">Install containerd</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"></code></pre></div><h2 id="install-kubelet">Install kubelet</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
-
-echo <span style="color:#e6db74">&#34;deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main&#34;</span> | sudo tee /etc/apt/sources.list.d/kubernetes.list
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">apt update
-apt install -y kubelet<span style="color:#f92672">=</span>1.23*
-</code></pre></div>]]></content>
             
                  
                     
