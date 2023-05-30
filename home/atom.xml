@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-05-30T09:00:33+00:00</updated>
+    <updated>2023-05-30T16:47:57+00:00</updated>
     
     
     <author>
@@ -17,6 +17,155 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes CephFS volume with CSI driver]]></title>
+            <link href="https://devopstales.github.io/home/k8s-cephfs-storage-with-csi-driver/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-cephfs-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes CephFS volume with CSI driver" />
+                <link href="https://devopstales.github.io/home/k8s-ceph-csi-extand/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes volume expansion with Ceph RBD CSI driver" />
+                <link href="https://devopstales.github.io/home/ceph_backup_benji/?utm_source=atom_feed" rel="related" type="text/html" title="CEPH backup with Benji" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
+            
+                <id>https://devopstales.github.io/home/k8s-cephfs-storage-with-csi-driver/</id>
+            
+            
+            <published>2023-05-30T00:00:00+00:00</published>
+            <updated>2023-05-30T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how can you use CephFS with CSI driver for persistent storage on Kubernetes.</p>
+<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
+
+
+<H3>Parst of the Kubernetes series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/ansible-k8s-install/">Install K8S with ansible</a></li>
+     <li>Part1b: <a href="../../kubernetes/k8s-install/">Install K8S with kubeadm</a></li>
+     <li>Part1c: <a href="../../kubernetes/k8s-install-containerd/">Install K8S with containerd and kubeadm</a></li>
+     <li>Part1d: <a href="../../kubernetes/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb/">Intall metal-lb with K8S</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-nginx-ingress/">Install Nginx ingress to K8S</a></li>
+<!--      <li>Part3b: k8s-multiple-nginx-ingress -->
+<!--      <li>Part3c: k8s-contour-ingress -->
+     <li>Part4: <a href="../../kubernetes/k8s-cert-manager/">Install cert-manager to K8S</a></li>
+<!-- local folder (+ autoprovisioning ) -->
+     <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+     <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+     <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... -->
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+<!-- istio-install.md -->
+     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+<!-- TICSK stack monitoring -->
+<!-- grafana loki -->
+<!-- logs to graylog -->
+</ul>
+
+
+
+<p>The Container Storage Interface (CSI) is a standard for exposing arbitrary block and file storage storage systems to Kubernetes. Using CSI third-party storage providers can write and deploy plugins exposing storage systems in Kubernetes. Before we begin lets ensure that we have the following requirements:</p>
+<ul>
+<li>Kubernetes cluster v1.14+</li>
+<li>allow-privileged flag enabled for both kubelet and API server</li>
+<li>Running Ceph cluster</li>
+<li>Created CephFS</li>
+</ul>
+<p>First we need to create a namespace for the storage provider:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create ns ceph-csi-cephfs
+kubens ceph-csi-cephfs
+</code></pre></div><p>Login to the CEPH cluster and get the configurations:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph config generate-minimal-conf &gt; ceph-minimal.conf
+
+cat ceph-minimal.conf
+<span style="color:#75715e"># minimal ceph.conf for e285a458-7c95-4187-8129-fbd6c370c537</span>
+<span style="color:#f92672">[</span>global<span style="color:#f92672">]</span>
+    fsid <span style="color:#f92672">=</span> 8cd464bc-1cfb-4ae8-ab49-b24edc6e7c20
+    mon_host <span style="color:#f92672">=</span> <span style="color:#f92672">[</span>v2:192.168.10.11:3300/0,v1:192.168.10.11:6789/0<span style="color:#f92672">]</span> <span style="color:#f92672">[</span>v2:192.168.10.12:3300/0,v1:192.168.10.12:6789/0<span style="color:#f92672">]</span> <span style="color:#f92672">[</span>v2:192.168.10.13:3300/0,v1:192.168.10.13:6789/0<span style="color:#f92672">]</span>
+
+ceph auth get-key client.admin
+QVFDWDNuVmtNV3NvSlJBQUFvazIxMCszZXFxNmF6SmpT5WJjaUE9PQ<span style="color:#f92672">==</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add ceph-csi https://ceph.github.io/csi-charts
+helm show values ceph-csi/ceph-csi-cephfs &gt; defaultValues.yaml
+</code></pre></div><p>Crate helm values file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano values.yaml</span>
+---
+<span style="color:#f92672">csiConfig</span>:
+  - <span style="color:#f92672">clusterID</span>: <span style="color:#ae81ff">k8s-cephfs</span>
+    <span style="color:#f92672">monitors</span>:
+      - <span style="color:#ae81ff">192.168.10.11</span>:<span style="color:#ae81ff">6789</span>
+      - <span style="color:#ae81ff">192.168.10.12</span>:<span style="color:#ae81ff">6789</span>
+      - <span style="color:#ae81ff">192.168.10.13</span>:<span style="color:#ae81ff">6789</span>
+    <span style="color:#f92672">cephFS</span>:
+      <span style="color:#f92672">subvolumeGroup</span>: <span style="color:#e6db74">&#34;csi&#34;</span>
+
+<span style="color:#f92672">secret</span>:
+  <span style="color:#f92672">adminID</span>: <span style="color:#ae81ff">admin</span>
+  <span style="color:#f92672">adminKey</span>: <span style="color:#ae81ff">QVFDWDNuVmtNV3NvSlJBQUFvazIxMCszZXFxNmF6SmpT5WJjaUE9PQ==</span>
+  <span style="color:#f92672">create</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#f92672">storageClass</span>:
+  <span style="color:#f92672">create</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">csi-cephfs-sc</span>
+  <span style="color:#f92672">clusterID</span>: <span style="color:#ae81ff">k8s-cephfs</span>
+  <span style="color:#75715e"># (required) CephFS filesystem name into which the volume shall be created</span>
+  <span style="color:#f92672">fsName</span>: <span style="color:#ae81ff">k8s-etc-nvme</span>
+  <span style="color:#f92672">reclaimPolicy</span>: <span style="color:#ae81ff">Delete</span>
+  <span style="color:#f92672">allowVolumeExpansion</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#f92672">cephconf</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">  # minimal ceph.conf for e285a458-7c95-4187-8129-fbd6c370c537
+</span><span style="color:#e6db74">  [global]
+</span><span style="color:#e6db74">      fsid = 8cd464bc-1cfb-4ae8-ab49-b24edc6e7c20
+</span><span style="color:#e6db74">      mon_host = [v2:192.168.10.11:3300/0,v1:192.168.10.11:6789/0] [v2:192.168.10.12:3300/0,v1:192.168.10.12:6789/0] [v2:192.168.10.13:3300/0,v1:192.168.10.13:6789/0]</span>  
+</code></pre></div><p>Deploy helm chart:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm upgrade --install ceph-csi-cephfs ceph-csi/ceph-csi-cephfs --values ./values.yaml
+</code></pre></div><h3 id="demo-time">Demo time</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano pvc.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PersistentVolumeClaim</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">csi-cephfs-pvc</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">accessModes</span>:
+    - <span style="color:#ae81ff">ReadWriteMany</span>
+  <span style="color:#f92672">resources</span>:
+    <span style="color:#f92672">requests</span>:
+      <span style="color:#f92672">storage</span>: <span style="color:#ae81ff">1Gi</span>
+  <span style="color:#f92672">storageClassName</span>: <span style="color:#ae81ff">csi-cephfs-sc</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f pvc.yaml
+
+
+kubectl get pvc
+NAME             STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS    AGE
+csi-cephfs-pvc   Bound    pvc-51526639-6fef-4abd-b453-c2b03c08781f   1Gi        RWX            csi-cephfs-sc   31m
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -2048,8 +2197,8 @@ notAfter<span style="color:#f92672">=</span>Aug <span style="color:#ae81ff">29</
             
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
             
                 <id>https://devopstales.github.io/home/openshift4-buildconfig/</id>
@@ -37960,7 +38109,7 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
             <updated>2019-10-08T00:00:00+00:00</updated>
             
             
-            <content type="html"><![CDATA[<p>In this post I will show you how can you use CEPH RBD with CSI driver for persistent storagi on Kubernetes.</p>
+            <content type="html"><![CDATA[<p>In this post I will show you how can you use CEPH RBD with CSI driver for persistent storage on Kubernetes.</p>
 <h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
 
 
@@ -38003,7 +38152,7 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
 
 
 
-<p>The Container Storage Interface (CSI) is a standard for exposing arbitrary block and file storage storage systems to Kubernetes. Using CSI third-party storage providers can write and deploy plugins exposing storage systems in Kubernetes. Bbefore we begin lets ensure that we have the following requirements:</p>
+<p>The Container Storage Interface (CSI) is a standard for exposing arbitrary block and file storage storage systems to Kubernetes. Using CSI third-party storage providers can write and deploy plugins exposing storage systems in Kubernetes. Before we begin lets ensure that we have the following requirements:</p>
 <ul>
 <li>Kubernetes cluster v1.14+</li>
 <li>allow-privileged flag enabled for both kubelet and API server</li>
