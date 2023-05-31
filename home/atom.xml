@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-05-30T16:47:57+00:00</updated>
+    <updated>2023-05-31T11:42:48+00:00</updated>
     
     
     <author>
@@ -17,6 +17,142 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to Migrate Persistent Volumes on Kubernetes Easily?]]></title>
+            <link href="https://devopstales.github.io/home/k8s-migrate-pv/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-migrate-pv/?utm_source=atom_feed" rel="related" type="text/html" title="How to Migrate Persistent Volumes on Kubernetes Easily?" />
+                <link href="https://devopstales.github.io/home/k8s-cephfs-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes CephFS volume with CSI driver" />
+                <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-cephfs-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes CephFS volume with CSI driver" />
+                <link href="https://devopstales.github.io/home/k8s-ceph-csi-extand/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes volume expansion with Ceph RBD CSI driver" />
+            
+                <id>https://devopstales.github.io/home/k8s-migrate-pv/</id>
+            
+            
+            <published>2023-05-31T00:00:00+00:00</published>
+            <updated>2023-05-31T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how can you use migrate your data from one PV to another.</p>
+<p>Have you faced a situation where you need to migrate your data from one PV to another. For example your your DB grew over time, and you need more space for it, but you cannot resize the PVC because it doesn&rsquo;t support volume expansion. Or you need to migrate data between StotageClasses or Clusters. I have, and find a tool called <a href="https://github.com/utkuozdemir/pv-migrate">pv-migrate</a> that supports this migrations.</p>
+<p>For the example I will migrate data between StotageClasses. I have two StotageClasses <code>cis-rbd-sc</code> and <code>csi-cephfs-sc</code> and I will migrate data from <code>cis-rbd-sc</code> to <code>cis-cephfs-sc</code>.</p>
+<h3 id="installing-pv-migrate">Installing PV-Migrate</h3>
+<p>First we need to install the <code>pv-migrate</code> tool. The easiest way is installing as a kubectl plugin by <code>krew</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl krew install pv-migrate
+
+kubectl pv-migrate --help
+</code></pre></div><p><code>pv-migrate</code> can migrate your data by tree different methods:</p>
+<ul>
+<li><em>lbsvc</em>: Load Balancer Service, this will run rsync+ssh over a Kubernetes Service type LoadBalancer. This is the method you want to use if you&rsquo;re migrating PVC from different Kubernetes clusters.</li>
+<li><em>mnt2</em>: Mounts both PVCs in a single pod and runs a regular rsync. This is only usable if source and destination PVCs are in the same namespace.</li>
+<li><em>svc</em>: Service, Runs rsync+ssh in a Kubernetes Service (ClusteRIP). Only applicable when the source and destination PVCs are in the same Kubernetes cluster.</li>
+</ul>
+<p>In my sase it will use the <code>mnt2</code> method but you didn&rsquo;t need to configure this because it automatically detect the best method.</p>
+<h3 id="how-to-migrate-persistent-volumes">How to Migrate Persistent Volumes</h3>
+<p>First you need to scale down your application that use the pvc:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl scale deployment test-app --replicas<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>
+</code></pre></div><p>Then we need to create a backup of the <code>pv</code> and <code>pvc</code> objects:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get pv test-app-pv -o yaml &gt; test-app-pv.yaml
+
+<span style="color:#75715e"># then find the pv belong to it and backup that too:</span>
+
+kg pv pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6 -o yaml &gt; pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6.yaml
+</code></pre></div><p>Now we can edit the existing pvc to change the storage class:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cp test-app-pv.yaml test-app-pv_new.yaml
+</code></pre></div><p>Remove the unnecessary parts and change the storage class.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano test-app-pv_new.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PersistentVolumeClaim</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">test-app-pv</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-app-pv_new</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">pv-test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">accessModes</span>:
+  - <span style="color:#ae81ff">ReadWriteOnce</span>
+  <span style="color:#f92672">resources</span>:
+    <span style="color:#f92672">requests</span>:
+      <span style="color:#f92672">storage</span>: <span style="color:#ae81ff">2Gi</span>
+  <span style="color:#f92672">storageClassName</span>: <span style="color:#ae81ff">csi-cephfs-sc</span>
+</code></pre></div><p>Apply the new <code>pvc</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f test-app-pv_new.yaml
+
+kubectl get pvc test-app-pv test-app-pv_new
+NAME              STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS    AGE
+test-app-pv       Bound    pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6   2Gi        RWO            csi-rbd-sc      54m
+test-app-pv_new   Bound    pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39   2Gi        RWO            csi-cephfs-sc   34m
+</code></pre></div><p>Now we can use the <code>pv-migrate</code> to copy the data:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl pv-migrate migrate <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --ignore-mounted <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  test-app-pv test-app-pv_new
+</code></pre></div><p>We will delete the <code>pvc</code>s so we need to change the reclaim policy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl patch pv pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6 -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;persistentVolumeReclaimPolicy&#34;:&#34;Retain&#34;}}&#39;</span>
+kubectl patch pv pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39 -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;persistentVolumeReclaimPolicy&#34;:&#34;Retain&#34;}}&#39;</span>
+
+kubectl get pv pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6 pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM                    STORAGECLASS    REASON AGE
+pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6   2Gi        RWO            Retain           Bound       pv-test/test-app-pv       csi-rbd-sc            54m
+pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39   2Gi        RWO            Retain           Bound       pv-test/test-app-pv_new   csi-cephfs-sc         34m
+</code></pre></div><p>Now we can delete the <code>pvc</code>s:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl delete -f test-app-pv.yaml
+kubectl delete -f test-app-pv_new.yaml
+
+kubectl get pv pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6 pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS         CLAIM                 STORAGECLASS    REASON   AGE
+pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6   2Gi        RWO            Retain           Released       pv-test/test-app-pv   csi-rbd-sc            54m
+pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39   2Gi        RWO            Retain           Released       pv-test/test-app-pv_new   csi-cephfs-sc            34m
+</code></pre></div><p>Now we need to patch path the <code>pv</code>s to reuse:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl patch pv pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6 -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;claimRef&#34;: null}}&#39;</span>
+kubectl patch pv pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39 -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;claimRef&#34;: null}}&#39;</span>
+
+kubectl get pv pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6 pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS      REASON   AGE
+pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6   2Gi        RWO            Retain           Available           csi-rbd-sc                 59d
+pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39   2Gi        RWO            Retain           Available           csi-cephfs-sc              39d
+</code></pre></div><p>Create the new <code>test-app-pv</code> with bound to <code>pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano test-app-pv_mod.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PersistentVolumeClaim</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">test-app-pv</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-app-pv</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">pv-test</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">accessModes</span>:
+  - <span style="color:#ae81ff">ReadWriteOnce</span>
+  <span style="color:#f92672">resources</span>:
+    <span style="color:#f92672">requests</span>:
+      <span style="color:#f92672">storage</span>: <span style="color:#ae81ff">2Gi</span>
+  <span style="color:#f92672">storageClassName</span>: <span style="color:#ae81ff">csi-cephfs-sc</span>
+  <span style="color:#f92672">volumeMode</span>: <span style="color:#ae81ff">Filesystem</span>
+  <span style="color:#f92672">volumeName</span>: <span style="color:#ae81ff">pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f test-app-pv_mod.yaml
+
+kubectl get pvc test-app-pv
+NAME              STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS    AGE
+test-app-pv       Bound    pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39   2Gi        RWO            csi-cephfs-sc   54m
+
+kubectl get pv pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM                    STORAGECLASS    REASON AGE
+pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39   2Gi        RWO            Retain           Bound       pv-test/test-app-pv   csi-cephfs-sc         34m
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -37,9 +173,6 @@
             
             
             <content type="html"><![CDATA[<p>In this post I will show you how can you use CephFS with CSI driver for persistent storage on Kubernetes.</p>
-<h3 id="parst-of-the-kubernetes-series">Parst of the Kubernetes series</h3>
-
-
 <H3>Parst of the Kubernetes series</H3>
 <ul>
      <li>Part1a: <a href="../../kubernetes/ansible-k8s-install/">Install K8S with ansible</a></li>
@@ -56,8 +189,9 @@
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -71,9 +205,11 @@
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -4850,8 +4986,9 @@ cat /proc/57277/uid_map
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -4865,9 +5002,11 @@ cat /proc/57277/uid_map
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -8779,8 +8918,9 @@ KUBELET_KUBEADM_ARGS<span style="color:#f92672">=</span><span style="color:#e6db
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -8794,9 +8934,11 @@ KUBELET_KUBEADM_ARGS<span style="color:#f92672">=</span><span style="color:#e6db
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -16550,8 +16692,9 @@ lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#a
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -16565,9 +16708,11 @@ lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#a
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -21932,8 +22077,9 @@ git push origin gh-pages
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -21947,9 +22093,11 @@ git push origin gh-pages
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -30623,8 +30771,9 @@ var config = {
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -30638,9 +30787,11 @@ var config = {
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -30870,8 +31021,9 @@ kubectl aplay -f vmware-sc.yml
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -30885,9 +31037,11 @@ kubectl aplay -f vmware-sc.yml
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -30994,8 +31148,9 @@ calicoctl patch felixconfiguration default --patch='{&quot;spec&quot;: {&quot;bp
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -31009,9 +31164,11 @@ calicoctl patch felixconfiguration default --patch='{&quot;spec&quot;: {&quot;bp
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -31762,8 +31919,9 @@ curl -sfL https://get.k3s.io | sh -
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -31777,9 +31935,11 @@ curl -sfL https://get.k3s.io | sh -
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -32079,8 +32239,9 @@ systemctl restart NetworkManager
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -32094,9 +32255,11 @@ systemctl restart NetworkManager
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -32809,8 +32972,9 @@ oc get csr -o name | xargs oc adm certificate approve
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -32824,9 +32988,11 @@ oc get csr -o name | xargs oc adm certificate approve
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -33337,8 +33503,9 @@ knife client list
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -33352,9 +33519,11 @@ knife client list
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -34950,8 +35119,9 @@ sudo -u postgres psql -x -c &quot;select * from pg_stat_replication&quot;
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -34965,9 +35135,11 @@ sudo -u postgres psql -x -c &quot;select * from pg_stat_replication&quot;
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -35110,8 +35282,9 @@ echo 8 &gt; /sys/module/zfs/parameters/zfs_vdev_async_write_min_active
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -35125,9 +35298,11 @@ echo 8 &gt; /sys/module/zfs/parameters/zfs_vdev_async_write_min_active
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -35264,8 +35439,9 @@ testpvc   Bound     pvc-145c785e-ab83-11e7-9432-4201ac1fd019   50Gi       RWX   
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -35279,9 +35455,11 @@ testpvc   Bound     pvc-145c785e-ab83-11e7-9432-4201ac1fd019   50Gi       RWX   
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -35446,8 +35624,9 @@ helm upgrade --install kuberos devopstales/kuberos --namespace kuberos -f values
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -35461,9 +35640,11 @@ helm upgrade --install kuberos devopstales/kuberos --namespace kuberos -f values
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -35754,8 +35935,9 @@ systemctl restart docker kubelet
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -35769,9 +35951,11 @@ systemctl restart docker kubelet
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -36008,8 +36192,9 @@ kubectl port-forward -n loki-stack service/grafana 3000:80
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -36023,9 +36208,11 @@ kubectl port-forward -n loki-stack service/grafana 3000:80
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -36198,8 +36385,9 @@ kubectl get po -n nginx-example
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -36213,9 +36401,11 @@ kubectl get po -n nginx-example
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -38129,8 +38319,9 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -38144,9 +38335,11 @@ cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -38393,8 +38586,9 @@ demo1-backup  demo-project-223110                      READY
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -38408,9 +38602,11 @@ demo1-backup  demo-project-223110                      READY
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -39064,8 +39260,9 @@ curl -XGET 'localhost:9200/_snapshot/my_backup/_all?pretty'
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -39079,9 +39276,11 @@ curl -XGET 'localhost:9200/_snapshot/my_backup/_all?pretty'
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -39268,8 +39467,9 @@ s3cmd setpolicy ./bucket-policy.json s3://devopstales
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -39283,9 +39483,11 @@ s3cmd setpolicy ./bucket-policy.json s3://devopstales
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -39355,8 +39557,9 @@ export HELM_HOST=localhost:44134
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -39370,9 +39573,11 @@ export HELM_HOST=localhost:44134
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -39931,8 +40136,9 @@ firewall-cmd --reload
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -39946,9 +40152,11 @@ firewall-cmd --reload
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -40096,8 +40304,9 @@ token:      XXXXXXXXXXXXXXXXXXXXXXXXXX
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -40111,9 +40320,11 @@ token:      XXXXXXXXXXXXXXXXXXXXXXXXXX
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
@@ -45133,8 +45344,9 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
      <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
      <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
      <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
-     <li>Part5d: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
-     <li>Part5e: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
      <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
      <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
 <!-- Kadalu (based on glustergs) -->
@@ -45148,9 +45360,11 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
      <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
      <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
 <!-- istio-install.md -->
-     <li>Part13: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
-<!-- TICSK stack monitoring -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
 <!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
 <!-- logs to graylog -->
 </ul>
 
