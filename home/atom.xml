@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-05-31T11:42:48+00:00</updated>
+    <updated>2023-06-23T12:52:38+00:00</updated>
     
     
     <author>
@@ -90,6 +90,22 @@ test-app-pv_new   Bound    pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39   2Gi       
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl pv-migrate migrate <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>  --ignore-mounted <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>  test-app-pv test-app-pv_new
+🚀  Starting migration
+💡  PVC grafana-two is mounted to node minikube, ignoring...
+💡  PVC grafana is mounted to node minikube, ignoring...
+💭  Will attempt <span style="color:#ae81ff">3</span> strategies: mnt2,svc,lbsvc
+🚁  Attempting strategy: mnt2
+🔑  Generating SSH key pair
+🔑  Creating secret <span style="color:#66d9ef">for</span> the public key
+🚀  Creating sshd pod
+⏳  Waiting <span style="color:#66d9ef">for</span> the sshd pod to start running
+🚀  Sshd pod started
+🔑  Creating secret <span style="color:#66d9ef">for</span> the private key
+🔗  Connecting to the rsync server
+📂  Copying data... 100% |█████████████████████████████████████████████████████████████████████████| <span style="color:#f92672">()</span>
+🧹  Cleaning up
+✨  Cleanup successful
+✅  Migration succeeded
 </code></pre></div><p>We will delete the <code>pvc</code>s so we need to change the reclaim policy:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl patch pv pvc-4dce1b52-818e-4e3e-b968-c2fe4e9de7d6 -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;persistentVolumeReclaimPolicy&#34;:&#34;Retain&#34;}}&#39;</span>
 kubectl patch pv pvc-2aef0615-5e1e-4f66-a14d-cdda326bff39 -p <span style="color:#e6db74">&#39;{&#34;spec&#34;:{&#34;persistentVolumeReclaimPolicy&#34;:&#34;Retain&#34;}}&#39;</span>
@@ -1482,7 +1498,7 @@ cat <span style="color:#e6db74">&lt;&lt;EOF &gt; ~/.config/systemd/user/ssh-agen
 <ul>
 <li>Ppen KeepassXC and go to <strong>Tools &gt; Settings</strong>. In the settings window click on <strong>SSH Agent</strong>, and then tick the checkbox that says <strong>Enable SSH Agent</strong>.</li>
 </ul>
-<p>KeepassXC-SSH-agent.png</p>
+<p><img src="/img/include/KeepassXC-SSH-agent.png" alt="KeepassXC-Add-entry"  class="zoomable" /></p>
 <p>Now we need to add the ssh key to keepassxc:</p>
 <p><img src="/img/include/KeepassXC-Add-entry.png" alt="KeepassXC-Add-entry"  class="zoomable" /></p>
 <p>If you have a password protected key add the password to keepassxc without a username.</p>
@@ -1860,7 +1876,7 @@ helm upgrade --install akv2k8s <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
@@ -20759,26 +20775,19 @@ https://github.com/weaveworks/kured
 </code></pre></div><p>If you find one of this flags everything is ok. Now we need to enable the kvm kernel module.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo modprobe kvm-intel
 </code></pre></div><h3 id="install-kata-container-engine">Install Kata container engine</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | sudo -E tee /etc/yum.repos.d/kata-containers.repo
+<p>I use Almalinux 8 for this install:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo -E dnf install -y centos-release-advanced-virtualization
+sudo -E dnf module disable -y virt:rhel
+
+cat <span style="color:#e6db74">&lt;&lt;EOF | sudo -E tee /etc/yum.repos.d/kata-containers.repo
 </span><span style="color:#e6db74">[kata-containers]
 </span><span style="color:#e6db74">name=Kata Containers
-</span><span style="color:#e6db74">baseurl=http://mirror.centos.org/centos/$releasever/virt/$basearch/kata-containers
+</span><span style="color:#e6db74">baseurl=http://mirror.centos.org/centos-8/8/virt/x86_64/kata-containers
 </span><span style="color:#e6db74">enabled=1
-</span><span style="color:#e6db74">gpgcheck=0
+</span><span style="color:#e6db74">gpgcheck=1
 </span><span style="color:#e6db74">skip_if_unavailable=1
 </span><span style="color:#e6db74">EOF</span>
 
-cat <span style="color:#e6db74">&lt;&lt;EOF | sudo -E tee /etc/yum.repos.d/advanced-virtualization.repo
-</span><span style="color:#e6db74">[advanced-virtualization]  
-</span><span style="color:#e6db74">name=Advanced Virtualization from CentOS $releasever
-</span><span style="color:#e6db74">baseurl=http://mirror.centos.org/centos/$releasever/virt/$basearch/advanced-virtualization
-</span><span style="color:#e6db74">enabled=1
-</span><span style="color:#e6db74">gpgcheck=0
-</span><span style="color:#e6db74">skip_if_unavailable=1
-</span><span style="color:#e6db74">EOF</span>
-
-sudo dnf install epel-release nano wget
-sudo dnf module disable virt
 sudo -E dnf install -y kata-containers
 </code></pre></div><h3 id="install-and-configure-containerd">Install and configure containerd</h3>
 <p>First I install containerd then I add Kata container as a containerd plugin to the config.</p>
