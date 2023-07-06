@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-06-23T12:52:38+00:00</updated>
+    <updated>2023-07-06T13:29:56+00:00</updated>
     
     
     <author>
@@ -17,6 +17,179 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[OKD OpenShift 4 Monitoring]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-monitoring/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/openshift4-monitoring/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4 Monitoring" />
+                <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
+                <link href="https://devopstales.github.io/home/openshift4-ceph-rbd-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 Ceph Persisten Storage" />
+                <link href="https://devopstales.github.io/home/openshift4-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 authentication" />
+                <link href="https://devopstales.github.io/home/openshift4-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 ingress" />
+            
+                <id>https://devopstales.github.io/home/openshift4-monitoring/</id>
+            
+            
+            <published>2023-06-14T00:00:00+00:00</published>
+            <updated>2023-06-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you can use the enbeddid Prometheus monitoring system in OpenShift 4 to monitor your workload applications.</p>
+<H3>Parst of the Openshift 4 series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/openshift4-install/">Install Opeshift 4</a></li>
+     <li>Part1b: <a href="../../kubernetes/openshift4-calico/">Install Opeshift 4 with calico</a></li>
+     <li>Part1c: <a href="../../kubernetes/openshift4-cilium/">Install Opeshift 4 with cilium</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift4-ingress/">Configure OKD OpenShift 4 ingress</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift4-auth/">Configure OKD OpenShift 4 authentication</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift4-ceph-rbd-csi/">Configure OKD OpenShift 4 Ceph Persisten Storage</a></li>
+     <li>Part5: <a href="../../kubernetes/openshift4-registry/">Configuringure OKD OpenShift 4 registry for bare metal</a></li>
+     <li>Part6a: <a href="../../kubernetes/openshift4-logging/">Install Cluster Logging Operator on OpenShift 4</a></li>
+     <li>Part6b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+     <li>Part7: <a href="../../kubernetes/openshift4-buildconfig/">Understand OKD OpenShift 4 Buildconfig Configurations</a></li>
+     <li>Part8: <a href="../../kubernetes/openshift4-tekton/">Install RadHat OpenShift pipelines (Tekton) OKD 4</a></li>
+</ul>
+
+
+
+<h3 id="create-demo-app-to-monitor">Create Demo app to monitor</h3>
+<p>First I installed a wordpress by helmfile to use as an app to monitor.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc new-project monitoring-test
+
+oc project monitoring-test
+</code></pre></div><p>Deploy test app</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano wordpress-helmfile.yaml</span>
+---
+<span style="color:#f92672">helmDefaults</span>:
+  <span style="color:#f92672">createNamespace</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">repositories</span>:
+- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">bitnami</span>
+  <span style="color:#f92672">url</span>: <span style="color:#ae81ff">https://charts.bitnami.com/bitnami</span>
+
+<span style="color:#f92672">releases</span>:
+- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">wordpress-test</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">monitoring-test</span>
+  <span style="color:#f92672">chart</span>: <span style="color:#ae81ff">bitnami/wordpress</span>
+  <span style="color:#f92672">set</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mariadb.primary.containerSecurityContext.enabled</span>
+    <span style="color:#f92672">value</span>: <span style="color:#66d9ef">false</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mariadb.primary.podSecurityContext.enabled</span>
+    <span style="color:#f92672">value</span>: <span style="color:#66d9ef">false</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mariadb.auth.rootPassword</span>
+    <span style="color:#f92672">value</span>: <span style="color:#ae81ff">wordpress-test</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mariadb.primary.persistence.enabled</span>
+    <span style="color:#f92672">value</span>: <span style="color:#66d9ef">true</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mariadb.primary.persistence.size</span>
+    <span style="color:#f92672">value</span>: <span style="color:#ae81ff">20Gi</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">wordpressPassword</span>
+    <span style="color:#f92672">value</span>: <span style="color:#ae81ff">wordpress-test</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">persistence.enabled</span>
+    <span style="color:#f92672">value</span>: <span style="color:#66d9ef">false</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">containerSecurityContext.enabled</span>
+    <span style="color:#f92672">value</span>: <span style="color:#66d9ef">false</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">podSecurityContext.enabled</span>
+    <span style="color:#f92672">value</span>: <span style="color:#66d9ef">false</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helmfile apply -f wordpress-helmfile.yaml
+</code></pre></div><h3 id="enable-user-namespace-monitoring">Enable user namespace monitoring</h3>
+<p>By default the enbeddid prometheus only monitor the cluster components. To monitor applications in user namespace you need to enable the user namespace monitoring.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc apply -f - <span style="color:#e6db74">&lt;&lt;EOF
+</span><span style="color:#e6db74">apiVersion: v1
+</span><span style="color:#e6db74">kind: ConfigMap
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: cluster-monitoring-config
+</span><span style="color:#e6db74">  namespace: openshift-monitoring
+</span><span style="color:#e6db74">data:
+</span><span style="color:#e6db74">  config.yaml: |
+</span><span style="color:#e6db74">    enableUserWorkload: true
+</span><span style="color:#e6db74">    alertmanagerMain:
+</span><span style="color:#e6db74">      enableUserAlertmanagerConfig: true
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><p>This will create a separate prometheus stack for user namespace monitoring. List user namespace monitor status:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc get pods -n openshift-user-workload-monitoring
+NAME                                  READY   STATUS    RESTARTS   AGE
+prometheus-operator-7c55995fb-zsjxk   2/2     Running   <span style="color:#ae81ff">0</span>          4m
+prometheus-user-workload-0            6/6     Running   <span style="color:#ae81ff">0</span>          4m
+prometheus-user-workload-1            6/6     Running   <span style="color:#ae81ff">0</span>          4m
+thanos-ruler-user-workload-0          3/3     Running   <span style="color:#ae81ff">0</span>          4m
+thanos-ruler-user-workload-1          3/3     Running   <span style="color:#ae81ff">0</span>          4m
+</code></pre></div><p>Now we can create alert routing to send emails about the alerts.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc apply -f - <span style="color:#e6db74">&lt;&lt;EOF
+</span><span style="color:#e6db74">apiVersion: monitoring.coreos.com/v1beta1
+</span><span style="color:#e6db74">kind: AlertmanagerConfig
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: pod-num-alert
+</span><span style="color:#e6db74">  namespace: monitoring-test
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  receivers:
+</span><span style="color:#e6db74">    - name: default
+</span><span style="color:#e6db74">    - name: email_alert
+</span><span style="color:#e6db74">      emailConfigs:
+</span><span style="color:#e6db74">      - to: devopstales@
+</span><span style="color:#e6db74">        from: prometheus@mydomain.intra
+</span><span style="color:#e6db74">        smarthost: mail.mydomain.intra:25
+</span><span style="color:#e6db74">        requireTLS: false
+</span><span style="color:#e6db74">        sendResolved: true
+</span><span style="color:#e6db74">  route:
+</span><span style="color:#e6db74">    receiver: email_alert
+</span><span style="color:#e6db74">    groupInterval: 5m
+</span><span style="color:#e6db74">    groupWait: 30s
+</span><span style="color:#e6db74">    repeatInterval: 10m
+</span><span style="color:#e6db74">    groupBy:
+</span><span style="color:#e6db74">      - namespace
+</span><span style="color:#e6db74">    routes:
+</span><span style="color:#e6db74">      - match:
+</span><span style="color:#e6db74">          severity: wordpress
+</span><span style="color:#e6db74">        receiver: email_alert
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><p>Create test alert:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">oc apply -f - <span style="color:#e6db74">&lt;&lt;EOF
+</span><span style="color:#e6db74">apiVersion: monitoring.coreos.com/v1
+</span><span style="color:#e6db74">kind: PrometheusRule
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: pod-num-alert
+</span><span style="color:#e6db74">  namespace: monitoring-test
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  groups:
+</span><span style="color:#e6db74">  - name: monitoring-test
+</span><span style="color:#e6db74">    rules:
+</span><span style="color:#e6db74">    - alert: RunningPodNumAlert
+</span><span style="color:#e6db74">      expr: sum(kube_pod_status_ready{namespace=&#34;monitoring-test&#34;}) != 3
+</span><span style="color:#e6db74">      for: 5m
+</span><span style="color:#e6db74">      labels:
+</span><span style="color:#e6db74">        namespace: monitoring-test
+</span><span style="color:#e6db74">        severity: wordpress
+</span><span style="color:#e6db74">---
+</span><span style="color:#e6db74">apiVersion: monitoring.coreos.com/v1
+</span><span style="color:#e6db74">kind: PrometheusRule
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: pod-memory-alert
+</span><span style="color:#e6db74">  namespace: monitoring-test
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  groups:
+</span><span style="color:#e6db74">  - name: monitoring-test
+</span><span style="color:#e6db74">    rules:
+</span><span style="color:#e6db74">    - alert: RunningPodMemoryAlert
+</span><span style="color:#e6db74">      expr: ((( sum(container_memory_working_set_bytes{image!=&#34;&#34;,container!=&#34;POD&#34;, namespace=&#34;monitoring-test&#34;}) by (namespace,container,pod)))) / 1000000 &gt; 90
+</span><span style="color:#e6db74">      for: 5m
+</span><span style="color:#e6db74">      labels:
+</span><span style="color:#e6db74">        namespace: monitoring-test
+</span><span style="color:#e6db74">        severity: wordpress
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -1876,7 +2049,7 @@ helm upgrade --install akv2k8s <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
