@@ -29,7 +29,7 @@
     "datePublished": "2019-06-14",
     "dateModified" : "2019-06-14",
     "url" : "https://devopstales.github.io/home/proxmox-ceph-radosgw/",
-    "wordCount" : "386",
+    "wordCount" : "541",
     "keywords" : [ "kubernetes", "openshift", "devops", "Blog" ]
     
 }
@@ -199,46 +199,66 @@ if (!doNotTrack) {
 		<div class="content post__content clearfix">
 			<p>RADOS Gateway  is an object storage interface in Ceph. It provides interfaces compatible with OpenStack Swift and Amazon S3.</p>
 <p>First create a keyring than generated the keys and added them to the keyring:</p>
-<pre tabindex="0"><code>root@pve1:~# ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.keyring
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.keyring
 
 root@pve1:~# ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.pve1 --gen-key
 root@pve1:~# ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.pve2 --gen-key
 root@pve1:~# ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.pve3 --gen-key
-</code></pre><p>And then I added the proper capabilities and add the keys to the cluster:</p>
-<pre tabindex="0"><code>root@pve1:~# ceph-authtool -n client.radosgw.pve1 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
-root@pve1:~# ceph-authtool -n client.radosgw.pve2 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
-root@pve1:~# ceph-authtool -n client.radosgw.pve3 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
-
-root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve1 -i /etc/ceph/ceph.client.radosgw.keyring
+</code></pre></div><p>And then I added the proper capabilities and add the keys to the cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph-authtool -n client.radosgw.pve1 --cap osd <span style="color:#e6db74">&#39;allow rwx&#39;</span> --cap mon <span style="color:#e6db74">&#39;allow rwx&#39;</span> /etc/ceph/ceph.client.radosgw.keyring
+root@pve1:~# ceph-authtool -n client.radosgw.pve2 --cap osd <span style="color:#e6db74">&#39;allow rwx&#39;</span> --cap mon <span style="color:#e6db74">&#39;allow rwx&#39;</span> /etc/ceph/ceph.client.radosgw.keyring
+root@pve1:~# ceph-authtool -n client.radosgw.pve3 --cap osd <span style="color:#e6db74">&#39;allow rwx&#39;</span> --cap mon <span style="color:#e6db74">&#39;allow rwx&#39;</span> /etc/ceph/ceph.client.radosgw.keyring
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve2:/etc/ceph/
+scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve3:/etc/ceph/
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve1 -i /etc/ceph/ceph.client.radosgw.keyring
 root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve2 -i /etc/ceph/ceph.client.radosgw.keyring
 root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve3 -i /etc/ceph/ceph.client.radosgw.keyring
-</code></pre><p>Copy the rings to the proxmox ClusterFS</p>
-<pre tabindex="0"><code>root@pve1:~# cp /etc/ceph/ceph.client.radosgw.keyring /etc/pve/priv
-</code></pre><p>Add the following lines to <code>/etc/ceph/ceph.conf</code>:</p>
-<pre tabindex="0"><code>[client.radosgw.pve1]
-        host = pve1
-        keyring = /etc/pve/priv/ceph.client.radosgw.keyring
-        log file = /var/log/ceph/client.radosgw.$host.log
-        rgw_dns_name = s3.devopstales.intra
+</code></pre></div><p>If you get the fallofing error: <code>handle_auth_bad_method server allowed_methods [2] but i only support [2]</code></p>
+<p>You Have a problem with your <code>/etc/ceph/ceph.client.admin.keyring</code> file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo ceph --cluster ceph auth get-key client.admin
+AQDxnppkhI2ZOBAAJ1VFYV6FvRi8vZyuUYzwZQ<span style="color:#f92672">==</span>
 
-[client.radosgw.pve2]
-        host = pve2
-        keyring = /etc/pve/priv/ceph.client.radosgw.keyring
-        log file = /var/log/ceph/client.radosgw.$host.log
-        rgw_dns_name = s3.devopstales.intra
+nano /etc/ceph/ceph.client.admin.keyring
+<span style="color:#f92672">[</span>client.admin<span style="color:#f92672">]</span>
+	key <span style="color:#f92672">=</span> AQDxnppkhI2ZOBAAJ1VFYV6FvRi8vZyuUYzwZQ<span style="color:#f92672">==</span>
+	caps mds <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+	caps mgr <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+	caps mon <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+	caps osd <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+</code></pre></div><p>Copy to the other nodes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve2:/etc/ceph/
+scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve3:/etc/ceph/
+</code></pre></div><p>Copy the rings to the proxmox ClusterFS</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# cp /etc/ceph/ceph.client.radosgw.keyring /etc/pve/priv
+</code></pre></div><p>Add the following lines to <code>/etc/ceph/ceph.conf</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>client.radosgw.pve1<span style="color:#f92672">]</span>
+        host <span style="color:#f92672">=</span> pve1
+        keyring <span style="color:#f92672">=</span> /etc/pve/priv/ceph.client.radosgw.keyring
+        log file <span style="color:#f92672">=</span> /var/log/ceph/client.radosgw.$host.log
+        rgw_dns_name <span style="color:#f92672">=</span> s3.devopstales.intra
+        rgw_frontends <span style="color:#f92672">=</span> civetweb port<span style="color:#f92672">=</span>10.83.110.1:7480
 
-[client.radosgw.pve3]
-        host = pve3
-        keyring = /etc/pve/priv/ceph.client.radosgw.keyring
-        log file = /var/log/ceph/client.rados.$host.log
-        rgw_dns_name = s3.devopstales.intra
-</code></pre><p>Install the pcakages and start the service. If all goes well, RADOSGW will create some default pools for you.</p>
-<pre tabindex="0"><code>root@pve1:~# apt install radosgw
+<span style="color:#f92672">[</span>client.radosgw.pve2<span style="color:#f92672">]</span>
+        host <span style="color:#f92672">=</span> pve2
+        keyring <span style="color:#f92672">=</span> /etc/pve/priv/ceph.client.radosgw.keyring
+        log file <span style="color:#f92672">=</span> /var/log/ceph/client.radosgw.$host.log
+        rgw_dns_name <span style="color:#f92672">=</span> s3.devopstales.intra
+        rgw_frontends <span style="color:#f92672">=</span> civetweb port<span style="color:#f92672">=</span>10.83.110.2:7480
+
+<span style="color:#f92672">[</span>client.radosgw.pve3<span style="color:#f92672">]</span>
+        host <span style="color:#f92672">=</span> pve3
+        keyring <span style="color:#f92672">=</span> /etc/pve/priv/ceph.client.radosgw.keyring
+        log file <span style="color:#f92672">=</span> /var/log/ceph/client.rados.$host.log
+        rgw_dns_name <span style="color:#f92672">=</span> s3.devopstales.intra
+        rgw_frontends <span style="color:#f92672">=</span> civetweb port<span style="color:#f92672">=</span>10.83.110.3:7480
+</code></pre></div><p>Install the pcakages and start the service. If all goes well, RADOSGW will create some default pools for you.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# apt install radosgw
 root@pve1:~# service radosgw start
 
 root@pve1:~# tail -f /var/log/ceph/client.rados.pve1.log
-</code></pre><pre tabindex="0"><code>root@pve1:~# ceph osd pool application enable .rgw.root rgw
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph osd pool application enable .rgw.root rgw
 root@pve1:~# ceph osd pool application enable default.rgw.control rgw
+
 root@pve1:~# ceph osd pool application enable default.rgw.data.root rgw
 root@pve1:~# ceph osd pool application enable default.rgw.gc rgw
 root@pve1:~# ceph osd pool application enable default.rgw.log rgw
@@ -248,23 +268,34 @@ root@pve1:~# ceph osd pool application enable default.rgw.users.keys rgw
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.index rgw
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.data rgw
 root@pve1:~# ceph osd pool application enable default.rgw.lc rgw
-</code></pre><pre tabindex="0"><code>root@pve1:~#  ssh pve2 'apt install radosgw &amp;&amp; service radosgw start'
-root@pve1:~#  ssh pve3 'apt install radosgw &amp;&amp; service radosgw start'
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~#  ssh pve2 <span style="color:#e6db74">&#39;apt install radosgw &amp;&amp; service radosgw start&#39;</span>
+root@pve1:~#  ssh pve3 <span style="color:#e6db74">&#39;apt install radosgw &amp;&amp; service radosgw start&#39;</span>
 
 root@pve1:~#  ceph osd pool ls
-</code></pre><pre tabindex="0"><code>root@pve1:~# radosgw-admin user create --uid=devopstales --display-name=&quot;devopstales&quot; --email=devopstales@devopstales.intra
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# radosgw-admin user create --uid<span style="color:#f92672">=</span>devopstales --display-name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devopstales&#34;</span> --email<span style="color:#f92672">=</span>devopstales@devopstales.intra
 root@pve1:~# radosgw-admin user info devopstales
 
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.index rgw
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.data rgw
-</code></pre><pre tabindex="0"><code>root@pve1:~# apt-get install s3cmd
+
+<span style="color:#75715e">#for minio cli to create bucketceph osd pool create default.rgw.buckets.data 32</span>
+ceph osd pool create default.rgw.buckets.index <span style="color:#ae81ff">8</span>
+ceph osd pool set default.rgw.buckets.index pgp_num <span style="color:#ae81ff">8</span>
+ceph osd pool set default.rgw.buckets.index size <span style="color:#ae81ff">3</span>
+ceph osd pool application enable default.rgw.buckets.index rgw
+ 
+ceph osd pool create default.rgw.buckets.data <span style="color:#ae81ff">32</span>
+ceph osd pool set default.rgw.buckets.data pgp_num <span style="color:#ae81ff">32</span>
+ceph osd pool set default.rgw.buckets.data size <span style="color:#ae81ff">3</span>
+ceph osd pool application enable default.rgw.buckets.data rgw
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# apt-get install s3cmd
 root@pve1:~# s3cmd --configure
 Access Key: xxxxxxxxxxxxxxxxxxxxxx
 Secret Key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 root@pve1:~#  s3cmd mb s3://devopstales
-Bucket 's3://devopstales/' created
-</code></pre>
+Bucket <span style="color:#e6db74">&#39;s3://devopstales/&#39;</span> created
+</code></pre></div>
 		</div>
 	</article>
 </main>
@@ -415,6 +446,7 @@ Bucket 's3://devopstales/' created
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/wazuh-siem/">Install Wazuh SIEM</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/debug-couldnt-get-resource-list/">Troubleshooting Kubernetes: API error at resource listing</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-monitoring/">OKD OpenShift 4 Monitoring</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-migrate-pv/">How to Migrate Persistent Volumes on Kubernetes Easily?</a></li>
@@ -424,7 +456,6 @@ Bucket 's3://devopstales/' created
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-reload-network/">Proxmox reload ifupdown2 network config from cli</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/azure-terraform/">Create VM in Azure with Terraform</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-terraform/">Create Proxmox VM with Terraform</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-pod-locations/">Influencing Kubernetes Scheduler Decisions</a></li>
 		</ul>
 	</div>
 </div>
@@ -560,6 +591,7 @@ Bucket 's3://devopstales/' created
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/siem/" title="SIEM">SIEM</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="sonarqube">sonarqube</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/squid/" title="squid">squid</a>
@@ -576,6 +608,7 @@ Bucket 's3://devopstales/' created
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/volume-expansion/" title="volume expansion">volume expansion</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vsphere/" title="vSphere">vSphere</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wazuh/" title="Wazuh">Wazuh</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>

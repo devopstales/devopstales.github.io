@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-08-17T07:09:02+00:00</updated>
+    <updated>2023-09-05T05:47:11+00:00</updated>
     
     
     <author>
@@ -17,6 +17,200 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Wazuh SIEM]]></title>
+            <link href="https://devopstales.github.io/home/wazuh-siem/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/linux/wazuh-siem/?utm_source=atom_feed" rel="related" type="text/html" title="Install Wazuh SIEM" />
+                <link href="https://devopstales.github.io/home/graylog5-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Graylog5" />
+                <link href="https://devopstales.github.io/home/graylog_kafka/?utm_source=atom_feed" rel="related" type="text/html" title="Sending syslog via Kafka into Graylog" />
+                <link href="https://devopstales.github.io/home/graylog4-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Graylog4" />
+                <link href="https://devopstales.github.io/home/graylog3-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Graylog3" />
+            
+                <id>https://devopstales.github.io/home/wazuh-siem/</id>
+            
+            
+            <published>2023-09-01T00:00:00+00:00</published>
+            <updated>2023-09-01T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to install and configure the Wazuh Open Source SIEM solution.</p>
+<h3 id="what-is-a-siem">What is a SIEM?</h3>
+<p>Security information and event management, or SIEM, is a security solution software that helps organizations recognize and address potential security threats and vulnerabilities before they have a chance to disrupt business operations.</p>
+<h3 id="what-is-wazuh">What is Wazuh?</h3>
+<p>Wazuh is a security platform that provides unified XDR and SIEM protection for endpoints and cloud workloads. The solution is composed of a single universal agent and three central components: the Wazuh server, the Wazuh indexer, and the Wazuh dashboard. For more information, check the Getting Started documentation.</p>
+<p>Wazuh is free and open source. Its components abide by the GNU General Public License, version 2, and the Apache License, Version 2.0 (ALv2).</p>
+<p><img src="/img/include/wazuh-architecture.webp" alt="wazuh infra"  class="zoomable" /></p>
+<h3 id="install-wazuh-indexer">Install wazuh-indexer</h3>
+<p>Generating the SSL certificates:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -sO https://packages.wazuh.com/4.5/wazuh-certs-tool.sh
+curl -sO https://packages.wazuh.com/4.5/config.yml
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano config.yml
+nodes:
+  <span style="color:#75715e"># Wazuh indexer nodes</span>
+  indexer:
+    - name: wazuh.mydomain.intra
+      ip: 192.168.10.50
+
+  server:
+    - name: wazuh.mydomain.intra
+      ip: 192.168.10.50
+
+  <span style="color:#75715e"># Wazuh dashboard nodes</span>
+  dashboard:
+    - name: wazuh.mydomain.intra
+      ip: 192.168.10.50
+</code></pre></div><p>Run <code>./wazuh-certs-tool.sh</code> to create the certificates.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">bash ./wazuh-certs-tool.sh -A
+
+tar -cvf ./wazuh-certificates.tar -C ./wazuh-certificates/ .
+</code></pre></div><p>Install packages:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install coreutils
+
+rpm --import https://packages.wazuh.com/key/GPG-KEY-WAZUH
+echo -e <span style="color:#e6db74">&#39;[wazuh]\ngpgcheck=1\ngpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH\nenabled=1\nname=EL-$releasever - Wazuh\nbaseurl=https://packages.wazuh.com/4.x/yum/\nprotect=1&#39;</span> | tee /etc/yum.repos.d/wazuh.repo
+
+yum -y install wazuh-indexer
+</code></pre></div><p>Configure wazuh-indexer:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/wazuh-indexer/opensearch.yml
+network.host: <span style="color:#e6db74">&#34;192.168.10.50&#34;</span>
+node.name: <span style="color:#e6db74">&#34;wazuh.mydomain.intra&#34;</span>
+cluster.initial_master_nodes:
+- <span style="color:#e6db74">&#34;wazuh.mydomain.intra&#34;</span>
+...
+plugins.security.nodes_dn:
+- <span style="color:#e6db74">&#34;CN=wazuh.mydomain.intra,OU=Wazuh,O=Wazuh,L=California,C=US&#34;</span>
+</code></pre></div><p>Deploying certificates:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export NODE_NAME<span style="color:#f92672">=</span>wazuh.mydomain.intra
+
+mkdir /etc/wazuh-indexer/certs
+tar -xf ./wazuh-certificates.tar -C /etc/wazuh-indexer/certs/ ./$NODE_NAME.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>./$NODE_NAME-key.pem ./admin.pem ./admin-key.pem ./root-ca.pem
+mv -n /etc/wazuh-indexer/certs/$NODE_NAME.pem /etc/wazuh-indexer/certs/indexer.pem
+mv -n /etc/wazuh-indexer/certs/$NODE_NAME-key.pem /etc/wazuh-indexer/certs/indexer-key.pem
+chmod <span style="color:#ae81ff">500</span> /etc/wazuh-indexer/certs
+chmod <span style="color:#ae81ff">400</span> /etc/wazuh-indexer/certs/*
+chown -R wazuh-indexer:wazuh-indexer /etc/wazuh-indexer/certs
+</code></pre></div><p>Configure memory heap size:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#34;bootstrap.memory_lock: true&#34;</span> &gt;&gt; /etc/wazuh-indexer/opensearch.yml
+
+nano /usr/lib/systemd/system/wazuh-indexer.service
+
+<span style="color:#f92672">[</span>Service<span style="color:#f92672">]</span>
+LimitMEMLOCK<span style="color:#f92672">=</span>infinity
+</code></pre></div><p>Starting the service:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl daemon-reload
+systemctl enable wazuh-indexer
+systemctl start wazuh-indexer
+</code></pre></div><p>Cluster initialization:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">/usr/share/wazuh-indexer/bin/indexer-security-init.sh
+
+curl -k -u admin:admin https://192.168.10.50:9200
+
+curl -k -u admin:admin https://192.168.10.50:9200/_cat/nodes?v
+</code></pre></div><h3 id="install-wazuh-manager">Install wazuh-manager</h3>
+<p>Install the package:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum -y install wazuh-manager
+</code></pre></div><p>Enable and start the Wazuh manager service.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl daemon-reload
+systemctl enable wazuh-manager
+systemctl start wazuh-manager
+</code></pre></div><h3 id="installing-filebeat">Installing Filebeat</h3>
+<p>Install the Filebeat package:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum -y install filebeat
+</code></pre></div><p>Configuring Filebeat:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -so /etc/filebeat/filebeat.yml https://packages.wazuh.com/4.5/tpl/wazuh/filebeat/filebeat.yml
+
+nano /etc/filebeat/filebeat.yml
+<span style="color:#75715e"># Wazuh - Filebeat configuration file</span>
+ output.elasticsearch:
+ hosts: <span style="color:#f92672">[</span><span style="color:#e6db74">&#34;192.168.10.50:9200&#34;</span><span style="color:#f92672">]</span>
+ protocol: https
+ username: <span style="color:#e6db74">${</span>username<span style="color:#e6db74">}</span>
+ password: <span style="color:#e6db74">${</span>password<span style="color:#e6db74">}</span>
+</code></pre></div><p>Create a Filebeat keystore to securely store authentication credentials:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">filebeat keystore create
+
+echo admin | filebeat keystore add username --stdin --force
+echo admin | filebeat keystore add password --stdin --force
+</code></pre></div><p>Download and apply wazuh index template to the indexer:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -so /etc/filebeat/wazuh-template.json https://raw.githubusercontent.com/wazuh/wazuh/4.5/extensions/elasticsearch/7.x/wazuh-template.json
+chmod go+r /etc/filebeat/wazuh-template.json
+</code></pre></div><p>Install the certificates and the wazuh module to filebeat:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">curl -s https://packages.wazuh.com/4.x/filebeat/wazuh-filebeat-0.2.tar.gz | tar -xvz -C /usr/share/filebeat/module
+
+mkdir /etc/filebeat/certs
+tar -xf ./wazuh-certificates.tar -C /etc/filebeat/certs/ ./$NODE_NAME.pem ./$NODE_NAME-key.pem ./root-ca.pem
+mv -n /etc/filebeat/certs/$NODE_NAME.pem /etc/filebeat/certs/filebeat.pem
+mv -n /etc/filebeat/certs/$NODE_NAME-key.pem /etc/filebeat/certs/filebeat-key.pem
+chmod <span style="color:#ae81ff">500</span> /etc/filebeat/certs
+chmod <span style="color:#ae81ff">400</span> /etc/filebeat/certs/*
+chown -R root:root /etc/filebeat/certs
+</code></pre></div><p>Starting the Filebeat service</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl daemon-reload
+systemctl enable filebeat
+systemctl start filebeat
+
+filebeat test output
+</code></pre></div><h3 id="install-wazuh-dashboard">Install Wazuh-dashboard</h3>
+<p>Installing packages:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install libcap
+
+yum -y install wazuh-dashboard
+</code></pre></div><p>Configuring the Wazuh dashboard:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/wazuh-dashboard/opensearch_dashboards.yml
+server.host: 0.0.0.0
+   server.port: <span style="color:#ae81ff">443</span>
+   opensearch.hosts: https://localhost:9200
+   opensearch.ssl.verificationMode: certificate
+</code></pre></div><p>Deploying certificates:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export NODE_NAME<span style="color:#f92672">=</span>wazuh.mydomain.intra
+
+export NODE_NAME<span style="color:#f92672">=</span>wazuh.mydomain.intra
+
+mkdir /etc/wazuh-dashboard/certs
+tar -xf ./wazuh-certificates.tar -C /etc/wazuh-dashboard/certs/ ./$NODE_NAME.pem ./$NODE_NAME-key.pem ./root-ca.pem
+mv -n /etc/wazuh-dashboard/certs/$NODE_NAME.pem /etc/wazuh-dashboard/certs/dashboard.pem
+mv -n /etc/wazuh-dashboard/certs/$NODE_NAME-key.pem /etc/wazuh-dashboard/certs/dashboard-key.pem
+chmod <span style="color:#ae81ff">500</span> /etc/wazuh-dashboard/certs
+chmod <span style="color:#ae81ff">400</span> /etc/wazuh-dashboard/certs/*
+chown -R wazuh-dashboard:wazuh-dashboard /etc/wazuh-dashboard/certs
+</code></pre></div><p>Starting the Wazuh dashboard service:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl daemon-reload
+systemctl enable wazuh-dashboard
+systemctl start wazuh-dashboard
+</code></pre></div><p>Access the Wazuh web interface with your credentials: Go to <code>https://192.168.10.50</code> and logi with user <code>admin</code> and password <code>admin</code>.</p>
+<p>Use the Wazuh passwords tool to change all the internal users' passwords.</p>
+<blockquote>
+<blockquote>
+<p>Save the passwords for later use. This is the only time the script shows it.</p>
+</blockquote>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">/usr/share/wazuh-indexer/plugins/opensearch-security/tools/wazuh-passwords-tool.sh --change-all --admin-user wazuh --admin-password wazuh
+
+INFO: The password <span style="color:#66d9ef">for</span> user admin is yWOzmNA.?Aoc+rQfDBcF71KZp?1xd7IO
+INFO: The password <span style="color:#66d9ef">for</span> user kibanaserver is nUa+66zY.eDF*2rRl5GKdgLxvgYQA+wo
+INFO: The password <span style="color:#66d9ef">for</span> user kibanaro is 0jHq.4i*VAgclnqFiXvZ5gtQq1D5LCcL
+INFO: The password <span style="color:#66d9ef">for</span> user logstash is hWW6U45rPoCT?oR.r.Baw2qaWz2iH8Ml
+INFO: The password <span style="color:#66d9ef">for</span> user readall is PNt5K+FpKDMO2TlxJ6Opb2D0mYl*I7FQ
+INFO: The password <span style="color:#66d9ef">for</span> user snapshotrestore is +GGz2noZZr2qVUK7xbtqjUup049tvLq.
+WARNING: Wazuh indexer passwords changed. Remember to update the password in the Wazuh dashboard and Filebeat nodes <span style="color:#66d9ef">if</span> necessary, and restart the services.
+INFO: The password <span style="color:#66d9ef">for</span> Wazuh API user wazuh is JYWz5Zdb3Yq+uOzOPyUU4oat0n60VmWI
+INFO: The password <span style="color:#66d9ef">for</span> Wazuh API user wazuh-wui is +fLddaCiZePxh24*?jC0nyNmgMGCKE+2
+INFO: Updated wazuh-wui user password in wazuh dashboard. Remember to restart the service.
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -2590,8 +2784,8 @@ notAfter<span style="color:#f92672">=</span>Aug <span style="color:#ae81ff">29</
             
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
             
                 <id>https://devopstales.github.io/home/openshift4-buildconfig/</id>
@@ -43383,46 +43577,66 @@ master-restart controllers
             
             <content type="html"><![CDATA[<p>RADOS Gateway  is an object storage interface in Ceph. It provides interfaces compatible with OpenStack Swift and Amazon S3.</p>
 <p>First create a keyring than generated the keys and added them to the keyring:</p>
-<pre tabindex="0"><code>root@pve1:~# ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.keyring
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.keyring
 
 root@pve1:~# ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.pve1 --gen-key
 root@pve1:~# ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.pve2 --gen-key
 root@pve1:~# ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.pve3 --gen-key
-</code></pre><p>And then I added the proper capabilities and add the keys to the cluster:</p>
-<pre tabindex="0"><code>root@pve1:~# ceph-authtool -n client.radosgw.pve1 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
-root@pve1:~# ceph-authtool -n client.radosgw.pve2 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
-root@pve1:~# ceph-authtool -n client.radosgw.pve3 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
-
-root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve1 -i /etc/ceph/ceph.client.radosgw.keyring
+</code></pre></div><p>And then I added the proper capabilities and add the keys to the cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph-authtool -n client.radosgw.pve1 --cap osd <span style="color:#e6db74">&#39;allow rwx&#39;</span> --cap mon <span style="color:#e6db74">&#39;allow rwx&#39;</span> /etc/ceph/ceph.client.radosgw.keyring
+root@pve1:~# ceph-authtool -n client.radosgw.pve2 --cap osd <span style="color:#e6db74">&#39;allow rwx&#39;</span> --cap mon <span style="color:#e6db74">&#39;allow rwx&#39;</span> /etc/ceph/ceph.client.radosgw.keyring
+root@pve1:~# ceph-authtool -n client.radosgw.pve3 --cap osd <span style="color:#e6db74">&#39;allow rwx&#39;</span> --cap mon <span style="color:#e6db74">&#39;allow rwx&#39;</span> /etc/ceph/ceph.client.radosgw.keyring
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve2:/etc/ceph/
+scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve3:/etc/ceph/
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve1 -i /etc/ceph/ceph.client.radosgw.keyring
 root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve2 -i /etc/ceph/ceph.client.radosgw.keyring
 root@pve1:~# ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.pve3 -i /etc/ceph/ceph.client.radosgw.keyring
-</code></pre><p>Copy the rings to the proxmox ClusterFS</p>
-<pre tabindex="0"><code>root@pve1:~# cp /etc/ceph/ceph.client.radosgw.keyring /etc/pve/priv
-</code></pre><p>Add the following lines to <code>/etc/ceph/ceph.conf</code>:</p>
-<pre tabindex="0"><code>[client.radosgw.pve1]
-        host = pve1
-        keyring = /etc/pve/priv/ceph.client.radosgw.keyring
-        log file = /var/log/ceph/client.radosgw.$host.log
-        rgw_dns_name = s3.devopstales.intra
+</code></pre></div><p>If you get the fallofing error: <code>handle_auth_bad_method server allowed_methods [2] but i only support [2]</code></p>
+<p>You Have a problem with your <code>/etc/ceph/ceph.client.admin.keyring</code> file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo ceph --cluster ceph auth get-key client.admin
+AQDxnppkhI2ZOBAAJ1VFYV6FvRi8vZyuUYzwZQ<span style="color:#f92672">==</span>
 
-[client.radosgw.pve2]
-        host = pve2
-        keyring = /etc/pve/priv/ceph.client.radosgw.keyring
-        log file = /var/log/ceph/client.radosgw.$host.log
-        rgw_dns_name = s3.devopstales.intra
+nano /etc/ceph/ceph.client.admin.keyring
+<span style="color:#f92672">[</span>client.admin<span style="color:#f92672">]</span>
+	key <span style="color:#f92672">=</span> AQDxnppkhI2ZOBAAJ1VFYV6FvRi8vZyuUYzwZQ<span style="color:#f92672">==</span>
+	caps mds <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+	caps mgr <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+	caps mon <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+	caps osd <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;allow *&#34;</span>
+</code></pre></div><p>Copy to the other nodes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve2:/etc/ceph/
+scp /etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.radosgw.keyring pve3:/etc/ceph/
+</code></pre></div><p>Copy the rings to the proxmox ClusterFS</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# cp /etc/ceph/ceph.client.radosgw.keyring /etc/pve/priv
+</code></pre></div><p>Add the following lines to <code>/etc/ceph/ceph.conf</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">[</span>client.radosgw.pve1<span style="color:#f92672">]</span>
+        host <span style="color:#f92672">=</span> pve1
+        keyring <span style="color:#f92672">=</span> /etc/pve/priv/ceph.client.radosgw.keyring
+        log file <span style="color:#f92672">=</span> /var/log/ceph/client.radosgw.$host.log
+        rgw_dns_name <span style="color:#f92672">=</span> s3.devopstales.intra
+        rgw_frontends <span style="color:#f92672">=</span> civetweb port<span style="color:#f92672">=</span>10.83.110.1:7480
 
-[client.radosgw.pve3]
-        host = pve3
-        keyring = /etc/pve/priv/ceph.client.radosgw.keyring
-        log file = /var/log/ceph/client.rados.$host.log
-        rgw_dns_name = s3.devopstales.intra
-</code></pre><p>Install the pcakages and start the service. If all goes well, RADOSGW will create some default pools for you.</p>
-<pre tabindex="0"><code>root@pve1:~# apt install radosgw
+<span style="color:#f92672">[</span>client.radosgw.pve2<span style="color:#f92672">]</span>
+        host <span style="color:#f92672">=</span> pve2
+        keyring <span style="color:#f92672">=</span> /etc/pve/priv/ceph.client.radosgw.keyring
+        log file <span style="color:#f92672">=</span> /var/log/ceph/client.radosgw.$host.log
+        rgw_dns_name <span style="color:#f92672">=</span> s3.devopstales.intra
+        rgw_frontends <span style="color:#f92672">=</span> civetweb port<span style="color:#f92672">=</span>10.83.110.2:7480
+
+<span style="color:#f92672">[</span>client.radosgw.pve3<span style="color:#f92672">]</span>
+        host <span style="color:#f92672">=</span> pve3
+        keyring <span style="color:#f92672">=</span> /etc/pve/priv/ceph.client.radosgw.keyring
+        log file <span style="color:#f92672">=</span> /var/log/ceph/client.rados.$host.log
+        rgw_dns_name <span style="color:#f92672">=</span> s3.devopstales.intra
+        rgw_frontends <span style="color:#f92672">=</span> civetweb port<span style="color:#f92672">=</span>10.83.110.3:7480
+</code></pre></div><p>Install the pcakages and start the service. If all goes well, RADOSGW will create some default pools for you.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# apt install radosgw
 root@pve1:~# service radosgw start
 
 root@pve1:~# tail -f /var/log/ceph/client.rados.pve1.log
-</code></pre><pre tabindex="0"><code>root@pve1:~# ceph osd pool application enable .rgw.root rgw
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# ceph osd pool application enable .rgw.root rgw
 root@pve1:~# ceph osd pool application enable default.rgw.control rgw
+
 root@pve1:~# ceph osd pool application enable default.rgw.data.root rgw
 root@pve1:~# ceph osd pool application enable default.rgw.gc rgw
 root@pve1:~# ceph osd pool application enable default.rgw.log rgw
@@ -43432,23 +43646,34 @@ root@pve1:~# ceph osd pool application enable default.rgw.users.keys rgw
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.index rgw
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.data rgw
 root@pve1:~# ceph osd pool application enable default.rgw.lc rgw
-</code></pre><pre tabindex="0"><code>root@pve1:~#  ssh pve2 'apt install radosgw &amp;&amp; service radosgw start'
-root@pve1:~#  ssh pve3 'apt install radosgw &amp;&amp; service radosgw start'
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~#  ssh pve2 <span style="color:#e6db74">&#39;apt install radosgw &amp;&amp; service radosgw start&#39;</span>
+root@pve1:~#  ssh pve3 <span style="color:#e6db74">&#39;apt install radosgw &amp;&amp; service radosgw start&#39;</span>
 
 root@pve1:~#  ceph osd pool ls
-</code></pre><pre tabindex="0"><code>root@pve1:~# radosgw-admin user create --uid=devopstales --display-name=&quot;devopstales&quot; --email=devopstales@devopstales.intra
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# radosgw-admin user create --uid<span style="color:#f92672">=</span>devopstales --display-name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devopstales&#34;</span> --email<span style="color:#f92672">=</span>devopstales@devopstales.intra
 root@pve1:~# radosgw-admin user info devopstales
 
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.index rgw
 root@pve1:~# ceph osd pool application enable default.rgw.buckets.data rgw
-</code></pre><pre tabindex="0"><code>root@pve1:~# apt-get install s3cmd
+
+<span style="color:#75715e">#for minio cli to create bucketceph osd pool create default.rgw.buckets.data 32</span>
+ceph osd pool create default.rgw.buckets.index <span style="color:#ae81ff">8</span>
+ceph osd pool set default.rgw.buckets.index pgp_num <span style="color:#ae81ff">8</span>
+ceph osd pool set default.rgw.buckets.index size <span style="color:#ae81ff">3</span>
+ceph osd pool application enable default.rgw.buckets.index rgw
+ 
+ceph osd pool create default.rgw.buckets.data <span style="color:#ae81ff">32</span>
+ceph osd pool set default.rgw.buckets.data pgp_num <span style="color:#ae81ff">32</span>
+ceph osd pool set default.rgw.buckets.data size <span style="color:#ae81ff">3</span>
+ceph osd pool application enable default.rgw.buckets.data rgw
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">root@pve1:~# apt-get install s3cmd
 root@pve1:~# s3cmd --configure
 Access Key: xxxxxxxxxxxxxxxxxxxxxx
 Secret Key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 root@pve1:~#  s3cmd mb s3://devopstales
-Bucket 's3://devopstales/' created
-</code></pre>]]></content>
+Bucket <span style="color:#e6db74">&#39;s3://devopstales/&#39;</span> created
+</code></pre></div>]]></content>
             
                  
                     
