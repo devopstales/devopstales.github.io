@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-09-07T06:55:52+00:00</updated>
+    <updated>2023-09-07T08:18:48+00:00</updated>
     
     
     <author>
@@ -17,6 +17,329 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Ingress to GKE]]></title>
+            <link href="https://devopstales.github.io/home/gke-ingress-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/gke-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Ingress to GKE" />
+                <link href="https://devopstales.github.io/home/aks-azure-key-vault-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Key Vault AKS integration with CSI Driver" />
+                <link href="https://devopstales.github.io/home/aks-azure-key-vault-akv2k8s/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Key Vault AKS integration with akv2k8s" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+            
+                <id>https://devopstales.github.io/home/gke-ingress-controller/</id>
+            
+            
+            <published>2023-09-06T00:00:00+00:00</published>
+            <updated>2023-09-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this pos I will show you how you can Install Ingress to GKE (Google Kubernetes Engine) Cluster.</p>
+<p>The default Nginx Ingress creates a Network Load balancer. In order to set up an HTTP/HTTPS Load balancer with Nginx ingress, we need to change the type: LoadBalancer on the Nginx Ingress Controller service to ClusterIP instead and add the NEG annotation to it. We will manually create an HTTP(S) LoadBalancer and bind it to the <code>ingress-nginx-controller</code> through its NEG annotation.  This binding will happen later when we set our Nginx Ingress Controller deployment as the Backend Service of our HTTPS LoadBalancer.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano values.yaml</span>
+---
+<span style="color:#f92672">controller</span>:
+  <span style="color:#f92672">service</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+    <span style="color:#f92672">annotations</span>:
+      <span style="color:#f92672">cloud.google.com/neg</span>: <span style="color:#e6db74">&#39;{&#34;exposed_ports&#34;: {&#34;80&#34;:{&#34;name&#34;: &#34;ingress-nginx-80-neg-http&#34;}}}&#39;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm upgrade ingress-nginx ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--install -f values.yaml <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--repo https://kubernetes.github.io/ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--namespace ingress-nginx --create-namespace
+</code></pre></div><p>Now we can see in the Google cloud console that our NEG is created successfully.</p>
+<p><img src="/img/incude/GKE-ingress-neg.webp" alt="NEG Config"  class="zoomable" /></p>
+<p>Let’s create the HTTP/HTTPS Loadbalancer &amp; add NEG in the backend of the load balancer.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Create an Static IP Address via using this command</span>
+gcloud compute addresses create loadbalancer-ip-1 --global --ip-version IPV4
+
+<span style="color:#75715e"># Create a firewall rule allowing the L7 Https Loadbalencer to access our cluster</span>
+gcloud compute firewall-rules create allow-tcp-loadbalancer <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --allow tcp:80 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --source-ranges 130.211.0.0/22,35.191.0.0/16 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --network default 
+
+<span style="color:#75715e">#Create a Health Check for Backend Service</span>
+gcloud compute health-checks create http lb-nginx-health-check <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --port <span style="color:#ae81ff">80</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --check-interval <span style="color:#ae81ff">60</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --unhealthy-threshold <span style="color:#ae81ff">3</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --healthy-threshold <span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --timeout <span style="color:#ae81ff">5</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --request-path /healthz
+  
+<span style="color:#75715e"># Create a Backend Service which is used to inform the LoadBalancer how to connect and distribute trafic to the pods.</span>
+gcloud compute backend-services create lb-backend-service <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --load-balancing-scheme<span style="color:#f92672">=</span>EXTERNAL <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --protocol<span style="color:#f92672">=</span>HTTP <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --port-name<span style="color:#f92672">=</span>http <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --health-checks<span style="color:#f92672">=</span>lb-nginx-health-check <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --global  
+ 
+<span style="color:#75715e"># Now it&#39;s the time we add the Nginx NEG service (the one annotated earlier) to the back end service created on the previous step:</span>
+gcloud compute backend-services add-backend lb-backend-service <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --network-endpoint-group<span style="color:#f92672">=</span>ingress-nginx-80-neg-http <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --network-endpoint-group-zone<span style="color:#f92672">=</span>us-central1-c <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --balancing-mode<span style="color:#f92672">=</span>RATE <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --capacity-scaler<span style="color:#f92672">=</span>1.0 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --max-rate-per-endpoint<span style="color:#f92672">=</span><span style="color:#ae81ff">100</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --global
+
+<span style="color:#75715e"># Create the load balancer itself (URL MAPS)</span>
+gcloud compute url-maps create nginx-public-loadbalancer <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --default-service lb-backend-service
+
+<span style="color:#75715e"># Create a target HTTP proxy to route requests to your URL map.</span>
+  gcloud compute target-http-proxies create http-lb-proxy <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>      --url-map<span style="color:#f92672">=</span>nginx-public-loadbalancer
+      
+<span style="color:#75715e"># Create a global forwarding rule to route incoming requests to the proxy</span>
+gcloud compute forwarding-rules create forwarding-rule-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>      --load-balancing-scheme<span style="color:#f92672">=</span>EXTERNAL <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>      --address<span style="color:#f92672">=</span>loadbalancer-ip-1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>      --global <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>      --target-http-proxy<span style="color:#f92672">=</span>http-lb-proxy <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>      --ports<span style="color:#f92672">=</span><span style="color:#ae81ff">80</span>
+</code></pre></div><p><img src="/img/incude/GKE-ingress-neg.webp" alt="LoadBalancer Config"  class="zoomable" /></p>
+<p>Let’s deploy Sample httpd webserver to test if our load balancer is working as expected.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano httpd.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">httpd-deployment</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">httpd</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">httpd</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">httpd</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">httpd</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">httpd</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">httpd-service</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">httpd</span>
+  <span style="color:#f92672">ports</span>:
+    - <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+      <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">80</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">testing-ingress-01</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+        <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">httpd-service</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f httpd.yaml
+</code></pre></div><h3 id="create-an-ingress-controller-to-an-internal-virtual-network-in">Create an ingress controller to an internal virtual network in</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano values.yaml</span>
+---
+<span style="color:#f92672">controller</span>:
+  <span style="color:#f92672">service</span>:
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+    <span style="color:#f92672">annotations</span>:
+      <span style="color:#f92672">cloud.google.com/neg</span>: <span style="color:#e6db74">&#39;{&#34;exposed_ports&#34;: {&#34;80&#34;:{&#34;name&#34;: &#34;ingress-nginx-internal-80-neg-http&#34;}}}&#39;</span>
+  <span style="color:#f92672">electionID</span>: <span style="color:#ae81ff">ingress-controller-leader</span>
+  <span style="color:#f92672">ingressClassResource</span>:
+    <span style="color:#f92672">name: internal-nginx  # default</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">default</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">controllerValue</span>: <span style="color:#e6db74">&#34;k8s.io/internal-ingress-nginx&#34;</span>  <span style="color:#75715e"># default: k8s.io/ingress-nginx</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm upgrade ingress-nginx-internal ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--install -f values.yaml  <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--repo https://kubernetes.github.io/ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--namespace ingress-nginx-internal --create-namespace
+</code></pre></div><p>Let’s create a regional private HTTP/HTTPS Loadbalancer &amp; add NEG in the backend of the load balancer we need a proxy-only subnet for creating a regional private HTTP/HTTPS load balancer.</p>
+<p>Create a proxy-only subnet:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">gcloud compute networks subnets create proxy-only-subnet-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --purpose<span style="color:#f92672">=</span>REGIONAL_MANAGED_PROXY <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --role<span style="color:#f92672">=</span>ACTIVE <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --region<span style="color:#f92672">=</span>us-central1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --network<span style="color:#f92672">=</span>default <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --range<span style="color:#f92672">=</span>10.129.0.0/23
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Create an Static Private IP Address </span>
+gcloud compute addresses create lb-ip-01 --region us-central1 --subnet default
+
+<span style="color:#75715e"># Create the fw-allow-health-check rule to allow Google Cloud health checks. This example allows all TCP traffic from health check probers.    </span>
+gcloud compute firewall-rules create fw-allow-health-check-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --network<span style="color:#f92672">=</span>default <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --action<span style="color:#f92672">=</span>allow <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --direction<span style="color:#f92672">=</span>ingress <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --source-ranges<span style="color:#f92672">=</span>130.211.0.0/22,35.191.0.0/16 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --rules<span style="color:#f92672">=</span>tcp
+
+<span style="color:#75715e"># Create the fw-allow-proxies rule to allow the regional external HTTP(S) load balancer&#39;s proxies to connect to your backends. Set source-ranges to the allocated ranges of your proxy-only subnet, for example, 10.129.0.0/23.</span>
+gcloud compute firewall-rules create fw-allow-proxies-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --network<span style="color:#f92672">=</span>default <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --action<span style="color:#f92672">=</span>allow <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --direction<span style="color:#f92672">=</span>ingress <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --source-ranges<span style="color:#f92672">=</span>10.129.0.0/23 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --target-tags<span style="color:#f92672">=</span>load-balanced-backend <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --rules<span style="color:#f92672">=</span>tcp:80,tcp:443,tcp:8080
+
+<span style="color:#75715e"># Create a Health Check for Backend Service</span>
+gcloud compute health-checks create http nginx-internal-lb-health-check <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --port <span style="color:#ae81ff">80</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --check-interval <span style="color:#ae81ff">60</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --unhealthy-threshold <span style="color:#ae81ff">3</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --healthy-threshold <span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --timeout <span style="color:#ae81ff">5</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --region<span style="color:#f92672">=</span>us-central1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --request-path /healthz 
+ 
+<span style="color:#75715e"># Create the backend service for the lb </span>
+gcloud compute backend-services create internal-lb-backend-service <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --load-balancing-scheme<span style="color:#f92672">=</span>INTERNAL_MANAGED <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --protocol<span style="color:#f92672">=</span>HTTP <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --health-checks<span style="color:#f92672">=</span>nginx-internal-lb-health-check <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --health-checks-region<span style="color:#f92672">=</span>us-central1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --region<span style="color:#f92672">=</span>us-central1
+  
+<span style="color:#75715e"># Add the backend to backend service   </span>
+gcloud compute backend-services add-backend internal-lb-backend-service <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --balancing-mode<span style="color:#f92672">=</span>RATE <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --network-endpoint-group<span style="color:#f92672">=</span>ingress-nginx-internal-80-neg-http <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --network-endpoint-group-zone<span style="color:#f92672">=</span>us-central1-c <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --capacity-scaler<span style="color:#f92672">=</span>1.0 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --max-rate-per-endpoint<span style="color:#f92672">=</span><span style="color:#ae81ff">100</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --region<span style="color:#f92672">=</span>us-central1
+  
+<span style="color:#75715e"># Create the URL map</span>
+gcloud compute url-maps create internal-nginx-lb-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --default-service<span style="color:#f92672">=</span>internal-lb-backend-service <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --region<span style="color:#f92672">=</span>us-central1
+  
+<span style="color:#75715e"># Create the target proxy</span>
+gcloud compute target-http-proxies create target-http-proxy <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --url-map<span style="color:#f92672">=</span>internal-nginx-lb-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --url-map-region<span style="color:#f92672">=</span>us-central1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --region<span style="color:#f92672">=</span>us-central1
+  
+<span style="color:#75715e"># Create the forwarding rule.  </span>
+gcloud compute forwarding-rules create internal-forwarding-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --load-balancing-scheme<span style="color:#f92672">=</span>INTERNAL_MANAGED <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --network<span style="color:#f92672">=</span>default <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --subnet<span style="color:#f92672">=</span>default <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --address<span style="color:#f92672">=</span>lb-ip-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --ports<span style="color:#f92672">=</span><span style="color:#ae81ff">80</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --region<span style="color:#f92672">=</span>us-central1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --target-http-proxy<span style="color:#f92672">=</span>target-http-proxy <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --target-http-proxy-region<span style="color:#f92672">=</span>us-central1
+</code></pre></div><p>Let’s deploy Sample Hello-Worldapp to test if our LB is working fine or not?</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano test.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-deployment</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">frontend</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">frontend</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">frontend</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">frontend</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">us-docker.pkg.dev/google-samples/containers/gke/hello-app:1.0</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">8080</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-service</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">frontend</span>
+  <span style="color:#f92672">ports</span>:
+    - <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+      <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">8080</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">testing-internal-ingress-01</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">internal-nginx</span>
+  <span style="color:#f92672">rules</span>:
+  - <span style="color:#f92672">http</span>:
+      <span style="color:#f92672">paths</span>:
+      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+        <span style="color:#f92672">backend</span>:
+          <span style="color:#f92672">service</span>:
+            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-service</span>
+            <span style="color:#f92672">port</span>:
+              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f test.yaml
+kubectl get ingress testing-internal-ingress-01
+</code></pre></div><p>Our setup is successfully done. So we can access this application from the same network itself as the load balancer is private, let’s create one private vm and access the app from this.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">gcloud compute instances create testing-vm-01 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --project<span style="color:#f92672">=</span>your-project-id <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --zone<span style="color:#f92672">=</span>us-central1-c <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --machine-type<span style="color:#f92672">=</span>e2-medium <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --network-interface<span style="color:#f92672">=</span>subnet<span style="color:#f92672">=</span>default,no-address <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --maintenance-policy<span style="color:#f92672">=</span>MIGRATE <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --provisioning-model<span style="color:#f92672">=</span>STANDARD <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --service-account<span style="color:#f92672">=</span>serviceaccount-compute@developer.gserviceaccount.com <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --scopes<span style="color:#f92672">=</span>https://www.googleapis.com/auth/cloud-platform <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --create-disk<span style="color:#f92672">=</span>auto-delete<span style="color:#f92672">=</span>yes,boot<span style="color:#f92672">=</span>yes,device-name<span style="color:#f92672">=</span>testing-vm-01,image<span style="color:#f92672">=</span>projects/ubuntu-os-cloud/global/images/ubuntu-1804-bionic-v20230324,mode<span style="color:#f92672">=</span>rw,size<span style="color:#f92672">=</span>10,type<span style="color:#f92672">=</span>projects/your-project/zones/us-central1-c/diskTypes/pd-balanced <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --no-shielded-secure-boot <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --shielded-vtpm <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --shielded-integrity-monitoring <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --labels<span style="color:#f92672">=</span>ec-src<span style="color:#f92672">=</span>vm_add-gcloud <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --reservation-affinity<span style="color:#f92672">=</span>any
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">gcloud compute ssh --zone <span style="color:#e6db74">&#34;us-central1-c&#34;</span> <span style="color:#e6db74">&#34;testing-vm-01&#34;</span>  <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--tunnel-through-iap --project <span style="color:#e6db74">&#34;your-project&#34;</span>
+
+curl -v http://loadbalancer_ip/
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -2311,7 +2634,7 @@ helm upgrade --install akv2k8s <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
@@ -2784,8 +3107,8 @@ notAfter<span style="color:#f92672">=</span>Aug <span style="color:#ae81ff">29</
             
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
             
                 <id>https://devopstales.github.io/home/openshift4-buildconfig/</id>
