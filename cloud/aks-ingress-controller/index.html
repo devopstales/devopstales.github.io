@@ -29,7 +29,7 @@
     "datePublished": "2020-11-15",
     "dateModified" : "2020-11-15",
     "url" : "https://devopstales.github.io/cloud/aks-ingress-controller/",
-    "wordCount" : "248",
+    "wordCount" : "256",
     "keywords" : [ "Azure", "AKS", "streaming", "Blog" ]
     
 }
@@ -245,28 +245,27 @@ helm install &lt;INGERSS_NAME&gt; \
 ingress-nginx/ingress-nginx \
 --namespace ingress \
 --set controller.replicaCount=2 \
---set controller.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux \
---set defaultBackend.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux \
+--set controller.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
+--set controller.admissionWebhooks.patch.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
+--set defaultBackend.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
+--set controller.service.annotations.&quot;service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path&quot;=/healthz \
 --set controller.service.loadBalancerIP=&quot;51.105.230.165&quot;
 </code></pre><pre tabindex="0"><code>kubectl --namespace ingress get services -o wide -w nginx-ingress-controller
 kubectl get service -l app=nginx-ingress --namespace ingress
 </code></pre><h3 id="create-an-ingress-controller-to-an-internal-virtual-network-in">Create an ingress controller to an internal virtual network in</h3>
 <p>By default, an NGINX ingress controller is created with a dynamic public IP address assignment. A common configuration requirement is to use an internal, private network and IP address. This approach allows you to restrict access to your services to internal users, with no external access. This example assigns 10.240.0.42 to the loadBalancerIP resource.</p>
-<pre tabindex="0"><code>nano internal-ingress.yaml
----
-controller:
-  service:
-    loadBalancerIP: 10.240.0.42
-    annotations:
-      service.beta.kubernetes.io/azure-load-balancer-internal: &quot;true&quot;
-</code></pre><pre tabindex="0"><code>helm install nginx-ingress \
+<pre tabindex="0"><code>helm install nginx-ingress \
 ingress-nginx/ingress-nginx \
 --namespace ingress \
 -f internal-ingress.yaml \
 --set controller.ingressClass=internal \
 --set controller.replicaCount=2 \
---set controller.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux \
---set defaultBackend.nodeSelector.&quot;beta\.kubernetes\.io/os&quot;=linux
+--set controller.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
+--set controller.admissionWebhooks.patch.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
+--set defaultBackend.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
+--set controller.service.annotations.&quot;service\.beta\.kubernetes\.io/azure-load-balancer-internal&quot;=true \
+--set controller.service.annotations.&quot;service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path&quot;=/healthz \
+--set controller.service.loadBalancerIP=10.224.0.42
 </code></pre><p>Create an ingress route</p>
 <pre tabindex="0"><code>apiVersion: networking.k8s.io/v1beta1
 kind: Ingress
