@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-11-11T17:25:07+00:00</updated>
+    <updated>2023-11-30T09:18:44+00:00</updated>
     
     
     <author>
@@ -17,6 +17,205 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[CNI-Genie: network separation with multiple CNI]]></title>
+            <link href="https://devopstales.github.io/home/cni-genie/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/cni-genie/?utm_source=atom_feed" rel="related" type="text/html" title="CNI-Genie: network separation with multiple CNI" />
+                <link href="https://devopstales.github.io/home/multus-nmstate/?utm_source=atom_feed" rel="related" type="text/html" title="Configurre network wit nmstate operator" />
+                <link href="https://devopstales.github.io/home/multus/?utm_source=atom_feed" rel="related" type="text/html" title="Use Multus CNI in Kubernetes" />
+                <link href="https://devopstales.github.io/home/multus-calico/?utm_source=atom_feed" rel="related" type="text/html" title="Use multus to separate metwork trafics" />
+                <link href="https://devopstales.github.io/kubernetes/multus-nmstate/?utm_source=atom_feed" rel="related" type="text/html" title="Configurre network wit nmstate operator" />
+            
+                <id>https://devopstales.github.io/home/cni-genie/</id>
+            
+            
+            <published>2023-10-27T00:00:00+00:00</published>
+            <updated>2023-10-27T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can use CNI-Genie for network separation with multiple CNI.</p>
+<h3 id="wat-is-cni-genie">Wat is CNI-Genie?</h3>
+<p>CNI-Genie CNI from Huawei is a container network interface plugin for Kubernetes that enables attaching multiple network interfaces to pods. In Kubernetes, each pod has only one network interface by default, other than local loopback. With CNI-Genie, you can create multi-homed pods that have multiple interfaces. CNI-Genie acts a as ‘meta’ plugin that can call other CNI plugins to configure additional interfaces.</p>
+<h3 id="kind-for-testing">Kind for testing</h3>
+<p>For this Demo  will use Kind (Kubernetes in Docker) for easy reproduction. The fallowing kind config will create a one master one worker Kubernetes cluster without a preinstalled CNI.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano kind-c1-config.yaml</span>
+---
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Cluster</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kind.x-k8s.io/v1alpha4</span>
+<span style="color:#f92672">nodes</span>:
+- <span style="color:#f92672">role</span>: <span style="color:#ae81ff">control-plane</span>
+- <span style="color:#f92672">role</span>: <span style="color:#ae81ff">worker</span>
+<span style="color:#f92672">networking</span>:
+  <span style="color:#f92672">disableDefaultCNI</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">podSubnet</span>: <span style="color:#e6db74">&#34;10.244.0.0/16&#34;</span>
+  <span style="color:#f92672">serviceSubnet</span>: <span style="color:#e6db74">&#34;10.245.0.0/16&#34;</span>
+</code></pre></div><p>As you can see the kind kbernetes cluster will use <code>10.244.0.0/16</code> as its pod network. Normally I whoud use the same network in the CNI configuration. In this demo I will install multiple CNIs in one cluster, so I cut this network in two. Flannel will use <code>10.244.0.0/17</code> as its network and weave-net <code>10.244.128.0/17</code>.</p>
+<h2 id="install-cni-networks">Install CNI networks</h2>
+<p>So frs I will start the kind network:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kind create cluster --name c1 --config kind-c1-config.yaml
+Creating cluster <span style="color:#e6db74">&#34;c1&#34;</span> ...
+ ✓ Ensuring node image <span style="color:#f92672">(</span>kindest/node:v1.27.0<span style="color:#f92672">)</span> 🖼
+ ✓ Preparing nodes 📦 📦
+ ✓ Writing configuration 📜
+ ✓ Starting control-plane 🕹️
+ ✓ Installing StorageClass 💾
+ ✓ Joining worker nodes 🚜
+Set kubectl context to <span style="color:#e6db74">&#34;kind-c1&#34;</span>
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-c1
+
+Thanks <span style="color:#66d9ef">for</span> using kind! 😊
+</code></pre></div><p>Then Install flannel network. For this I downloaded the flannel yaml from its git repo and modified it to use <code>kube-system</code> as its namespace and <code>10.244.0.0/17</code> as its network.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">  <span style="color:#f92672">net-conf.json</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">    {
+</span><span style="color:#e6db74">      &#34;Network&#34;: &#34;10.244.0.0/17&#34;,
+</span><span style="color:#e6db74">      &#34;Backend&#34;: {
+</span><span style="color:#e6db74">        &#34;Type&#34;: &#34;vxlan&#34;
+</span><span style="color:#e6db74">      }
+</span><span style="color:#e6db74">    }</span>    
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubens kube-system
+kubectl apply -f kube-flannel.yaml
+</code></pre></div><p>I thought it will be enough but I get an error at the flannel pods:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl describe pod coredns-6d4b75cb6d-c9vr2 -n kube-system
+Name:                 coredns-6d4b75cb6d-c9vr2
+Namespace:            kube-system
+...
+...
+Events:
+  Type     Reason                  Age                    From               Message
+  ----     ------                  ----                   ----               -------
+  Warning  FailedScheduling        6m34s <span style="color:#f92672">(</span>x26 over 132m<span style="color:#f92672">)</span>  default-scheduler  0/3 nodes are available: <span style="color:#ae81ff">3</span> node<span style="color:#f92672">(</span>s<span style="color:#f92672">)</span> had untolerated taint <span style="color:#f92672">{</span>node.kubernetes.io/not-ready: <span style="color:#f92672">}</span>. preemption: 0/3 nodes are available: <span style="color:#ae81ff">3</span> Preemption is not helpful <span style="color:#66d9ef">for</span> scheduling.
+  Normal   Scheduled               4m24s                  default-scheduler  Successfully assigned kube-system/coredns-6d4b75cb6d-c9vr2 to testcluster-worker
+  ...
+  ...
+  ...
+  Warning  FailedCreatePodSandBox  2m39s                  kubelet            Failed to create pod sandbox: rpc error: code <span style="color:#f92672">=</span> Unknown desc <span style="color:#f92672">=</span> failed to setup network <span style="color:#66d9ef">for</span> sandbox <span style="color:#e6db74">&#34;cde73425ddab3522e243e810b75fac3cda51724a8f1f3c45f4a58c6df05bb613&#34;</span>: plugin type<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;flannel&#34;</span> failed <span style="color:#f92672">(</span>add<span style="color:#f92672">)</span>: failed to delegate add: failed to find plugin <span style="color:#e6db74">&#34;bridge&#34;</span> in path <span style="color:#f92672">[</span>/opt/cni/bin<span style="color:#f92672">]</span>
+  Warning  FailedCreatePodSandBox  7s <span style="color:#f92672">(</span>x12 over 2m28s<span style="color:#f92672">)</span>    kubelet            <span style="color:#f92672">(</span>combined from similar events<span style="color:#f92672">)</span>: Failed to create pod sandbox: rpc error: code <span style="color:#f92672">=</span> Unknown desc <span style="color:#f92672">=</span> failed to setup network <span style="color:#66d9ef">for</span> sandbox <span style="color:#e6db74">&#34;fc18a7232cce32804a88edface3219f4d7dcaa6ae4cd3d2e6e268b7f4c30b801&#34;</span>: plugin type<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;flannel&#34;</span> failed <span style="color:#f92672">(</span>add<span style="color:#f92672">)</span>: failed to delegate add: failed to find plugin <span style="color:#e6db74">&#34;bridge&#34;</span> in path <span style="color:#f92672">[</span>/opt/cni/bin<span style="color:#f92672">]</span>
+</code></pre></div><p>At this point I realized that the kubernetes node docker image dose not contain the necessary binaries, so I built a docker image that contains this binaries and I copies this binaries from an init container:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">      <span style="color:#f92672">initContainers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">install-containernetworking-plugins</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">devopstales/containernetworking-plugins:1.0</span>
+        <span style="color:#f92672">command</span>:
+        - <span style="color:#ae81ff">/bin/sh</span>
+        - <span style="color:#e6db74">&#39;-c&#39;</span>
+        - <span style="color:#ae81ff">cp -R /containernetworking-plugins/* /opt/cni/bin/</span>
+        <span style="color:#f92672">volumeMounts</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cni-plugin</span>
+          <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/opt/cni/bin</span>
+</code></pre></div><p>Next we will install the weave-net. I downloaded its yaml from the git repo and modified it to use <code>10.244.128.0/17</code> as its network.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">          <span style="color:#f92672">containers</span>:
+            - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">weave</span>
+              <span style="color:#f92672">command</span>:
+                - <span style="color:#ae81ff">/home/weave/launch.sh</span>
+              <span style="color:#f92672">env</span>:
+                - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">INIT_CONTAINER</span>
+                  <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+                - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">HOSTNAME</span>
+                  <span style="color:#f92672">valueFrom</span>:
+                    <span style="color:#f92672">fieldRef</span>:
+                      <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+                      <span style="color:#f92672">fieldPath</span>: <span style="color:#ae81ff">spec.nodeName</span>
+                - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">IPALLOC_RANGE</span>
+                  <span style="color:#f92672">value</span>: <span style="color:#ae81ff">10.244.128.0</span><span style="color:#ae81ff">/17</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubens kube-system
+kubectl apply -f weave-daemonset-k8s.yaml
+</code></pre></div><p>Now all the pods are running:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get pods -n kube-system
+NAME                                       READY   STATUS    RESTARTS      AGE
+coredns-5d78c9869d-mfkrx                   1/1     Running   <span style="color:#ae81ff">0</span>             1h
+coredns-5d78c9869d-twr8t                   1/1     Running   <span style="color:#ae81ff">0</span>             1h
+etcd-c1-control-plane                      1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-apiserver-c1-control-plane            1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-controller-manager-c1-control-plane   1/1     Running   <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>20m ago<span style="color:#f92672">)</span>   1h
+kube-flannel-ds-h7f64                      1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-flannel-ds-v5w2c                      1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-proxy-46g2z                           1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-proxy-qxx29                           1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-scheduler-c1-control-plane            1/1     Running   <span style="color:#ae81ff">0</span>             1h
+weave-net-h8rcz                            2/2     Running   <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>20m ago<span style="color:#f92672">)</span>   1h
+weave-net-xhcld                            2/2     Running   <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>20m ago<span style="color:#f92672">)</span>   1h
+</code></pre></div><h3 id="install-cni-genie">Install CNI-Genie</h3>
+<p>Tp install the CNI-Genie I used the yaml from CNI-Genie&rsquo;s yaml with a modification. The yaml contains outdated RBAC objects so you need to switch <code>rbac.authorization.k8s.io/v1bet1</code> to <code>rbac.authorization.k8s.io/v1</code></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">wget https://raw.githubusercontent.com/cni-genie/CNI-Genie/master/conf/1.8/genie-plugin.yaml
+nano genie-plugin.yaml
+kubectl apply -f genie-plugin.yaml
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get pods -n kube-system
+NAME                                       READY   STATUS    RESTARTS      AGE
+coredns-5d78c9869d-mfkrx                   1/1     Running   <span style="color:#ae81ff">0</span>             1h
+coredns-5d78c9869d-twr8t                   1/1     Running   <span style="color:#ae81ff">0</span>             1h
+etcd-c1-control-plane                      1/1     Running   <span style="color:#ae81ff">0</span>             1h
+genie-plugin-l65tj                         1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-apiserver-c1-control-plane            1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-controller-manager-c1-control-plane   1/1     Running   <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>20m ago<span style="color:#f92672">)</span>   1h
+kube-flannel-ds-h7f64                      1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-flannel-ds-v5w2c                      1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-proxy-46g2z                           1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-proxy-qxx29                           1/1     Running   <span style="color:#ae81ff">0</span>             1h
+kube-scheduler-c1-control-plane            1/1     Running   <span style="color:#ae81ff">0</span>             1h
+weave-net-h8rcz                            2/2     Running   <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>20m ago<span style="color:#f92672">)</span>   1h
+weave-net-xhcld                            2/2     Running   <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>20m ago<span style="color:#f92672">)</span>   1h
+</code></pre></div><p>In the node containers you can find all the tree CNI configs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker exec -it c1-worker ls -laF /etc/cni/net.d/
+total <span style="color:#ae81ff">28</span>
+drwx------ <span style="color:#ae81ff">1</span> root root <span style="color:#ae81ff">4096</span> Oct <span style="color:#ae81ff">26</span> 14:01 ./
+drwxr-xr-x <span style="color:#ae81ff">1</span> root root <span style="color:#ae81ff">4096</span> Jun <span style="color:#ae81ff">15</span> 00:37 ../
+-rw-r--r-- <span style="color:#ae81ff">1</span> root root <span style="color:#ae81ff">1487</span> Oct <span style="color:#ae81ff">26</span> 14:01 00-genie.conf
+-rw-r--r-- <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">292</span> Oct <span style="color:#ae81ff">26</span> 13:50 10-flannel.conflist
+-rw-r--r-- <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">318</span> Oct <span style="color:#ae81ff">26</span> 13:51 10-weave.conflist
+-rw-r--r-- <span style="color:#ae81ff">1</span> root root  <span style="color:#ae81ff">271</span> Oct <span style="color:#ae81ff">26</span> 14:01 genie-kubeconfig
+</code></pre></div><h3 id="demo">Demo</h3>
+<p>I will start two pods in different networks:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano test1.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx1</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">cni</span>: <span style="color:#e6db74">&#34;weave&#34;</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
+    <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">Always</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano test2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx2</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">cni</span>: <span style="color:#e6db74">&#34;flannel&#34;</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
+    <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">Always</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+</code></pre></div><p>The <code>nginx1</code> will run in <code>weave</code> network and the <code>nginx2</code> in <code>flannel</code> network.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f nginx1.yaml
+kubectl apply -f nginx2.yaml
+
+kubectl get po -o wide
+NAME     READY   STATUS    RESTARTS   AGE    IP             NODE        NOMINATED NODE   READINESS GATES
+nginx1   1/1     Running   <span style="color:#ae81ff">0</span>          101s   10.244.128.2   c1-worker   &lt;none&gt;           &lt;none&gt;
+nginx2   1/1     Running   <span style="color:#ae81ff">0</span>          4s     10.244.1.5     c1-worker   &lt;none&gt;           &lt;none&gt;
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -324,7 +523,7 @@ yum install -y kubectx helm
                 <link href="https://devopstales.github.io/kubernetes/multus-nmstate/?utm_source=atom_feed" rel="related" type="text/html" title="Configurre network wit nmstate operator" />
                 <link href="https://devopstales.github.io/home/multus-calico/?utm_source=atom_feed" rel="related" type="text/html" title="Use multus to separate metwork trafics" />
                 <link href="https://devopstales.github.io/kubernetes/multus/?utm_source=atom_feed" rel="related" type="text/html" title="Use Multus CNI in Kubernetes" />
-                <link href="https://devopstales.github.io/home/cluster-rmesh-with-submariner/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Rancher Submariner Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cluster-mesh-with-submariner/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Rancher Submariner Cluster Mesh" />
             
                 <id>https://devopstales.github.io/home/multus-nmstate/</id>
             
@@ -1161,15 +1360,15 @@ INFO: Updated wazuh-wui user password in wazuh dashboard. Remember to restart th
         
         <entry>
             <title type="html"><![CDATA[Multicluster Kubernetes with Rancher Submariner Cluster Mesh]]></title>
-            <link href="https://devopstales.github.io/home/cluster-rmesh-with-submariner/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            <link href="https://devopstales.github.io/home/cluster-mesh-with-submariner/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/kubernetes/cluster-rmesh-with-submariner/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Rancher Submariner Cluster Mesh" />
-                <link href="https://devopstales.github.io/home/cluster-rmesh-with-skupper/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Skupper Cluster Mesh" />
-                <link href="https://devopstales.github.io/home/cluster-rmesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
-                <link href="https://devopstales.github.io/home/cluster-rmesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/kubernetes/cluster-mesh-with-submariner/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Rancher Submariner Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cluster-mesh-with-skupper/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Skupper Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cluster-mesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cluster-mesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
                 <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
             
-                <id>https://devopstales.github.io/home/cluster-rmesh-with-submariner/</id>
+                <id>https://devopstales.github.io/home/cluster-mesh-with-submariner/</id>
             
             
             <published>2023-08-23T00:00:00+00:00</published>
@@ -1447,15 +1646,15 @@ rebel-base-default-kind-c1   ClusterSetIP   <span style="color:#f92672">[</span>
         
         <entry>
             <title type="html"><![CDATA[Multicluster Kubernetes with Skupper Cluster Mesh]]></title>
-            <link href="https://devopstales.github.io/home/cluster-rmesh-with-skupper/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            <link href="https://devopstales.github.io/home/cluster-mesh-with-skupper/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/cluster-rmesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
-                <link href="https://devopstales.github.io/home/cluster-rmesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cluster-mesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cluster-mesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
                 <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
-                <link href="https://devopstales.github.io/kubernetes/cluster-rmesh-with-skupper/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Skupper Cluster Mesh" />
-                <link href="https://devopstales.github.io/kubernetes/cluster-rmesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
+                <link href="https://devopstales.github.io/kubernetes/cluster-mesh-with-skupper/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Skupper Cluster Mesh" />
+                <link href="https://devopstales.github.io/kubernetes/cluster-mesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
             
-                <id>https://devopstales.github.io/home/cluster-rmesh-with-skupper/</id>
+                <id>https://devopstales.github.io/home/cluster-mesh-with-skupper/</id>
             
             
             <published>2023-08-12T00:00:00+00:00</published>
@@ -1699,15 +1898,15 @@ xfGRpW09Qu
         
         <entry>
             <title type="html"><![CDATA[Multicluster Kubernetes with Linkerd Cluster Mesh]]></title>
-            <link href="https://devopstales.github.io/home/cluster-rmesh-with-linkerd/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            <link href="https://devopstales.github.io/home/cluster-mesh-with-linkerd/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/home/cluster-rmesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/home/cluster-mesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
                 <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
-                <link href="https://devopstales.github.io/kubernetes/cluster-rmesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
-                <link href="https://devopstales.github.io/kubernetes/cluster-rmesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/kubernetes/cluster-mesh-with-linkerd/?utm_source=atom_feed" rel="related" type="text/html" title="Multicluster Kubernetes with Linkerd Cluster Mesh" />
+                <link href="https://devopstales.github.io/kubernetes/cluster-mesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
                 <link href="https://devopstales.github.io/kubernetes/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
             
-                <id>https://devopstales.github.io/home/cluster-rmesh-with-linkerd/</id>
+                <id>https://devopstales.github.io/home/cluster-mesh-with-linkerd/</id>
             
             
             <published>2023-08-06T00:00:00+00:00</published>
@@ -2032,15 +2231,15 @@ kubectl --context kind-c1 exec -ti deployment/x-wing -c x-wing-container -- curl
         
         <entry>
             <title type="html"><![CDATA[Kubernetes Multicluster with Cilium Cluster Mesh]]></title>
-            <link href="https://devopstales.github.io/home/cluster-rmesh-with-cilium/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            <link href="https://devopstales.github.io/home/cluster-mesh-with-cilium/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
-                <link href="https://devopstales.github.io/kubernetes/cluster-rmesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
+                <link href="https://devopstales.github.io/kubernetes/cluster-mesh-with-cilium/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
                 <link href="https://devopstales.github.io/kubernetes/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
                 <link href="https://devopstales.github.io/home/cilium-opnsense-bgp-v2/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
                 <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
             
-                <id>https://devopstales.github.io/home/cluster-rmesh-with-cilium/</id>
+                <id>https://devopstales.github.io/home/cluster-mesh-with-cilium/</id>
             
             
             <published>2023-07-15T00:00:00+00:00</published>
@@ -4421,7 +4620,7 @@ helm upgrade --install akv2k8s <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
@@ -16396,6 +16595,8 @@ rtt min/avg/max/mdev <span style="color:#f92672">=</span> 0.099/0.099/0.099/0.00
             
             
             <content type="html"><![CDATA[<p>In this post I will show you how you can use Multus CNI to create Kubernetes pods with multiple interfaces.</p>
+<h3 id="what-is-multus">What is Multus?</h3>
+<p>Multus CNI is a container network interface plugin for Kubernetes that enables attaching multiple network interfaces to pods. In Kubernetes, each pod has only one network interface by default, other than local loopback. With Multus, you can create multi-homed pods that have multiple interfaces. Multus acts a as ‘meta’ plugin that can call other CNI plugins to configure additional interfaces.</p>
 <h3 id="install-a-default-network">Install a default network</h3>
 <p>Our installation method requires that you first have installed Kubernetes and have configured a default network &ndash; that is, a CNI plugin that&rsquo;s used for your pod-to-pod connectivity. After installing Kubernetes, you must install a default network CNI plugin. In this demo I will use Flannel for the sake of simplicity.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># install flanel:</span>
@@ -27404,7 +27605,7 @@ sudo dnf install -y helm
 </code></pre></div><h3 id="rke2-specific-ports">RKE2 specific ports</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9345/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6443/tcp --permanent
-sudo firewall-cmd --add-port<span style="color:#f92672">=</span>10250Air-Gap/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>10250/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2379/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2380/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>30000-32767/tcp --permanent
@@ -27414,14 +27615,12 @@ sudo firewall-cmd --add-port<span style="color:#f92672">=</span>19090/tcp --perm
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6942/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9091/tcp --permanent
 <span style="color:#75715e">### CNI specific ports</span>
-<span style="color:#75715e"># 4244/TCP is required when the Hubble Relay is enabled and therefore needs to connect to all agents to collect the flows</span>
-sudo firewall-cmd --add-port<span style="color:#f92672">=</span>4244/tcp --permanent
-<span style="color:#75715e"># Cilium healthcheck related permits:</span>
-sudo firewall-cmd --add-port<span style="color:#f92672">=</span>4240/tcp --permanent
-sudo firewall-cmd --remove-icmp-block<span style="color:#f92672">=</span>echo-request --permanent
-sudo firewall-cmd --remove-icmp-block<span style="color:#f92672">=</span>echo-reply --permanent
-<span style="color:#75715e"># Since we are using Cilium with GENEVE as overlay, we need the following port too:</span>
-sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6081/udp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>179/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>4789/udp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>5473/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9098/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9099/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>5473/tcp --permanent
 <span style="color:#75715e">### Ingress Controller specific ports</span>
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>80/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>443/tcp --permanent
@@ -27487,8 +27686,7 @@ cat <span style="color:#e6db74">&lt;&lt; EOF &gt; /var/lib/rancher/rke2/server/m
 </span><span style="color:#e6db74">            prometheus.io/scrape: &#34;true&#34;
 </span><span style="color:#e6db74">            prometheus.io/port: &#34;10254&#34;
 </span><span style="color:#e6db74">EOF</span>
-</code></pre></div><p>!!!!!!!!!!!!!!!!!!!!!</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get endpoints kubernetes -o wide
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get endpoints kubernetes -o wide
 NAME         ENDPOINTS        AGE
 kubernetes   10.0.2.15:6443   86m
 </code></pre></div><h3 id="prevent-rke2-package-updates">Prevent RKE2 Package Updates</h3>
@@ -27710,7 +27908,7 @@ sudo dnf install -y helm
 </code></pre></div><h3 id="rke2-specific-ports">RKE2 specific ports</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9345/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6443/tcp --permanent
-sudo firewall-cmd --add-port<span style="color:#f92672">=</span>10250Air-Gap/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>10250/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2379/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2380/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>30000-32767/tcp --permanent
