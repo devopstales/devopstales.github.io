@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2023-11-30T09:18:44+00:00</updated>
+    <updated>2024-01-24T15:54:36+00:00</updated>
     
     
     <author>
@@ -7553,7 +7553,7 @@ $ grep <span style="color:#e6db74">${</span>USER<span style="color:#e6db74">}</s
 sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/CentOS_8/devel:kubic:libcontainers:stable.repo
 sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/CentOS_8/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
 
-yum install cri-o cri-tools nano wget iproute-tc
+yum install cri-o nano wget
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bas" data-lang="bas">cat <span style="color:#f92672">&lt;&lt;</span><span style="color:#75715e">&#39;EOF&#39; | sudo tee /etc/modules-load.d/crio.conf &gt; /dev/null</span>
 overlay
 br_netfilter
@@ -7577,7 +7577,8 @@ swapoff -a
 swapoff -a
 sed -i.bak -r <span style="color:#e6db74">&#39;s/(.+ swap .+)/#\1/&#39;</span> /etc/fstab
 free -h
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir /etc/crio/crio.conf.d/
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Configure User anmespacing in CRI-O</span>
+mkdir /etc/crio/crio.conf.d/
 cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/crio/crio.conf.d/01-userns-workload.conf
 </span><span style="color:#e6db74">[crio.runtime.workloads.userns]
 </span><span style="color:#e6db74">activation_annotation = &#34;io.kubernetes.cri-o.userns-mode&#34;
@@ -7631,12 +7632,16 @@ ranges found for user \&quot;containers\&quot; in /etc/subuid&quot;
 </span><span style="color:#e6db74">gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 </span><span style="color:#e6db74">EOF</span>
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">CRIP_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>crio --version | egrep ^Version | awk <span style="color:#e6db74">&#39;{print $2}&#39;</span><span style="color:#66d9ef">)</span>
-yum install kubelet-$CRIP_VERSION kubeadm-$CRIP_VERSION kubectl-$CRIP_VERSION -y
+yum install kubelet-$CRIP_VERSION kubeadm-$CRIP_VERSION kubectl-$CRIP_VERSION cri-tools iproute-tc -y
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">IP<span style="color:#f92672">=</span>192.168.200.10
-<span style="color:#75715e"># for multi interface configuration</span>
-echo <span style="color:#e6db74">&#39;KUBELET_EXTRA_ARGS=&#34;--node-ip=&#39;</span>$IP<span style="color:#e6db74">&#39;&#34;&#39;</span> &gt; /etc/sysconfig/kubelet
 
-systemctl enable kubelet.service
+mkdir /var/lib/kubelet/
+
+<span style="color:#75715e"># --node-ip for multi interface configuration</span>
+cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /var/lib/kubelet/kubeadm-flags.env
+</span><span style="color:#e6db74">KUBELET_KUBEADM_ARGS=&#34;--node-ip=&#39;$IP&#39;&#34;
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl enable kubelet.service
 systemctl enable --now crio
 kubeadm config images pull --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION
 kubeadm init --pod-network-cidr<span style="color:#f92672">=</span>10.244.0.0/16 --apiserver-advertise-address<span style="color:#f92672">=</span>$IP  --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock
@@ -7651,9 +7656,9 @@ kubectl get node -o wide
 kubectl get po --all-namespaces
 
 kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
-</code></pre></div><pre tabindex="0"><code>kubectl taint nodes --all node-role.kubernetes.io/master-
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl taint nodes --all node-role.kubernetes.io/master-
 kubectl taint nodes --all node-role.kubernetes.io/control-plane-
-</code></pre><p>and <strong>docker/containerd</strong> can be install in rootless mode.  user namespaces it.</p>
+</code></pre></div><p>and <strong>docker/containerd</strong> can be install in rootless mode.  user namespaces it.</p>
 <h3 id="demo-time">Demo time</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano pod.yaml
 ---
@@ -36588,77 +36593,83 @@ curl -sfL https://get.k3s.io | sh -
 <h3 id="what-is-cri-o">What is CRI-O?</h3>
 <p>The Kubernetes project has defined a number of standards. One of them is cri. The Container Runtime Interface. This interface defines how Kubernetes talks with a high-level container runtime. CRI-O is an implementation of the Kubernetes CRI to enable using OCI (Open Container Initiative) compatible runtimes. It is a lightweight alternative of Docker as the runtime for kubernetes. t allows Kubernetes to use any OCI-compliant runtime as the container runtime for running pods. Today it supports runc and Kata Containers as the container runtimes but any OCI-conformant runtime can be plugged in principle.</p>
 <h3 id="install-cri-o-instad-of-docker">Install CRI-O instad of Docker</h3>
-<pre tabindex="0"><code>VERSION=1.18
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">VERSION<span style="color:#f92672">=</span>1.18
 sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/CentOS_7/devel:kubic:libcontainers:stable.repo
-sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_${VERSION}.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:${VERSION}/CentOS_7/devel:kubic:libcontainers:stable:cri-o:${VERSION}.repo
+sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/CentOS_7/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
 
 yum install cri-o
-</code></pre><h3 id="configure">Configure</h3>
-<pre tabindex="0"><code>modprobe overlay
+</code></pre></div><h3 id="configure">Configure</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">modprobe overlay
 modprobe br_netfilter
 
-cat &lt;&lt;EOF &gt;  /etc/sysctl.d/k8s.conf
-net.bridge.bridge-nf-call-ip6tables = 1
-net.bridge.bridge-nf-call-iptables = 1
-net.ipv6.conf.all.disable_ipv6 = 1
-net.ipv6.conf.default.disable_ipv6 = 1
-net.ipv4.ip_forward                 = 1
-net.bridge.bridge-nf-call-ip6tables = 1
-EOF
+cat <span style="color:#e6db74">&lt;&lt;EOF &gt;  /etc/sysctl.d/k8s.conf
+</span><span style="color:#e6db74">net.bridge.bridge-nf-call-ip6tables = 1
+</span><span style="color:#e6db74">net.bridge.bridge-nf-call-iptables = 1
+</span><span style="color:#e6db74">net.ipv6.conf.all.disable_ipv6 = 1
+</span><span style="color:#e6db74">net.ipv6.conf.default.disable_ipv6 = 1
+</span><span style="color:#e6db74">net.ipv4.ip_forward                 = 1
+</span><span style="color:#e6db74">net.bridge.bridge-nf-call-ip6tables = 1
+</span><span style="color:#e6db74">EOF</span>
 
 sysctl --system
-</code></pre><pre tabindex="0"><code>free -h
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">free -h
 swapoff -a
 swapoff -a
-sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
+sed -i.bak -r <span style="color:#e6db74">&#39;s/(.+ swap .+)/#\1/&#39;</span> /etc/fstab
 free -h
-</code></pre><p>You nee the same cgroup manager in cri-o and kubeadm. The default for kubeadm is cgroupfs and for cri-o the default is systemd. In this example I configured cri-o for cgroupfs.</p>
-<pre tabindex="0"><code>nano /etc/crio/crio.conf
-[crio.runtime]
-conmon_cgroup = &quot;pod&quot;
-cgroup_manager = &quot;cgroupfs&quot;
+</code></pre></div><p>You nee the same cgroup manager in cri-o and kubeadm. The default for kubeadm is cgroupfs and for cri-o the default is systemd. In this example I configured cri-o for cgroupfs.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /etc/crio/crio.conf
+<span style="color:#f92672">[</span>crio.runtime<span style="color:#f92672">]</span>
+conmon_cgroup <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;pod&#34;</span>
+cgroup_manager <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;cgroupfs&#34;</span>
 
 nano /etc/containers/registries.conf
-registries = [
-  &quot;quay.io&quot;,
-  &quot;docker.io&quot;
-]
-</code></pre><p>If you want to use systemd:</p>
-<pre tabindex="0"><code>echo &quot;KUBELET_EXTRA_ARGS=--cgroup-driver=systemd&quot; | tee /etc/sysconfig/kubelet
-</code></pre><h3 id="install-kubernets">Install kubernets</h3>
-<pre tabindex="0"><code>cat &lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
-[kubernetes]
-name=Kubernetes
-baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
-enabled=1
-gpgcheck=1
-repo_gpgcheck=1
-gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-EOF
+registries <span style="color:#f92672">=</span> <span style="color:#f92672">[</span>
+  <span style="color:#e6db74">&#34;quay.io&#34;</span>,
+  <span style="color:#e6db74">&#34;docker.io&#34;</span>
+<span style="color:#f92672">]</span>
+</code></pre></div><p>If you want to use systemd:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#34;KUBELET_EXTRA_ARGS=--cgroup-driver=systemd&#34;</span> | tee /etc/sysconfig/kubelet
+</code></pre></div><h3 id="install-kubernets">Install kubernets</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
+</span><span style="color:#e6db74">[kubernetes]
+</span><span style="color:#e6db74">name=Kubernetes
+</span><span style="color:#e6db74">baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+</span><span style="color:#e6db74">enabled=1
+</span><span style="color:#e6db74">gpgcheck=1
+</span><span style="color:#e6db74">repo_gpgcheck=1
+</span><span style="color:#e6db74">gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+</span><span style="color:#e6db74">EOF</span>
 
-CRIP_VERSION=$(crio --version | awk '{print $3}')
+CRIP_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>crio --version | awk <span style="color:#e6db74">&#39;{print $3}&#39;</span><span style="color:#66d9ef">)</span>
 yum install kubelet-$CRIP_VERSION kubeadm-$CRIP_VERSION kubectl-$CRIP_VERSION -y
-</code></pre><pre tabindex="0"><code>IP=172.17.9.10
-# for multi interface configuration
-echo 'KUBELET_EXTRA_ARGS=&quot;--node-ip='$IP' --cgroup-driver=systemd&quot;' &gt; /etc/sysconfig/kubelet
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">IP<span style="color:#f92672">=</span>172.17.9.10
 
-systemctl enable kubelet.service
+mkdir /var/lib/kubelet/
+
+<span style="color:#75715e"># --node-ip for multi interface configuration</span>
+<span style="color:#75715e"># --cgroup-driver=systemd for systemd dryver</span>
+
+cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /var/lib/kubelet/kubeadm-flags.env
+</span><span style="color:#e6db74">KUBELET_KUBEADM_ARGS=&#34;--node-ip=&#39;$IP&#39; --cgroup-driver=systemd&#34;
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl enable --now kubelet.service
 systemctl enable --now cri-o
-kubeadm config images pull --cri-socket=unix:///var/run/crio/crio.sock --kubernetes-version=$CRIP_VERSION
-kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address=$IP  --kubernetes-version=$CRIP_VERSION --cri-socket=unix:///var/run/crio/crio.sock
+kubeadm config images pull --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION
+kubeadm init --pod-network-cidr<span style="color:#f92672">=</span>10.244.0.0/16 --apiserver-advertise-address<span style="color:#f92672">=</span>$IP  --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock
 
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
+sudo chown <span style="color:#66d9ef">$(</span>id -u<span style="color:#66d9ef">)</span>:<span style="color:#66d9ef">$(</span>id -g<span style="color:#66d9ef">)</span> $HOME/.kube/config
 
 
 crictl info
 kubectl get node -o wide
 kubectl get po --all-namespaces
-</code></pre><h3 id="inincialize-network">Inincialize network</h3>
-<pre tabindex="0"><code>wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+</code></pre></div><h3 id="inincialize-network">Inincialize network</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
 kubectl aplly -f kube-flannel.yml
-</code></pre><pre tabindex="0"><code>kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
 wget https://docs.projectcalico.org/manifests/custom-resources.yaml
 
 nano ustom-resources.yaml
@@ -36667,38 +36678,38 @@ nano ustom-resources.yaml
 ...
 
 kubectl apply -f custom-resources.yaml
-</code></pre><h3 id="install-tools">Install tools</h3>
-<pre tabindex="0"><code>yum install git -y
+</code></pre></div><h3 id="install-tools">Install tools</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install git -y
 
 sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
 sudo ln -s /opt/kubectx/kubectx /usr/local/sbin/kubectx
 sudo ln -s /opt/kubectx/kubens /usr/local/sbin/kubens
-</code></pre><h3 id="deploy-kadalu-storage">Deploy kadalu storage</h3>
-<pre tabindex="0"><code>sudo wipefs -a -t dos -f /dev/sdb
+</code></pre></div><h3 id="deploy-kadalu-storage">Deploy kadalu storage</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo wipefs -a -t dos -f /dev/sdb
 sudo mkfs.xfs /dev/sdb
 
 yum install python3-pip -y
 sudo pip3 install kubectl-kadalu
 
-echo &quot;export PATH=$PATH:/usr/local/bin/&quot; &gt;&gt; /etc/profile
+echo <span style="color:#e6db74">&#34;export PATH=</span>$PATH<span style="color:#e6db74">:/usr/local/bin/&#34;</span> &gt;&gt; /etc/profile
 source /etc/profile
 
 kubectl kadalu install
 
-# k8s.mydomain.intra is the nod name in Kubernetes
-# /dev/sdb is the disk
+<span style="color:#75715e"># k8s.mydomain.intra is the nod name in Kubernetes</span>
+<span style="color:#75715e"># /dev/sdb is the disk</span>
 
-kubectl kadalu storage-add storage-pool-1 \
-    --device k8s.mydomain.intra:/dev/sdb
+kubectl kadalu storage-add storage-pool-1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --device k8s.mydomain.intra:/dev/sdb
 
-# to delete object if you misconfigured kadalu
+<span style="color:#75715e"># to delete object if you misconfigured kadalu</span>
 kubectl delete kadalustorages.kadalu-operator.storage storage-pool-1
 
 
 kubectl get pods -n kadalu
 
-kubectl patch storageclass kadalu.replica1 -p '{&quot;metadata&quot;: {&quot;annotations&quot;:{&quot;storageclass.kubernetes.io/is-default-class&quot;:&quot;true&quot;}}}'
-</code></pre><pre tabindex="0"><code>nano test-pvc.yaml
+kubectl patch storageclass kadalu.replica1 -p <span style="color:#e6db74">&#39;{&#34;metadata&#34;: {&#34;annotations&#34;:{&#34;storageclass.kubernetes.io/is-default-class&#34;:&#34;true&#34;}}}&#39;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano test-pvc.yaml
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
@@ -36711,7 +36722,7 @@ spec:
   resources:
     requests:
       storage: 1Gi
-</code></pre>]]></content>
+</code></pre></div>]]></content>
             
                  
                     

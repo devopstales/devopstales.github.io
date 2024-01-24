@@ -29,7 +29,7 @@
     "datePublished": "2022-11-02",
     "dateModified" : "2022-11-02",
     "url" : "https://devopstales.github.io/kubernetes/k8s-user-namespace/",
-    "wordCount" : "834",
+    "wordCount" : "845",
     "keywords" : [ "CRI-O", "kubernetes deployment", "user namespace", "Blog" ]
     
 }
@@ -257,7 +257,7 @@ $ grep <span style="color:#e6db74">${</span>USER<span style="color:#e6db74">}</s
 sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/CentOS_8/devel:kubic:libcontainers:stable.repo
 sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/CentOS_8/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
 
-yum install cri-o cri-tools nano wget iproute-tc
+yum install cri-o nano wget
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bas" data-lang="bas">cat <span style="color:#f92672">&lt;&lt;</span><span style="color:#75715e">&#39;EOF&#39; | sudo tee /etc/modules-load.d/crio.conf &gt; /dev/null</span>
 overlay
 br_netfilter
@@ -281,7 +281,8 @@ swapoff -a
 swapoff -a
 sed -i.bak -r <span style="color:#e6db74">&#39;s/(.+ swap .+)/#\1/&#39;</span> /etc/fstab
 free -h
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir /etc/crio/crio.conf.d/
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Configure User anmespacing in CRI-O</span>
+mkdir /etc/crio/crio.conf.d/
 cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/crio/crio.conf.d/01-userns-workload.conf
 </span><span style="color:#e6db74">[crio.runtime.workloads.userns]
 </span><span style="color:#e6db74">activation_annotation = &#34;io.kubernetes.cri-o.userns-mode&#34;
@@ -335,12 +336,16 @@ ranges found for user \&quot;containers\&quot; in /etc/subuid&quot;
 </span><span style="color:#e6db74">gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 </span><span style="color:#e6db74">EOF</span>
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">CRIP_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>crio --version | egrep ^Version | awk <span style="color:#e6db74">&#39;{print $2}&#39;</span><span style="color:#66d9ef">)</span>
-yum install kubelet-$CRIP_VERSION kubeadm-$CRIP_VERSION kubectl-$CRIP_VERSION -y
+yum install kubelet-$CRIP_VERSION kubeadm-$CRIP_VERSION kubectl-$CRIP_VERSION cri-tools iproute-tc -y
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">IP<span style="color:#f92672">=</span>192.168.200.10
-<span style="color:#75715e"># for multi interface configuration</span>
-echo <span style="color:#e6db74">&#39;KUBELET_EXTRA_ARGS=&#34;--node-ip=&#39;</span>$IP<span style="color:#e6db74">&#39;&#34;&#39;</span> &gt; /etc/sysconfig/kubelet
 
-systemctl enable kubelet.service
+mkdir /var/lib/kubelet/
+
+<span style="color:#75715e"># --node-ip for multi interface configuration</span>
+cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /var/lib/kubelet/kubeadm-flags.env
+</span><span style="color:#e6db74">KUBELET_KUBEADM_ARGS=&#34;--node-ip=&#39;$IP&#39;&#34;
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl enable kubelet.service
 systemctl enable --now crio
 kubeadm config images pull --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION
 kubeadm init --pod-network-cidr<span style="color:#f92672">=</span>10.244.0.0/16 --apiserver-advertise-address<span style="color:#f92672">=</span>$IP  --kubernetes-version<span style="color:#f92672">=</span>$CRIP_VERSION --cri-socket<span style="color:#f92672">=</span>unix:///var/run/crio/crio.sock
@@ -355,9 +360,9 @@ kubectl get node -o wide
 kubectl get po --all-namespaces
 
 kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
-</code></pre></div><pre tabindex="0"><code>kubectl taint nodes --all node-role.kubernetes.io/master-
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl taint nodes --all node-role.kubernetes.io/master-
 kubectl taint nodes --all node-role.kubernetes.io/control-plane-
-</code></pre><p>and <strong>docker/containerd</strong> can be install in rootless mode.  user namespaces it.</p>
+</code></pre></div><p>and <strong>docker/containerd</strong> can be install in rootless mode.  user namespaces it.</p>
 <h3 id="demo-time">Demo time</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano pod.yaml
 ---
@@ -773,7 +778,7 @@ cat /proc/57277/uid_map
 	<div class="container footer__container flex">
 		
 		<div class="footer__copyright">
-			&copy; 2023 devopstales.
+			&copy; 2024 devopstales.
 			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
 		</div>
 	</div>
