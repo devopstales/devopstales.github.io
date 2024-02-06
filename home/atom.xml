@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2024-01-25T10:31:23+00:00</updated>
+    <updated>2024-02-06T14:35:38+00:00</updated>
     
     
     <author>
@@ -17,6 +17,948 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Github Self-Hosted Runners on Kubernetes with Actions Runner Controller]]></title>
+            <link href="https://devopstales.github.io/home/github-self-hosted-runners-on-kubernetes/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/github-actions-basics/?utm_source=atom_feed" rel="related" type="text/html" title="GitHub Actions: Basics" />
+                <link href="https://devopstales.github.io/devops/github-self-hosted-runners-on-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Github Self-Hosted Runners on Kubernetes with Actions Runner Controller" />
+                <link href="https://devopstales.github.io/devops/github-actions-basics/?utm_source=atom_feed" rel="related" type="text/html" title="GitHub Actions: Basics" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/home/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+            
+                <id>https://devopstales.github.io/home/github-self-hosted-runners-on-kubernetes/</id>
+            
+            
+            <published>2024-01-29T00:00:00+00:00</published>
+            <updated>2024-01-29T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can set up self-hosted GitHub action runner in Kubernetes with Actions Runner Controller.</p>
+<p>Following are the steps to set up an organization-level container-based runner within an EKS cluster.</p>
+<h3 id="github-authentication-for-action-runner-controller">GitHub authentication for Action Runner Controller</h3>
+<p>First, we need to set up a mechanism to authenticate the action runner controller to GitHub. This can be done in two ways:</p>
+<ul>
+<li>PAT (Personal Access Token)</li>
+<li>Using GitHub App</li>
+</ul>
+<p>In this demo I will use the GithubApp method for authentication.</p>
+<ul>
+<li>In the upper-right corner of any page on GitHub, click your profile photo.</li>
+<li>Navigate to your account settings.
+<ul>
+<li>For a GitHub App owned by a personal account, click Settings.</li>
+<li>For a GitHub App owned by an organization:
+<ul>
+<li>Click Your organizations.</li>
+<li>To the right of the organization, click Settings.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>In the left sidebar, click Developer settings.</li>
+<li>In the left sidebar, click GitHub Apps.</li>
+<li>Click New GitHub App.</li>
+</ul>
+<p><img src="/img/include/github-app01.webp" alt="Example image"  class="zoomable" /></p>
+<p>Set the fallowing permissions:</p>
+<ul>
+<li>Repository Permissions
+<ul>
+<li>Actions (read only)</li>
+<li>Administration (read and write)</li>
+<li>Checks (read only)</li>
+<li>Metadata (read only)</li>
+<li>Pull requests (read only)</li>
+</ul>
+</li>
+<li>Organization Permissions
+<ul>
+<li>Self-hosted runners (read/write)</li>
+<li>Webhooks(read and write)</li>
+</ul>
+</li>
+</ul>
+<p>You will get an <code>App ID</code> <code>Client ID</code> and <code>Client Secret</code>. This will be used later.</p>
+<p>Download the private key file by pushing the “Generate a private key” button at the bottom of the GitHub App page for later use.</p>
+<p>When the installation is complete, you will be taken to a URL. The last number of the URL will be used as the Installation ID later (for example, if the URL ends in settings/installations/12345, the Installation ID is 12345).</p>
+<p>Finally, register the App ID (APP_ID), Installation ID (INSTALLATION_ID), and the downloaded private key file (PRIVATE_KEY_FILE_PATH) as Kubernetes secrets using the following command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create secret generic arc-secret -n arc-systems <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span> - from-literal<span style="color:#f92672">=</span>github_app_id<span style="color:#f92672">=</span>YOUR_GITHUB_APP_ID <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span> - from-literal<span style="color:#f92672">=</span>github_app_installation_id<span style="color:#f92672">=</span>YOUR_INSTALLATION_ID <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span> - from-literal<span style="color:#f92672">=</span>github_app_private_key<span style="color:#f92672">=</span>YOUR_PRIVATE_KEY
+</code></pre></div><h3 id="install-the-action-runner-controller-arc">Install the Action Runner Controller (ARC)</h3>
+<p>To install the operator and the custom resource definitions (CRDs) in your cluster, do the following.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm install arc <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --namespace arc-system <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --create-namespace <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller
+</code></pre></div><blockquote>
+<p>For additional Helm configuration options, see <a href="https://github.com/actions/actions-runner-controller/blob/master/charts/gha-runner-scale-set-controller/values.yaml">values.yaml</a> in the ARC documentation.</p>
+</blockquote>
+<h3 id="configuring-a-runner-scale-set">Configuring a runner scale set</h3>
+<p>To configure your runner scale set, run the following command in your terminal, using values from your ARC configuration.</p>
+<blockquote>
+<p>As a security best practice, install your runner scale sets to a different namespace than the namespace containing your Action Runner Controller.</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm install arc-runner-set <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --namespace arc-systems <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --create-namespace <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --set githubConfigUrl<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://github.com/&lt;your_enterprise/org/&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --set githubConfigSecret.githubConfigSecret<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;arc-secret&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+</code></pre></div><blockquote>
+<p>For more Helm configuration options, see <a href="https://github.com/actions/actions-runner-controller/blob/master/charts/gha-runner-scale-set/values.yaml">values.yaml</a> in the ARC documentation.</p>
+</blockquote>
+<p>From your terminal, run the following command to check your installation.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm list -A
+</code></pre></div><p>You should see an output similar to the following.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                                       APP VERSION
+arc             arc-systems     <span style="color:#ae81ff">1</span>               2023-04-12 11:45:59.152090536 +0000 UTC deployed        gha-runner-scale-set-controller-0.4.0       0.4.0
+arc-runner-set  arc-runners     <span style="color:#ae81ff">1</span>               2023-04-12 11:46:13.451041354 +0000 UTC deployed        gha-runner-scale-set-0.4.0                  0.4.0
+</code></pre></div><p>To check the manager pod, run the following command in your terminal.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get pods -n arc-systems
+</code></pre></div><p>If everything was installed successfully, the status of the pods shows as Running.</p>
+<pre tabindex="0"><code class="language-bah" data-lang="bah">NAME                                                   READY   STATUS    RESTARTS   AGE
+arc-gha-runner-scale-set-controller-594cdc976f-m7cjs   1/1     Running   0          64s
+arc-runner-set-754b578d-listener                       1/1     Running   0          12s
+</code></pre><h3 id="using-runner-scale-sets">Using runner scale sets</h3>
+<p>Now you will create and run a simple test workflow that uses the runner scale set runners.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">name</span>: <span style="color:#ae81ff">Actions Runner Controller Demo</span>
+<span style="color:#f92672">on</span>:
+  <span style="color:#f92672">workflow_dispatch</span>:
+
+<span style="color:#f92672">jobs</span>:
+  <span style="color:#f92672">Explore-GitHub-Actions</span>:
+    <span style="color:#75715e"># You need to use the INSTALLATION_NAME from the previous steps</span>
+    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">arc-runner-set</span>
+    <span style="color:#f92672">steps</span>:
+    - <span style="color:#f92672">run</span>: <span style="color:#ae81ff">echo &#34;🎉 This job uses runner scale set runners!&#34;</span>
+</code></pre></div><p>Once you&rsquo;ve added the workflow to your repository, manually trigger the workflow.  To view the runner pods being created while the workflow is running, run the following command from your terminal.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get pods -n arc-runners
+</code></pre></div><p>A successful output will look similar to the following.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">NAMESPACE     NAME                                                  READY   STATUS    RESTARTS      AGE
+arc-runners   arc-runner-set-rmrgw-runner-p9p5n                     1/1     Running   <span style="color:#ae81ff">0</span>             21s
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes Secure Install]]></title>
+            <link href="https://devopstales.github.io/home/k8s-secure-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-secure-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Secure Install" />
+                <link href="https://devopstales.github.io/home/k8s-cisa-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Hardening Guide with CISA 1.6 Benchmark" />
+                <link href="https://devopstales.github.io/home/k8s-falco/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes audit logs and Falco" />
+                <link href="https://devopstales.github.io/home/k8s-test-tools/?utm_source=atom_feed" rel="related" type="text/html" title="Validate Kubernetes Deployment in CI/CD" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-cisa-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Hardening Guide with CISA 1.6 Benchmark" />
+            
+                <id>https://devopstales.github.io/home/k8s-secure-install/</id>
+            
+            
+            <published>2024-01-20T00:00:00+00:00</published>
+            <updated>2024-01-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to install a Kubernetes cluster in a secure way with.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install -y epel-release
+yum install -y nano wget
+</code></pre></div><h3 id="selinux-and-firewall-config">Selinux and Firewall Config</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl enable firewalld
+systemctl start firewalld
+
+<span style="color:#75715e"># Check selinux enabled</span>
+sestatus
+
+<span style="color:#75715e"># Resoult</span>
+SELinux status:                 enabled
+SELinuxfs mount:                /sys/fs/selinux
+SELinux root directory:         /etc/selinux
+Loaded policy name:             targeted
+Current mode:                   enforcing
+Mode from config file:          enforcing
+Policy MLS status:              enabled
+Policy deny_unknown status:     allowed
+Memory protection checking:     actual <span style="color:#f92672">(</span>secure<span style="color:#f92672">)</span>
+Max kernel policy version:      <span style="color:#ae81ff">33</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9345/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6443/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>10250/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2379/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2380/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>30000-32767/tcp --permanent
+<span style="color:#75715e"># Used for the Monitoring</span>
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9796/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>19090/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6942/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9091/tcp --permanent
+<span style="color:#75715e">### CNI specific ports Cilium</span>
+<span style="color:#75715e"># 4244/TCP is required when the Hubble Relay is enabled and therefore needs to connect to all agents to collect the flows</span>
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>4244/tcp --permanent
+<span style="color:#75715e"># Cilium healthcheck related permits:</span>
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>4240/tcp --permanent
+sudo firewall-cmd --remove-icmp-block<span style="color:#f92672">=</span>echo-request --permanent
+sudo firewall-cmd --remove-icmp-block<span style="color:#f92672">=</span>echo-reply --permanent
+<span style="color:#75715e"># Since we are using Cilium with GENEVE as overlay, we need the following port too:</span>
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6081/udp --permanent
+<span style="color:#75715e">### Ingress Controller specific ports</span>
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>80/tcp --permanent
+sudo firewall-cmd --add-port<span style="color:#f92672">=</span>443/tcp --permanent
+<span style="color:#75715e">### To get DNS resolution working, simply enable Masquerading.</span>
+sudo firewall-cmd --zone<span style="color:#f92672">=</span>public  --add-masquerade --permanent
+
+<span style="color:#75715e">### Finally apply all the firewall changes</span>
+sudo firewall-cmd --reload
+</code></pre></div><p>Verification:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo firewall-cmd --list-all
+public <span style="color:#f92672">(</span>active<span style="color:#f92672">)</span>
+  target: default
+  icmp-block-inversion: no
+  interfaces: eno1
+  sources: 
+  services: cockpit dhcpv6-client ssh wireguard
+  ports: 9345/tcp 6443/tcp 10250/tcp 2379/tcp 2380/tcp 30000-32767/tcp 4240/tcp 6081/udp 80/tcp 443/tcp 4244/tcp 9796/tcp 19090/tcp 6942/tcp 9091/tcp
+  protocols: 
+  masquerade: yes
+  forward-ports: 
+  source-ports: 
+  icmp-blocks: 
+  rich rules: 
+</code></pre></div><h3 id="linux-configurations">Linux Configurations</h3>
+<p>Enable cgroupV2</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo dnf install -y grubby
+sudo grubby <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --update-kernel<span style="color:#f92672">=</span>ALL <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --args<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;systemd.unified_cgroup_hierarchy=1&#34;</span>
+
+cat <span style="color:#e6db74">&lt;&lt; EOF &gt;&gt; /etc/systemd/system.conf
+</span><span style="color:#e6db74">DefaultCPUAccounting=yes
+</span><span style="color:#e6db74">DefaultIOAccounting=yes
+</span><span style="color:#e6db74">DefaultIPAccounting=yes
+</span><span style="color:#e6db74">DefaultBlockIOAccounting=yes
+</span><span style="color:#e6db74">EOF</span>
+
+init <span style="color:#ae81ff">6</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># check for type cgroup2</span>
+$ mount -l|grep cgroup
+cgroup2 on /sys/fs/cgroup type cgroup2 <span style="color:#f92672">(</span>rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate<span style="color:#f92672">)</span>
+
+<span style="color:#75715e"># check for cpu controller</span>
+$ cat /sys/fs/cgroup/cgroup.subtree_control
+cpu io memory pids
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | sudo tee /etc/modules-load.d/crio.conf
+</span><span style="color:#e6db74">overlay
+</span><span style="color:#e6db74">br_netfilter
+</span><span style="color:#e6db74">EOF</span>
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+</span><span style="color:#e6db74">net.bridge.bridge-nf-call-ip6tables = 1
+</span><span style="color:#e6db74">net.bridge.bridge-nf-call-iptables  = 1
+</span><span style="color:#e6db74">net.ipv4.ip_forward                 = 1
+</span><span style="color:#e6db74">#
+</span><span style="color:#e6db74"># protectKernelDefaults
+</span><span style="color:#e6db74">#
+</span><span style="color:#e6db74">kernel.keys.root_maxbytes           = 25000000
+</span><span style="color:#e6db74">kernel.keys.root_maxkeys            = 1000000
+</span><span style="color:#e6db74">kernel.panic                        = 10
+</span><span style="color:#e6db74">kernel.panic_on_oops                = 1
+</span><span style="color:#e6db74">vm.overcommit_memory                = 1
+</span><span style="color:#e6db74">vm.panic_on_oom                     = 0
+</span><span style="color:#e6db74">EOF</span>
+
+sysctl --system
+</code></pre></div><p>Ensure the eBFP filesystem is mounted (which should already be the case on RHEL 8.3):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mount | grep /sys/fs/bpf
+<span style="color:#75715e"># if present should output, e.g. &#34;none on /sys/fs/bpf type bpf&#34;...</span>
+</code></pre></div><p>If that&rsquo;s not the case, mount it using the commands down here:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo mount bpffs -t bpf /sys/fs/bpf
+sudo bash -c <span style="color:#e6db74">&#39;cat &lt;&lt;EOF &gt;&gt; /etc/fstab
+</span><span style="color:#e6db74">none /sys/fs/bpf bpf rw,relatime 0 0
+</span><span style="color:#e6db74">EOF&#39;</span>
+</code></pre></div><h3 id="etcd">etcd</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">useradd -r -c <span style="color:#e6db74">&#34;etcd user&#34;</span> -s /sbin/nologin -M etcd
+
+head -c <span style="color:#ae81ff">32</span> /dev/urandom | base64
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano /etc/kubernetes/etcd-encription.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apiserver.config.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">EncryptionConfiguration</span>
+<span style="color:#f92672">resources</span>:
+  - <span style="color:#f92672">resources</span>:
+    - <span style="color:#ae81ff">secrets</span>
+    <span style="color:#f92672">providers</span>:
+    - <span style="color:#f92672">identity</span>: {}
+    - <span style="color:#f92672">aesgcm</span>:
+        <span style="color:#f92672">keys</span>:
+        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">key1</span>
+          <span style="color:#f92672">secret</span>: <span style="color:#ae81ff">&lt;BASE 64 ENCODED SECRET&gt;</span>
+</code></pre></div><h3 id="cri-o">CRI-O</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">VERSION<span style="color:#f92672">=</span>1.28
+
+sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/CentOS_8/devel:kubic:libcontainers:stable.repo
+sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/CentOS_8/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
+
+yum install -y cri-o
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Configure User anmespacing in CRI-O</span>
+mkdir /etc/crio/crio.conf.d/
+
+sed -i <span style="color:#e6db74">&#39;s|^cgroup_manager|#cgroup_manager|&#39;</span> /etc/crio/crio.conf
+sed -i <span style="color:#e6db74">&#39;s|^conmon_cgroup|#conmon_cgroup|&#39;</span> /etc/crio/crio.conf
+
+cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/crio/crio.conf.d/01-crio-base.conf
+</span><span style="color:#e6db74">[crio]
+</span><span style="color:#e6db74">storage_driver = &#34;overlay&#34;
+</span><span style="color:#e6db74">storage_option = [&#34;overlay.mount_program=/usr/bin/fuse-overlayfs&#34;]
+</span><span style="color:#e6db74">[crio.runtime]
+</span><span style="color:#e6db74">cgroup_manager = &#34;cgroupfs&#34;
+</span><span style="color:#e6db74">conmon_cgroup = &#39;pod&#39;
+</span><span style="color:#e6db74">EOF</span>
+
+cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/crio/crio.conf.d/02-userns-workload.conf
+</span><span style="color:#e6db74">[crio.runtime.workloads.userns]
+</span><span style="color:#e6db74">activation_annotation = &#34;io.kubernetes.cri-o.userns-mode&#34;
+</span><span style="color:#e6db74">allowed_annotations = [&#34;io.kubernetes.cri-o.userns-mode&#34;]
+</span><span style="color:#e6db74">EOF</span>
+
+<span style="color:#75715e"># Test CRIO selinux config</span>
+egrep -r <span style="color:#e6db74">&#34;selinux&#34;</span> /etc/crio/
+/etc/crio/crio.conf:selinux <span style="color:#f92672">=</span> true
+</code></pre></div><p>The <strong>CRI-O</strong> will run the containers with the <code>containers</code> user so I need to create <code>/etc/subuid</code> and <code>/etc/subgid</code> on nodes.</p>
+<blockquote>
+<p>SubUID/GIDs are a range of user/group IDs that a user is allowed to use.</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#34;containers:200000:268435456&#34;</span> &gt;&gt; /etc/subuid
+echo <span style="color:#e6db74">&#34;containers:200000:268435456&#34;</span> &gt;&gt; /etc/subgid
+</code></pre></div><h3 id="kubeadm-install">Kubeadm install</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
+</span><span style="color:#e6db74">[kubernetes]
+</span><span style="color:#e6db74">name=Kubernetes
+</span><span style="color:#e6db74">baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+</span><span style="color:#e6db74">enabled=1
+</span><span style="color:#e6db74">gpgcheck=1
+</span><span style="color:#e6db74">repo_gpgcheck=1
+</span><span style="color:#e6db74">gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+</span><span style="color:#e6db74">EOF</span>
+
+CRIP_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>crio --version | grep <span style="color:#e6db74">&#34;^Version&#34;</span> | awk <span style="color:#e6db74">&#39;{print $2}&#39;</span><span style="color:#66d9ef">)</span>
+yum install kubelet-$CRIP_VERSION kubeadm-$CRIP_VERSION kubectl-$CRIP_VERSION cri-tools iproute-tc -y
+
+echo <span style="color:#e6db74">&#34;exclude=kubelet, kubectl, kubeadm, cri-o&#34;</span> &gt;&gt; /etc/yum.conf
+</code></pre></div><h3 id="kubeadm-init-config">Kubeadm init config</h3>
+<p>Set Kubernetes version:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">clusterName</span>: <span style="color:#ae81ff">k8s-main</span>
+<span style="color:#f92672">kubernetesVersion</span>: <span style="color:#ae81ff">1.28.2</span>
+</code></pre></div><p>Configure authentication and enable webhooks:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">apiServer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">authorization-mode</span>: <span style="color:#e6db74">&#34;Node,RBAC&#34;</span>
+    <span style="color:#f92672">enable-admission-plugins</span>: <span style="color:#e6db74">&#34;NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook&#34;</span>
+</code></pre></div><p>Set node ip and load-balancer ip if you use an external load-balancer for multi node infra:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
+<span style="color:#f92672">bootstrapTokens</span>:
+- <span style="color:#f92672">token</span>: <span style="color:#e6db74">&#34;c2t0rj.cofbfnwwrb387890&#34;</span>
+<span style="color:#f92672">localAPIEndpoint</span>:
+  <span style="color:#75715e"># local ip and port</span>
+  <span style="color:#f92672">advertiseAddress</span>: <span style="color:#ae81ff">192.168.56.12</span>
+  <span style="color:#f92672">bindPort</span>: <span style="color:#ae81ff">6443</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#75715e"># load-balancer ip or node ip and port</span>
+<span style="color:#f92672">controlPlaneEndpoint</span>: <span style="color:#e6db74">&#34;192.168.56.12:6443&#34;</span>
+</code></pre></div><p>Configure Certificate and rotation:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
+<span style="color:#f92672">nodeRegistration</span>:
+  <span style="color:#f92672">kubeletExtraArgs</span>:
+    <span style="color:#f92672">rotate-server-certificates</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">certificatesDir</span>: <span style="color:#ae81ff">/etc/kubernetes/pki</span>
+<span style="color:#f92672">apiServer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">kubelet-certificate-authority</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/pki/ca.crt&#34;</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
+<span style="color:#f92672">enableServer</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">serverTLSBootstrap</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">rotateCertificates</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">featureGates</span>:
+    <span style="color:#f92672">RotateKubeletServerCertificate</span>: <span style="color:#66d9ef">true</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">JoinConfiguration</span>
+<span style="color:#f92672">nodeRegistration</span>:
+  <span style="color:#f92672">kubeletExtraArgs</span>:
+    <span style="color:#f92672">rotate-server-certificates</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</code></pre></div><p>Configure kubernetes to use CRI-O:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
+<span style="color:#f92672">nodeRegistration</span>:
+  <span style="color:#f92672">criSocket</span>: <span style="color:#e6db74">&#34;unix:///var/run/crio/crio.sock&#34;</span>
+  <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
+  <span style="color:#f92672">taints</span>: <span style="color:#66d9ef">null</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">JoinConfiguration</span>
+<span style="color:#f92672">nodeRegistration</span>:
+  <span style="color:#f92672">criSocket</span>: <span style="color:#e6db74">&#34;unix:///var/run/crio/crio.sock&#34;</span>
+  <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
+  <span style="color:#f92672">taints</span>: <span style="color:#66d9ef">null</span>
+</code></pre></div><p>Set CNI Network in kubernetes config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">networking</span>:
+  <span style="color:#f92672">serviceSubnet</span>: <span style="color:#e6db74">&#34;10.96.0.0/12&#34;</span>
+  <span style="color:#f92672">podSubnet</span>: <span style="color:#e6db74">&#34;10.244.0.0/16&#34;</span>
+  <span style="color:#f92672">dnsDomain</span>: <span style="color:#e6db74">&#34;cluster.local&#34;</span>
+<span style="color:#f92672">apiServer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">service-node-port-range</span>: <span style="color:#e6db74">&#34;30000-50000&#34;</span>
+    <span style="color:#f92672">anonymous-auth</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</code></pre></div><p>Apply Pod Security Standards at the Cluster Level:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF &gt; /etc/kubernetes/k8s-pss.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apiserver.config.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AdmissionConfiguration</span>
+<span style="color:#f92672">plugins</span>:
+- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">PodSecurity</span>
+  <span style="color:#f92672">configuration</span>:
+    <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">pod-security.admission.config.k8s.io/v1beta1</span>
+    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PodSecurityConfiguration</span>
+    <span style="color:#f92672">defaults</span>:
+      <span style="color:#f92672">enforce</span>: <span style="color:#e6db74">&#34;restricted&#34;</span>
+      <span style="color:#f92672">enforce-version</span>: <span style="color:#e6db74">&#34;latest&#34;</span>
+      <span style="color:#f92672">audit</span>: <span style="color:#e6db74">&#34;restricted&#34;</span>
+      <span style="color:#f92672">audit-version</span>: <span style="color:#e6db74">&#34;latest&#34;</span>
+      <span style="color:#f92672">warn</span>: <span style="color:#e6db74">&#34;restricted&#34;</span>
+      <span style="color:#f92672">warn-version</span>: <span style="color:#e6db74">&#34;latest&#34;</span>
+    <span style="color:#f92672">exemptions</span>:
+      <span style="color:#f92672">usernames</span>: []
+      <span style="color:#f92672">runtimeClasses</span>: []
+      <span style="color:#f92672">namespaces</span>: [<span style="color:#ae81ff">kube-system, cis-operator-system, cilium-spire, ceph-storage-system]</span>
+<span style="color:#ae81ff">EOF</span>
+<span style="color:#75715e"># Add your own exemption namespaces.</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">apiServer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">admission-control-config-file</span>: <span style="color:#ae81ff">/etc/kubernetes/k8s-pss.yaml</span>
+  <span style="color:#f92672">extraVolumes</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;kubernetes-pss&#34;</span>
+    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/k8s-pss.yaml&#34;</span>
+    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/k8s-pss.yaml&#34;</span>
+    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;File&#34;</span>
+    <span style="color:#f92672">propagation</span>: <span style="color:#ae81ff">Bidirectional</span>
+</code></pre></div><p>Configure etcd folder and encryption:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">etcd</span>:
+  <span style="color:#f92672">local</span>:
+    <span style="color:#f92672">dataDir</span>: <span style="color:#ae81ff">/var/lib/etcd</span>
+<span style="color:#f92672">apiServer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">encryption-provider-config</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/etcd-encription.yaml&#34;</span>
+  <span style="color:#f92672">extraVolumes</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;etc-kubernetes-etcd-enc&#34;</span>
+    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/etcd-encription.yaml&#34;</span>
+    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/etcd-encription.yaml&#34;</span>
+    <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;File&#34;</span>
+    <span style="color:#f92672">propagation</span>: <span style="color:#ae81ff">HostToContainer</span>
+</code></pre></div><p>Configure default kernel option protection:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
+<span style="color:#f92672">nodeRegistration</span>:
+  <span style="color:#f92672">kubeletExtraArgs</span>:
+    <span style="color:#f92672">protect-kernel-defaults</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
+<span style="color:#f92672">protectKernelDefaults</span>: <span style="color:#66d9ef">true</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">JoinConfiguration</span>
+<span style="color:#f92672">nodeRegistration</span>:
+  <span style="color:#f92672">kubeletExtraArgs</span>:
+    <span style="color:#f92672">protect-kernel-defaults</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</code></pre></div><p>Enable Profiling:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">apiServer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">profiling</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+<span style="color:#f92672">scheduler</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">profiling</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+<span style="color:#f92672">controllerManager</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">profiling</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+</code></pre></div><p>Enable secomp profiles:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
+<span style="color:#f92672">featureGates</span>:
+    <span style="color:#f92672">SeccompDefault</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">seccompDefault</span>: <span style="color:#66d9ef">true</span>
+</code></pre></div><p>Enable swaping:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
+<span style="color:#f92672">failSwapOn</span>: <span style="color:#66d9ef">false</span>
+<span style="color:#f92672">featureGates</span>:
+    <span style="color:#f92672">NodeSwap</span>: <span style="color:#66d9ef">true</span>
+</code></pre></div><p>Enable KubeletInUserNamespace:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
+<span style="color:#f92672">cgroupDriver</span>: <span style="color:#e6db74">&#34;cgroupfs&#34;</span>
+<span style="color:#f92672">featureGates</span>:
+    <span style="color:#f92672">KubeletInUserNamespace</span>: <span style="color:#66d9ef">true</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeproxy.config.k8s.io/v1alpha1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeProxyConfiguration</span>
+<span style="color:#f92672">mode</span>: <span style="color:#e6db74">&#34;iptables&#34;</span>
+<span style="color:#75715e"># or &#34;userspace&#34;</span>
+<span style="color:#f92672">conntrack</span>:
+<span style="color:#75715e"># Skip setting sysctl value &#34;net.netfilter.nf_conntrack_max&#34;</span>
+  <span style="color:#f92672">maxPerCore</span>: <span style="color:#ae81ff">0</span>
+<span style="color:#75715e"># Skip setting &#34;net.netfilter.nf_conntrack_tcp_timeout_established&#34;</span>
+  <span style="color:#f92672">tcpEstablishedTimeout</span>: <span style="color:#ae81ff">0s</span>
+<span style="color:#75715e"># Skip setting &#34;net.netfilter.nf_conntrack_tcp_timeout_close&#34;</span>
+  <span style="color:#f92672">tcpCloseWaitTimeout</span>: <span style="color:#ae81ff">0s</span>
+</code></pre></div><p>Enable audit logging:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
+<span style="color:#f92672">apiServer</span>:
+  <span style="color:#f92672">extraArgs</span>:
+    <span style="color:#f92672">audit-log-maxage</span>: <span style="color:#e6db74">&#34;30&#34;</span>
+    <span style="color:#f92672">audit-log-maxbackup</span>: <span style="color:#e6db74">&#34;10&#34;</span>
+    <span style="color:#f92672">audit-log-maxsize</span>: <span style="color:#e6db74">&#34;100&#34;</span>
+    <span style="color:#f92672">audit-log-path</span>: <span style="color:#e6db74">&#34;/var/log/kube-audit/audit.log&#34;</span>
+    <span style="color:#f92672">audit-policy-file</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/audit-policy.yaml&#34;</span>
+  <span style="color:#f92672">extraVolumes</span>:
+  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;audit-config&#34;</span>
+    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/audit-policy.yaml&#34;</span>
+    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/audit-policy.yaml&#34;</span>
+    <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;File&#34;</span>
+  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;audit-log&#34;</span>
+    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/var/log/kube-audit&#34;</span>
+    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/var/log/kube-audit&#34;</span>
+    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;DirectoryOrCreate&#34;</span>
+</code></pre></div><p>Configure audit-log policy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;&gt; /etc/kubernetes/audit-policy.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">audit.k8s.io/v1</span> <span style="color:#75715e"># This is required.</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Policy</span>
+<span style="color:#75715e"># Don&#39;t generate audit events for all requests in RequestReceived stage.</span>
+<span style="color:#f92672">omitStages</span>:
+  - <span style="color:#e6db74">&#34;RequestReceived&#34;</span>
+<span style="color:#f92672">rules</span>:
+  <span style="color:#75715e"># Log pod changes at RequestResponse level</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">RequestResponse</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span>
+      <span style="color:#75715e"># Resource &#34;pods&#34; doesn&#39;t match requests to any subresource of pods,</span>
+      <span style="color:#75715e"># which is consistent with the RBAC policy.</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;pods&#34;</span>, <span style="color:#e6db74">&#34;deployments&#34;</span>]
+
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">RequestResponse</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;rbac.authorization.k8s.io&#34;</span>
+      <span style="color:#75715e"># Resource &#34;pods&#34; doesn&#39;t match requests to any subresource of pods,</span>
+      <span style="color:#75715e"># which is consistent with the RBAC policy.</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;clusterroles&#34;</span>, <span style="color:#e6db74">&#34;clusterrolebindings&#34;</span>]
+
+  <span style="color:#75715e"># Log &#34;pods/log&#34;, &#34;pods/status&#34; at Metadata level</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Metadata</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;pods/log&#34;</span>, <span style="color:#e6db74">&#34;pods/status&#34;</span>]
+
+  <span style="color:#75715e"># Don&#39;t log requests to a configmap called &#34;controller-leader&#34;</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">None</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;configmaps&#34;</span>]
+      <span style="color:#f92672">resourceNames</span>: [<span style="color:#e6db74">&#34;controller-leader&#34;</span>]
+
+  <span style="color:#75715e"># Don&#39;t log watch requests by the &#34;system:kube-proxy&#34; on endpoints or services</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">None</span>
+    <span style="color:#f92672">users</span>: [<span style="color:#e6db74">&#34;system:kube-proxy&#34;</span>]
+    <span style="color:#f92672">verbs</span>: [<span style="color:#e6db74">&#34;watch&#34;</span>]
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;endpoints&#34;</span>, <span style="color:#e6db74">&#34;services&#34;</span>]
+
+  <span style="color:#75715e"># Don&#39;t log authenticated requests to certain non-resource URL paths.</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">None</span>
+    <span style="color:#f92672">userGroups</span>: [<span style="color:#e6db74">&#34;system:authenticated&#34;</span>]
+    <span style="color:#f92672">nonResourceURLs</span>:
+    - <span style="color:#e6db74">&#34;/api*&#34;</span> <span style="color:#75715e"># Wildcard matching.</span>
+    - <span style="color:#e6db74">&#34;/version&#34;</span>
+
+  <span style="color:#75715e"># Log the request body of configmap changes in kube-system.</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Request</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;configmaps&#34;</span>]
+    <span style="color:#75715e"># This rule only applies to resources in the &#34;kube-system&#34; namespace.</span>
+    <span style="color:#75715e"># The empty string &#34;&#34; can be used to select non-namespaced resources.</span>
+    <span style="color:#f92672">namespaces</span>: [<span style="color:#e6db74">&#34;kube-system&#34;</span>]
+
+  <span style="color:#75715e"># Log configmap changes in all other namespaces at the RequestResponse level.</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">RequestResponse</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;configmaps&#34;</span>]
+
+  <span style="color:#75715e"># Log secret changes in all other namespaces at the Metadata level.</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Metadata</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
+      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;secrets&#34;</span>]
+
+  <span style="color:#75715e"># Log all other resources in core and extensions at the Request level.</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Request</span>
+    <span style="color:#f92672">resources</span>:
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
+    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;extensions&#34;</span> <span style="color:#75715e"># Version of group should NOT be included.</span>
+
+  <span style="color:#75715e"># A catch-all rule to log all other requests at the Metadata level.</span>
+  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Metadata</span>
+    <span style="color:#75715e"># Long-running requests like watches that fall under this rule will not</span>
+    <span style="color:#75715e"># generate an audit event in RequestReceived.</span>
+    <span style="color:#f92672">omitStages</span>:
+      - <span style="color:#e6db74">&#34;RequestReceived&#34;</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><h3 id="install-kubernetes">Install Kubernetes</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">systemctl enable --now crio
+crictl info
+
+kubeadm config images pull --config 010-kubeadm-conf-1-28-2.yaml
+
+systemctl enable kubelet.service
+
+kubeadm init --skip-phases<span style="color:#f92672">=</span>addon/kube-proxy --config 010-kubeadm-conf-1-28-2.yaml
+</code></pre></div><h3 id="post-install">Post Install</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown <span style="color:#66d9ef">$(</span>id -u<span style="color:#66d9ef">)</span>:<span style="color:#66d9ef">$(</span>id -g<span style="color:#66d9ef">)</span> $HOME/.kube/config
+
+kubectl get csr --all-namespaces
+kubectl get csr -oname | xargs kubectl certificate approve
+kubectl apply -f 012-k8s-clusterrole.yaml
+
+yum install -y https://harbottle.gitlab.io/harbottle-main/7/x86_64/harbottle-main-release.rpm
+yum install -y kubectx
+
+curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+echo <span style="color:#e6db74">&#39;PATH=$PATH:/usr/local/bin&#39;</span> &gt;&gt; /etc/profile
+export PATH<span style="color:#f92672">=</span>$PATH:/usr/local/bin
+</code></pre></div><h3 id="install-cilium-as-cni">Install cilium as CNI</h3>
+<p>Generate Clilium configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF &gt; 031-cilium-helm-values.yaml</span>
+<span style="color:#75715e"># Set kubeProxyReplacement to &#34;strict&#34; in order to prevent CVE-2020-8554 and fully remove kube-proxy.</span>
+<span style="color:#75715e"># See https://cilium.io/blog/2020/12/11/kube-proxy-free-cve-mitigation for more information.</span>
+<span style="color:#f92672">kubeProxyReplacement</span>: <span style="color:#e6db74">&#34;strict&#34;</span>
+
+<span style="color:#f92672">k8sServiceHost</span>: <span style="color:#ae81ff">192.168.56.12</span>
+<span style="color:#f92672">k8sServicePort</span>: <span style="color:#ae81ff">6443</span>
+<span style="color:#f92672">rollOutCiliumPods</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">priorityClassName</span>: <span style="color:#ae81ff">system-cluster-critical</span>
+
+<span style="color:#f92672">ipv4</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">ipv6</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">bpf</span>:
+  <span style="color:#f92672">masquerade</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#f92672">encryption</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">wireguard</span>
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">nodeEncryption</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#75715e"># L7 policy</span>
+<span style="color:#f92672">loadBalancer</span>:
+  <span style="color:#f92672">l7</span>:
+    <span style="color:#f92672">backend</span>: <span style="color:#ae81ff">envoy</span>
+<span style="color:#f92672">envoy</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">prometheus</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">serviceMonitor</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#75715e"># L2 LoadBalancer service</span>
+<span style="color:#f92672">l2announcements</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#75715e"># Api gateway</span>
+<span style="color:#f92672">gatewayAPI</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#75715e"># Ingress controller</span>
+<span style="color:#f92672">ingressController</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">loadbalancerMode</span>: <span style="color:#ae81ff">shared</span>
+
+<span style="color:#75715e"># mTLS</span>
+<span style="color:#f92672">authentication</span>:
+  <span style="color:#f92672">mode</span>: <span style="color:#ae81ff">required</span>
+  <span style="color:#f92672">mutual</span>:
+    <span style="color:#f92672">spire</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+      <span style="color:#f92672">install</span>:
+        <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+        <span style="color:#f92672">server</span>:
+          <span style="color:#f92672">dataStorage</span>:
+            <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">endpointStatus</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">status</span>: <span style="color:#ae81ff">policy</span>
+
+<span style="color:#f92672">dashboards</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
+
+<span style="color:#f92672">hubble</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">metrics</span>:
+    <span style="color:#f92672">enableOpenMetrics</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">enabled</span>:
+    - <span style="color:#ae81ff">dns:query;ignoreAAAA</span>
+    - <span style="color:#ae81ff">drop</span>
+    - <span style="color:#ae81ff">tcp</span>
+    - <span style="color:#ae81ff">flow:sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity</span>
+    - <span style="color:#ae81ff">port-distribution</span>
+    - <span style="color:#ae81ff">icmp</span>
+    - <span style="color:#ae81ff">kafka:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction;sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity</span>
+    - <span style="color:#ae81ff">policy:sourceContext=app|workload-name|pod|reserved-identity;destinationContext=app|workload-name|pod|dns|reserved-identity;labelsContext=source_namespace,destination_namespace</span>
+    - <span style="color:#ae81ff">httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction</span>
+    <span style="color:#f92672">serviceMonitor</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">dashboards</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+      <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
+      <span style="color:#f92672">annotations</span>:
+        <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
+
+  <span style="color:#f92672">ui</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+    <span style="color:#f92672">ingress</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#f92672">hosts</span>:
+        - <span style="color:#ae81ff">hubble.k8s.intra</span>
+      <span style="color:#f92672">annotations</span>:
+        <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+      <span style="color:#f92672">tls</span>:
+      - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">hubble-ingress-tls</span>
+        <span style="color:#f92672">hosts</span>:
+        - <span style="color:#ae81ff">hubble.k8s.intra</span>
+    <span style="color:#f92672">tolerations</span>:
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/master&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/control-plane&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+    <span style="color:#f92672">backend</span>:
+      <span style="color:#f92672">resources</span>:
+        <span style="color:#f92672">limits</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">60m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">300Mi</span>
+        <span style="color:#f92672">requests</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">20m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
+    <span style="color:#f92672">frontend</span>:
+      <span style="color:#f92672">resources</span>:
+        <span style="color:#f92672">limits</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1024M</span>
+        <span style="color:#f92672">requests</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
+    <span style="color:#f92672">proxy</span>:
+      <span style="color:#f92672">resources</span>:
+        <span style="color:#f92672">limits</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1024M</span>
+        <span style="color:#f92672">requests</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
+
+  <span style="color:#f92672">relay</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">tolerations</span>:
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/master&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/control-plane&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+    <span style="color:#f92672">resources</span>:
+      <span style="color:#f92672">limits</span>:
+        <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+        <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">500Mi</span>
+    <span style="color:#f92672">prometheus</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#f92672">serviceMonitor</span>:
+        <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">operator</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">resources</span>:
+    <span style="color:#f92672">limits</span>:
+      <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
+      <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1Gi</span>
+    <span style="color:#f92672">requests</span>:
+      <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+      <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">128Mi</span>
+  <span style="color:#f92672">prometheus</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">serviceMonitor</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">dashboards</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
+    <span style="color:#f92672">annotations</span>:
+      <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
+
+<span style="color:#f92672">ipam</span>:
+  <span style="color:#f92672">mode</span>: <span style="color:#e6db74">&#34;cluster-pool&#34;</span>
+  <span style="color:#f92672">operator</span>:
+    <span style="color:#f92672">clusterPoolIPv4PodCIDRList</span>: <span style="color:#e6db74">&#34;10.43.0.0/16&#34;</span>
+    <span style="color:#f92672">clusterPoolIPv4MaskSize</span>: <span style="color:#ae81ff">24</span>
+    <span style="color:#f92672">clusterPoolIPv6PodCIDRList</span>: <span style="color:#e6db74">&#34;fd00::/104&#34;</span>
+    <span style="color:#f92672">clusterPoolIPv6MaskSize</span>: <span style="color:#ae81ff">120</span>
+
+<span style="color:#f92672">resources</span>:
+  <span style="color:#f92672">limits</span>:
+    <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">4000m</span>
+    <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">4Gi</span>
+  <span style="color:#f92672">requests</span>:
+    <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+    <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">512Mi</span>
+
+<span style="color:#f92672">prometheus</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#75715e"># Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.</span>
+  <span style="color:#f92672">port</span>: <span style="color:#ae81ff">19090</span>
+  <span style="color:#75715e"># Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!</span>
+  <span style="color:#f92672">serviceMonitor</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+
+helm repo add cilium https://helm.cilium.io/
+helm upgrade --install cilium cilium/cilium <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  --namespace kube-system <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  -f 031-cilium-helm-values.yaml
+
+kubectl get pods -A
+</code></pre></div><h3 id="harden-kubernetes">Harden Kubernetes</h3>
+<p>There is an opensource tool theat tests CISA&rsquo;s best best practices on your clsuter. We vill use this to test the resoults.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># kube-bench</span>
+<span style="color:#75715e"># https://github.com/aquasecurity/kube-bench/releases/</span>
+yum install -y https://github.com/aquasecurity/kube-bench/releases/download/v0.6.5/kube-bench_0.6.5_linux_amd64.rpm
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">useradd -r -c <span style="color:#e6db74">&#34;etcd user&#34;</span> -s /sbin/nologin -M etcd
+chown etcd:etcd /var/lib/etcd
+chmod <span style="color:#ae81ff">700</span> /var/lib/etcd
+
+<span style="color:#75715e"># kube-bench</span>
+kube-bench
+kube-bench | grep <span style="color:#e6db74">&#34;\[FAIL\]&#34;</span>
+</code></pre></div><h3 id="join-nodes">join nodes</h3>
+<p>Firs we need to get the join command from the master:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master1</span>
+kubeadm token create --print-join-command
+kubeadm join 192.168.56.12:6443 --token c2t0rj.cofbfnwwrb387890 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span> --discovery-token-ca-cert-hash sha256:a52f4c16a6ce9ef72e3d6172611d17d9752dfb1c3870cf7c8ad4ce3bcb97547e
+</code></pre></div><p>If the next node is a worke we can just use the command what we get. If a next node is a master we need to generate a certificate-key. You need a separate certificate-key for every new master.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master1</span>
+<span style="color:#75715e">## generate cert key</span>
+kubeadm certs certificate-key
+29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
+
+<span style="color:#75715e">## store cert key in secret</span>
+kubeadm init phase upload-certs --upload-certs --certificate-key<span style="color:#f92672">=</span>29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master2</span>
+kubeadm join 192.168.56.12:6443 --token c2t0rj.cofbfnwwrb387890 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--discovery-token-ca-cert-hash sha256:a52f4c16a6ce9ef72e3d6172611d17d9752dfb1c3870cf7c8ad4ce3bcb97547e <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--control-plane --certificate-key 29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># on master3</span>
+kubeadm join 192.168.56.12:6443 --token c2t0rj.cofbfnwwrb387890 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--discovery-token-ca-cert-hash sha256:a52f4c16a6ce9ef72e3d6172611d17d9752dfb1c3870cf7c8ad4ce3bcb97547e <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--control-plane --certificate-key 29ab8a6013od73s8d3g4ba3a3b24679693e98acd796356eeb47df098c47f2773
+</code></pre></div><p>In the end withevery new node we need to approve the certificate requests for the node.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get csr -oname | xargs kubectl certificate approve
+
+useradd -r -c <span style="color:#e6db74">&#34;etcd user&#34;</span> -s /sbin/nologin -M etcd
+chown etcd:etcd /var/lib/etcd
+chmod <span style="color:#ae81ff">700</span> /var/lib/etcd
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -4940,7 +5882,7 @@ helm upgrade --install akv2k8s <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
@@ -5413,8 +6355,8 @@ notAfter<span style="color:#f92672">=</span>Aug <span style="color:#ae81ff">29</
             
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
             
                 <id>https://devopstales.github.io/home/openshift4-buildconfig/</id>
@@ -21050,10 +21992,7 @@ kubectl apply -f 012-k8s-clusterrole.yaml
 </code></pre></div><h3 id="cilium">cilium</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">mount | grep /sys/fs/bpf
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install -y https://harbottle.gitlab.io/harbottle-main/7/x86_64/harbottle-main-release.rpm
-yum install -y kubectx
-
-dnf copr enable cerenit/helm -y
-yum install -y helm
+yum install -y kubectx helm
 
 helm repo add cilium https://helm.cilium.io/
 
@@ -28237,7 +29176,7 @@ sudo firewall-cmd --add-port<span style="color:#f92672">=</span>10250/tcp --perm
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2379/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2380/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>30000-32767/tcp --permanent
-<span style="color:#75715e"># Used for the Rancher Monitoring</span>
+<span style="color:#75715e"># Used for the Monitoring</span>
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9796/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>19090/tcp --permanent
 sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6942/tcp --permanent
@@ -28293,6 +29232,8 @@ cat <span style="color:#e6db74">&lt;&lt; EOF &gt;  /etc/rancher/rke2/config.yaml
 </span><span style="color:#e6db74">disable:
 </span><span style="color:#e6db74">  - rke2-canal
 </span><span style="color:#e6db74">  - rke2-kube-proxy
+</span><span style="color:#e6db74">disable-cloud-controller: true
+</span><span style="color:#e6db74">disable-kube-proxy: true
 </span><span style="color:#e6db74">EOF</span>
 </code></pre></div><p><strong>Note:</strong> I disabled <code>rke2-canal</code> and <code>rke2-kube-proxy</code> since I plan to install Cilium as CNI in <a href="https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/">&ldquo;kube-proxy less mode&rdquo;</a> (<code>kubeProxyReplacement: &quot;strict&quot;</code>). Do not disable <code>rke2-kube-proxy</code> if you use another CNI - it will not work afterwards!</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo cp -f /usr/share/rke2/rke2-cis-sysctl.conf /etc/sysctl.d/60-rke2-cis.conf
