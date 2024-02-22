@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2024-02-21T08:56:03+00:00</updated>
+    <updated>2024-02-22T10:18:01+00:00</updated>
     
     
     <author>
@@ -17,6 +17,195 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Integrating OpenShift 4 with External Grafana]]></title>
+            <link href="https://devopstales.github.io/home/openshift4-monitoringw-with-external-grafana/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/openshift4-monitoringw-with-external-grafana/?utm_source=atom_feed" rel="related" type="text/html" title="Integrating OpenShift 4 with External Grafana" />
+                <link href="https://devopstales.github.io/home/openshift4-monitoring/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4 Monitoring" />
+                <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
+                <link href="https://devopstales.github.io/home/openshift4-ceph-rbd-csi/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 Ceph Persisten Storage" />
+                <link href="https://devopstales.github.io/home/openshift4-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OKD OpenShift 4 authentication" />
+            
+                <id>https://devopstales.github.io/home/openshift4-monitoringw-with-external-grafana/</id>
+            
+            
+            <published>2024-02-20T00:00:00+00:00</published>
+            <updated>2024-02-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how you how you can integrate an external Grafana with OpenShift 4 Prometheus.</p>
+<p>OpenShift already has its built-in monitoring stack with Prometheus, Grafana, and Alertmanager. It’s useful for monitoring a single cluster, but in the case of multiple clusters, you may want to get a single point of view. So I will configure an external VM based installed Grafana to get graphs from all the clusters.</p>
+<h3 id="configuring-openshift-prometheus">Configuring OpenShift Prometheus</h3>
+<p>First we will create a a secret in Openshift for the authentication based in the name of the monitoring service account:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">oc apply -f - &lt;&lt;EOF</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">prometheus-robot-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">openshift-monitoring</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">kubernetes.io/service-account.name</span>: <span style="color:#ae81ff">prometheus-k8s</span>
+<span style="color:#f92672">type</span>: <span style="color:#ae81ff">kubernetes.io/service-account-token</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Check the token string and Try to query the OpenShift Prometheus using that token</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">TOKEN<span style="color:#f92672">=</span><span style="color:#e6db74">`</span>oc -n openshift-monitoring extract secret/prometheus-robot-secret --to<span style="color:#f92672">=</span>- --keys<span style="color:#f92672">=</span>token<span style="color:#e6db74">`</span>
+
+PROMETHEUS_URL<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>oc get route -n openshift-monitoring prometheus-k8s -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{.status.ingress[0].host}&#34;</span><span style="color:#66d9ef">)</span>
+
+curl -sk -H <span style="color:#e6db74">&#34;Authorization: Bearer </span>$TOKEN<span style="color:#e6db74">&#34;</span> https://$PROMETHEUS_URL/api/v1/alerts
+</code></pre></div><p>The result will end up with something like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{<span style="color:#f92672">&#34;status&#34;</span>:<span style="color:#e6db74">&#34;success&#34;</span>,<span style="color:#f92672">&#34;data&#34;</span>:{<span style="color:#f92672">&#34;alerts&#34;</span>:[{<span style="color:#f92672">&#34;labels&#34;</span>:{<span style="color:#f92672">&#34;alertname&#34;</span>:<span style="color:#e6db74">&#34;PodDisruptionBudgetAtLimit&#34;</span> <span style="color:#960050;background-color:#1e0010">…</span>
+</code></pre></div><h3 id="integrate-grafana-with-openshift-prometheus">Integrate Grafana with OpenShift Prometheus</h3>
+<p>Go back to the Grafana Dashboard, and add &lsquo;&lsquo;&lsquo;data source&rsquo;&rsquo;&rsquo; by go to &lsquo;&lsquo;&lsquo;menu&rsquo;&rsquo;&rsquo; → &lsquo;&lsquo;&lsquo;connection&rsquo;&rsquo;&rsquo; → &lsquo;&lsquo;&lsquo;data source&rsquo;&rsquo;&rsquo; → add &lsquo;&lsquo;&lsquo;new data source&rsquo;&rsquo;&rsquo; and choose &lsquo;&lsquo;&lsquo;Prometheus&rsquo;'&rsquo;.</p>
+<p>On Authentication:</p>
+<ul>
+<li>Choose Forward OAuth Identity as the authentication method</li>
+<li>Skip TLS Certificate Validation when using untrusted certificate</li>
+</ul>
+<p><img src="/img/include/openshift-external-grafana01.webp" alt="On Authentication"  class="zoomable" /></p>
+<p>On HTTP Headers, add Header:</p>
+<ul>
+<li>Fill in the Header with &lsquo;&lsquo;&lsquo;Authorization&rsquo;&rsquo;&rsquo;</li>
+<li>Fill in the value with the output of this following command</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">TOKEN<span style="color:#f92672">=</span> <span style="color:#e6db74">`</span>oc -n openshift-monitoring extract secret/prometheus-robot-secret — to<span style="color:#f92672">=</span>- — keys<span style="color:#f92672">=</span>token<span style="color:#e6db74">`</span>
+echo <span style="color:#e6db74">&#34;Bearer </span>$TOKEN<span style="color:#e6db74">&#34;</span>
+</code></pre></div><p><img src="/img/include/openshift-external-grafana02.webp" alt="On Authentication"  class="zoomable" /></p>
+<p>Click Save and Test, if there is an error it will be showing the error</p>
+<p><img src="/img/include/openshift-external-grafana03.webp" alt="On Authentication"  class="zoomable" /></p>
+<p>If everything goes well, we can start building Grafana dashboard</p>
+<p><img src="/img/include/openshift-external-grafana04.webp" alt="On Authentication"  class="zoomable" /></p>
+<p>Click on building the dashboard, and choose the previous data source</p>
+<p><img src="/img/include/openshift-external-grafana05.webp" alt="On Authentication"  class="zoomable" /></p>
+<p><img src="/img/include/openshift-external-grafana06.webp" alt="On Authentication"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[RKE2 With MetalLB and NGINX Ingress Controller]]></title>
+            <link href="https://devopstales.github.io/home/rke2-ingress-loadbalancer/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/rke2-ingress-loadbalancer/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 With MetalLB and NGINX Ingress Controller" />
+                <link href="https://devopstales.github.io/home/image-security-admission-controller-v3/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V3" />
+                <link href="https://devopstales.github.io/home/continuous-image-security/?utm_source=atom_feed" rel="related" type="text/html" title="Continuous Image Security" />
+                <link href="https://devopstales.github.io/home/k8s-vault-v2/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes integration with external Vault" />
+                <link href="https://devopstales.github.io/home/rke2-calico/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Install With Calico" />
+            
+                <id>https://devopstales.github.io/home/rke2-ingress-loadbalancer/</id>
+            
+            
+            <published>2024-02-15T00:00:00+00:00</published>
+            <updated>2024-02-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how to Configure MetalLB to provide a bare metal Load Balancer for NGINX Ingress Controller.</p>
+<h3 id="metallb-config">MetalLB Config</h3>
+<p>First we need to install the MetalLB in RKE2. In my <a href="/kubernetes/k8s-metallb/">previous post</a> I wrote how to install it. So please check it.</p>
+<p>The following configs should be deployed to your K8s environment.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">metallb.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">IPAddressPool</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">metallb-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">addresses</span>:
+  - <span style="color:#ae81ff">192.168.20.46</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.47</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.48</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.85</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.86</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.87</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.88</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.89</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.90</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.91</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.92</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.93</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.94</span><span style="color:#ae81ff">/32</span>
+  - <span style="color:#ae81ff">192.168.20.95</span><span style="color:#ae81ff">/32</span>
+  <span style="color:#f92672">autoAssign</span>: <span style="color:#66d9ef">true</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">metallb.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">L2Advertisement</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">metallb-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ipAddressPools</span>:
+  - <span style="color:#ae81ff">default</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">metallb.io/v1beta2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">BGPPeer</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">metallb-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">myASN</span>: <span style="color:#ae81ff">64790</span>
+  <span style="color:#f92672">peerASN</span>: <span style="color:#ae81ff">64791</span>
+  <span style="color:#f92672">peerAddress</span>: <span style="color:#ae81ff">192.168.20.64</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">metallb.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">BGPAdvertisement</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">default</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">metallb-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">ipAddressPools</span>:
+  - <span style="color:#ae81ff">default</span>
+</code></pre></div><blockquote>
+<p>I have both Layer 2 and BGP advertisements enabled. This is because my services and clients share the same subnet. BGP won’t work for clients on the same subnet as the services because it is layer 3, the client will ARP ping for the IP and receive no reply. The PFSense router will only route to service IP’s via the node IP’s from another subnet. Therefore you need both. I chose to have them on the same subnet because this avoids having large amounts of traffic transferring the PFSense FW which is slower and more resource hungry than dedicated switches.</p>
+</blockquote>
+<h3 id="bgp-on-pfsense">BGP on PFSense</h3>
+<p>In my <a href="/kubernetes/k8s-metallb-bgp-pfsense/">previous post</a> I wrote about how to configure MetalLB in BGP mode with PFSense.</p>
+<blockquote>
+<p>Just make sure to change the AS number to match your metallb config.</p>
+</blockquote>
+<h3 id="nginx-ingress-controller-config">NGINX Ingress Controller Config</h3>
+<p>We USE RKE2 as the kubernetes cluster. RKE2 has its own NGINX Ingress Controller already installed in host network mode. So we need to reconfigure the installed helm chart to run with LoadBalancer type service. For this we need to override the default helm values in the helm release object:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo nano /var/lib/rancher/rke2/server/manifests/rke2-ingress-nginx-config.yaml
+</code></pre></div><p>Add the following contents.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">helm.cattle.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">HelmChartConfig</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">rke2-ingress-nginx</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">valuesContent</span>: |-<span style="color:#e6db74">
+</span><span style="color:#e6db74">    controller:
+</span><span style="color:#e6db74">      config:
+</span><span style="color:#e6db74">        use-forwarded-headers: &#34;true&#34;
+</span><span style="color:#e6db74">        enable-real-ip: &#34;true&#34;
+</span><span style="color:#e6db74">      publishService:
+</span><span style="color:#e6db74">        enabled: true
+</span><span style="color:#e6db74">      service:
+</span><span style="color:#e6db74">        enabled: true
+</span><span style="color:#e6db74">        type: LoadBalancer
+</span><span style="color:#e6db74">        externalTrafficPolicy: Local
+</span><span style="color:#e6db74">        annotations:
+</span><span style="color:#e6db74">          metallb.universe.tf/loadBalancerIPs: 192.168.20.45</span>    
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -45231,74 +45420,73 @@ curl -XGET 'localhost:9200/_snapshot/my_backup/_all?pretty'
 
 
 <h3 id="enviroment">Enviroment</h3>
-<pre tabindex="0"><code>kubectl get node
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get node
 NAME     STATUS   ROLES    EXTERNAL-IP
 host-1   Ready    master   203.0.113.1
 host-2   Ready    node     203.0.113.2
 host-3   Ready    node     203.0.113.3
 host-4   Ready    node     203.0.113.4
-</code></pre><p>MetalLB provides a network load-balancer implementation for Kubernetes clusters that do not run on a supported cloud provider, effectively allowing the usage of LoadBalancer Services within ber-metal Installation. Kubernetes does not offer an implementation of network load-balancers (Services of type LoadBalancer) for bare metal clusters. The implementations of Network LB that Kubernetes does ship with are all glue code that calls out to various IaaS platforms (GCP, AWS, Azure…). If you’re not running on a supported IaaS platform (GCP, AWS, Azure…), LoadBalancers will remain in the “pending” state indefinitely when created.</p>
+</code></pre></div><p>MetalLB provides a network load-balancer implementation for Kubernetes clusters that do not run on a supported cloud provider, effectively allowing the usage of LoadBalancer Services within ber-metal Installation. Kubernetes does not offer an implementation of network load-balancers (Services of type LoadBalancer) for bare metal clusters. The implementations of Network LB that Kubernetes does ship with are all glue code that calls out to various IaaS platforms (GCP, AWS, Azure…). If you’re not running on a supported IaaS platform (GCP, AWS, Azure…), LoadBalancers will remain in the “pending” state indefinitely when created.</p>
 <p><img src="/img/include/metallb.jpg" alt="Example image"  class="zoomable" /></p>
 <p>First we need to apply the MetalLB manifest.</p>
-<pre tabindex="0"><code>kubectl apply -f https://raw.githubusercontent.com/google/metallb/v0.8.1/manifests/metallb.yaml
-</code></pre><p>Create a metallb-configmap.yaml file and modify your IP range accordingly.</p>
-<pre tabindex="0"><code>cat &lt; EOF &gt; metallb-config.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  namespace: metallb-system
-  name: config
-data:
-  config: |
-    address-pools:
-    - name: my-ip-space
-      protocol: layer2
-      addresses:
-      - 203.0.113.2-203.0.113.4
-EOF
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f https://raw.githubusercontent.com/google/metallb/v0.8.1/manifests/metallb.yaml
+</code></pre></div><p>Create a metallb-configmap.yaml file and modify your IP range accordingly.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt; EOF &gt; metallb-config.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ConfigMap</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">metallb-system</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">config</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">config</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">    address-pools:
+</span><span style="color:#e6db74">    - name: my-ip-space
+</span><span style="color:#e6db74">      protocol: layer2
+</span><span style="color:#e6db74">      addresses:
+</span><span style="color:#e6db74">      - 203.0.113.2-203.0.113.4</span>    
+<span style="color:#ae81ff">EOF</span>
 
-kubectl apply -f metallb-config.yaml
-kubectl get pods -n metallb-system
-</code></pre><p>Exposing a service through the load balancer</p>
-<pre tabindex="0"><code>cat &lt;EOF&gt;&gt; nginx.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: nginx-deployment
-spec:
-  selector:
-    matchLabels:
-      app: nginx
-  replicas: 2
-  template:
-    metadata:
-      labels:
-        app: nginx
-    spec:
-      containers:
-      - name: nginx
-        image: nginx:latest
-        ports:
-        - containerPort: 80
+<span style="color:#ae81ff">kubectl apply -f metallb-config.yaml</span>
+<span style="color:#ae81ff">kubectl get pods -n metallb-system</span>
+</code></pre></div><p>Exposing a service through the load balancer</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;EOF&gt;&gt; nginx.yaml</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx-deployment</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:latest</span>
+        <span style="color:#f92672">ports</span>:
+        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx
-spec:
-  type: LoadBalancer
-  selector:
-    app: nginx
-  ports:
-  - port: 80
-    name: http
-EOF
-
-kubectl apply -f nginx-deployment.yaml
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">LoadBalancer</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">nginx</span>
+  <span style="color:#f92672">ports</span>:
+  - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f nginx-deployment.yaml
 kubectl get svc
-NAME           TYPE           CLUSTER-IP       EXTERNAL-IP    PORT(S)        AGE
+NAME           TYPE           CLUSTER-IP       EXTERNAL-IP    PORT<span style="color:#f92672">(</span>S<span style="color:#f92672">)</span>        AGE
 nginx          LoadBalancer   10.109.51.83     203.0.113.2    80:30452/TCP   5m
-</code></pre>]]></content>
+</code></pre></div>]]></content>
             
                  
                     
