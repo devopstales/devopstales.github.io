@@ -29,7 +29,7 @@
     "datePublished": "2022-12-18",
     "dateModified" : "2022-12-18",
     "url" : "https://devopstales.github.io/home/icinga2_install_centos8/",
-    "wordCount" : "551",
+    "wordCount" : "515",
     "keywords" : [ "devops", "tales", "icinga", "icinga2", "nagios", "Blog" ]
     
 }
@@ -226,9 +226,15 @@ firewall-cmd --permanent --add-service<span style="color:#f92672">=</span>postgr
 firewall-cmd --permanent --add-port<span style="color:#f92672">=</span>5665/tcp
 firewall-cmd --reload
 </code></pre></div><h3 id="install-postgresql">Install postgresql</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install postgresql-server postgresql
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install epel-release
+yum update --nogpgcheck
+
+yum install postgresql-server postgresql nano
 postgresql-setup initdb
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /var/lib/pgsql/data/pg_hba.conf
+</code></pre></div><blockquote>
+<p>Icinga config mast be in the beginning of the file.</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /var/lib/pgsql/data/pg_hba.conf
 <span style="color:#75715e"># TYPE  DATABASE        USER            ADDRESS                 METHOD</span>
 <span style="color:#75715e"># icinga</span>
 local   icinga      icinga                            md5
@@ -247,16 +253,24 @@ host    all         all         ::1/128               ident
 
 systemctl enable  --now postgresql
 </code></pre></div><h3 id="install-icinga2">Install Icinga2</h3>
-<pre tabindex="0"><code>yum install https://packages.icinga.com/epel/icinga-rpm-release-8-latest.noarch.rpm
-yum install epel-release
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Main Centos 8 repo (Not up to date)</span>
+yum install https://packages.icinga.com/epel/icinga-rpm-release-8-latest.noarch.rpm
+</code></pre></div><p>OR</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Community Centos 8 repo</span>
+rpm --import https://packages.freedom-for-icinga.com/free-icinga.key
 
-dnf --enablerepo=powertools install nagios-plugins-all
+curl https://packages.freedom-for-icinga.com/epel/FREE-ICINGA-release.repo <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>-o /etc/yum.repos.d/FREE-ICINGA-release.repo
+</code></pre></div><p>OR</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Suse RockyLinux 8 repo</span>
+curl https://download.opensuse.org/repositories/home:/wurzelbro:/icinga/RockyLinux_8/home:wurzelbro:icinga.repo <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>-o /etc/yum.repos.d/suse_wurzelbro_icinga.repo
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">dnf --enablerepo<span style="color:#f92672">=</span>powertools install nagios-plugins-all
 
 yum install icinga2 icinga2-selinux nano-icinga2 icinga2-ido-pgsql
-</code></pre><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#39;include &#34;/usr/share/nano/icinga2.nanorc&#34;&#39;</span> &gt;&gt; /etc/nanorc
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">echo <span style="color:#e6db74">&#39;include &#34;/usr/share/nano/icinga2.nanorc&#34;&#39;</span> &gt;&gt; /etc/nanorc
 cp /etc/nanorc ~/.nanorc
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cd /tmp
-sudo -u postgres psql -c <span style="color:#e6db74">&#34;CREATE ROLE icinga WITH LOGIN PASSWORD &#39;icinga&#39;&#34;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo -u postgres psql -c <span style="color:#e6db74">&#34;CREATE ROLE icinga WITH LOGIN PASSWORD &#39;icinga&#39;&#34;</span>
 sudo -u postgres createdb -O icinga -E UTF8 icinga
 
 export PGPASSWORD<span style="color:#f92672">=</span>icinga
@@ -289,58 +303,51 @@ echo <span style="color:#e6db74">&#39;
 </code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">icinga2 node wizard
 Welcome to the Icinga <span style="color:#ae81ff">2</span> Setup Wizard!
 
-We<span style="color:#e6db74">&#39;ll guide you through all required configuration details.
-</span><span style="color:#e6db74">
-</span><span style="color:#e6db74">Please specify if this is a satellite setup (&#39;</span>n<span style="color:#e6db74">&#39; installs a master setup) [Y/n]: n
-</span><span style="color:#e6db74">Starting the Master setup routine...
-</span><span style="color:#e6db74">Please specifiy the common name (CN) [icinga.devopstales.intra]:
-</span><span style="color:#e6db74">Checking for existing certificates for common name &#39;</span>icinga.devopstales.intra<span style="color:#e6db74">&#39;...
-</span><span style="color:#e6db74">Certificates not yet generated. Running &#39;</span>api setup<span style="color:#e6db74">&#39; now.
-</span><span style="color:#e6db74">information/cli: Generating new CA.
-</span><span style="color:#e6db74">information/base: Writing private key to &#39;</span>/var/lib/icinga2/ca/ca.key<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/base: Writing X509 certificate to &#39;</span>/var/lib/icinga2/ca/ca.crt<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Generating new CSR in &#39;</span>/etc/icinga2/pki/icinga.devopstales.intra.csr<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/base: Writing private key to &#39;</span>/etc/icinga2/pki/icinga.devopstales.intra.key<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/base: Writing certificate signing request to &#39;</span>/etc/icinga2/pki/icinga.devopstales.intra.csr<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Signing CSR with CA and writing certificate to &#39;</span>/etc/icinga2/pki/icinga.devopstales.intra.crt<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Copying CA certificate to &#39;</span>/etc/icinga2/pki/ca.crt<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">Generating master configuration for Icinga 2.
-</span><span style="color:#e6db74">information/cli: Adding new ApiUser &#39;</span>root<span style="color:#e6db74">&#39; in &#39;</span>/etc/icinga2/conf.d/api-users.conf<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Enabling the &#39;</span>api<span style="color:#e6db74">&#39; feature.
-</span><span style="color:#e6db74">Enabling feature api. Make sure to restart Icinga 2 for these changes to take effect.
-</span><span style="color:#e6db74">information/cli: Dumping config items to file &#39;</span>/etc/icinga2/zones.conf<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Created backup file &#39;</span>/etc/icinga2/zones.conf.orig<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">Please specify the API bind host/port (optional):
-</span><span style="color:#e6db74">Bind Host []: Hit Enter
-</span><span style="color:#e6db74">Bind Port []: Hit Enter
-</span><span style="color:#e6db74">information/cli: Created backup file &#39;</span>/etc/icinga2/features-available/api.conf.orig<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Updating constants.conf.
-</span><span style="color:#e6db74">information/cli: Created backup file &#39;</span>/etc/icinga2/constants.conf.orig<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Updating constants file &#39;</span>/etc/icinga2/constants.conf<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Updating constants file &#39;</span>/etc/icinga2/constants.conf<span style="color:#e6db74">&#39;.
-</span><span style="color:#e6db74">information/cli: Updating constants file &#39;</span>/etc/icinga2/constants.conf<span style="color:#960050;background-color:#1e0010">&#39;</span>.
+We will guide you through all required configuration details.
+
+Please specify <span style="color:#66d9ef">if</span> this is an agent/satellite setup <span style="color:#f92672">(</span><span style="color:#e6db74">&#39;n&#39;</span> installs a master setup<span style="color:#f92672">)</span> <span style="color:#f92672">[</span>Y/n<span style="color:#f92672">]</span>: n
+
+Starting the Master setup routine...
+
+Please specify the common name <span style="color:#f92672">(</span>CN<span style="color:#f92672">)</span> <span style="color:#f92672">[</span>alma8.mydomain.intra<span style="color:#f92672">]</span>: icinga.mydomain.intra
+Reconfiguring Icinga...
+Checking <span style="color:#66d9ef">for</span> existing certificates <span style="color:#66d9ef">for</span> common name <span style="color:#e6db74">&#39;icinga.mydomain.intra&#39;</span>...
+Certificates not yet generated. Running <span style="color:#e6db74">&#39;api setup&#39;</span> now.
+Generating master configuration <span style="color:#66d9ef">for</span> Icinga 2.
+<span style="color:#e6db74">&#39;api&#39;</span> feature already enabled.
+
+Master zone name <span style="color:#f92672">[</span>master<span style="color:#f92672">]</span>:
+
+Default global zones: global-templates director-global
+Do you want to specify additional global zones? <span style="color:#f92672">[</span>y/N<span style="color:#f92672">]</span>:
+Please specify the API bind host/port <span style="color:#f92672">(</span>optional<span style="color:#f92672">)</span>:
+Bind Host <span style="color:#f92672">[]</span>:
+Bind Port <span style="color:#f92672">[]</span>:
+
+Do you want to disable the inclusion of the conf.d directory <span style="color:#f92672">[</span>Y/n<span style="color:#f92672">]</span>: n
+
 Done.
 
 Now restart your Icinga <span style="color:#ae81ff">2</span> daemon to finish the installation!
 
 systemctl restart icinga2
 </code></pre></div><h3 id="install-icingaweb2">Install IcingaWeb2</h3>
-<pre tabindex="0"><code>yum install icingaweb2 icingacli icingaweb2-selinux
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">yum install nginx icingaweb2 icingacli icingaweb2-selinux
 
 systemctl enable php-fpm.service --now
 
-## config
-icingacli setup config webserver --fpm-uri=unix:/var/run/php-fpm/www.sock nginx &gt; /etc/nginx/default.d/icinga.conf
+<span style="color:#75715e">## config</span>
+icingacli setup config webserver --fpm-uri<span style="color:#f92672">=</span>unix:/var/run/php-fpm/www.sock nginx &gt; /etc/nginx/default.d/icinga.conf
 systemctl enable --now nginx
 
-sudo -u postgres psql -c &quot;CREATE ROLE icinga_web WITH LOGIN PASSWORD 'icinga_web'&quot;
+sudo -u postgres psql -c <span style="color:#e6db74">&#34;CREATE ROLE icinga_web WITH LOGIN PASSWORD &#39;icinga_web&#39;&#34;</span>
 sudo -u postgres createdb -O icinga_web -E UTF8 icinga_web
 
 icingacli setup token create
 
-# go to
+<span style="color:#75715e"># go to</span>
 https://icinga.devopstales.intra/icingaweb2/
-</code></pre><p><img src="https://devopstales.github.io/img/include/icingaweb1.png" alt="Example image"  class="zoomable" /></p>
+</code></pre></div><p><img src="https://devopstales.github.io/img/include/icingaweb1.png" alt="Example image"  class="zoomable" /></p>
 <p><img src="https://devopstales.github.io/img/include/icingaweb2.png" alt="Example image"  class="zoomable" /></p>
 <p><img src="https://devopstales.github.io/img/include/icingaweb3.png" alt="Example image"  class="zoomable" /></p>
 <p><img src="https://devopstales.github.io/img/include/icingaweb4.png" alt="Example image"  class="zoomable" /></p>
@@ -414,7 +421,7 @@ https://icinga.devopstales.intra/icingaweb2/
             <li><a href="https://devopstales.github.io/series/k8s-operators" class="text-uppercase">k8s-operators (10)</a>
             </li>
             
-            <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (60)</a>
+            <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (62)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (32)</a>
@@ -509,6 +516,8 @@ https://icinga.devopstales.intra/icingaweb2/
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-vxlan/">Kubernetes with external Ingress Controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-bgp/">Kubernetes with external Ingress Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-monitoringw-with-external-grafana/">Integrating OpenShift 4 with External Grafana</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rke2-ingress-loadbalancer/">RKE2 With MetalLB and NGINX Ingress Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/github-self-hosted-runners-on-kubernetes/">Github Self-Hosted Runners on Kubernetes with Actions Runner Controller</a></li>
@@ -517,8 +526,6 @@ https://icinga.devopstales.intra/icingaweb2/
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/cni-genie/">CNI-Genie: network separation with multiple CNI</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-haproxy-lb/">Proxmox: Behind HAproxy Load Balancer</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-install-with-swap/">Install kubernetes with kubeadm and enable swap</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/multus-nmstate/">Configurre network wit nmstate operator</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/gke-ingress-controller/">Install Ingress to GKE</a></li>
 		</ul>
 	</div>
 </div>
@@ -581,7 +588,7 @@ https://icinga.devopstales.intra/icingaweb2/
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/group-policy/" title="Group Policy ">Group Policy </a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gvisor/" title="gvisor">gvisor</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/haproxy/" title="HAproxy">HAproxy</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/haproxy/" title="haproxy">haproxy</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm/" title="helm">helm</a>
@@ -647,7 +654,7 @@ https://icinga.devopstales.intra/icingaweb2/
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="prometheus">prometheus</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxy/" title="proxy">proxy</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="pxe">pxe</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/radius/" title="RADIUS">RADIUS</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="rancher">rancher</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rbac/" title="RBAC">RBAC</a>
@@ -658,6 +665,7 @@ https://icinga.devopstales.intra/icingaweb2/
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rsyslog/" title="rsyslog">rsyslog</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/seccomp/" title="seccomp">seccomp</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/siem/" title="SIEM">SIEM</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/skupper/" title="skupper">skupper</a>
