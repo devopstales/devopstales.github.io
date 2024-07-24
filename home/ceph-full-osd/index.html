@@ -29,7 +29,7 @@
     "datePublished": "2022-01-12",
     "dateModified" : "2022-01-12",
     "url" : "https://devopstales.github.io/home/ceph-full-osd/",
-    "wordCount" : "433",
+    "wordCount" : "933",
     "keywords" : [ "kubernetes", "openshift", "devops", "Blog" ]
     
 }
@@ -196,37 +196,110 @@ if (!doNotTrack) {
 <div class="meta__item-datetime meta__item">
 	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg><time class="meta__text" datetime="2022-01-12T00:00:00Z">January 12, 2022</time></div></div>
 		</header>
-		<div class="content post__content clearfix">
+		
+<div class="post__toc toc">
+	<div class="toc__title">Page content</div>
+	<div class="toc__menu">
+		<nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#check-osd-usage">Check Osd usage</a></li>
+        <li><a href="#temprary-fix">Temprary Fix</a></li>
+        <li><a href="#fix-by-balance">Fix by balance</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+	</div>
+</div><div class="content post__content clearfix">
 			<p>In this post I will show you what can you do whet an OSD is full and the ceph cluster is locked.</p>
 <p>OSDs should never be full in theory and administrators should monitor how full OSDs are. If OSDs are approaching 80% full, it’s time for the administrator to take action to prevent OSDs from filling up.  Action can include re-weighting the OSDs in question and or adding more OSDs to the cluster.</p>
-<pre tabindex="0"><code># ceph osd dump | grep ratio
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># ceph osd dump | grep ratio</span>
 full_ratio 0.95
 backfillfull_ratio 0.9
 nearfull_ratio 0.85
-</code></pre><p>By default, when OSDs reach 85% capacity, <code>nearfull_ratio warning</code> is triggered.
-By default when OSDs reach 90% capacity, <code>backfillfull_ratio warning</code> is triggered.  At this point the cluster will deny backfilling to the OSD in question.
-By default when OSDs reach 95% capacity, <code>full_ratio is triggered</code>, all PGs (Placement Groups) on the OSDs in question will be marked Read Only, as well as all pools which are associated with the PGs on the OSD. The cluster is marked Read Only, to prevent corruption from occurring.</p>
-<p>Check Osd usage:</p>
-<pre tabindex="0"><code>ceph --connect-timeout=5 osd df tree
-</code></pre><p>To get the cluster out of this state, data needs to be pushed away or removed from the OSDs in question. In the below example it is a single OSD in question (osd.52), but there could be many OSDs that are marked full.<br>
+</code></pre></div><p>By default, when OSDs reach &lsquo;&lsquo;&lsquo;85%&rsquo;&rsquo;&rsquo; capacity, <code>nearfull_ratio warning</code> is triggered.
+By default when OSDs reach &lsquo;&lsquo;&lsquo;90%&rsquo;&rsquo;&rsquo; capacity, <code>backfillfull_ratio warning</code> is triggered.  At this point the cluster will deny backfilling to the OSD in question.
+By default when OSDs reach &lsquo;&lsquo;&lsquo;95%&rsquo;&rsquo;&rsquo; capacity, <code>full_ratio is triggered</code>, all PGs (Placement Groups) on the OSDs in question will be marked Read Only, as well as all pools which are associated with the PGs on the OSD. The cluster is marked Read Only, to prevent corruption from occurring.</p>
+<h3 id="check-osd-usage">Check Osd usage</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph --connect-timeout<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span> osd df tree
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph osd status
+
++----+--------+-------+-------+--------+---------+--------+---------+-----------+
+| id |  host  |  used | avail | wr ops | wr data | rd ops | rd data |   state   |
++----+--------+-------+-------+--------+---------+--------+---------+-----------+
+| <span style="color:#ae81ff">0</span>  | ceph01 | 1352G | 1441G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">1</span>  | ceph02 | 1104G | 1689G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">2</span>  | ceph03 | 1800G |  994G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">3</span>  | ceph04 | 1764G | 1030G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">4</span>  | ceph01 | 1185G | 1608G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">5</span>  | ceph01 | 1107G | 1686G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">6</span>  | ceph02 |  614G |  316G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">7</span>  | ceph03 |  370G |  560G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">8</span>  | ceph03 |  411G |  520G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">9</span>  | ceph04 |  493G |  438G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
+| <span style="color:#ae81ff">10</span> | ceph04 |  285G |  645G |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   |    <span style="color:#ae81ff">0</span>   |     <span style="color:#ae81ff">0</span>   | exists,up |
++----+--------+-------+-------+--------+---------+--------+---------+-----------+
+</code></pre></div><p>To get the cluster out of this state, data needs to be pushed away or removed from the OSDs in question. In the below example it is a single OSD in question (osd.4), but there could be many OSDs that are marked full.<br>
 The first objective is to get the OSDs that are full below 95% capacity, so the cluster is not marked Read Only. It is possible to achieve this goal with a lower Weight value, .90, .85, .80, etc.</p>
-<pre tabindex="0"><code>ceph osd set noout
-ceph osd reweight 52 .85
-</code></pre><p><code>ceph osd set-full-ratio .96</code> will change the <code>full_ratio</code> to 96% and remove the Read Only flag on OSDs which are 95% -96% full. If OSDs are 96% full it&rsquo;s possible to set <code>ceph osd set-full-ratio .97</code>, however, do NOT set this value too high.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph osd set noout
+ceph osd reweight <span style="color:#ae81ff">4</span> .85
+</code></pre></div><h3 id="temprary-fix">Temprary Fix</h3>
+<p><code>ceph osd set-full-ratio .96</code> will change the <code>full_ratio</code> to 96% and remove the Read Only flag on OSDs which are 95% -96% full. If OSDs are 96% full it&rsquo;s possible to set <code>ceph osd set-full-ratio .97</code>, however, do NOT set this value too high.</p>
 <p><code>ceph osd set-backfillfull-ratio 91</code> will change the <code>backfillfull_ratio</code> to 91% and allow backfill to occur on OSDs which are 90-91% full.  This setting is helpful when there are multiple OSDs which are full.</p>
-<pre tabindex="0"><code>ceph osd set-nearfull-ratio .90
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph osd set-nearfull-ratio .90
 ceph osd set-backfillfull-ratio .95
 ceph osd set-full-ratio .97
-</code></pre><p>Now we can add more OSD to the cluster or force the rebalance of the data. In this case I will do the second because I hawe no more space in my server for more OSD disks.</p>
-<pre tabindex="0"><code>ceph balancer on
+</code></pre></div><h3 id="fix-by-balance">Fix by balance</h3>
+<p>Now we can add more OSD to the cluster or force the rebalance of the data. In this case I will do the second because I hawe no more space in my server for more OSD disks.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph balancer on
 ceph balancer mode upmap
 ceph balancer status
 ceph balancer ls
-</code></pre><p>If the percentig is below the 96 treshold you can configure back the ratios:</p>
-<pre tabindex="0"><code>ceph osd set-nearfull-ratio .85
+</code></pre></div><p>I’m going to run the reweight by utilization command on my cluster; this is will automatically adjust the OSDs over storage utilization to redistribute pages and rebalance my cluster.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph osd reweight-by-utilization
+
+moved <span style="color:#ae81ff">10</span> / <span style="color:#ae81ff">512</span> <span style="color:#f92672">(</span>1.95312%<span style="color:#f92672">)</span>
+avg 51.2
+stddev 21.9399 -&gt; 22.4535 <span style="color:#f92672">(</span>expected baseline 6.78823<span style="color:#f92672">)</span>
+min osd.10 with <span style="color:#ae81ff">20</span> -&gt; <span style="color:#ae81ff">20</span> pgs <span style="color:#f92672">(</span>0.390625 -&gt; 0.390625 * mean<span style="color:#f92672">)</span>
+max osd.3 with <span style="color:#ae81ff">87</span> -&gt; <span style="color:#ae81ff">90</span> pgs <span style="color:#f92672">(</span>1.69922 -&gt; 1.75781 * mean<span style="color:#f92672">)</span>
+
+oload <span style="color:#ae81ff">120</span>
+max_change 0.05
+max_change_osds <span style="color:#ae81ff">4</span>
+average_utilization 0.4747
+overload_utilization 0.5697
+osd.6 weight 1.0000 -&gt; 0.9500
+osd.7 weight 1.0000 -&gt; 0.9500
+osd.8 weight 1.0000 -&gt; 0.9500
+osd.1 weight 1.0000 -&gt; 0.9500
+</code></pre></div><p>We can see that Ceph made adjustments to 4 OSDs and only lowered their weight by .05 like I mentioned just a small about is necessary. You’ll notice that the storage was redistributed, and now let’s look at my final result on how the reweighting looks for each OSD.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph osd tree
+
+ID CLASS WEIGHT   TYPE NAME          STATUS REWEIGHT PRI-AFF 
+-1       20.92242 root default                               
+-3        8.18697     host ceph01                         
+ <span style="color:#ae81ff">0</span>   hdd  2.72899         osd.0          up  1.00000 1.00000 
+ <span style="color:#ae81ff">4</span>   hdd  2.72899         osd.4          up  1.00000 1.00000 
+ <span style="color:#ae81ff">5</span>   hdd  2.72899         osd.5          up  1.00000 1.00000 
+-5        3.63869     host ceph02                         
+ <span style="color:#ae81ff">1</span>   hdd  2.72899         osd.1          up  0.80005 1.00000 
+ <span style="color:#ae81ff">6</span>   hdd  0.90970         osd.6          up  0.75006 1.00000 
+-7        4.54839     host ceph03                         
+ <span style="color:#ae81ff">2</span>   hdd  2.72899         osd.2          up  1.00000 1.00000 
+ <span style="color:#ae81ff">7</span>   hdd  0.90970         osd.7          up  0.75006 1.00000 
+ <span style="color:#ae81ff">8</span>   hdd  0.90970         osd.8          up  0.75006 1.00000 
+-9        4.54839     host ceph04                         
+ <span style="color:#ae81ff">3</span>   hdd  2.72899         osd.3          up  0.95001 1.00000 
+ <span style="color:#ae81ff">9</span>   hdd  0.90970         osd.9          up  1.00000 1.00000 
+<span style="color:#ae81ff">10</span>   hdd  0.90970         osd.10         up  1.00000 1.00000 
+</code></pre></div><p>If the percentig is below the 96 treshold you can configure back the ratios:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">ceph osd set-nearfull-ratio .85
 ceph osd set-backfillfull-ratio .90
 ceph osd set-full-ratio .95
-</code></pre>
+</code></pre></div>
 		</div>
 	</article>
 </main>
@@ -380,8 +453,8 @@ ceph osd set-full-ratio .95
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-vxlan/">Kubernetes with external Ingress Controller</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-bgp/">Kubernetes with external Ingress Controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-vxlan/">Kubernetes with external Ingress Controller with Haproxy and VXLAN</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-bgp/">Kubernetes with external Ingress Controller with Haproxy and BGP</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-monitoringw-with-external-grafana/">Integrating OpenShift 4 with External Grafana</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/rke2-ingress-loadbalancer/">RKE2 With MetalLB and NGINX Ingress Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/github-self-hosted-runners-on-kubernetes/">Github Self-Hosted Runners on Kubernetes with Actions Runner Controller</a></li>
@@ -550,6 +623,7 @@ ceph osd set-full-ratio .95
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/volume-expansion/" title="volume expansion">volume expansion</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vsphere/" title="vSphere">vSphere</a>
+		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vxlan/" title="vxlan">vxlan</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wazuh/" title="Wazuh">Wazuh</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
 		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
