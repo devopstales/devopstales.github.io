@@ -15,10 +15,10 @@
          "@id": "https://devopstales.github.io/"
     },
     "articleSection" : "Home",
-    "name" : "Install Ingress to AKS",
+    "name" : "Install Nginx Ingress Controller to AKS",
     "image": "https://devopstales.github.io/img/aks2.webp",
-    "headline" : "Install Ingress to AKS",
-    "description" : "In this pos I will show you how you can Install Ingress to AKS (Azure Kubernetes Service) Cluster.\n",
+    "headline" : "Install Nginx Ingress Controller to AKS",
+    "description" : "In this pos I will show you how you can install Nginx Ingress Controlle to AKS (Azure Kubernetes Service) Cluster.\n",
     "inLanguage" : "en-US",
     "author" : "Blaiserman",
     "creator" : "Blaiserman",
@@ -29,8 +29,8 @@
     "datePublished": "2020-11-15",
     "dateModified" : "2020-11-15",
     "url" : "https://devopstales.github.io/home/aks-ingress-controller/",
-    "wordCount" : "256",
-    "keywords" : [ "devops", "tales", "Azure", "AKS", "streaming", "Blog" ]
+    "wordCount" : "292",
+    "keywords" : [ "devops", "tales", "Azure", "AKS", "streaming", "ingress", "ingress controller", "private", "public", "Blog" ]
     
 }
 </script>
@@ -38,11 +38,11 @@
 <meta name="msvalidate.01" content="4E830BF9C048B3A327492699A61E741E" />
 <meta name="yandex-verification" content="96d0b6ba6c7aa697" />
 
-	<title>Install Ingress to AKS - devopstales</title>
+	<title>Install Nginx Ingress Controller to AKS - devopstales</title>
 	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
 	<meta name="description" content="">
-	<meta property="og:title" content="Install Ingress to AKS" />
-<meta property="og:description" content="In this pos I will show you how you can Install Ingress to AKS (Azure Kubernetes Service) Cluster." />
+	<meta property="og:title" content="Install Nginx Ingress Controller to AKS" />
+<meta property="og:description" content="In this pos I will show you how you can install Nginx Ingress Controlle to AKS (Azure Kubernetes Service) Cluster." />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://devopstales.github.io/home/aks-ingress-controller/" /><meta property="article:section" content="Home" />
 <meta property="article:published_time" content="2020-11-15T00:00:00+00:00" />
@@ -191,7 +191,7 @@ if (!doNotTrack) {
 <main class="main" role="main">
 	<article class="post">
 		<header class="post__header">
-			<h1 class="post__title">Install Ingress to AKS</h1>
+			<h1 class="post__title">Install Nginx Ingress Controller to AKS</h1>
 			<div class="post__meta meta">
 <div class="meta__item-datetime meta__item">
 	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg><time class="meta__text" datetime="2020-11-15T00:00:00Z">November 15, 2020</time></div></div>
@@ -214,69 +214,78 @@ if (!doNotTrack) {
 </nav>
 	</div>
 </div><div class="content post__content clearfix">
-			<p>In this pos I will show you how you can Install Ingress to AKS (Azure Kubernetes Service) Cluster.</p>
+			<p>In this pos I will show you how you can install Nginx Ingress Controlle to AKS (Azure Kubernetes Service) Cluster.</p>
 <H3>Parts of the AKS series</H3>
 <ul>
      <li>Part1: <a href="../../cloud/AKS/">Install AKS Cluster</a></li>
      <li>Part2: <a href="../../cloud/aks-registry/">Integrate AKS with Registry</a></li>
-     <li>Part3: <a href="../../cloud/aks-ingress-controller/">Install Ingresscontreoller To AKS</a></li>
+     <li>Part3: <a href="../../cloud/aks-azure-key-vault-akv2k8s/">Azure Key Vault AKS integration with akv2k8s</a>
+     <li>Part4: <a href="../../cloud/aks-azure-key-vault-csi/">Azure Key Vault AKS integration with CSI Driver</a>
+     <li>Part5: <a href="../../cloud/aks-ingress-controller-v2/">Install Ingress contreoller To AKS</a></li>
+     <li>Part6: <a href="../../cloud/azure-private-dns-with-AKS-ingress-controller/">Use Azure Private DNS with AKS Ingress Controller</a></li>
+     <li>Part7: <a href="../../cloud/custom-ssl-and-dns-on-AKS-ingress-controller/">Configure custom SSL and DNS on AKS Ingress Controller</a></li>
 </ul>
 
+<!---
+https://learn.microsoft.com/en-us/azure/aks/app-routing-nginx-prometheus
+https://learn.microsoft.com/en-us/azure/aks/keda-about
+https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/integrate-keda#scalers
+https://learn.microsoft.com/en-us/azure/load-testing/quickstart-create-and-run-load-test
+-->
 
 
 <h3 id="get-aks-credentials">Get AKS credentials</h3>
-<pre tabindex="0"><code>az login
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az login
 az aks get-credentials --resource-group test-cluster --name test-cluster
 kubectl get nodes
-</code></pre><h3 id="create-ingress-with-static-public-ip">Create ingress with static public ip</h3>
-<pre tabindex="0"><code>az network public-ip create \
---location &lt;REGION_NAME&gt; \
---resource-group &lt;RESOURCE_GROUP_NAME&gt; \
---name &lt;IP_NAME&gt; --sku Standard \
---allocation-method static \
---query publicIp.ipAddress -o tsv
+</code></pre></div><h3 id="create-ingress-with-static-public-ip">Create ingress with static public ip</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az network public-ip create <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--location &lt;REGION_NAME&gt; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--resource-group &lt;RESOURCE_GROUP_NAME&gt; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name &lt;IP_NAME&gt; --sku Standard <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--allocation-method static <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--query publicIp.ipAddress -o tsv
 
-# 51.105.230.165
-</code></pre><h3 id="deploy-nginx-ingress-controller-with-helm">Deploy nginx ingress controller with helm</h3>
-<pre tabindex="0"><code>kubectl create namespace ingress
+<span style="color:#75715e"># 51.105.230.165</span>
+</code></pre></div><h3 id="deploy-nginx-ingress-controller-with-helm">Deploy nginx ingress controller with helm</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create namespace ingress
 
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 
-helm install &lt;INGERSS_NAME&gt; \
-ingress-nginx/ingress-nginx \
---namespace ingress \
---set controller.replicaCount=2 \
---set controller.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
---set controller.admissionWebhooks.patch.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
---set defaultBackend.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
---set controller.service.annotations.&quot;service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path&quot;=/healthz \
---set controller.service.loadBalancerIP=&quot;51.105.230.165&quot;
-</code></pre><pre tabindex="0"><code>kubectl --namespace ingress get services -o wide -w nginx-ingress-controller
-kubectl get service -l app=nginx-ingress --namespace ingress
-</code></pre><h3 id="create-an-ingress-controller-to-an-internal-virtual-network-in">Create an ingress controller to an internal virtual network in</h3>
+helm install &lt;INGERSS_NAME&gt; <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>ingress-nginx/ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--namespace ingress <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.replicaCount<span style="color:#f92672">=</span><span style="color:#ae81ff">2</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.nodeSelector.<span style="color:#e6db74">&#34;kubernetes\.io/os&#34;</span><span style="color:#f92672">=</span>linux <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.admissionWebhooks.patch.nodeSelector.<span style="color:#e6db74">&#34;kubernetes\.io/os&#34;</span><span style="color:#f92672">=</span>linux <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set defaultBackend.nodeSelector.<span style="color:#e6db74">&#34;kubernetes\.io/os&#34;</span><span style="color:#f92672">=</span>linux <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.service.annotations.<span style="color:#e6db74">&#34;service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path&#34;</span><span style="color:#f92672">=</span>/healthz <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.service.loadBalancerIP<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;51.105.230.165&#34;</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl --namespace ingress get services -o wide -w nginx-ingress-controller
+kubectl get service -l app<span style="color:#f92672">=</span>nginx-ingress --namespace ingress
+</code></pre></div><h3 id="create-an-ingress-controller-to-an-internal-virtual-network-in">Create an ingress controller to an internal virtual network in</h3>
 <p>By default, an NGINX ingress controller is created with a dynamic public IP address assignment. A common configuration requirement is to use an internal, private network and IP address. This approach allows you to restrict access to your services to internal users, with no external access. This example assigns 10.240.0.42 to the loadBalancerIP resource.</p>
-<pre tabindex="0"><code>helm install nginx-ingress \
-ingress-nginx/ingress-nginx \
---namespace ingress \
--f internal-ingress.yaml \
---set controller.ingressClass=internal \
---set controller.replicaCount=2 \
---set controller.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
---set controller.admissionWebhooks.patch.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
---set defaultBackend.nodeSelector.&quot;kubernetes\.io/os&quot;=linux \
---set controller.service.annotations.&quot;service\.beta\.kubernetes\.io/azure-load-balancer-internal&quot;=true \
---set controller.service.annotations.&quot;service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path&quot;=/healthz \
---set controller.service.loadBalancerIP=10.224.0.42
-</code></pre><p>Create an ingress route</p>
-<pre tabindex="0"><code>apiVersion: networking.k8s.io/v1beta1
-kind: Ingress
-metadata:
-  name: hello-world-ingress
-  namespace: ingress-basic
-  annotations:
-    kubernetes.io/ingress.class: internal
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">helm install nginx-ingress <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>ingress-nginx/ingress-nginx <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--namespace ingress <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.ingressClass<span style="color:#f92672">=</span>internal <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.replicaCount<span style="color:#f92672">=</span><span style="color:#ae81ff">2</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.nodeSelector.<span style="color:#e6db74">&#34;kubernetes\.io/os&#34;</span><span style="color:#f92672">=</span>linux <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.admissionWebhooks.patch.nodeSelector.<span style="color:#e6db74">&#34;kubernetes\.io/os&#34;</span><span style="color:#f92672">=</span>linux <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set defaultBackend.nodeSelector.<span style="color:#e6db74">&#34;kubernetes\.io/os&#34;</span><span style="color:#f92672">=</span>linux <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.service.annotations.<span style="color:#e6db74">&#34;service\.beta\.kubernetes\.io/azure-load-balancer-internal&#34;</span><span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.service.annotations.<span style="color:#e6db74">&#34;service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path&#34;</span><span style="color:#f92672">=</span>/healthz <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--set controller.service.loadBalancerIP<span style="color:#f92672">=</span>10.224.0.42
+</code></pre></div><p>Create an ingress route</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1beta1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">hello-world-ingress</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">ingress-basic</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">internal</span>
 ...
-</code></pre>
+</code></pre></div>
 		</div>
 	</article>
 </main>
@@ -430,6 +439,9 @@ metadata:
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/custom-ssl-and-dns-on-aks-ingress-controller/">Configure custom SSL and DNS on AKS Ingress Controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/azure-private-dns-with-aks-ingress-controller/">Use Azure Private DNS with AKS Ingress Controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/aks-ingress-controller-v2/">Install Nginx Ingress Controller to AKS with application routing add-on</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-vxlan/">Kubernetes with external Ingress Controller with Haproxy and VXLAN</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-bgp/">Kubernetes with external Ingress Controller with Haproxy and BGP</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/openshift4-monitoringw-with-external-grafana/">Integrating OpenShift 4 with External Grafana</a></li>
@@ -437,9 +449,6 @@ metadata:
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/github-self-hosted-runners-on-kubernetes/">Github Self-Hosted Runners on Kubernetes with Actions Runner Controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-secure-install/">Kubernetes Secure Install</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-checkpointing/">Kubernetes Container Checkpoints</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/cni-genie/">CNI-Genie: network separation with multiple CNI</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/proxmox-haproxy-lb/">Proxmox: Behind HAproxy Load Balancer</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-install-with-swap/">Install kubernetes with kubeadm and enable swap</a></li>
 		</ul>
 	</div>
 </div>
