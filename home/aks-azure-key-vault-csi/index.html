@@ -29,7 +29,7 @@
     "datePublished": "2023-03-08",
     "dateModified" : "2023-03-08",
     "url" : "https://devopstales.github.io/home/aks-azure-key-vault-csi/",
-    "wordCount" : "438",
+    "wordCount" : "856",
     "keywords" : [ "devops", "tales", "Azure", "AKS", "streaming", "Blog" ]
     
 }
@@ -196,9 +196,23 @@ if (!doNotTrack) {
 <div class="meta__item-datetime meta__item">
 	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg><time class="meta__text" datetime="2023-03-08T00:00:00Z">March 08, 2023</time></div></div>
 		</header>
-		<div class="content post__content clearfix">
+		
+<div class="post__toc toc">
+	<div class="toc__title">Page content</div>
+	<div class="toc__menu">
+		<nav id="TableOfContents">
+  <ul>
+    <li><a href="#create-key-vault-and-add-keys">Create key vault and add keys</a></li>
+    <li><a href="#acces-key-vault-with-managed-identity">Acces key vault with managed identity</a></li>
+    <li><a href="#acces-key-vault-with-service-principal">Acces key vault with service principal</a></li>
+    <li><a href="#demo-time">Demo time</a></li>
+  </ul>
+</nav>
+	</div>
+</div><div class="content post__content clearfix">
 			<p>In this Post I will show you how you can use CSI Driver to mount secrets from Azure Key Vault to AKS.</p>
-<p>First we need to create a key store</p>
+<h2 id="create-key-vault-and-add-keys">Create key vault and add keys</h2>
+<p>First we need to create a key vault</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az aks enable-addons <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--addons<span style="color:#f92672">=</span>azure-keyvault-secrets-provider <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--name<span style="color:#f92672">=</span>$CLUSTER <span style="color:#ae81ff">\
@@ -225,7 +239,23 @@ az role assignment create <span style="color:#ae81ff">\
  
 <span style="color:#75715e"># add a secret to the key vault</span>
 az keyvault secret set --vault-name $KV --name $SECRET --value $VALUE
-</code></pre></div><p>After you granted access to yourself to the key vault you need to grant access to a managed identity:</p>
+</code></pre></div><p>Create secret in keyvault:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az keyvault secret set <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--vault-name <span style="color:#e6db74">&#34;</span>$KV<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name <span style="color:#e6db74">&#34;sqldatabase&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--value <span style="color:#e6db74">&#39;kvdemo&#39;</span>
+
+az keyvault secret set <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--vault-name <span style="color:#e6db74">&#34;</span>$KV<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name <span style="color:#e6db74">&#34;sqlusername&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--value <span style="color:#e6db74">&#39;root&#39;</span>
+
+az keyvault secret set <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--vault-name <span style="color:#e6db74">&#34;</span>$KV<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name <span style="color:#e6db74">&#34;sqlpassword&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--value <span style="color:#e6db74">&#39;Password1&#39;</span>
+</code></pre></div><h2 id="acces-key-vault-with-managed-identity">Acces key vault with managed identity</h2>
+<p>If you created your AKS cluster with managed identity you need to grant access to a managed identity:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># grab the managed identity principalId assuming it is in the default</span>
 <span style="color:#75715e"># MC_ group for your cluster and resource group</span>
 IDENTITY_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az identity show -g MC<span style="color:#ae81ff">\_</span>$RG<span style="color:#ae81ff">\_</span>$CLUSTER<span style="color:#ae81ff">\_</span>westeurope --name azurekeyvaultsecretsprovider-$CLUSTER --query principalId -o tsv<span style="color:#66d9ef">)</span>
@@ -238,73 +268,216 @@ az role assignment create <span style="color:#ae81ff">\
 </code></pre></div><p>Create a SecretProviderClass:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">AZURE_TENANT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az account show --query tenantId -o tsv<span style="color:#66d9ef">)</span>
 CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az aks show -g $RG -n $CLUSTER --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv<span style="color:#66d9ef">)</span>
- 
-cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
-</span><span style="color:#e6db74">apiVersion: secrets-store.csi.x-k8s.io/v1
-</span><span style="color:#e6db74">kind: SecretProviderClass
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  name: demo-secret
-</span><span style="color:#e6db74">  namespace: default
-</span><span style="color:#e6db74">spec:
-</span><span style="color:#e6db74">  provider: azure
-</span><span style="color:#e6db74">  secretObjects:
-</span><span style="color:#e6db74">  - secretName: demosecret
-</span><span style="color:#e6db74">    type: Opaque
-</span><span style="color:#e6db74">    data:
-</span><span style="color:#e6db74">    - objectName: &#34;demosecret&#34;
-</span><span style="color:#e6db74">      key: demosecret
-</span><span style="color:#e6db74">  parameters:
-</span><span style="color:#e6db74">    usePodIdentity: &#34;false&#34;
-</span><span style="color:#e6db74">    useVMManagedIdentity: &#34;true&#34;
-</span><span style="color:#e6db74">    userAssignedIdentityID: &#34;$CLIENT_ID&#34;
-</span><span style="color:#e6db74">    keyvaultName: &#34;$KV&#34;
-</span><span style="color:#e6db74">    objects: |
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">secrets-store.csi.x-k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">SecretProviderClass</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">provider</span>: <span style="color:#ae81ff">azure</span>
+  <span style="color:#f92672">parameters</span>:
+    <span style="color:#f92672">usePodIdentity</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#75715e"># use managed identity</span>
+    <span style="color:#f92672">useVMManagedIdentity</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+    <span style="color:#75715e"># add managed identity id manually</span>
+    <span style="color:#f92672">userAssignedIdentityID</span>: <span style="color:#e6db74">&#34;$CLIENT_ID&#34;</span>
+    <span style="color:#f92672">tenantId</span>: <span style="color:#e6db74">&#34;$AZURE_TENANT_ID&#34;</span>
+    <span style="color:#f92672">keyvaultName</span>: <span style="color:#e6db74">&#34;$KV&#34;</span>
+    <span style="color:#75715e"># name and type in keyvault</span>
+    <span style="color:#f92672">objects</span>: |<span style="color:#e6db74">
 </span><span style="color:#e6db74">      array:
 </span><span style="color:#e6db74">        - |
-</span><span style="color:#e6db74">          objectName: &#34;demosecret&#34;
+</span><span style="color:#e6db74">          objectName: &#34;sqldatabase&#34;
 </span><span style="color:#e6db74">          objectType: secret
-</span><span style="color:#e6db74">    tenantId: &#34;$AZURE_TENANT_ID&#34;
-</span><span style="color:#e6db74">EOF</span>
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlusername&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlpassword&#34;
+</span><span style="color:#e6db74">          objectType: secret</span>      
+  <span style="color:#f92672">secretObjects</span>:
+  - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">databasesecrets</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+    <span style="color:#75715e"># name and key in secret</span>
+    <span style="color:#f92672">data</span>:
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqldatabase&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqldatabase</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlusername&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlusername</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlpassword&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlpassword</span>
+<span style="color:#ae81ff">EOF</span>
 </code></pre></div><p>Mount the secrets in pods</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
-</span><span style="color:#e6db74">apiVersion: apps/v1
-</span><span style="color:#e6db74">kind: Deployment
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  labels:
-</span><span style="color:#e6db74">    app: secretpods
-</span><span style="color:#e6db74">  name: secretpods
-</span><span style="color:#e6db74">spec:
-</span><span style="color:#e6db74">  replicas: 1
-</span><span style="color:#e6db74">  selector:
-</span><span style="color:#e6db74">    matchLabels:
-</span><span style="color:#e6db74">      app: secretpods
-</span><span style="color:#e6db74">  template:
-</span><span style="color:#e6db74">    metadata:
-</span><span style="color:#e6db74">      labels:
-</span><span style="color:#e6db74">        app: secretpods
-</span><span style="color:#e6db74">    spec:
-</span><span style="color:#e6db74">      containers:
-</span><span style="color:#e6db74">      - image: nginx
-</span><span style="color:#e6db74">        name: nginx
-</span><span style="color:#e6db74">        env:
-</span><span style="color:#e6db74">          - name:  demosecret
-</span><span style="color:#e6db74">            valueFrom:
-</span><span style="color:#e6db74">              secretKeyRef:
-</span><span style="color:#e6db74">                name:  demosecret
-</span><span style="color:#e6db74">                key:  demosecret
-</span><span style="color:#e6db74">        volumeMounts:
-</span><span style="color:#e6db74">          - name:  secret-store
-</span><span style="color:#e6db74">            mountPath:  &#34;mnt/secret-store&#34;
-</span><span style="color:#e6db74">            readOnly: true
-</span><span style="color:#e6db74">      volumes:
-</span><span style="color:#e6db74">        - name:  secret-store
-</span><span style="color:#e6db74">          csi:
-</span><span style="color:#e6db74">            driver: secrets-store.csi.k8s.io
-</span><span style="color:#e6db74">            readOnly: true
-</span><span style="color:#e6db74">            volumeAttributes:
-</span><span style="color:#e6db74">              secretProviderClass: &#34;demo-secret&#34;
-</span><span style="color:#e6db74">EOF</span>
-</code></pre></div><p>Now we you can werify the secret in the pod:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secretpods</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#75715e"># get as environment variables</span>
+        <span style="color:#f92672">env</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqldatabase</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqldatabase</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlusername</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlusername</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlpassword</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlpassword</span>
+        <span style="color:#75715e"># mount as file</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+            <span style="color:#f92672">mountPath</span>:  <span style="color:#e6db74">&#34;mnt/secret-store&#34;</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#75715e"># get the SecretProviderClass object</span>
+      <span style="color:#f92672">volumes</span>:
+        - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+          <span style="color:#f92672">csi</span>:
+            <span style="color:#f92672">driver</span>: <span style="color:#ae81ff">secrets-store.csi.k8s.io</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+            <span style="color:#f92672">volumeAttributes</span>:
+              <span style="color:#f92672">secretProviderClass</span>: <span style="color:#e6db74">&#34;demo-secret&#34;</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><h2 id="acces-key-vault-with-service-principal">Acces key vault with service principal</h2>
+<p>Create an identity in Azure</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export CLIENT_SECRET<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az ad sp create-for-rbac <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role Contributor --scopes /subscriptions/$SUBSCRIPTION_ID <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name http://secrets-store-test --query <span style="color:#e6db74">&#39;password&#39;</span> -otsv<span style="color:#66d9ef">)</span>
+
+export CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az ad sp show --id http://secrets-store-test --query <span style="color:#e6db74">&#39;appId&#39;</span> -otsv<span style="color:#66d9ef">)</span>
+</code></pre></div><p>Provide the identity to access the Azure key vault</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az keyvault set-policy -n $KV --secret-permissions get --spn $CLIENT_ID
+</code></pre></div><p>Create the Kubernetes secret with credentials</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">clientid</span>: <span style="color:#ae81ff">$CLIENT_ID</span>
+  <span style="color:#f92672">clientsecret</span>: <span style="color:#ae81ff">$CLIENT_SECRET</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">secrets-store.csi.k8s.io/used</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secrets-store-creds</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Create and apply your own SecretProviderClass object</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">secrets-store.csi.x-k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">SecretProviderClass</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">provider</span>: <span style="color:#ae81ff">azure</span>
+  <span style="color:#f92672">parameters</span>:
+    <span style="color:#f92672">usePodIdentity</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#f92672">useVMManagedIdentity</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#f92672">tenantId</span>: <span style="color:#e6db74">&#34;$AZURE_TENANT_ID&#34;</span>
+    <span style="color:#f92672">keyvaultName</span>: <span style="color:#e6db74">&#34;$KV&#34;</span>
+    <span style="color:#75715e"># name and type in keyvault</span>
+    <span style="color:#f92672">objects</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">      array:
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqldatabase&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlusername&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlpassword&#34;
+</span><span style="color:#e6db74">          objectType: secret</span>      
+  <span style="color:#f92672">secretObjects</span>:
+  - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">databasesecrets</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+    <span style="color:#75715e"># name and key in secret</span>
+    <span style="color:#f92672">data</span>:
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqldatabase&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqldatabase</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlusername&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlusername</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlpassword&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlpassword</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Mount the secrets in pods</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secretpods</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#75715e"># get as environment variables</span>
+        <span style="color:#f92672">env</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqldatabase</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqldatabase</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlusername</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlusername</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlpassword</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlpassword</span>
+        <span style="color:#75715e"># mount as file</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+            <span style="color:#f92672">mountPath</span>:  <span style="color:#e6db74">&#34;mnt/secret-store&#34;</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#75715e"># get the SecretProviderClass object</span>
+      <span style="color:#f92672">volumes</span>:
+        - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+          <span style="color:#f92672">csi</span>:
+            <span style="color:#f92672">driver</span>: <span style="color:#ae81ff">secrets-store.csi.k8s.io</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+            <span style="color:#f92672">volumeAttributes</span>:
+              <span style="color:#f92672">secretProviderClass</span>: <span style="color:#e6db74">&#34;demo-secret&#34;</span>
+            <span style="color:#75715e"># Only required when using service principal mode</span>
+            <span style="color:#f92672">nodePublishSecretRef</span>:
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secrets-store-creds</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><h2 id="demo-time">Demo time</h2>
+<p>Now we you can werify the secret in the pod:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export POD_NAME<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>kubectl get pods -l <span style="color:#e6db74">&#34;app=secretpods&#34;</span> -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{.items[0].metadata.name}&#34;</span><span style="color:#66d9ef">)</span>
  
 <span style="color:#75715e"># if this does not work, check the status of the pod</span>
@@ -312,11 +485,13 @@ cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
 kubectl exec -it $POD_NAME -- sh
  
 cd /mnt/secret-store
-ls <span style="color:#75715e"># the file containing the secret is listed</span>
-cat demosecret; echo <span style="color:#75715e"># demovalue is revealed</span>
+ls
+sqldatabase  sqlpassword  sqlusername
+<span style="color:#75715e"># the file containing the secret is listed</span>
+cat sqldatabase
  
 <span style="color:#75715e"># echo the value of the environment variable</span>
-echo $demosecret <span style="color:#75715e"># demovalue is revealed</span>
+echo $sqldatabase
 </code></pre></div>
 		</div>
 	</article>

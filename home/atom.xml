@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2024-07-26T09:46:12+00:00</updated>
+    <updated>2024-09-20T11:01:52+00:00</updated>
     
     
     <author>
@@ -4055,7 +4055,8 @@ curl -v http://loadbalancer_ip/
             <span style="color:#f92672">usersearch</span>: <span style="color:#e6db74">&#39;(sAMAccountName={0})&#39;</span>
             <span style="color:#f92672">skip_users</span>:
             - <span style="color:#ae81ff">kibanaserver</span>
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano /etc/wazuh-indexer/opensearch-security/roles_mapping.yml</span>
+</code></pre></div><p>Create role mapping for your group. In this example I will use <code>devops-team</code> to mapp to the same role as admin.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">nano /etc/wazuh-indexer/opensearch-security/roles_mapping.yml</span>
 ---
 <span style="color:#f92672">all_access</span>:
   <span style="color:#f92672">reserved</span>: <span style="color:#66d9ef">true</span>
@@ -4067,6 +4068,23 @@ curl -v http://loadbalancer_ip/
   <span style="color:#f92672">users</span>: []
   <span style="color:#f92672">and_backend_roles</span>: []
   <span style="color:#f92672">description</span>: <span style="color:#e6db74">&#34;Maps admin to all_access&#34;</span>
+</code></pre></div><p>Apply config and role mapping:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export JAVA_HOME<span style="color:#f92672">=</span>/usr/share/wazuh-indexer/jdk/
+bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>	-f /etc/wazuh-indexer/opensearch-security/config.yml -icl <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>        -key /etc/wazuh-indexer/certs/admin-key.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>        -cert /etc/wazuh-indexer/certs/admin.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>        -cacert /etc/wazuh-indexer/certs/root-ca.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>        -h 192.168.108.102 -nhnv
+
+bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>	-f /etc/wazuh-indexer/opensearch-security/roles_mapping.yml -icl <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>	-key /etc/wazuh-indexer/certs/admin-key.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>	-cert /etc/wazuh-indexer/certs/admin.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>	-cacert /etc/wazuh-indexer/certs/root-ca.pem <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>	-h 192.168.108.102 -nhnv
+
+systemctl restart wazuh-dashboard
 </code></pre></div>]]></content>
             
                  
@@ -7295,7 +7313,8 @@ echo <span style="color:#e6db74">&#34;{
             
             
             <content type="html"><![CDATA[<p>In this Post I will show you how you can use CSI Driver to mount secrets from Azure Key Vault to AKS.</p>
-<p>First we need to create a key store</p>
+<h2 id="create-key-vault-and-add-keys">Create key vault and add keys</h2>
+<p>First we need to create a key vault</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az aks enable-addons <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--addons<span style="color:#f92672">=</span>azure-keyvault-secrets-provider <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--name<span style="color:#f92672">=</span>$CLUSTER <span style="color:#ae81ff">\
@@ -7322,7 +7341,23 @@ az role assignment create <span style="color:#ae81ff">\
  
 <span style="color:#75715e"># add a secret to the key vault</span>
 az keyvault secret set --vault-name $KV --name $SECRET --value $VALUE
-</code></pre></div><p>After you granted access to yourself to the key vault you need to grant access to a managed identity:</p>
+</code></pre></div><p>Create secret in keyvault:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az keyvault secret set <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--vault-name <span style="color:#e6db74">&#34;</span>$KV<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name <span style="color:#e6db74">&#34;sqldatabase&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--value <span style="color:#e6db74">&#39;kvdemo&#39;</span>
+
+az keyvault secret set <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--vault-name <span style="color:#e6db74">&#34;</span>$KV<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name <span style="color:#e6db74">&#34;sqlusername&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--value <span style="color:#e6db74">&#39;root&#39;</span>
+
+az keyvault secret set <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--vault-name <span style="color:#e6db74">&#34;</span>$KV<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name <span style="color:#e6db74">&#34;sqlpassword&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--value <span style="color:#e6db74">&#39;Password1&#39;</span>
+</code></pre></div><h2 id="acces-key-vault-with-managed-identity">Acces key vault with managed identity</h2>
+<p>If you created your AKS cluster with managed identity you need to grant access to a managed identity:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># grab the managed identity principalId assuming it is in the default</span>
 <span style="color:#75715e"># MC_ group for your cluster and resource group</span>
 IDENTITY_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az identity show -g MC<span style="color:#ae81ff">\_</span>$RG<span style="color:#ae81ff">\_</span>$CLUSTER<span style="color:#ae81ff">\_</span>westeurope --name azurekeyvaultsecretsprovider-$CLUSTER --query principalId -o tsv<span style="color:#66d9ef">)</span>
@@ -7335,73 +7370,216 @@ az role assignment create <span style="color:#ae81ff">\
 </code></pre></div><p>Create a SecretProviderClass:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">AZURE_TENANT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az account show --query tenantId -o tsv<span style="color:#66d9ef">)</span>
 CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az aks show -g $RG -n $CLUSTER --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv<span style="color:#66d9ef">)</span>
- 
-cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
-</span><span style="color:#e6db74">apiVersion: secrets-store.csi.x-k8s.io/v1
-</span><span style="color:#e6db74">kind: SecretProviderClass
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  name: demo-secret
-</span><span style="color:#e6db74">  namespace: default
-</span><span style="color:#e6db74">spec:
-</span><span style="color:#e6db74">  provider: azure
-</span><span style="color:#e6db74">  secretObjects:
-</span><span style="color:#e6db74">  - secretName: demosecret
-</span><span style="color:#e6db74">    type: Opaque
-</span><span style="color:#e6db74">    data:
-</span><span style="color:#e6db74">    - objectName: &#34;demosecret&#34;
-</span><span style="color:#e6db74">      key: demosecret
-</span><span style="color:#e6db74">  parameters:
-</span><span style="color:#e6db74">    usePodIdentity: &#34;false&#34;
-</span><span style="color:#e6db74">    useVMManagedIdentity: &#34;true&#34;
-</span><span style="color:#e6db74">    userAssignedIdentityID: &#34;$CLIENT_ID&#34;
-</span><span style="color:#e6db74">    keyvaultName: &#34;$KV&#34;
-</span><span style="color:#e6db74">    objects: |
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">secrets-store.csi.x-k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">SecretProviderClass</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">provider</span>: <span style="color:#ae81ff">azure</span>
+  <span style="color:#f92672">parameters</span>:
+    <span style="color:#f92672">usePodIdentity</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#75715e"># use managed identity</span>
+    <span style="color:#f92672">useVMManagedIdentity</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+    <span style="color:#75715e"># add managed identity id manually</span>
+    <span style="color:#f92672">userAssignedIdentityID</span>: <span style="color:#e6db74">&#34;$CLIENT_ID&#34;</span>
+    <span style="color:#f92672">tenantId</span>: <span style="color:#e6db74">&#34;$AZURE_TENANT_ID&#34;</span>
+    <span style="color:#f92672">keyvaultName</span>: <span style="color:#e6db74">&#34;$KV&#34;</span>
+    <span style="color:#75715e"># name and type in keyvault</span>
+    <span style="color:#f92672">objects</span>: |<span style="color:#e6db74">
 </span><span style="color:#e6db74">      array:
 </span><span style="color:#e6db74">        - |
-</span><span style="color:#e6db74">          objectName: &#34;demosecret&#34;
+</span><span style="color:#e6db74">          objectName: &#34;sqldatabase&#34;
 </span><span style="color:#e6db74">          objectType: secret
-</span><span style="color:#e6db74">    tenantId: &#34;$AZURE_TENANT_ID&#34;
-</span><span style="color:#e6db74">EOF</span>
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlusername&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlpassword&#34;
+</span><span style="color:#e6db74">          objectType: secret</span>      
+  <span style="color:#f92672">secretObjects</span>:
+  - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">databasesecrets</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+    <span style="color:#75715e"># name and key in secret</span>
+    <span style="color:#f92672">data</span>:
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqldatabase&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqldatabase</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlusername&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlusername</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlpassword&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlpassword</span>
+<span style="color:#ae81ff">EOF</span>
 </code></pre></div><p>Mount the secrets in pods</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
-</span><span style="color:#e6db74">apiVersion: apps/v1
-</span><span style="color:#e6db74">kind: Deployment
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  labels:
-</span><span style="color:#e6db74">    app: secretpods
-</span><span style="color:#e6db74">  name: secretpods
-</span><span style="color:#e6db74">spec:
-</span><span style="color:#e6db74">  replicas: 1
-</span><span style="color:#e6db74">  selector:
-</span><span style="color:#e6db74">    matchLabels:
-</span><span style="color:#e6db74">      app: secretpods
-</span><span style="color:#e6db74">  template:
-</span><span style="color:#e6db74">    metadata:
-</span><span style="color:#e6db74">      labels:
-</span><span style="color:#e6db74">        app: secretpods
-</span><span style="color:#e6db74">    spec:
-</span><span style="color:#e6db74">      containers:
-</span><span style="color:#e6db74">      - image: nginx
-</span><span style="color:#e6db74">        name: nginx
-</span><span style="color:#e6db74">        env:
-</span><span style="color:#e6db74">          - name:  demosecret
-</span><span style="color:#e6db74">            valueFrom:
-</span><span style="color:#e6db74">              secretKeyRef:
-</span><span style="color:#e6db74">                name:  demosecret
-</span><span style="color:#e6db74">                key:  demosecret
-</span><span style="color:#e6db74">        volumeMounts:
-</span><span style="color:#e6db74">          - name:  secret-store
-</span><span style="color:#e6db74">            mountPath:  &#34;mnt/secret-store&#34;
-</span><span style="color:#e6db74">            readOnly: true
-</span><span style="color:#e6db74">      volumes:
-</span><span style="color:#e6db74">        - name:  secret-store
-</span><span style="color:#e6db74">          csi:
-</span><span style="color:#e6db74">            driver: secrets-store.csi.k8s.io
-</span><span style="color:#e6db74">            readOnly: true
-</span><span style="color:#e6db74">            volumeAttributes:
-</span><span style="color:#e6db74">              secretProviderClass: &#34;demo-secret&#34;
-</span><span style="color:#e6db74">EOF</span>
-</code></pre></div><p>Now we you can werify the secret in the pod:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secretpods</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#75715e"># get as environment variables</span>
+        <span style="color:#f92672">env</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqldatabase</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqldatabase</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlusername</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlusername</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlpassword</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlpassword</span>
+        <span style="color:#75715e"># mount as file</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+            <span style="color:#f92672">mountPath</span>:  <span style="color:#e6db74">&#34;mnt/secret-store&#34;</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#75715e"># get the SecretProviderClass object</span>
+      <span style="color:#f92672">volumes</span>:
+        - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+          <span style="color:#f92672">csi</span>:
+            <span style="color:#f92672">driver</span>: <span style="color:#ae81ff">secrets-store.csi.k8s.io</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+            <span style="color:#f92672">volumeAttributes</span>:
+              <span style="color:#f92672">secretProviderClass</span>: <span style="color:#e6db74">&#34;demo-secret&#34;</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><h2 id="acces-key-vault-with-service-principal">Acces key vault with service principal</h2>
+<p>Create an identity in Azure</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export CLIENT_SECRET<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az ad sp create-for-rbac <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--role Contributor --scopes /subscriptions/$SUBSCRIPTION_ID <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name http://secrets-store-test --query <span style="color:#e6db74">&#39;password&#39;</span> -otsv<span style="color:#66d9ef">)</span>
+
+export CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az ad sp show --id http://secrets-store-test --query <span style="color:#e6db74">&#39;appId&#39;</span> -otsv<span style="color:#66d9ef">)</span>
+</code></pre></div><p>Provide the identity to access the Azure key vault</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az keyvault set-policy -n $KV --secret-permissions get --spn $CLIENT_ID
+</code></pre></div><p>Create the Kubernetes secret with credentials</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">data</span>:
+  <span style="color:#f92672">clientid</span>: <span style="color:#ae81ff">$CLIENT_ID</span>
+  <span style="color:#f92672">clientsecret</span>: <span style="color:#ae81ff">$CLIENT_SECRET</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">secrets-store.csi.k8s.io/used</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secrets-store-creds</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Create and apply your own SecretProviderClass object</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">secrets-store.csi.x-k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">SecretProviderClass</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">provider</span>: <span style="color:#ae81ff">azure</span>
+  <span style="color:#f92672">parameters</span>:
+    <span style="color:#f92672">usePodIdentity</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#f92672">useVMManagedIdentity</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#f92672">tenantId</span>: <span style="color:#e6db74">&#34;$AZURE_TENANT_ID&#34;</span>
+    <span style="color:#f92672">keyvaultName</span>: <span style="color:#e6db74">&#34;$KV&#34;</span>
+    <span style="color:#75715e"># name and type in keyvault</span>
+    <span style="color:#f92672">objects</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">      array:
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqldatabase&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlusername&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlpassword&#34;
+</span><span style="color:#e6db74">          objectType: secret</span>      
+  <span style="color:#f92672">secretObjects</span>:
+  - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">databasesecrets</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+    <span style="color:#75715e"># name and key in secret</span>
+    <span style="color:#f92672">data</span>:
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqldatabase&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqldatabase</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlusername&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlusername</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlpassword&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlpassword</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Mount the secrets in pods</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secretpods</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#75715e"># get as environment variables</span>
+        <span style="color:#f92672">env</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqldatabase</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqldatabase</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlusername</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlusername</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlpassword</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlpassword</span>
+        <span style="color:#75715e"># mount as file</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+            <span style="color:#f92672">mountPath</span>:  <span style="color:#e6db74">&#34;mnt/secret-store&#34;</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#75715e"># get the SecretProviderClass object</span>
+      <span style="color:#f92672">volumes</span>:
+        - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+          <span style="color:#f92672">csi</span>:
+            <span style="color:#f92672">driver</span>: <span style="color:#ae81ff">secrets-store.csi.k8s.io</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+            <span style="color:#f92672">volumeAttributes</span>:
+              <span style="color:#f92672">secretProviderClass</span>: <span style="color:#e6db74">&#34;demo-secret&#34;</span>
+            <span style="color:#75715e"># Only required when using service principal mode</span>
+            <span style="color:#f92672">nodePublishSecretRef</span>:
+              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secrets-store-creds</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><h2 id="demo-time">Demo time</h2>
+<p>Now we you can werify the secret in the pod:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export POD_NAME<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>kubectl get pods -l <span style="color:#e6db74">&#34;app=secretpods&#34;</span> -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{.items[0].metadata.name}&#34;</span><span style="color:#66d9ef">)</span>
  
 <span style="color:#75715e"># if this does not work, check the status of the pod</span>
@@ -7409,11 +7587,13 @@ cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
 kubectl exec -it $POD_NAME -- sh
  
 cd /mnt/secret-store
-ls <span style="color:#75715e"># the file containing the secret is listed</span>
-cat demosecret; echo <span style="color:#75715e"># demovalue is revealed</span>
+ls
+sqldatabase  sqlpassword  sqlusername
+<span style="color:#75715e"># the file containing the secret is listed</span>
+cat sqldatabase
  
 <span style="color:#75715e"># echo the value of the environment variable</span>
-echo $demosecret <span style="color:#75715e"># demovalue is revealed</span>
+echo $sqldatabase
 </code></pre></div>]]></content>
             
                  
@@ -29631,7 +29811,7 @@ kubectl delete pod -n kube-system core-dns-#########
 </ul>
 <p><img src="/img/include/ldapssan9.PNG" alt="Example image"  class="zoomable" /></p>
 <ul>
-<li>Rght click and select <code>Certificate Template to Issue</code> Add the new Template</li>
+<li>Rght click on <code>Certificate Template</code> and select <code>New / Certificate Template to Issue</code> Add the new Template</li>
 </ul>
 <p><img src="/img/include/ldapssan13.PNG" alt="Example image"  class="zoomable" /></p>
 <h3 id="generate-certificate">Generate Certificate</h3>
@@ -57631,6 +57811,364 @@ nodes:
 </code></pre><pre tabindex="0"><code>kind create cluster -n cilium01 --config clilium-cluster-mesh-c01.yaml
 kind create cluster -n cilium02 --config clilium-cluster-mesh-c02.yaml
 </code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[]]></title>
+            <link href="https://devopstales.github.io/home/k8s-egress-gateway/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/home/k8s-egress-gateway/</id>
+            
+            
+            <published>0001-01-01T00:00:00+00:00</published>
+            <updated>0001-01-01T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<ul>
+<li><a href="https://spidernet-io.github.io/egressgateway/v0.4/usage/Install/">https://spidernet-io.github.io/egressgateway/v0.4/usage/Install/</a></li>
+<li><a href="https://docs.cilium.io/en/stable/network/egress-gateway/">https://docs.cilium.io/en/stable/network/egress-gateway/</a></li>
+</ul>
+]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[]]></title>
+            <link href="https://devopstales.github.io/home/k8s-network-separation/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/home/k8s-network-separation/</id>
+            
+            
+            <published>0001-01-01T00:00:00+00:00</published>
+            <updated>0001-01-01T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p><a href="https://www.redhat.com/en/blog/openshift-and-network-security-zones-coexistence-approaches">https://www.redhat.com/en/blog/openshift-and-network-security-zones-coexistence-approaches</a>
+<a href="https://docs.cilium.io/en/latest/network/l2-announcements/">https://docs.cilium.io/en/latest/network/l2-announcements/</a>
+<a href="https://docs.cilium.io/en/latest/network/egress-gateway/#id1">https://docs.cilium.io/en/latest/network/egress-gateway/#id1</a>
+<a href="https://docs.cilium.io/en/latest/network/servicemesh/ingress/#gs-ingress">https://docs.cilium.io/en/latest/network/servicemesh/ingress/#gs-ingress</a>
+<a href="https://docs.cilium.io/en/latest/network/concepts/ipam/multi-pool/">https://docs.cilium.io/en/latest/network/concepts/ipam/multi-pool/</a>
+<a href="https://docs.cilium.io/en/latest/network/kubernetes/ipam-multi-pool/#enable-multi-pool-ipam-mode">https://docs.cilium.io/en/latest/network/kubernetes/ipam-multi-pool/#enable-multi-pool-ipam-mode</a>
+<a href="https://stackoverflow.com/questions/52487333/how-to-assign-a-namespace-to-certain-nodes">https://stackoverflow.com/questions/52487333/how-to-assign-a-namespace-to-certain-nodes</a></p>
+<ul>
+<li>
+<p>Install Cilium CNI</p>
+<ul>
+<li>with L2 Announcements enabled <input checked="" disabled="" type="checkbox"> </li>
+<li>with Egress Gateway enabled <input checked="" disabled="" type="checkbox"> </li>
+<li>with Multi-Pool <input checked="" disabled="" type="checkbox"> </li>
+</ul>
+</li>
+<li>
+<p>Configuration</p>
+<ul>
+<li>Create two LB pools (DMZ and LAN) <input checked="" disabled="" type="checkbox"> </li>
+<li>Create two Ingress Controller within ther LB pools (DMZ and LAN)</li>
+<li>Create two cilium Egress Gateway within ther LB pools (DMZ and LAN)</li>
+<li>Create Network policy for ingress/egress communication separation</li>
+<li>Create two IP pools (DMZ and LAN) for network separation in Kubernetes</li>
+</ul>
+</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
+kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule-
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">kubeProxyReplacement</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#f92672">k8sServiceHost</span>: <span style="color:#ae81ff">10.0.2.15</span>
+<span style="color:#f92672">k8sServicePort</span>: <span style="color:#ae81ff">6443</span>
+<span style="color:#f92672">containerRuntime</span>:
+  <span style="color:#f92672">integration</span>: <span style="color:#ae81ff">containerd</span>
+<span style="color:#f92672">rollOutCiliumPods</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">priorityClassName</span>: <span style="color:#ae81ff">system-cluster-critical</span>
+
+<span style="color:#f92672">ipv4</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">ipv6</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#75715e"># L2 LoadBalancer service</span>
+<span style="color:#f92672">l2announcements</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#75715e"># Policy audit log</span>
+<span style="color:#f92672">config</span>:
+  <span style="color:#f92672">policyAuditMode</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#75715e"># egressGateway</span>
+<span style="color:#f92672">egressGateway</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">bpf</span>:
+  <span style="color:#f92672">masquerade</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">l7Proxy</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">endpointStatus</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">status</span>: <span style="color:#ae81ff">policy</span>
+
+<span style="color:#f92672">dashboards</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
+
+<span style="color:#f92672">hubble</span>:
+  <span style="color:#f92672">metrics</span>:
+    <span style="color:#f92672">enableOpenMetrics</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">enabled</span>:
+    - <span style="color:#ae81ff">dns</span>
+    - <span style="color:#ae81ff">drop</span>
+    - <span style="color:#ae81ff">tcp</span>
+    - <span style="color:#ae81ff">flow:sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity</span>
+    - <span style="color:#ae81ff">port-distribution</span>
+    - <span style="color:#ae81ff">icmp</span>
+    - <span style="color:#ae81ff">kafka:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction;sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity</span>
+    - <span style="color:#ae81ff">policy:sourceContext=app|workload-name|pod|reserved-identity;destinationContext=app|workload-name|pod|dns|reserved-identity;labelsContext=source_namespace,destination_namespace</span>
+    - <span style="color:#ae81ff">httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction</span>
+    <span style="color:#f92672">serviceMonitor</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">dashboards</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+      <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
+      <span style="color:#f92672">annotations</span>:
+        <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
+
+  <span style="color:#f92672">ui</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+    <span style="color:#f92672">ingress</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#f92672">hosts</span>:
+        - <span style="color:#ae81ff">hubble.k8s.intra</span>
+      <span style="color:#f92672">annotations</span>:
+        <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+      <span style="color:#f92672">tls</span>:
+      - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">hubble-ingress-tls</span>
+        <span style="color:#f92672">hosts</span>:
+        - <span style="color:#ae81ff">hubble.k8s.intra</span>
+    <span style="color:#f92672">tolerations</span>:
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/master&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/control-plane&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+    <span style="color:#f92672">backend</span>:
+      <span style="color:#f92672">resources</span>:
+        <span style="color:#f92672">limits</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">60m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">300Mi</span>
+        <span style="color:#f92672">requests</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">20m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
+    <span style="color:#f92672">frontend</span>:
+      <span style="color:#f92672">resources</span>:
+        <span style="color:#f92672">limits</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1024M</span>
+        <span style="color:#f92672">requests</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
+    <span style="color:#f92672">proxy</span>:
+      <span style="color:#f92672">resources</span>:
+        <span style="color:#f92672">limits</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1024M</span>
+        <span style="color:#f92672">requests</span>:
+          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
+
+  <span style="color:#f92672">relay</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">tolerations</span>:
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/master&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/control-plane&#34;</span>
+        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
+        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
+    <span style="color:#f92672">resources</span>:
+      <span style="color:#f92672">limits</span>:
+        <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+        <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">500Mi</span>
+    <span style="color:#f92672">prometheus</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#f92672">serviceMonitor</span>:
+        <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+
+<span style="color:#f92672">operator</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">resources</span>:
+    <span style="color:#f92672">limits</span>:
+      <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
+      <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1Gi</span>
+    <span style="color:#f92672">requests</span>:
+      <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+      <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">128Mi</span>
+  <span style="color:#f92672">prometheus</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#f92672">serviceMonitor</span>:
+      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+  <span style="color:#f92672">dashboards</span>:
+    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+    <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
+    <span style="color:#f92672">annotations</span>:
+      <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
+
+<span style="color:#f92672">ipam</span>:
+  <span style="color:#f92672">mode</span>: <span style="color:#e6db74">&#34;multi-pool&#34;</span>
+  <span style="color:#f92672">operator</span>:
+    <span style="color:#f92672">clusterPoolIPv4PodCIDR</span>: <span style="color:#e6db74">&#34;10.43.0.0/16&#34;</span>
+    <span style="color:#f92672">clusterPoolIPv4MaskSize</span>: <span style="color:#ae81ff">24</span>
+    <span style="color:#f92672">clusterPoolIPv6PodCIDR</span>: <span style="color:#e6db74">&#34;fd00::/104&#34;</span>
+    <span style="color:#f92672">clusterPoolIPv6MaskSize</span>: <span style="color:#ae81ff">120</span>
+    <span style="color:#f92672">autoCreateCiliumPodIPPools</span>:
+      <span style="color:#f92672">default</span>:
+        <span style="color:#f92672">ipv4</span>:
+          <span style="color:#f92672">cidrs</span>:
+            - <span style="color:#ae81ff">10.10.0.0</span><span style="color:#ae81ff">/16</span>
+          <span style="color:#f92672">maskSize</span>: <span style="color:#ae81ff">27</span>
+
+<span style="color:#f92672">routingMode</span>: <span style="color:#ae81ff">native</span>
+<span style="color:#f92672">autoDirectNodeRoutes</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#f92672">endpointRoutes</span>:
+  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#f92672">ipv4NativeRoutingCIDR</span>: <span style="color:#ae81ff">10.0.0.0</span><span style="color:#ae81ff">/8</span>
+</code></pre></div><h3 id="create-two-lb-pools-default-and-dmz">Create two LB pools (default and dmz)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get ciliumpodippool default -o yaml
+apiVersion: cilium.io/v2alpha1
+kind: CiliumPodIPPool
+metadata:
+  creationTimestamp: <span style="color:#e6db74">&#34;2024-05-15T11:00:27Z&#34;</span>
+  generation: <span style="color:#ae81ff">1</span>
+  name: default
+  resourceVersion: <span style="color:#e6db74">&#34;3188&#34;</span>
+  uid: ce4288fa-e458-4ed6-b03c-c46af24e2a92
+spec:
+  ipv4:
+    cidrs:
+    - 10.10.0.0/16
+    maskSize: <span style="color:#ae81ff">27</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
+</span><span style="color:#e6db74">apiVersion: cilium.io/v2alpha1
+</span><span style="color:#e6db74">kind: CiliumPodIPPool
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: damz
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  ipv4:
+</span><span style="color:#e6db74">    cidrs:
+</span><span style="color:#e6db74">    - 10.20.0.0/16
+</span><span style="color:#e6db74">    maskSize: 27
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get ciliumpodippools
+NAME      AGE
+damz      26s
+default   66m
+</code></pre></div><p>Test with apps the two ip pools:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
+</span><span style="color:#e6db74">apiVersion: apps/v1
+</span><span style="color:#e6db74">kind: Deployment
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: nginx-default
+</span><span style="color:#e6db74">  namespace: default
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  selector:
+</span><span style="color:#e6db74">    matchLabels:
+</span><span style="color:#e6db74">      app: nginx-default
+</span><span style="color:#e6db74">  replicas: 2
+</span><span style="color:#e6db74">  template:
+</span><span style="color:#e6db74">    metadata:
+</span><span style="color:#e6db74">      labels:
+</span><span style="color:#e6db74">        app: nginx-default
+</span><span style="color:#e6db74">    spec:
+</span><span style="color:#e6db74">      containers:
+</span><span style="color:#e6db74">      - name: nginx
+</span><span style="color:#e6db74">        image: nginx:1.25.1
+</span><span style="color:#e6db74">        ports:
+</span><span style="color:#e6db74">        - containerPort: 80
+</span><span style="color:#e6db74">---
+</span><span style="color:#e6db74">apiVersion: apps/v1
+</span><span style="color:#e6db74">kind: Deployment
+</span><span style="color:#e6db74">metadata:
+</span><span style="color:#e6db74">  name: nginx-damz
+</span><span style="color:#e6db74">  namespace: default
+</span><span style="color:#e6db74">spec:
+</span><span style="color:#e6db74">  selector:
+</span><span style="color:#e6db74">    matchLabels:
+</span><span style="color:#e6db74">      app: nginx-damz
+</span><span style="color:#e6db74">  replicas: 2
+</span><span style="color:#e6db74">  template:
+</span><span style="color:#e6db74">    metadata:
+</span><span style="color:#e6db74">      labels:
+</span><span style="color:#e6db74">        app: nginx-damz
+</span><span style="color:#e6db74">      annotations:
+</span><span style="color:#e6db74">        ipam.cilium.io/ip-pool: damz
+</span><span style="color:#e6db74">    spec:
+</span><span style="color:#e6db74">      containers:
+</span><span style="color:#e6db74">      - name: nginx
+</span><span style="color:#e6db74">        image: nginx:1.25.1
+</span><span style="color:#e6db74">        ports:
+</span><span style="color:#e6db74">        - containerPort: 80
+</span><span style="color:#e6db74">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl  get po -o wide
+NAME                             READY   STATUS    RESTARTS   AGE   IP           NODE                   NOMINATED NODE   READINESS GATES
+nginx-damz-769c564fc8-br85b      1/1     Running   <span style="color:#ae81ff">0</span>          30s   10.20.0.28   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
+nginx-damz-769c564fc8-zqxgw      1/1     Running   <span style="color:#ae81ff">0</span>          30s   10.20.0.10   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
+nginx-default-7d4b875895-7pz9f   1/1     Running   <span style="color:#ae81ff">0</span>          31s   10.10.0.30   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
+nginx-default-7d4b875895-tbstn   1/1     Running   <span style="color:#ae81ff">0</span>          31s   10.10.0.15   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[]]></title>
+            <link href="https://devopstales.github.io/home/k8s-selinux/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/home/k8s-selinux/</id>
+            
+            
+            <published>0001-01-01T00:00:00+00:00</published>
+            <updated>0001-01-01T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<ul>
+<li><a href="https://suraj.io/post/single-node-k8s-fedora-selinux/">https://suraj.io/post/single-node-k8s-fedora-selinux/</a></li>
+<li><a href="https://suraj.io/post/k8s-hostpat-nuke-nodes/">https://suraj.io/post/k8s-hostpat-nuke-nodes/</a></li>
+<li><a href="https://stackoverflow.com/questions/51000791/how-to-mount-hostpath-volume-in-kubernetes-with-selinux">https://stackoverflow.com/questions/51000791/how-to-mount-hostpath-volume-in-kubernetes-with-selinux</a></li>
+</ul>
+]]></content>
             
                  
                     
