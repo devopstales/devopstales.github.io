@@ -9,14 +9,90 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2024-09-20T11:01:52+00:00</updated>
+    <updated>2024-10-08T07:37:44+00:00</updated>
     
     
     <author>
-            <name>Blaiserman</name>
+            <name>Balázs Páldi</name>
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Send Pfsense logs to Wazuh]]></title>
+            <link href="https://devopstales.github.io/home/wazuh-pfsense-syslog/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/wazuh-authentication/?utm_source=atom_feed" rel="related" type="text/html" title="Wazuh SIEM Authentication" />
+                <link href="https://devopstales.github.io/home/wazuh-siem/?utm_source=atom_feed" rel="related" type="text/html" title="Install Wazuh SIEM" />
+                <link href="https://devopstales.github.io/linux/wazuh-pfsense-syslog/?utm_source=atom_feed" rel="related" type="text/html" title="Send Pfsense logs to Wazuh" />
+                <link href="https://devopstales.github.io/home/github-self-hosted-runners-on-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Github Self-Hosted Runners on Kubernetes with Actions Runner Controller" />
+                <link href="https://devopstales.github.io/linux/wazuh-authentication/?utm_source=atom_feed" rel="related" type="text/html" title="Wazuh SIEM Authentication" />
+            
+                <id>https://devopstales.github.io/home/wazuh-pfsense-syslog/</id>
+            
+            
+            <published>2024-09-10T00:00:00+00:00</published>
+            <updated>2024-09-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to send PFSense logs to Wazuh SIEM server.</p>
+<p>Many examples on the internet says that you can use Wazuh agent to send logs to Wazuh Server. Well from PFsense 2.5 you can not install the agent without braking the PFsense upgrade manager UI. The next option is to send the PFsense logs directly from the firewall to the Wazuh Server syslog endpoint. I tried this method but my problem was the <code>Log Message Format</code>. From PFsense 2.5 you can use RFC5424 format but the Wazuh server syslog input dose not decode it well and the default log decoders for PFsense Dose not work. So I tried the legacy RFC3164 format. Well There is a bug in the FreeBSD implementation of the syslogd and it dose not include the hostname to the syslog message. It means this is not a valid syslog formatted message, and the Wazuh default log decoders for PFsense still not working. So first I tried the create custom decoders for the log messages. In the end I found a suggestion on PFsense forum to use the syslog-ng plugin of PFsense because it formats the syslog messages correctly.</p>
+<h3 id="install-syslog-ng-plugin">Install Syslog-ng plugin</h3>
+<p>Navigate to <code>System &gt; Package Manager &gt; Avaiable Packages</code> and search for <code>syslog</code> the only result will be the syslog-ng package. Click on the install button to add it to the firewall.</p>
+<p><img src="/img/include/pfsese_wazuh_syslog_00.webp" alt="wazuh infra"  class="zoomable" /></p>
+<h3 id="setting-syslog-ng">Setting syslog-ng</h3>
+<p>Navigate to <code>Services &gt; Syslog-ng &gt; Settings Tab</code> and set the syslog-ng on the GUI as the image below and click on the save button.</p>
+<p><img src="/img/include/pfsese_wazuh_syslog_03.webp" alt="wazuh infra"  class="zoomable" /></p>
+<h3 id="send-pfsense-logs-to-syslog-ng">Send pfSense Logs to syslog-ng</h3>
+<p>Navigate to <code>Status &gt; System Logs &gt; Settings Tab</code> and at the button check the Enable Remote Logging checkbox.</p>
+<p>Set the settings as the picture below and click the save button.</p>
+<p><img src="/img/include/pfsese_wazuh_syslog_01.webp" alt="wazuh infra"  class="zoomable" /></p>
+<p><img src="/img/include/pfsese_wazuh_syslog_02.webp" alt="wazuh infra"  class="zoomable" /></p>
+<h3 id="configure-wazuh-syslog-input">Configure Wazuh syslog input</h3>
+<p>Edit the <code>/var/ossec/etc/ossec.cfg</code> on the Wazuh Manger:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-xml" data-lang="xml"><span style="color:#f92672">&lt;ossec_config&gt;</span>
+  <span style="color:#75715e">&lt;!-- pfsense syslog input --&gt;</span>
+  <span style="color:#f92672">&lt;remote&gt;</span>
+    <span style="color:#f92672">&lt;connection&gt;</span>syslog<span style="color:#f92672">&lt;/connection&gt;</span>
+    <span style="color:#f92672">&lt;port&gt;</span>5514<span style="color:#f92672">&lt;/port&gt;</span>
+    <span style="color:#f92672">&lt;protocol&gt;</span>tcp<span style="color:#f92672">&lt;/protocol&gt;</span>
+    <span style="color:#f92672">&lt;allowed-ips&gt;</span>192.168.1.10<span style="color:#f92672">&lt;/allowed-ips&gt;</span>
+    <span style="color:#f92672">&lt;local_ip&gt;</span>192.168.1.5<span style="color:#f92672">&lt;/local_ip&gt;</span>
+  <span style="color:#f92672">&lt;/remote&gt;</span>
+  <span style="color:#f92672">&lt;remote&gt;</span>
+    <span style="color:#f92672">&lt;connection&gt;</span>syslog<span style="color:#f92672">&lt;/connection&gt;</span>
+    <span style="color:#f92672">&lt;port&gt;</span>5514<span style="color:#f92672">&lt;/port&gt;</span>
+    <span style="color:#f92672">&lt;protocol&gt;</span>udp<span style="color:#f92672">&lt;/protocol&gt;</span>
+    <span style="color:#f92672">&lt;allowed-ips&gt;</span>192.168.1.10<span style="color:#f92672">&lt;/allowed-ips&gt;</span>
+    <span style="color:#f92672">&lt;local_ip&gt;</span>192.168.1.5<span style="color:#f92672">&lt;/local_ip&gt;</span>
+  <span style="color:#f92672">&lt;/remote&gt;</span>
+<span style="color:#f92672">&lt;/ossec_config&gt;</span>
+</code></pre></div><p>The pfsense server&rsquo;s ip is <code>192.168.1.10</code> and the wazuh server1s ip is <code>192.168.1.5</code>.</p>
+<h3 id="sending-syslog-ng-logs-to-remote-server">Sending syslog-ng Logs to Remote Server</h3>
+<p>Syslog-ng is very flexible with its sources and destinations and the next step will be to crate a new destination to connect the local instance to the remote server.</p>
+<p>First, we need to add a new <code>destination</code> entry named <code>DST_WAZUH_SYSLOG</code>. Navigate to<code> Services &gt; Syslog-ng &gt; Advanced Tab</code> and add a new <code>destination</code> as the picture below.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">{</span> network<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;192.168.1.5&#34;</span> transport<span style="color:#f92672">(</span>udp<span style="color:#f92672">)</span> port<span style="color:#f92672">(</span>5514<span style="color:#f92672">))</span>; <span style="color:#f92672">}</span>;
+</code></pre></div><p>After, adding the <code>destination</code> we need to connect with the remote server adding a new <code>log</code> object as seen below.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">{</span> source<span style="color:#f92672">(</span>_DEFAULT<span style="color:#f92672">)</span>; destination<span style="color:#f92672">(</span>DST_WAZUH_SYSLOG<span style="color:#f92672">)</span>; <span style="color:#f92672">}</span>;
+</code></pre></div><blockquote>
+<p>If you want to rewrite the hostname create a <code>rewrite</code> object named <code>REWRITE_HOSTNAME</code>:</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">{</span> set<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;pfsense.mydomain.intra&#34;</span>, value<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;HOST&#34;</span><span style="color:#f92672">))</span>; <span style="color:#f92672">}</span>;
+</code></pre></div><p>The add the rewrite rule to the <code>destination</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#f92672">{</span> source<span style="color:#f92672">(</span>_DEFAULT<span style="color:#f92672">)</span>; rewrite<span style="color:#f92672">(</span>REWRITE_HOSTNAME<span style="color:#f92672">)</span>; destination<span style="color:#f92672">(</span>DST_WAZUH_SYSLOG<span style="color:#f92672">)</span>; <span style="color:#f92672">}</span>;
+</code></pre></div><p>Check if the Service is running.</p>
+<p><img src="/img/include/pfsese_wazuh_syslog_04.webp" alt="wazuh infra"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -7716,7 +7792,7 @@ helm upgrade --install akv2k8s <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
@@ -10280,7 +10356,7 @@ C:<span style="color:#ae81ff">\P</span>rogram Files<span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/pfsense-ipsec-mss-clamping/?utm_source=atom_feed" rel="related" type="text/html" title="pfsense: IPSec SSH connectivity issue" />
                 <link href="https://devopstales.github.io/home/ros-pppoe-server/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: PPPOE Server" />
                 <link href="https://devopstales.github.io/home/aws-s2s-vpn/?utm_source=atom_feed" rel="related" type="text/html" title="AWS - pfsense: Site-to-site VPN using static routes" />
-                <link href="https://devopstales.github.io/home/pfsense-ha-ipsec/?utm_source=atom_feed" rel="related" type="text/html" title="HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances" />
+                <link href="https://devopstales.github.io/home/pfsense-ad-join/?utm_source=atom_feed" rel="related" type="text/html" title="Firewall Ports for AD Domain Join" />
             
                 <id>https://devopstales.github.io/home/pfsense-suidproxy/</id>
             
@@ -11599,7 +11675,7 @@ helm upgrade --install trivy devopstales/trivy-operator -f values.yaml
                 <link href="https://devopstales.github.io/linux/pfsense-ipsec-mss-clamping/?utm_source=atom_feed" rel="related" type="text/html" title="pfsense: IPSec SSH connectivity issue" />
                 <link href="https://devopstales.github.io/home/ros-pppoe-server/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: PPPOE Server" />
                 <link href="https://devopstales.github.io/home/aws-s2s-vpn/?utm_source=atom_feed" rel="related" type="text/html" title="AWS - pfsense: Site-to-site VPN using static routes" />
-                <link href="https://devopstales.github.io/linux/pfsense-ha-ipsec/?utm_source=atom_feed" rel="related" type="text/html" title="HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances" />
+                <link href="https://devopstales.github.io/home/pfsense-ad-join/?utm_source=atom_feed" rel="related" type="text/html" title="Firewall Ports for AD Domain Join" />
             
                 <id>https://devopstales.github.io/home/pfsense-ipsec-mss-clamping/</id>
             
@@ -13400,7 +13476,7 @@ ppp secret add name<span style="color:#f92672">=</span>tester password<span styl
                 <link href="https://devopstales.github.io/home/ros-secure/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Secure your router" />
                 <link href="https://devopstales.github.io/home/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
                 <link href="https://devopstales.github.io/mikrotik/ros-secure/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Secure your router" />
-                <link href="https://devopstales.github.io/mikrotik/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
+                <link href="https://devopstales.github.io/home/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
             
                 <id>https://devopstales.github.io/home/ros-web-content-filter/</id>
             
@@ -13472,9 +13548,9 @@ ppp secret add name<span style="color:#f92672">=</span>tester password<span styl
             
                 <link href="https://devopstales.github.io/mikrotik/ros-secure/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Secure your router" />
                 <link href="https://devopstales.github.io/home/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
+                <link href="https://devopstales.github.io/home/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
                 <link href="https://devopstales.github.io/mikrotik/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
                 <link href="https://devopstales.github.io/home/k8s-crowdsec-ids/?utm_source=atom_feed" rel="related" type="text/html" title="CrowdSec Intrusion Detection System (IDS) for Kubernetes" />
-                <link href="https://devopstales.github.io/home/ubuntu-22.04-ad-join/?utm_source=atom_feed" rel="related" type="text/html" title="Ubuntu 22.04 - Microsoft Active Directory Group Policy" />
             
                 <id>https://devopstales.github.io/home/ros-secure/</id>
             
@@ -15821,10 +15897,10 @@ Apr <span style="color:#ae81ff">27</span> 11:31:59 prometheus systemd<span style
             <link href="https://devopstales.github.io/home/container-runtimes/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/kubernetes/container-runtimes/?utm_source=atom_feed" rel="related" type="text/html" title="Containers and Container runtimes for Beginners" />
-                <link href="https://devopstales.github.io/home/aws-eks-amp-monitoring/?utm_source=atom_feed" rel="related" type="text/html" title="Using AWS Prometheus (AMP) for monitoring AWS EKS cluster." />
                 <link href="https://devopstales.github.io/home/k8s-falco/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes audit logs and Falco" />
                 <link href="https://devopstales.github.io/home/k8s-cisa-install/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Hardening Guide with CISA 1.6 Benchmark" />
                 <link href="https://devopstales.github.io/home/k8s-seccomp/?utm_source=atom_feed" rel="related" type="text/html" title="Hardening Kubernetes with seccomp" />
+                <link href="https://devopstales.github.io/home/kubernetes-deprecated-docker-containderd-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes deprecated Docker? Containderd is the new Docker!!" />
             
                 <id>https://devopstales.github.io/home/container-runtimes/</id>
             
@@ -20552,10 +20628,10 @@ ceph osd set-full-ratio .95
             <link href="https://devopstales.github.io/home/k8s-pinniped/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/kubernetes/k8s-pinniped/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Single Sign-on with Pinniped OpenID Connect" />
+                <link href="https://devopstales.github.io/home/pfsense-ad-join/?utm_source=atom_feed" rel="related" type="text/html" title="Firewall Ports for AD Domain Join" />
                 <link href="https://devopstales.github.io/home/cilium-clustermesh/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Multicluster with Cilium Cluster Mesh" />
                 <link href="https://devopstales.github.io/home/k8s-git-backup/?utm_source=atom_feed" rel="related" type="text/html" title="How to Backup Kubernetes to git?" />
                 <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
-                <link href="https://devopstales.github.io/home/lazyimage/?utm_source=atom_feed" rel="related" type="text/html" title="Speed up docker pull with lazypull" />
             
                 <id>https://devopstales.github.io/home/k8s-pinniped/</id>
             
@@ -23104,7 +23180,7 @@ lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#a
                 <link href="https://devopstales.github.io/home/aks-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Azure Conainer Registry integration for AKS" />
                 <link href="https://devopstales.github.io/home/aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nginx Ingress Controller to AKS" />
                 <link href="https://devopstales.github.io/home/aks/?utm_source=atom_feed" rel="related" type="text/html" title="Install AKS Cluster" />
-                <link href="https://devopstales.github.io/home/k8s-install-containerd/?utm_source=atom_feed" rel="related" type="text/html" title="Install kubernetes with kubeadm" />
+                <link href="https://devopstales.github.io/home/pfsense-ad-join/?utm_source=atom_feed" rel="related" type="text/html" title="Firewall Ports for AD Domain Join" />
             
                 <id>https://devopstales.github.io/home/azure-dc-deploy/</id>
             
@@ -23201,6 +23277,11 @@ lrwxrwxrwx <span style="color:#ae81ff">1</span> ceph ceph  <span style="color:#a
             <title type="html"><![CDATA[Firewall Ports for AD Domain Join]]></title>
             <link href="https://devopstales.github.io/home/pfsense-ad-join/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/linux/pfsense-ad-join/?utm_source=atom_feed" rel="related" type="text/html" title="Firewall Ports for AD Domain Join" />
+                <link href="https://devopstales.github.io/home/pfsense-ha-ipsec/?utm_source=atom_feed" rel="related" type="text/html" title="HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances" />
+                <link href="https://devopstales.github.io/home/ipmitool-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate ipmitool" />
+                <link href="https://devopstales.github.io/home/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
+                <link href="https://devopstales.github.io/home/pfsense-usg/?utm_source=atom_feed" rel="related" type="text/html" title="Pfsese USG S2S VPN" />
             
                 <id>https://devopstales.github.io/home/pfsense-ad-join/</id>
             
@@ -25230,10 +25311,10 @@ minikube config set driver hyperv
             <link href="https://devopstales.github.io/home/pfsense-ha-ipsec/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/pfsense-ha-ipsec/?utm_source=atom_feed" rel="related" type="text/html" title="HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances" />
-                <link href="https://devopstales.github.io/home/cilium-opnsense-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Use Cilium BGP integration with OPNsense" />
-                <link href="https://devopstales.github.io/home/k8s-metallb-bgp-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Self-hosted Load Balancer for bare metal Kubernetes" />
-                <link href="https://devopstales.github.io/home/pfsense-usg/?utm_source=atom_feed" rel="related" type="text/html" title="Pfsese USG S2S VPN" />
-                <link href="https://devopstales.github.io/home/pfsense-telegraf/?utm_source=atom_feed" rel="related" type="text/html" title="Install telegraf on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
+                <link href="https://devopstales.github.io/home/opnsense-openvpn/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OpenVPN HA opnsense cluster" />
+                <link href="https://devopstales.github.io/home/opnsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA opnsense cluster" />
             
                 <id>https://devopstales.github.io/home/pfsense-ha-ipsec/</id>
             
@@ -46592,9 +46673,9 @@ export LOGIN_MODULE=&quot;multiauth&quot;
             
                 <link href="https://devopstales.github.io/linux/docker-on-fedora31/?utm_source=atom_feed" rel="related" type="text/html" title="Install docker on fedora 31" />
                 <link href="https://devopstales.github.io/home/graylog-pfsense-squid/?utm_source=atom_feed" rel="related" type="text/html" title="Analyzing PFsense squid logs in Graylog" />
+                <link href="https://devopstales.github.io/home/install-squid/?utm_source=atom_feed" rel="related" type="text/html" title="Install Squid proxy" />
                 <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-error/?utm_source=atom_feed" rel="related" type="text/html" title="Solution for: Proxmox backup error due to iothread" />
-                <link href="https://devopstales.github.io/home/foreman-pxe/?utm_source=atom_feed" rel="related" type="text/html" title="Install Foreman PXE boot" />
             
                 <id>https://devopstales.github.io/home/docker-on-fedora31/</id>
             
@@ -46761,6 +46842,11 @@ systemctl restart grafana-server
             <title type="html"><![CDATA[Install Squid proxy]]></title>
             <link href="https://devopstales.github.io/home/install-squid/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/linux/install-squid/?utm_source=atom_feed" rel="related" type="text/html" title="Install Squid proxy" />
+                <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
+                <link href="https://devopstales.github.io/home/proxmox-backup-error/?utm_source=atom_feed" rel="related" type="text/html" title="Solution for: Proxmox backup error due to iothread" />
+                <link href="https://devopstales.github.io/home/foreman-pxe/?utm_source=atom_feed" rel="related" type="text/html" title="Install Foreman PXE boot" />
+                <link href="https://devopstales.github.io/home/k8s-ceph-storage-with-csi-driver/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Ceph RBD volume with CSI driver" />
             
                 <id>https://devopstales.github.io/home/install-squid/</id>
             
@@ -47195,7 +47281,7 @@ spec:
                 <link href="https://devopstales.github.io/home/proxmox-backup-sanoid/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with sanoid" />
                 <link href="https://devopstales.github.io/home/proxmox-backup-znapzend/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox backup with znapzend" />
                 <link href="https://devopstales.github.io/home/proxmox-node-remove/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox node removal" />
-                <link href="https://devopstales.github.io/home/openshift-gitlab-helm/?utm_source=atom_feed" rel="related" type="text/html" title="Installing GitLab on OpenShift" />
+                <link href="https://devopstales.github.io/home/install-squid/?utm_source=atom_feed" rel="related" type="text/html" title="Install Squid proxy" />
             
                 <id>https://devopstales.github.io/home/proxmox-backup-error/</id>
             
@@ -49819,7 +49905,7 @@ oc delete -f deploy/operator.yaml
                 <link href="https://devopstales.github.io/linux/graylog3-pfsense/?utm_source=atom_feed" rel="related" type="text/html" title="Analyzing PFsense logs in Graylog3" />
                 <link href="https://devopstales.github.io/linux/graylog3-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Graylog3" />
                 <link href="https://devopstales.github.io/home/grafana-loki/?utm_source=atom_feed" rel="related" type="text/html" title="Grafana Loki" />
-                <link href="https://devopstales.github.io/home/grafana-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Grafana" />
+                <link href="https://devopstales.github.io/home/opnsense-openvpn/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OpenVPN HA opnsense cluster" />
             
                 <id>https://devopstales.github.io/home/graylog3-pfsense/</id>
             
@@ -50785,9 +50871,9 @@ systemctl status prometheus.service
             
                 <link href="https://devopstales.github.io/home/gitlab-install/?utm_source=atom_feed" rel="related" type="text/html" title="Gitlab Install" />
                 <link href="https://devopstales.github.io/home/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
+                <link href="https://devopstales.github.io/home/opnsense-openvpn/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OpenVPN HA opnsense cluster" />
                 <link href="https://devopstales.github.io/home/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
-                <link href="https://devopstales.github.io/home/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
-                <link href="https://devopstales.github.io/home/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
+                <link href="https://devopstales.github.io/home/opnsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA opnsense cluster" />
             
                 <id>https://devopstales.github.io/home/install-mattermost-for-gitlab/</id>
             
@@ -50914,10 +51000,10 @@ server {
             <link href="https://devopstales.github.io/home/gitlab-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/home/openshift-letsencrypt/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Letsencrypt certificates" />
+                <link href="https://devopstales.github.io/home/opnsense-openvpn/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OpenVPN HA opnsense cluster" />
                 <link href="https://devopstales.github.io/home/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
+                <link href="https://devopstales.github.io/home/opnsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA opnsense cluster" />
                 <link href="https://devopstales.github.io/home/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
-                <link href="https://devopstales.github.io/home/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
-                <link href="https://devopstales.github.io/home/hashicorp-vault/?utm_source=atom_feed" rel="related" type="text/html" title="Install hashicorp vault" />
             
                 <id>https://devopstales.github.io/home/gitlab-install/</id>
             
@@ -51342,6 +51428,11 @@ oc patch route ruby-ex \
             <title type="html"><![CDATA[Configure OpenVPN HA opnsense cluster]]></title>
             <link href="https://devopstales.github.io/home/opnsense-openvpn/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/home/opnsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA opnsense cluster" />
+                <link href="https://devopstales.github.io/linux/opnsense-openvpn/?utm_source=atom_feed" rel="related" type="text/html" title="Configure OpenVPN HA opnsense cluster" />
+                <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
+                <link href="https://devopstales.github.io/linux/opnsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA opnsense cluster" />
             
                 <id>https://devopstales.github.io/home/opnsense-openvpn/</id>
             
@@ -51522,6 +51613,11 @@ Go to <code>Firewll &gt; Aliases &gt; Add</code> and create alias for CARP membe
             <title type="html"><![CDATA[Configurate HA opnsense cluster]]></title>
             <link href="https://devopstales.github.io/home/opnsense-ha/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
+                <link href="https://devopstales.github.io/linux/opnsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA opnsense cluster" />
+                <link href="https://devopstales.github.io/home/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
+                <link href="https://devopstales.github.io/home/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
             
                 <id>https://devopstales.github.io/home/opnsense-ha/</id>
             
@@ -52580,7 +52676,7 @@ hammer content-view version promote \
                 <link href="https://devopstales.github.io/linux/awx-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX" />
                 <link href="https://devopstales.github.io/linux/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
-                <link href="https://devopstales.github.io/home/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
+                <link href="https://devopstales.github.io/home/ipmitool-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate ipmitool" />
             
                 <id>https://devopstales.github.io/home/awx-install/</id>
             
@@ -52688,7 +52784,7 @@ systemctl enable awx-web
                 <link href="https://devopstales.github.io/linux/awx-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX" />
                 <link href="https://devopstales.github.io/linux/awx-docker/?utm_source=atom_feed" rel="related" type="text/html" title="Install AWX in docker" />
                 <link href="https://devopstales.github.io/home/ansible-openshift-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Openshift" />
-                <link href="https://devopstales.github.io/home/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
+                <link href="https://devopstales.github.io/home/ipmitool-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate ipmitool" />
             
                 <id>https://devopstales.github.io/home/awx-docker/</id>
             
@@ -52752,6 +52848,11 @@ dockerhub_version=latest</p>]]></content>
             <title type="html"><![CDATA[Configurate ipmitool]]></title>
             <link href="https://devopstales.github.io/home/ipmitool-config/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/linux/ipmitool-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate ipmitool" />
+                <link href="https://devopstales.github.io/home/pfsense-telegraf/?utm_source=atom_feed" rel="related" type="text/html" title="Install telegraf on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
+                <link href="https://devopstales.github.io/home/pfsense-usg/?utm_source=atom_feed" rel="related" type="text/html" title="Pfsese USG S2S VPN" />
+                <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
             
                 <id>https://devopstales.github.io/home/ipmitool-config/</id>
             
@@ -53012,6 +53113,11 @@ df -hP /var/satellite
             <title type="html"><![CDATA[Google Authenticator on pfSense]]></title>
             <link href="https://devopstales.github.io/home/pfsense-2fa/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/linux/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
+                <link href="https://devopstales.github.io/home/ipmitool-config/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate ipmitool" />
+                <link href="https://devopstales.github.io/home/pfsense-usg/?utm_source=atom_feed" rel="related" type="text/html" title="Pfsese USG S2S VPN" />
+                <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
             
                 <id>https://devopstales.github.io/home/pfsense-2fa/</id>
             
@@ -53827,10 +53933,10 @@ Then the poller will ativated.
             <link href="https://devopstales.github.io/home/pfsense-usg/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/linux/pfsense-usg/?utm_source=atom_feed" rel="related" type="text/html" title="Pfsese USG S2S VPN" />
+                <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
+                <link href="https://devopstales.github.io/home/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
                 <link href="https://devopstales.github.io/home/pfsense-telegraf/?utm_source=atom_feed" rel="related" type="text/html" title="Install telegraf on pfsense" />
                 <link href="https://devopstales.github.io/home/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
-                <link href="https://devopstales.github.io/home/openshift-gitlabrunner/?utm_source=atom_feed" rel="related" type="text/html" title="Install Gitlab runner on Openshift" />
-                <link href="https://devopstales.github.io/home/openshift-extregistry/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: External registry" />
             
                 <id>https://devopstales.github.io/home/pfsense-usg/</id>
             
@@ -54585,7 +54691,7 @@ Make sure HTTPS is selected as Protocol and now change the SSL Certificate to th
                 <link href="https://devopstales.github.io/home/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
                 <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
                 <link href="https://devopstales.github.io/home/openshift-ldap/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift LDAP authentication" />
-                <link href="https://devopstales.github.io/home/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
             
                 <id>https://devopstales.github.io/home/k8s-helm-rbac/</id>
             
@@ -55186,6 +55292,11 @@ sudo ansible-playbook -i inventory/hosts.localhost playbooks/deploy_cluster.yml
             <title type="html"><![CDATA[WAN failower on pfsense]]></title>
             <link href="https://devopstales.github.io/home/pfsense-wlan/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/home/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
+                <link href="https://devopstales.github.io/linux/pfsense-wlan/?utm_source=atom_feed" rel="related" type="text/html" title="WAN failower on pfsense" />
+                <link href="https://devopstales.github.io/linux/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
+                <link href="https://devopstales.github.io/home/pfsense-telegraf/?utm_source=atom_feed" rel="related" type="text/html" title="Install telegraf on pfsense" />
+                <link href="https://devopstales.github.io/home/openshift-ceph/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift Ceph RBD for dynamic provisioning" />
             
                 <id>https://devopstales.github.io/home/pfsense-wlan/</id>
             
@@ -55316,6 +55427,11 @@ Clone WAN1 rules and edit them to WLAN2
             <title type="html"><![CDATA[Configurate HA pfsense cluster]]></title>
             <link href="https://devopstales.github.io/home/pfsense-ha/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
+                <link href="https://devopstales.github.io/linux/pfsense-ha/?utm_source=atom_feed" rel="related" type="text/html" title="Configurate HA pfsense cluster" />
+                <link href="https://devopstales.github.io/home/pfsense-telegraf/?utm_source=atom_feed" rel="related" type="text/html" title="Install telegraf on pfsense" />
+                <link href="https://devopstales.github.io/home/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/home/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
+                <link href="https://devopstales.github.io/home/keycloak1/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with mysql" />
             
                 <id>https://devopstales.github.io/home/pfsense-ha/</id>
             
@@ -57762,413 +57878,6 @@ scrape_configs:
 systemctl start prometheus
 systemctl status prometheus
 </code></pre>]]></content>
-            
-                 
-                    
-                 
-                    
-                 
-                    
-                
-            
-        </entry>
-    
-        
-        <entry>
-            <title type="html"><![CDATA[]]></title>
-            <link href="https://devopstales.github.io/home/cilium-clustermesh2/?utm_source=atom_feed" rel="alternate" type="text/html" />
-            
-            
-                <id>https://devopstales.github.io/home/cilium-clustermesh2/</id>
-            
-            
-            <published>0001-01-01T00:00:00+00:00</published>
-            <updated>0001-01-01T00:00:00+00:00</updated>
-            
-            
-            <content type="html"><![CDATA[<pre tabindex="0"><code>kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-networking:
-  podSubnet: &quot;10.11.0.0/16&quot;
-  # the default CNI will not be installed
-  disableDefaultCNI: true
-nodes:
-- role: control-plane
-- role: worker
-- role: worker
-
-</code></pre><pre tabindex="0"><code>kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-networking:
-  podSubnet: &quot;10.12.0.0/16&quot;
-  # the default CNI will not be installed
-  disableDefaultCNI: true
-nodes:
-- role: control-plane
-- role: worker
-- role: worker
-
-</code></pre><pre tabindex="0"><code>kind create cluster -n cilium01 --config clilium-cluster-mesh-c01.yaml
-kind create cluster -n cilium02 --config clilium-cluster-mesh-c02.yaml
-</code></pre>]]></content>
-            
-                 
-                    
-                 
-                    
-                 
-                    
-                
-            
-        </entry>
-    
-        
-        <entry>
-            <title type="html"><![CDATA[]]></title>
-            <link href="https://devopstales.github.io/home/k8s-egress-gateway/?utm_source=atom_feed" rel="alternate" type="text/html" />
-            
-            
-                <id>https://devopstales.github.io/home/k8s-egress-gateway/</id>
-            
-            
-            <published>0001-01-01T00:00:00+00:00</published>
-            <updated>0001-01-01T00:00:00+00:00</updated>
-            
-            
-            <content type="html"><![CDATA[<ul>
-<li><a href="https://spidernet-io.github.io/egressgateway/v0.4/usage/Install/">https://spidernet-io.github.io/egressgateway/v0.4/usage/Install/</a></li>
-<li><a href="https://docs.cilium.io/en/stable/network/egress-gateway/">https://docs.cilium.io/en/stable/network/egress-gateway/</a></li>
-</ul>
-]]></content>
-            
-                 
-                    
-                 
-                    
-                 
-                    
-                
-            
-        </entry>
-    
-        
-        <entry>
-            <title type="html"><![CDATA[]]></title>
-            <link href="https://devopstales.github.io/home/k8s-network-separation/?utm_source=atom_feed" rel="alternate" type="text/html" />
-            
-            
-                <id>https://devopstales.github.io/home/k8s-network-separation/</id>
-            
-            
-            <published>0001-01-01T00:00:00+00:00</published>
-            <updated>0001-01-01T00:00:00+00:00</updated>
-            
-            
-            <content type="html"><![CDATA[<p><a href="https://www.redhat.com/en/blog/openshift-and-network-security-zones-coexistence-approaches">https://www.redhat.com/en/blog/openshift-and-network-security-zones-coexistence-approaches</a>
-<a href="https://docs.cilium.io/en/latest/network/l2-announcements/">https://docs.cilium.io/en/latest/network/l2-announcements/</a>
-<a href="https://docs.cilium.io/en/latest/network/egress-gateway/#id1">https://docs.cilium.io/en/latest/network/egress-gateway/#id1</a>
-<a href="https://docs.cilium.io/en/latest/network/servicemesh/ingress/#gs-ingress">https://docs.cilium.io/en/latest/network/servicemesh/ingress/#gs-ingress</a>
-<a href="https://docs.cilium.io/en/latest/network/concepts/ipam/multi-pool/">https://docs.cilium.io/en/latest/network/concepts/ipam/multi-pool/</a>
-<a href="https://docs.cilium.io/en/latest/network/kubernetes/ipam-multi-pool/#enable-multi-pool-ipam-mode">https://docs.cilium.io/en/latest/network/kubernetes/ipam-multi-pool/#enable-multi-pool-ipam-mode</a>
-<a href="https://stackoverflow.com/questions/52487333/how-to-assign-a-namespace-to-certain-nodes">https://stackoverflow.com/questions/52487333/how-to-assign-a-namespace-to-certain-nodes</a></p>
-<ul>
-<li>
-<p>Install Cilium CNI</p>
-<ul>
-<li>with L2 Announcements enabled <input checked="" disabled="" type="checkbox"> </li>
-<li>with Egress Gateway enabled <input checked="" disabled="" type="checkbox"> </li>
-<li>with Multi-Pool <input checked="" disabled="" type="checkbox"> </li>
-</ul>
-</li>
-<li>
-<p>Configuration</p>
-<ul>
-<li>Create two LB pools (DMZ and LAN) <input checked="" disabled="" type="checkbox"> </li>
-<li>Create two Ingress Controller within ther LB pools (DMZ and LAN)</li>
-<li>Create two cilium Egress Gateway within ther LB pools (DMZ and LAN)</li>
-<li>Create Network policy for ingress/egress communication separation</li>
-<li>Create two IP pools (DMZ and LAN) for network separation in Kubernetes</li>
-</ul>
-</li>
-</ul>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
-kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule-
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">kubeProxyReplacement</span>: <span style="color:#66d9ef">true</span>
-
-<span style="color:#f92672">k8sServiceHost</span>: <span style="color:#ae81ff">10.0.2.15</span>
-<span style="color:#f92672">k8sServicePort</span>: <span style="color:#ae81ff">6443</span>
-<span style="color:#f92672">containerRuntime</span>:
-  <span style="color:#f92672">integration</span>: <span style="color:#ae81ff">containerd</span>
-<span style="color:#f92672">rollOutCiliumPods</span>: <span style="color:#66d9ef">true</span>
-<span style="color:#f92672">priorityClassName</span>: <span style="color:#ae81ff">system-cluster-critical</span>
-
-<span style="color:#f92672">ipv4</span>:
-  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-<span style="color:#f92672">ipv6</span>:
-  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
-
-<span style="color:#75715e"># L2 LoadBalancer service</span>
-<span style="color:#f92672">l2announcements</span>:
-  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-
-<span style="color:#75715e"># Policy audit log</span>
-<span style="color:#f92672">config</span>:
-  <span style="color:#f92672">policyAuditMode</span>: <span style="color:#66d9ef">true</span>
-
-<span style="color:#75715e"># egressGateway</span>
-<span style="color:#f92672">egressGateway</span>:
-  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-<span style="color:#f92672">bpf</span>:
-  <span style="color:#f92672">masquerade</span>: <span style="color:#66d9ef">true</span>
-<span style="color:#f92672">l7Proxy</span>: <span style="color:#66d9ef">false</span>
-
-<span style="color:#f92672">endpointStatus</span>:
-  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-  <span style="color:#f92672">status</span>: <span style="color:#ae81ff">policy</span>
-
-<span style="color:#f92672">dashboards</span>:
-  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
-  <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
-  <span style="color:#f92672">annotations</span>:
-    <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
-
-<span style="color:#f92672">hubble</span>:
-  <span style="color:#f92672">metrics</span>:
-    <span style="color:#f92672">enableOpenMetrics</span>: <span style="color:#66d9ef">true</span>
-    <span style="color:#f92672">enabled</span>:
-    - <span style="color:#ae81ff">dns</span>
-    - <span style="color:#ae81ff">drop</span>
-    - <span style="color:#ae81ff">tcp</span>
-    - <span style="color:#ae81ff">flow:sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity</span>
-    - <span style="color:#ae81ff">port-distribution</span>
-    - <span style="color:#ae81ff">icmp</span>
-    - <span style="color:#ae81ff">kafka:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction;sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity</span>
-    - <span style="color:#ae81ff">policy:sourceContext=app|workload-name|pod|reserved-identity;destinationContext=app|workload-name|pod|dns|reserved-identity;labelsContext=source_namespace,destination_namespace</span>
-    - <span style="color:#ae81ff">httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction</span>
-    <span style="color:#f92672">serviceMonitor</span>:
-      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
-    <span style="color:#f92672">dashboards</span>:
-      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
-      <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
-      <span style="color:#f92672">annotations</span>:
-        <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
-
-  <span style="color:#f92672">ui</span>:
-    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-    <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
-    <span style="color:#f92672">ingress</span>:
-      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-      <span style="color:#f92672">hosts</span>:
-        - <span style="color:#ae81ff">hubble.k8s.intra</span>
-      <span style="color:#f92672">annotations</span>:
-        <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
-        <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
-      <span style="color:#f92672">tls</span>:
-      - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">hubble-ingress-tls</span>
-        <span style="color:#f92672">hosts</span>:
-        - <span style="color:#ae81ff">hubble.k8s.intra</span>
-    <span style="color:#f92672">tolerations</span>:
-      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/master&#34;</span>
-        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
-        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
-      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/control-plane&#34;</span>
-        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
-        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
-    <span style="color:#f92672">backend</span>:
-      <span style="color:#f92672">resources</span>:
-        <span style="color:#f92672">limits</span>:
-          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">60m</span>
-          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">300Mi</span>
-        <span style="color:#f92672">requests</span>:
-          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">20m</span>
-          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
-    <span style="color:#f92672">frontend</span>:
-      <span style="color:#f92672">resources</span>:
-        <span style="color:#f92672">limits</span>:
-          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
-          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1024M</span>
-        <span style="color:#f92672">requests</span>:
-          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
-          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
-    <span style="color:#f92672">proxy</span>:
-      <span style="color:#f92672">resources</span>:
-        <span style="color:#f92672">limits</span>:
-          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
-          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1024M</span>
-        <span style="color:#f92672">requests</span>:
-          <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
-          <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">64Mi</span>
-
-  <span style="color:#f92672">relay</span>:
-    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-    <span style="color:#f92672">tolerations</span>:
-      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/master&#34;</span>
-        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
-        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
-      - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#34;node-role.kubernetes.io/control-plane&#34;</span>
-        <span style="color:#f92672">operator</span>: <span style="color:#e6db74">&#34;Exists&#34;</span>
-        <span style="color:#f92672">effect</span>: <span style="color:#e6db74">&#34;NoSchedule&#34;</span>
-    <span style="color:#f92672">resources</span>:
-      <span style="color:#f92672">limits</span>:
-        <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
-        <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">500Mi</span>
-    <span style="color:#f92672">prometheus</span>:
-      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-      <span style="color:#f92672">serviceMonitor</span>:
-        <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
-
-<span style="color:#f92672">operator</span>:
-  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
-  <span style="color:#f92672">resources</span>:
-    <span style="color:#f92672">limits</span>:
-      <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">1000m</span>
-      <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">1Gi</span>
-    <span style="color:#f92672">requests</span>:
-      <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
-      <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">128Mi</span>
-  <span style="color:#f92672">prometheus</span>:
-    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-    <span style="color:#f92672">serviceMonitor</span>:
-      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
-  <span style="color:#f92672">dashboards</span>:
-    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
-    <span style="color:#f92672">namespace</span>: <span style="color:#e6db74">&#34;monitoring-system&#34;</span>
-    <span style="color:#f92672">annotations</span>:
-      <span style="color:#f92672">grafana_folder</span>: <span style="color:#e6db74">&#34;cilium&#34;</span>
-
-<span style="color:#f92672">ipam</span>:
-  <span style="color:#f92672">mode</span>: <span style="color:#e6db74">&#34;multi-pool&#34;</span>
-  <span style="color:#f92672">operator</span>:
-    <span style="color:#f92672">clusterPoolIPv4PodCIDR</span>: <span style="color:#e6db74">&#34;10.43.0.0/16&#34;</span>
-    <span style="color:#f92672">clusterPoolIPv4MaskSize</span>: <span style="color:#ae81ff">24</span>
-    <span style="color:#f92672">clusterPoolIPv6PodCIDR</span>: <span style="color:#e6db74">&#34;fd00::/104&#34;</span>
-    <span style="color:#f92672">clusterPoolIPv6MaskSize</span>: <span style="color:#ae81ff">120</span>
-    <span style="color:#f92672">autoCreateCiliumPodIPPools</span>:
-      <span style="color:#f92672">default</span>:
-        <span style="color:#f92672">ipv4</span>:
-          <span style="color:#f92672">cidrs</span>:
-            - <span style="color:#ae81ff">10.10.0.0</span><span style="color:#ae81ff">/16</span>
-          <span style="color:#f92672">maskSize</span>: <span style="color:#ae81ff">27</span>
-
-<span style="color:#f92672">routingMode</span>: <span style="color:#ae81ff">native</span>
-<span style="color:#f92672">autoDirectNodeRoutes</span>: <span style="color:#66d9ef">true</span>
-<span style="color:#f92672">endpointRoutes</span>:
-  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
-
-<span style="color:#f92672">ipv4NativeRoutingCIDR</span>: <span style="color:#ae81ff">10.0.0.0</span><span style="color:#ae81ff">/8</span>
-</code></pre></div><h3 id="create-two-lb-pools-default-and-dmz">Create two LB pools (default and dmz)</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get ciliumpodippool default -o yaml
-apiVersion: cilium.io/v2alpha1
-kind: CiliumPodIPPool
-metadata:
-  creationTimestamp: <span style="color:#e6db74">&#34;2024-05-15T11:00:27Z&#34;</span>
-  generation: <span style="color:#ae81ff">1</span>
-  name: default
-  resourceVersion: <span style="color:#e6db74">&#34;3188&#34;</span>
-  uid: ce4288fa-e458-4ed6-b03c-c46af24e2a92
-spec:
-  ipv4:
-    cidrs:
-    - 10.10.0.0/16
-    maskSize: <span style="color:#ae81ff">27</span>
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
-</span><span style="color:#e6db74">apiVersion: cilium.io/v2alpha1
-</span><span style="color:#e6db74">kind: CiliumPodIPPool
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  name: damz
-</span><span style="color:#e6db74">spec:
-</span><span style="color:#e6db74">  ipv4:
-</span><span style="color:#e6db74">    cidrs:
-</span><span style="color:#e6db74">    - 10.20.0.0/16
-</span><span style="color:#e6db74">    maskSize: 27
-</span><span style="color:#e6db74">EOF</span>
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl get ciliumpodippools
-NAME      AGE
-damz      26s
-default   66m
-</code></pre></div><p>Test with apps the two ip pools:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">cat <span style="color:#e6db74">&lt;&lt;EOF | kubectl apply -f -
-</span><span style="color:#e6db74">apiVersion: apps/v1
-</span><span style="color:#e6db74">kind: Deployment
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  name: nginx-default
-</span><span style="color:#e6db74">  namespace: default
-</span><span style="color:#e6db74">spec:
-</span><span style="color:#e6db74">  selector:
-</span><span style="color:#e6db74">    matchLabels:
-</span><span style="color:#e6db74">      app: nginx-default
-</span><span style="color:#e6db74">  replicas: 2
-</span><span style="color:#e6db74">  template:
-</span><span style="color:#e6db74">    metadata:
-</span><span style="color:#e6db74">      labels:
-</span><span style="color:#e6db74">        app: nginx-default
-</span><span style="color:#e6db74">    spec:
-</span><span style="color:#e6db74">      containers:
-</span><span style="color:#e6db74">      - name: nginx
-</span><span style="color:#e6db74">        image: nginx:1.25.1
-</span><span style="color:#e6db74">        ports:
-</span><span style="color:#e6db74">        - containerPort: 80
-</span><span style="color:#e6db74">---
-</span><span style="color:#e6db74">apiVersion: apps/v1
-</span><span style="color:#e6db74">kind: Deployment
-</span><span style="color:#e6db74">metadata:
-</span><span style="color:#e6db74">  name: nginx-damz
-</span><span style="color:#e6db74">  namespace: default
-</span><span style="color:#e6db74">spec:
-</span><span style="color:#e6db74">  selector:
-</span><span style="color:#e6db74">    matchLabels:
-</span><span style="color:#e6db74">      app: nginx-damz
-</span><span style="color:#e6db74">  replicas: 2
-</span><span style="color:#e6db74">  template:
-</span><span style="color:#e6db74">    metadata:
-</span><span style="color:#e6db74">      labels:
-</span><span style="color:#e6db74">        app: nginx-damz
-</span><span style="color:#e6db74">      annotations:
-</span><span style="color:#e6db74">        ipam.cilium.io/ip-pool: damz
-</span><span style="color:#e6db74">    spec:
-</span><span style="color:#e6db74">      containers:
-</span><span style="color:#e6db74">      - name: nginx
-</span><span style="color:#e6db74">        image: nginx:1.25.1
-</span><span style="color:#e6db74">        ports:
-</span><span style="color:#e6db74">        - containerPort: 80
-</span><span style="color:#e6db74">EOF</span>
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl  get po -o wide
-NAME                             READY   STATUS    RESTARTS   AGE   IP           NODE                   NOMINATED NODE   READINESS GATES
-nginx-damz-769c564fc8-br85b      1/1     Running   <span style="color:#ae81ff">0</span>          30s   10.20.0.28   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
-nginx-damz-769c564fc8-zqxgw      1/1     Running   <span style="color:#ae81ff">0</span>          30s   10.20.0.10   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
-nginx-default-7d4b875895-7pz9f   1/1     Running   <span style="color:#ae81ff">0</span>          31s   10.10.0.30   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
-nginx-default-7d4b875895-tbstn   1/1     Running   <span style="color:#ae81ff">0</span>          31s   10.10.0.15   alma8.mydomain.intra   &lt;none&gt;           &lt;none&gt;
-</code></pre></div>]]></content>
-            
-                 
-                    
-                 
-                    
-                 
-                    
-                
-            
-        </entry>
-    
-        
-        <entry>
-            <title type="html"><![CDATA[]]></title>
-            <link href="https://devopstales.github.io/home/k8s-selinux/?utm_source=atom_feed" rel="alternate" type="text/html" />
-            
-            
-                <id>https://devopstales.github.io/home/k8s-selinux/</id>
-            
-            
-            <published>0001-01-01T00:00:00+00:00</published>
-            <updated>0001-01-01T00:00:00+00:00</updated>
-            
-            
-            <content type="html"><![CDATA[<ul>
-<li><a href="https://suraj.io/post/single-node-k8s-fedora-selinux/">https://suraj.io/post/single-node-k8s-fedora-selinux/</a></li>
-<li><a href="https://suraj.io/post/k8s-hostpat-nuke-nodes/">https://suraj.io/post/k8s-hostpat-nuke-nodes/</a></li>
-<li><a href="https://stackoverflow.com/questions/51000791/how-to-mount-hostpath-volume-in-kubernetes-with-selinux">https://stackoverflow.com/questions/51000791/how-to-mount-hostpath-volume-in-kubernetes-with-selinux</a></li>
-</ul>
-]]></content>
             
                  
                     
