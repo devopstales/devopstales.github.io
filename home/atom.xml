@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2024-10-14T13:44:33+00:00</updated>
+    <updated>2024-10-18T14:22:41+00:00</updated>
     
     
     <author>
@@ -7437,8 +7437,8 @@ az keyvault secret set <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--vault-name <span style="color:#e6db74">&#34;</span>$KV<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--name <span style="color:#e6db74">&#34;sqlpassword&#34;</span> <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--value <span style="color:#e6db74">&#39;Password1&#39;</span>
-</code></pre></div><h2 id="acces-key-vault-with-managed-identity">Acces key vault with managed identity</h2>
-<p>If you created your AKS cluster with managed identity you need to grant access to a managed identity:</p>
+</code></pre></div><h2 id="acces-key-vault-with-system-assigned-managed-identity">Acces key vault with system-assigned managed identity</h2>
+<p>If you created your AKS cluster with managed identity you can go to grant access to a managed identity:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># grab the managed identity principalId assuming it is in the default</span>
 <span style="color:#75715e"># MC_ group for your cluster and resource group</span>
 IDENTITY_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az identity show -g MC<span style="color:#ae81ff">\_</span>$RG<span style="color:#ae81ff">\_</span>$CLUSTER<span style="color:#ae81ff">\_</span>westeurope --name azurekeyvaultsecretsprovider-$CLUSTER --query principalId -o tsv<span style="color:#66d9ef">)</span>
@@ -7448,6 +7448,11 @@ az role assignment create <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--assignee-object-id $IDENTITY_ID <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--role <span style="color:#e6db74">&#34;Key Vault Administrator&#34;</span> <span style="color:#ae81ff">\
 </span><span style="color:#ae81ff"></span>--scope /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV
+</code></pre></div><p>If not yet enabled you need to enable system-assigned managed identity on AKS:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az aks update <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--resource-group $RG <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name  $CLUSTER <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--enable-managed-identity
 </code></pre></div><p>Create a SecretProviderClass:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">AZURE_TENANT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az account show --query tenantId -o tsv<span style="color:#66d9ef">)</span>
 CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az aks show -g $RG -n $CLUSTER --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv<span style="color:#66d9ef">)</span>
@@ -7499,6 +7504,7 @@ CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</spa
   <span style="color:#f92672">labels</span>:
     <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
   <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
 <span style="color:#f92672">spec</span>:
   <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
   <span style="color:#f92672">selector</span>:
@@ -7550,7 +7556,7 @@ CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</spa
 </span><span style="color:#ae81ff"></span>--name http://secrets-store-test --query <span style="color:#e6db74">&#39;password&#39;</span> -otsv<span style="color:#66d9ef">)</span>
 
 export CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az ad sp show --id http://secrets-store-test --query <span style="color:#e6db74">&#39;appId&#39;</span> -otsv<span style="color:#66d9ef">)</span>
-</code></pre></div><p>Provide the identity to access the Azure key vault</p>
+</code></pre></div><p>Provide policy to the identity to access the Azure key vault</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az keyvault set-policy -n $KV --secret-permissions get --spn $CLIENT_ID
 </code></pre></div><p>Create the Kubernetes secret with credentials</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
@@ -7612,6 +7618,7 @@ export CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">
   <span style="color:#f92672">labels</span>:
     <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
   <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
 <span style="color:#f92672">spec</span>:
   <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
   <span style="color:#f92672">selector</span>:
@@ -7659,9 +7666,146 @@ export CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">
             <span style="color:#f92672">nodePublishSecretRef</span>:
               <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secrets-store-creds</span>
 <span style="color:#ae81ff">EOF</span>
+</code></pre></div><h2 id="acces-key-vault-with-federated-workload-identity">Acces key vault with federated workload identity</h2>
+<p><a href="https://medium.com/@er.singh.nitin/integrate-azure-keyvault-with-aks-using-workload-identity-51e92d0e5063">https://medium.com/@er.singh.nitin/integrate-azure-keyvault-with-aks-using-workload-identity-51e92d0e5063</a></p>
+<p>This scanario is similar to the previous one, but instead of using managed identities we use the AKS cluster&rsquo;s workload identity to authenticate. In normal situation the identity is autenticates with a password. Password authentication is not the safest option. Instad we will use a federation to authenticate with OIDC SSO authentication.</p>
+<p>Enable OIDC issuer and Workload identity in an existing AKS cluster.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az aks update <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--resource-group $RG <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name  $CLUSTER <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--enable-oidc-issuer <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--enable-workload-identity
+</code></pre></div><p>Create a managed identity:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az identity create <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name secrets-store-test <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--resource-group $RG <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--location $RG_LOCATION <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--subscription $SUBSCRIPTION
+</code></pre></div><p>Get the OIDC issuer url and export it as an environment variable.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export AKS_OIDC_ISSUER<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az aks show --name $CLUSTER --resource-group $RG --query <span style="color:#e6db74">&#34;oidcIssuerProfile.issuerUrl&#34;</span> -o tsv<span style="color:#66d9ef">)</span>
+</code></pre></div><p>Export managed identity variable. We will assign this to the AKS service account.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export USER_ASSIGNED_CLIENT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az identity show --resource-group $RG --name secrets-store-test --query <span style="color:#e6db74">&#39;clientId&#39;</span> -otsv<span style="color:#66d9ef">)</span>
+export IDENTITY_TENANT<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az aks show --name $CLUSTER --resource-group $RG<span style="color:#66d9ef">)</span>
+</code></pre></div><p>Create AKS service account and we will assign the Managed Identity ClientID to it using <code>azure.workload.identity/client-id</code> annotation.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">az aks get-credentials -n $CLUSTER -g $RG</span>
+
+<span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ServiceAccount</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">annotations</span>:
+    <span style="color:#f92672">azure.workload.identity/client-id</span>: <span style="color:#ae81ff">${USER_ASSIGNED_CLIENT_ID}</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">azure.workload.identity/use</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">keyvault-sa</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Create the federated identity credential between the managed identity, service account issuer and subject.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export FEDERATED_IDENTITY_NAME<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;aksfederatedidentity&#34;</span> <span style="color:#75715e"># can be changed as needed</span>
+az identity federated-credential create <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--name $FEDERATED_IDENTITY_NAME <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--identity-name secrets-store-test <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--resource-group $RG <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--issuer <span style="color:#e6db74">${</span>AKS_OIDC_ISSUER<span style="color:#e6db74">}</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>--subject system:serviceaccount:default:keyvault-sa
+</code></pre></div><p>Provide policy to the identity to access the Azure key vault</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">az keyvault set-policy -n $KV --secret-permissions get --spn $USER_ASSIGNED_CLIENT_ID
+</code></pre></div><p>Create a SecretProviderClass:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">AZURE_TENANT_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>az account show --query tenantId -o tsv<span style="color:#66d9ef">)</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">secrets-store.csi.x-k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">SecretProviderClass</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo-secret</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">provider</span>: <span style="color:#ae81ff">azure</span>
+  <span style="color:#f92672">parameters</span>:
+    <span style="color:#75715e"># use managed identity</span>
+    <span style="color:#f92672">useVMManagedIdentity</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+    <span style="color:#f92672">clientID</span>: <span style="color:#e6db74">&#34;$USER_ASSIGNED_CLIENT_ID&#34;</span>
+    <span style="color:#f92672">tenantId</span>: <span style="color:#e6db74">&#34;$AZURE_TENANT_ID&#34;</span>
+    <span style="color:#f92672">keyvaultName</span>: <span style="color:#e6db74">&#34;$KV&#34;</span>
+    <span style="color:#75715e"># name and type in keyvault</span>
+    <span style="color:#f92672">objects</span>: |<span style="color:#e6db74">
+</span><span style="color:#e6db74">      array:
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqldatabase&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlusername&#34;
+</span><span style="color:#e6db74">          objectType: secret
+</span><span style="color:#e6db74">        - |
+</span><span style="color:#e6db74">          objectName: &#34;sqlpassword&#34;
+</span><span style="color:#e6db74">          objectType: secret</span>      
+  <span style="color:#f92672">secretObjects</span>:
+  - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">databasesecrets</span>
+    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+    <span style="color:#75715e"># name and key in secret</span>
+    <span style="color:#f92672">data</span>:
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqldatabase&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqldatabase</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlusername&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlusername</span>
+    - <span style="color:#f92672">objectName</span>: <span style="color:#e6db74">&#34;sqlpassword&#34;</span>
+      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sqlpassword</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">cat &lt;&lt;EOF | kubectl apply -f -</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+  <span style="color:#f92672">selector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">metadata</span>:
+      <span style="color:#f92672">labels</span>:
+        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">secretpods</span>
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">serviceAccountName</span>: <span style="color:#ae81ff">keyvault-sa</span>
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">nginx</span>
+        <span style="color:#75715e"># get as environment variables</span>
+        <span style="color:#f92672">env</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqldatabase</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqldatabase</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlusername</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlusername</span>
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">sqlpassword</span>
+            <span style="color:#f92672">valueFrom</span>:
+              <span style="color:#f92672">secretKeyRef</span>:
+                <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">databasesecrets</span>
+                <span style="color:#f92672">key</span>:  <span style="color:#ae81ff">sqlpassword</span>
+        <span style="color:#75715e"># mount as file</span>
+        <span style="color:#f92672">volumeMounts</span>:
+          - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+            <span style="color:#f92672">mountPath</span>:  <span style="color:#e6db74">&#34;mnt/secret-store&#34;</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#75715e"># get the SecretProviderClass object</span>
+      <span style="color:#f92672">volumes</span>:
+        - <span style="color:#f92672">name</span>:  <span style="color:#ae81ff">secret-store</span>
+          <span style="color:#f92672">csi</span>:
+            <span style="color:#f92672">driver</span>: <span style="color:#ae81ff">secrets-store.csi.k8s.io</span>
+            <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+            <span style="color:#f92672">volumeAttributes</span>:
+              <span style="color:#f92672">secretProviderClass</span>: <span style="color:#e6db74">&#34;demo-secret&#34;</span>
+<span style="color:#ae81ff">EOF</span>
 </code></pre></div><h2 id="demo-time">Demo time</h2>
 <p>Now we you can werify the secret in the pod:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export POD_NAME<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>kubectl get pods -l <span style="color:#e6db74">&#34;app=secretpods&#34;</span> -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{.items[0].metadata.name}&#34;</span><span style="color:#66d9ef">)</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">export POD_NAME<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>kubectl get pods -n default -l <span style="color:#e6db74">&#34;app=secretpods&#34;</span> -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{.items[0].metadata.name}&#34;</span><span style="color:#66d9ef">)</span>
  
 <span style="color:#75715e"># if this does not work, check the status of the pod</span>
 <span style="color:#75715e"># if still in ContainerCreating there might be an issue</span>
@@ -8270,8 +8414,8 @@ notAfter<span style="color:#f92672">=</span>Aug <span style="color:#ae81ff">29</
             
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/home/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
             
                 <id>https://devopstales.github.io/home/openshift4-buildconfig/</id>
