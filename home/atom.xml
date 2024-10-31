@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/home/" rel="alternate" type="text/html" title="HTML" />
             <link href="https://devopstales.github.io/home/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
             <link href="https://devopstales.github.io/home/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2024-10-18T15:01:01+00:00</updated>
+    <updated>2024-10-31T07:01:01+00:00</updated>
     
     
     <author>
@@ -17,6 +17,623 @@
             </author>
     
         <id>https://devopstales.github.io/home/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Hierarchical namespace controller]]></title>
+            <link href="https://devopstales.github.io/home/k8s-hierarchical-namespace-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-hierarchical-namespace-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Hierarchical namespace controller" />
+                <link href="https://devopstales.github.io/home/k8s-custom-kube-scheduler/?utm_source=atom_feed" rel="related" type="text/html" title="Custom Kube-Scheduler" />
+                <link href="https://devopstales.github.io/home/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Schedulerrofile" />
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/home/k8s-dmz-vxlan/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and VXLAN" />
+            
+                <id>https://devopstales.github.io/home/k8s-hierarchical-namespace-controller/</id>
+            
+            
+            <published>2024-10-25T00:00:00+00:00</published>
+            <updated>2024-10-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you how to install Hierarchical namespace controller (HNC) on k8s.</p>
+<h3 id="what-is-hierarchical-namespace-controller">What is Hierarchical namespace controller?</h3>
+<p>Hierarchical namespace controller is a controller that allows you to create a hierarchy between namespace objects.</p>
+<h3 id="installing">Installing</h3>
+<p>You can install or upgrade HNC on your cluster using the following commands (admin privileges required):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Select the latest version of HNC</span>
+HNC_VERSION<span style="color:#f92672">=</span>v1.1.0
+
+<span style="color:#75715e"># Select the variant of HNC you like. Other than &#39;default&#39;, options include:</span>
+<span style="color:#75715e"># &#39;hrq&#39;: Like default, but with hierarchical quotas.</span>
+<span style="color:#75715e"># &#39;ha&#39;: Like default, but with two deployments: one single-pod for the controller, and one three-pod for the webhooks</span>
+<span style="color:#75715e"># &#39;default-cm&#39;: Like default, but without the built-in cert rotator, and with support for cert-manager</span>
+HNC_VARIANT<span style="color:#f92672">=</span>default
+
+<span style="color:#75715e"># Install HNC. Afterwards, wait up to 30s for HNC to refresh the certificates on its webhooks.</span>
+kubectl apply -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/<span style="color:#e6db74">${</span>HNC_VERSION<span style="color:#e6db74">}</span>/<span style="color:#e6db74">${</span>HNC_VARIANT<span style="color:#e6db74">}</span>.yaml 
+
+<span style="color:#75715e"># Install kubectl plugin with krew</span>
+kubectl krew install hns
+</code></pre></div><h3 id="basic-functionality">Basic functionality</h3>
+<blockquote>
+<p>Demonstrates: setting parent-child relationships, subnamespace creation, RBAC propagation, hierarchy modification.</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create namespace acme-org
+
+kubectl create namespace team-a
+kubectl create namespace service-1
+</code></pre></div><p>By default, there&rsquo;s no relationship between these namespaces. Let&rsquo;s make <code>acme-org</code> the parent of <code>team-a</code>, and <code>team-a</code> the parent of <code>service-1</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#75715e"># Make acme-org the parent of team-a</span>
+kubectl hns set team-a --parent acme-org
+
+<span style="color:#75715e"># This won&#39;t work, will be rejected since it would cause a cycle. Try it!</span>
+kubectl hns set acme-org --parent team-a
+
+<span style="color:#75715e"># Make team-a the parent of service-1</span>
+kubectl hns set service-1 --parent team-a
+
+<span style="color:#75715e"># Display the hierarchy</span>
+kubectl hns tree acme-org
+
+<span style="color:#75715e"># Output:</span>
+acme-org
+└── team-a
+     └── service-1
+</code></pre></div><h3 id="subnamespaces">Subnamespaces</h3>
+<p>Imagine you have a team called <code>team-b</code> under the org called <code>acme-org</code>. You are the admin of the namespace <code>team-b</code> and have no cluster-wide permissions to create namespaces, but you do have a <code>RoleBinding</code> in <code>team-b</code> that gives you permission to create a <code>SubnamespaceAnchor</code> object in that namespace.</p>
+<p>Now you would like to create three <code>subnamespaces</code> for services owned by your team, say <code>service-1</code>, <code>service-2</code> and <code>service-3</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl hns create service-1 -n team-b
+kubectl hns create service-2 -n team-b
+kubectl hns create service-3 -n team-b
+kubectl hns tree team-a
+
+<span style="color:#75715e"># Expected output:</span>
+team-b
+├── <span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> service-1
+├── <span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> service-2
+└── <span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> service-3
+
+<span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> Indicates subnamespace
+</code></pre></div><p>As with regular namespaces (&ldquo;full namespaces,&rdquo; in HNC terms), subnamespaces must have unique names.</p>
+<h3 id="hierarchical-rbac">Hierarchical RBAC</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl -n team-a create role team-a-sre --verb<span style="color:#f92672">=</span>update --resource<span style="color:#f92672">=</span>deployments
+kubectl -n team-a create rolebinding team-a-sres --role team-a-sre --serviceaccount<span style="color:#f92672">=</span>team-a:default
+
+kubectl -n acme-org create role org-sre --verb<span style="color:#f92672">=</span>update --resource<span style="color:#f92672">=</span>deployments
+kubectl -n acme-org create rolebinding org-sres --role org-sre --serviceaccount<span style="color:#f92672">=</span>acme-org:default
+</code></pre></div><p>Now, if we check <code>service-1</code>, we&rsquo;ll see that the rolebindings from the ancestor namespaces have been propagated to the child namespace.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl -n service-1 describe roles
+<span style="color:#75715e"># Output: you should see two roles, one propagated from acme-org and the other</span>
+<span style="color:#75715e"># from team-a.</span>
+
+kubectl -n service-1 get rolebindings
+<span style="color:#75715e"># Output: similarly, you should see two propagated rolebindings.</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl describe rolebinding org-sres -n team-a
+<span style="color:#75715e"># Output:</span>
+Name:         sres
+Labels:       hnc.x-k8s.io/inheritedFrom<span style="color:#f92672">=</span>acme-org  <span style="color:#75715e"># inserted by HNC</span>
+Annotations:  &lt;none&gt;
+Role:
+  Kind:  ClusterRole
+  Name:  admin
+Subjects: ...
+</code></pre></div><p>The controller keeps the RBAC objects in sync with the current hierarchy.</p>
+<h3 id="hierarchical-network-policy">Hierarchical network policy</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl hns create service-2 -n team-a
+kubectl hns tree acme-org
+
+acme-org
+├── team-a
+│   ├── service-1
+│   └── <span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> service-2
+└── <span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> team-b
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl run s2 -n service-2 --image<span style="color:#f92672">=</span>nginxinc/nginx-unprivileged --restart<span style="color:#f92672">=</span>Never --expose --port <span style="color:#ae81ff">8080</span>
+
+<span style="color:#75715e"># Verify that it&#39;s running:</span>
+kubectl get service,pod -o wide -n service-2
+
+<span style="color:#75715e"># To test that the service is accessible from workloads in different namespaces, start a client pod in service-1 and confirm that the service is reachable.</span>
+kubectl run client -n service-1 -it --image<span style="color:#f92672">=</span>alpine --restart<span style="color:#f92672">=</span>Never --rm -- sh
+wget -qO- --timeout <span style="color:#ae81ff">2</span> http://s2.service-2:8080
+</code></pre></div><p>Now we&rsquo;ll create a default network policy that blocks any ingress from other namespaces:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">kubectl apply -f - &lt;&lt; EOF</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkPolicy</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">deny-from-other-namespaces</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">acme-org</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">podSelector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+  <span style="color:#f92672">ingress</span>:
+  - <span style="color:#f92672">from</span>:
+    - <span style="color:#f92672">podSelector</span>: {}
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><p>Now let&rsquo;s ensure this policy can be propagated to its descendants.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl hns config set-resource networkpolicies --group networking.k8s.io --mode Propagate
+
+<span style="color:#75715e"># And verify it got propagated:</span>
+kubectl get netpol --all-namespaces | grep deny
+
+<span style="color:#75715e"># Expected output:</span>
+acme-org    deny-from-other-namespaces   &lt;none&gt;         37s
+service-1   deny-from-other-namespaces   &lt;none&gt;         0s
+service-2   deny-from-other-namespaces   &lt;none&gt;         0s
+team-a      deny-from-other-namespaces   &lt;none&gt;         0s
+team-b      deny-from-other-namespaces   &lt;none&gt;         0s
+</code></pre></div><p>If network policies have been correctly enabled on your cluster, we&rsquo;ll now see that we can no longer access <code>service-2</code> from a client in <code>service-1</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl run client -n service-1 -it --image<span style="color:#f92672">=</span>alpine --restart<span style="color:#f92672">=</span>Never --rm -- sh
+wget -qO- --timeout <span style="color:#ae81ff">2</span> http://s2.service-2:8080
+<span style="color:#75715e"># Observe timeout</span>
+</code></pre></div><p>But in this example, we&rsquo;d like all service from a specific team to be able to interact with each other, so we&rsquo;ll create a second network policy as shown below that will allow all namespaces within team-a to be able to communicate with each other.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">kubectl apply -f - &lt;&lt; EOF</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkPolicy</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">allow-team-a</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">team-a</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">podSelector</span>:
+    <span style="color:#f92672">matchLabels</span>:
+  <span style="color:#f92672">ingress</span>:
+  - <span style="color:#f92672">from</span>:
+    - <span style="color:#f92672">namespaceSelector</span>:
+        <span style="color:#f92672">matchExpressions</span>:
+          - <span style="color:#f92672">key</span>: <span style="color:#e6db74">&#39;team-a.tree.hnc.x-k8s.io/depth&#39;</span>
+            <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">Exists</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><h3 id="hierarchical-resource-quotas-hrqs">Hierarchical resource quotas (HRQs)</h3>
+<p>Let&rsquo;s assume you own acme-org from the previous example:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">acme-org
+├── <span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> team-a
+└── <span style="color:#f92672">[</span>s<span style="color:#f92672">]</span> team-b
+</code></pre></div><p>If you create a <code>HierarchicalResourceQuota</code> in namespace <code>acme-org</code>, the sum of all <code>subnamespaces</code> resources can&rsquo;t surpass the <code>HRQ</code>.</p>
+<p>Create the HRQ:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#ae81ff">kubectl apply -f - &lt;&lt; EOF</span>
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">hnc.x-k8s.io/v1alpha2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">HierarchicalResourceQuota</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">acme-org-hrq</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">acme-org</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">hard</span>:
+    <span style="color:#f92672">services</span>: <span style="color:#ae81ff">1</span>
+<span style="color:#ae81ff">EOF</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create service clusterip team-a-svc --clusterip<span style="color:#f92672">=</span>None -n team-a
+
+<span style="color:#75715e"># Now, when you try to create a Service in namespace team-b:</span>
+kubectl create service clusterip team-b-svc --clusterip<span style="color:#f92672">=</span>None -n team-b
+
+<span style="color:#75715e"># You get an error:</span>
+Error from server <span style="color:#f92672">(</span>Forbidden<span style="color:#f92672">)</span>:
+  error when creating <span style="color:#e6db74">&#34;STDIN&#34;</span>:
+    admission webhood <span style="color:#e6db74">&#34;resourcesquotasstatus.hnc.x-k8s.io&#34;</span> denied the request:
+      exceeded hierarchical quota in namespace <span style="color:#e6db74">&#34;acme-org&#34;</span>:
+        <span style="color:#e6db74">&#34;acme-org-hrq&#34;</span>, requested: services<span style="color:#f92672">=</span>1, used: services<span style="color:#f92672">=</span>1, limited: services<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Custom Kube-Scheduler]]></title>
+            <link href="https://devopstales.github.io/home/k8s-custom-kube-scheduler/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Schedulerrofile" />
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-custom-kube-scheduler/?utm_source=atom_feed" rel="related" type="text/html" title="Custom Kube-Scheduler" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Schedulerrofile" />
+                <link href="https://devopstales.github.io/home/k8s-dmz-vxlan/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and VXLAN" />
+            
+                <id>https://devopstales.github.io/home/k8s-custom-kube-scheduler/</id>
+            
+            
+            <published>2024-10-24T00:00:00+00:00</published>
+            <updated>2024-10-24T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can create a custom Kube-Scheduler to chaneg scheduling options.</p>
+<h3 id="what-is-kube-scheduler">What is Kube-Scheduler?</h3>
+<p>Kube-Scheduler is the component that is makes decisions on where to run Pods based on various criteria such as node selectors, affinities, hardware constraints, resource limits. By default the sheduler schedules the pods to the lease used node. In this example I will change this to the <img src="https://kubernetes.io/docs/concepts/scheduling-eviction/resource-bin-packing/#enabling-bin-packing-using-mostallocated-strategy" alt="MostAllocated strategy"  class="zoomable" />. With this configuration you can save resources and mony.</p>
+<blockquote>
+<p>This post was tested on Kubernetes version 1.25 and later.</p>
+</blockquote>
+<h3 id="create-config-for-the-scheduler">Create Config for the scheduler</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubescheduler.config.k8s.io/v1beta2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeSchedulerConfiguration</span>
+<span style="color:#f92672">leaderElection</span>:
+   <span style="color:#f92672">leaderElect</span>: <span style="color:#66d9ef">false</span>
+<span style="color:#f92672">profiles</span>:
+   - <span style="color:#f92672">schedulerName</span>: <span style="color:#ae81ff">custom-scheduler</span>
+     <span style="color:#f92672">pluginConfig</span>:
+       - <span style="color:#f92672">args</span>:
+           <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubescheduler.config.k8s.io/v1beta2</span>
+           <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NodeResourcesFitArgs</span>
+           <span style="color:#f92672">scoringStrategy</span>:
+               <span style="color:#f92672">resources</span>:
+                   - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cpu</span>
+                     <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
+                   - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">memory</span>
+                     <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
+               <span style="color:#f92672">type</span>: <span style="color:#ae81ff">MostAllocated</span>
+         <span style="color:#f92672">name</span>: <span style="color:#ae81ff">NodeResourcesFit</span>
+     <span style="color:#f92672">plugins</span>:
+       <span style="color:#f92672">score</span>:
+           <span style="color:#f92672">enabled</span>:
+               - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">NodeResourcesFit</span>
+                 <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl create configmap custom-scheduler-config -n kube-system --from-file<span style="color:#f92672">=</span>scheduler-config.yaml
+</code></pre></div><h3 id="create-the-serviceaccount-for-the-custom-kube-scheduler">Create the ServiceAccount for the custom kube-scheduler</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ServiceAccount</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+ <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+<span style="color:#f92672">rules</span>:
+- <span style="color:#f92672">apiGroups</span>:
+ - <span style="color:#e6db74">&#34;&#34;</span>
+ <span style="color:#f92672">resources</span>:
+ - <span style="color:#ae81ff">pods</span>
+ - <span style="color:#ae81ff">pods/status</span>
+ - <span style="color:#ae81ff">pods/binding</span>
+ <span style="color:#f92672">verbs</span>:
+ - <span style="color:#ae81ff">get</span>
+ - <span style="color:#ae81ff">list</span>
+ - <span style="color:#ae81ff">watch</span>
+ - <span style="color:#ae81ff">create</span>
+ - <span style="color:#ae81ff">update</span>
+ - <span style="color:#ae81ff">patch</span>
+ - <span style="color:#ae81ff">delete</span>
+- <span style="color:#f92672">apiGroups</span>:
+ - <span style="color:#e6db74">&#34;&#34;</span>
+ <span style="color:#f92672">resources</span>:
+ - <span style="color:#ae81ff">nodes</span>
+ <span style="color:#f92672">verbs</span>:
+ - <span style="color:#ae81ff">get</span>
+ - <span style="color:#ae81ff">list</span>
+ - <span style="color:#ae81ff">watch</span>
+- <span style="color:#f92672">apiGroups</span>:
+ - <span style="color:#ae81ff">storage.k8s.io</span>
+ <span style="color:#f92672">resources</span>:
+ - <span style="color:#ae81ff">storageclasses</span>
+ - <span style="color:#ae81ff">csinodes</span>
+ - <span style="color:#ae81ff">csidrivers</span>
+ - <span style="color:#ae81ff">csistoragecapacities</span>
+ <span style="color:#f92672">verbs</span>:
+ - <span style="color:#ae81ff">watch</span>
+ - <span style="color:#ae81ff">list</span>
+ - <span style="color:#ae81ff">get</span>
+- <span style="color:#f92672">apiGroups</span>:
+ - <span style="color:#ae81ff">apps</span>
+ <span style="color:#f92672">resources</span>:
+ - <span style="color:#ae81ff">replicasets</span>
+ - <span style="color:#ae81ff">statefulsets</span>
+ <span style="color:#f92672">verbs</span>:
+ - <span style="color:#ae81ff">watch</span>
+ - <span style="color:#ae81ff">list</span>
+ - <span style="color:#ae81ff">get</span>
+- <span style="color:#f92672">apiGroups</span>:
+ - <span style="color:#e6db74">&#34;&#34;</span>
+ <span style="color:#f92672">resources</span>:
+ - <span style="color:#ae81ff">persistentvolumeclaims</span>
+ - <span style="color:#ae81ff">services</span>
+ - <span style="color:#ae81ff">namespaces</span>
+ - <span style="color:#ae81ff">configmaps</span>
+ - <span style="color:#ae81ff">replicationcontrollers</span>
+ - <span style="color:#ae81ff">persistentvolumes</span>
+ - <span style="color:#ae81ff">poddisruptionbudgets</span>
+ - <span style="color:#ae81ff">replicasets</span>
+ - <span style="color:#ae81ff">statefulsets</span>
+ <span style="color:#f92672">verbs</span>:
+ - <span style="color:#ae81ff">watch</span>
+ - <span style="color:#ae81ff">list</span>
+ - <span style="color:#ae81ff">get</span>
+- <span style="color:#f92672">apiGroups</span>:
+ - <span style="color:#ae81ff">policy</span>
+ <span style="color:#f92672">resources</span>:
+ - <span style="color:#ae81ff">poddisruptionbudgets</span>
+ <span style="color:#f92672">verbs</span>:
+ - <span style="color:#ae81ff">watch</span>
+ - <span style="color:#ae81ff">list</span>
+ - <span style="color:#ae81ff">get</span>
+---
+<span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+<span style="color:#f92672">roleRef</span>:
+ <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+ <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+<span style="color:#f92672">subjects</span>:
+- <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ServiceAccount</span>
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+ <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f scheduler-sa.yaml
+</code></pre></div><h3 id="create-the-custom-scheduler-deployment">Create the custom scheduler deployment</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+ <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+ <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">spec</span>:
+ <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+ <span style="color:#f92672">selector</span>:
+   <span style="color:#f92672">matchLabels</span>:
+     <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+ <span style="color:#f92672">template</span>:
+   <span style="color:#f92672">metadata</span>:
+     <span style="color:#f92672">labels</span>:
+       <span style="color:#f92672">component</span>: <span style="color:#ae81ff">scheduler</span>
+       <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+       <span style="color:#f92672">tier</span>: <span style="color:#ae81ff">control-plane</span>
+   <span style="color:#f92672">spec</span>:
+     <span style="color:#f92672">containers</span>:
+     - <span style="color:#f92672">command</span>:
+       - <span style="color:#ae81ff">/usr/local/bin/kube-scheduler</span>
+       - --<span style="color:#ae81ff">leader-elect=false</span>
+       - --<span style="color:#ae81ff">config=/etc/kubernetes/scheduler-config.yaml</span>
+       - -<span style="color:#ae81ff">v=5</span>
+       <span style="color:#f92672">env</span>: []
+       <span style="color:#f92672">image</span>: <span style="color:#ae81ff">registry.k8s.io/kube-scheduler:v1.25.12</span>
+       <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
+       <span style="color:#f92672">resources</span>:
+         <span style="color:#f92672">requests</span>:
+           <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">200m</span>
+           <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">128Mi</span>
+         <span style="color:#f92672">limits</span>:
+           <span style="color:#f92672">memory</span>: <span style="color:#ae81ff">128Mi</span>
+       <span style="color:#f92672">livenessProbe</span>:
+         <span style="color:#f92672">httpGet</span>:
+           <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/healthz</span>
+           <span style="color:#f92672">port</span>: <span style="color:#ae81ff">10259</span>
+           <span style="color:#f92672">scheme</span>: <span style="color:#ae81ff">HTTPS</span>
+       <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler</span>
+       <span style="color:#f92672">readinessProbe</span>:
+         <span style="color:#f92672">httpGet</span>:
+           <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/healthz</span>
+           <span style="color:#f92672">port</span>: <span style="color:#ae81ff">10259</span>
+           <span style="color:#f92672">scheme</span>: <span style="color:#ae81ff">HTTPS</span>
+       <span style="color:#f92672">volumeMounts</span>:
+       - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/etc/kubernetes/scheduler-config.yaml</span>
+         <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler-config</span>
+         <span style="color:#f92672">subPath</span>: <span style="color:#ae81ff">scheduler-config.yaml</span>
+     <span style="color:#f92672">serviceAccountName</span>: <span style="color:#ae81ff">custom-scheduler</span>
+     <span style="color:#f92672">volumes</span>:
+     - <span style="color:#f92672">configMap</span>:
+         <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler-config</span>
+       <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-scheduler-config</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f custom-scheduler-deployment.yaml
+</code></pre></div><h3 id="schedule-pods-with-the-custom-kube-scheduler">Schedule Pods with the custom kube-scheduler</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">my-app</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">3</span>
+  <span style="color:#f92672">template</span>:
+    <span style="color:#f92672">spec</span>:
+      <span style="color:#f92672">schedulerName</span>: <span style="color:#ae81ff">custom-scheduler</span>
+      <span style="color:#f92672">containers</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">my-app</span>
+        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">my-app-image</span>
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kube-Schedulerrofile]]></title>
+            <link href="https://devopstales.github.io/home/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/home/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Schedulerrofile" />
+                <link href="https://devopstales.github.io/home/k8s-dmz-vxlan/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and VXLAN" />
+                <link href="https://devopstales.github.io/home/k8s-dmz-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and BGP" />
+                <link href="https://devopstales.github.io/home/github-self-hosted-runners-on-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Github Self-Hosted Runners on Kubernetes with Actions Runner Controller" />
+            
+                <id>https://devopstales.github.io/home/k8s-kube-scheduler-profile/</id>
+            
+            
+            <published>2024-10-23T00:00:00+00:00</published>
+            <updated>2024-10-23T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can create a custom Kube-Scheduler profile to chaneg scheduling options.</p>
+<h3 id="what-is-kube-scheduler">What is Kube-Scheduler?</h3>
+<p>Kube-Scheduler is the component that is makes decisions on where to run Pods based on various criteria such as node selectors, affinities, hardware constraints, resource limits. By default the sheduler schedules the pods to the lease used node. In this example I will change this to the <img src="https://kubernetes.io/docs/concepts/scheduling-eviction/resource-bin-packing/#enabling-bin-packing-using-mostallocated-strategy" alt="MostAllocated strategy"  class="zoomable" />. With this configuration you can save resources and mony.</p>
+<blockquote>
+<p>This post was tested on Kubernetes version 1.25 and later.</p>
+</blockquote>
+<h3 id="find-kube-scheduler-config">Find Kube-Scheduler config</h3>
+<p>On the masternodes find the <code>/etc/kubernetes/manifests/kube-scheduler.yaml</code> file.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">creationTimestamp</span>: <span style="color:#66d9ef">null</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">component</span>: <span style="color:#ae81ff">kube-scheduler</span>
+    <span style="color:#f92672">tier</span>: <span style="color:#ae81ff">control-plane</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kube-scheduler</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">command</span>:
+    - <span style="color:#ae81ff">kube-scheduler</span>
+    - --<span style="color:#ae81ff">authentication-kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    - --<span style="color:#ae81ff">authorization-kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    - --<span style="color:#ae81ff">bind-address=127.0.0.1</span>
+    - --<span style="color:#ae81ff">kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    - --<span style="color:#ae81ff">leader-elect=true</span>
+    - --<span style="color:#ae81ff">port=0</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">k8s.gcr.io/kube-scheduler:v1.25.2</span>
+    <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
+    <span style="color:#f92672">livenessProbe</span>:
+      <span style="color:#f92672">failureThreshold</span>: <span style="color:#ae81ff">8</span>
+      <span style="color:#f92672">httpGet</span>:
+        <span style="color:#f92672">host</span>: <span style="color:#ae81ff">127.0.0.1</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/healthz</span>
+        <span style="color:#f92672">port</span>: <span style="color:#ae81ff">10259</span>
+        <span style="color:#f92672">scheme</span>: <span style="color:#ae81ff">HTTPS</span>
+      <span style="color:#f92672">initialDelaySeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">periodSeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">timeoutSeconds</span>: <span style="color:#ae81ff">15</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kube-scheduler</span>
+    <span style="color:#f92672">resources</span>:
+      <span style="color:#f92672">requests</span>:
+        <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+    <span style="color:#f92672">startupProbe</span>:
+      <span style="color:#f92672">failureThreshold</span>: <span style="color:#ae81ff">24</span>
+      <span style="color:#f92672">httpGet</span>:
+        <span style="color:#f92672">host</span>: <span style="color:#ae81ff">127.0.0.1</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/healthz</span>
+        <span style="color:#f92672">port</span>: <span style="color:#ae81ff">10259</span>
+        <span style="color:#f92672">scheme</span>: <span style="color:#ae81ff">HTTPS</span>
+      <span style="color:#f92672">initialDelaySeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">periodSeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">timeoutSeconds</span>: <span style="color:#ae81ff">15</span>
+    <span style="color:#f92672">volumeMounts</span>:
+    - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/etc/kubernetes/scheduler.conf</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kubeconfig</span>
+      <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">hostNetwork</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">priorityClassName</span>: <span style="color:#ae81ff">system-node-critical</span>
+  <span style="color:#f92672">securityContext</span>:
+    <span style="color:#f92672">seccompProfile</span>:
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RuntimeDefault</span>
+  <span style="color:#f92672">volumes</span>:
+  - <span style="color:#f92672">hostPath</span>:
+      <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/etc/kubernetes/scheduler.conf</span>
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">FileOrCreate</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kubeconfig</span>
+<span style="color:#f92672">status</span>: {}
+</code></pre></div><h3 id="create-config-for-the-scheduler">Create Config for the scheduler</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubescheduler.config.k8s.io/v1beta2</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeSchedulerConfiguration</span>
+<span style="color:#f92672">leaderElection</span>:
+   <span style="color:#f92672">leaderElect</span>: <span style="color:#66d9ef">false</span>
+<span style="color:#f92672">profiles</span>:
+   - <span style="color:#f92672">schedulerName</span>: <span style="color:#ae81ff">custom-scheduler</span>
+     <span style="color:#f92672">pluginConfig</span>:
+       - <span style="color:#f92672">args</span>:
+           <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubescheduler.config.k8s.io/v1beta2</span>
+           <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NodeResourcesFitArgs</span>
+           <span style="color:#f92672">scoringStrategy</span>:
+               <span style="color:#f92672">resources</span>:
+                   - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cpu</span>
+                     <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
+                   - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">memory</span>
+                     <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
+               <span style="color:#f92672">type</span>: <span style="color:#ae81ff">MostAllocated</span>
+         <span style="color:#f92672">name</span>: <span style="color:#ae81ff">NodeResourcesFit</span>
+     <span style="color:#f92672">plugins</span>:
+       <span style="color:#f92672">score</span>:
+           <span style="color:#f92672">enabled</span>:
+               - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">NodeResourcesFit</span>
+                 <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">1</span>
+</code></pre></div><h3 id="update-scheduler-manifest">Update scheduler manifest</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo cp kube-scheduler.yaml.bak /etc/kubernetes/manifests/kube-scheduler.yaml
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+<span style="color:#f92672">metadata</span>:
+  <span style="color:#f92672">creationTimestamp</span>: <span style="color:#66d9ef">null</span>
+  <span style="color:#f92672">labels</span>:
+    <span style="color:#f92672">component</span>: <span style="color:#ae81ff">kube-scheduler</span>
+    <span style="color:#f92672">tier</span>: <span style="color:#ae81ff">control-plane</span>
+  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kube-scheduler</span>
+  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kube-system</span>
+<span style="color:#f92672">spec</span>:
+  <span style="color:#f92672">containers</span>:
+  - <span style="color:#f92672">command</span>:
+    - <span style="color:#ae81ff">kube-scheduler</span>
+    - --<span style="color:#ae81ff">config=/etc/kubernetes/myscheduler.conf</span>
+    - --<span style="color:#ae81ff">authorization-kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    - --<span style="color:#ae81ff">authentication-kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">k8s.gcr.io/kube-scheduler:v1.25.2</span>
+    <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
+    <span style="color:#f92672">livenessProbe</span>:
+      <span style="color:#f92672">failureThreshold</span>: <span style="color:#ae81ff">8</span>
+      <span style="color:#f92672">httpGet</span>:
+        <span style="color:#f92672">host</span>: <span style="color:#ae81ff">127.0.0.1</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/healthz</span>
+        <span style="color:#f92672">port</span>: <span style="color:#ae81ff">10259</span>
+        <span style="color:#f92672">scheme</span>: <span style="color:#ae81ff">HTTPS</span>
+      <span style="color:#f92672">initialDelaySeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">periodSeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">timeoutSeconds</span>: <span style="color:#ae81ff">15</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kube-scheduler</span>
+    <span style="color:#f92672">resources</span>:
+      <span style="color:#f92672">requests</span>:
+        <span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">100m</span>
+    <span style="color:#f92672">startupProbe</span>:
+      <span style="color:#f92672">failureThreshold</span>: <span style="color:#ae81ff">24</span>
+      <span style="color:#f92672">httpGet</span>:
+        <span style="color:#f92672">host</span>: <span style="color:#ae81ff">127.0.0.1</span>
+        <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/healthz</span>
+        <span style="color:#f92672">port</span>: <span style="color:#ae81ff">10259</span>
+        <span style="color:#f92672">scheme</span>: <span style="color:#ae81ff">HTTPS</span>
+      <span style="color:#f92672">initialDelaySeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">periodSeconds</span>: <span style="color:#ae81ff">10</span>
+      <span style="color:#f92672">timeoutSeconds</span>: <span style="color:#ae81ff">15</span>
+    <span style="color:#f92672">volumeMounts</span>:
+    - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/etc/kubernetes/scheduler.conf</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kubeconfig</span>
+      <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+    - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/etc/kubernetes/myscheduler.conf</span>
+      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mysched</span>
+      <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">hostNetwork</span>: <span style="color:#66d9ef">true</span>
+  <span style="color:#f92672">priorityClassName</span>: <span style="color:#ae81ff">system-node-critical</span>
+  <span style="color:#f92672">securityContext</span>:
+    <span style="color:#f92672">seccompProfile</span>:
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RuntimeDefault</span>
+  <span style="color:#f92672">volumes</span>:
+  - <span style="color:#f92672">hostPath</span>:
+      <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/etc/kubernetes/scheduler.conf</span>
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">FileOrCreate    </span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">kubeconfig</span>
+  - <span style="color:#f92672">hostPath</span>:
+      <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/etc/kubernetes/myscheduler.conf</span>
+      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">FileOrCreate</span>
+    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mysched</span>
+</code></pre></div><blockquote>
+<p>Remember to xhnage the config on all master nodes.</p>
+</blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo cp kube-scheduler.yaml /etc/kubernetes/manifests/kube-scheduler.yaml
+</code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -7940,7 +8557,7 @@ helm upgrade --install akv2k8s <span style="color:#ae81ff">\
                 <link href="https://devopstales.github.io/home/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/home/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="OKD OpenShift 4: Service Serving Certificate" />
-                <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
             
                 <id>https://devopstales.github.io/home/openshift4-service-serving-certificate/</id>
             
