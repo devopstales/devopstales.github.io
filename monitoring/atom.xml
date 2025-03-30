@@ -1,21 +1,2606 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
-    <generator uri="https://gohugo.io/" version="0.89.2">Hugo</generator><title type="html"><![CDATA[Monitorings on devopstales]]></title>
+    <generator uri="https://gohugo.io/" version="0.145.0">Hugo</generator><title type="html"><![CDATA[Monitorings on devopstales]]></title>
     
         <subtitle type="html"><![CDATA[Blog about dev and ops stuff]]></subtitle>
     
     
     
-            <link href="https://devopstales.github.io/monitoring/" rel="alternate" type="text/html" title="HTML" />
-            <link href="https://devopstales.github.io/monitoring/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
-            <link href="https://devopstales.github.io/monitoring/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2025-03-10T15:30:47+00:00</updated>
+            <link href="https://devopstales.github.io/monitoring/" rel="alternate" type="text/html" title="html" />
+            <link href="https://devopstales.github.io/monitoring/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
+            <link href="https://devopstales.github.io/monitoring/atom.xml" rel="self" type="application/atom+xml" title="atom" />
+    <updated>2025-03-30T13:01:43+00:00</updated>
     
     
-    <author>
-            <name>Balázs Páldi</name>
-            </author>
+    
     
         <id>https://devopstales.github.io/monitoring/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install icinga director modules to Icingaweb2 on CentOS/Almlalinux/RockyOS 8]]></title>
+            <link href="https://devopstales.github.io/monitoring/icinga2_director_centos8/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/icinga2_install_centos8/?utm_source=atom_feed" rel="related" type="text/html" title="Install Icinga2 on CentOS/Almlalinux/RockyOS 8" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_director/?utm_source=atom_feed" rel="related" type="text/html" title="Install icinga director modules to Icingaweb2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Install nrpe tp Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_add_host/?utm_source=atom_feed" rel="related" type="text/html" title="Add host to Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Icinga2" />
+            
+                <id>https://devopstales.github.io/monitoring/icinga2_director_centos8/</id>
+            
+            
+            <published>2022-12-19T00:00:00+00:00</published>
+            <updated>2022-12-19T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to install Icingaweb2 module director.</p>
+<p>Icinga irector is designed for those who want to automate their configuration deployment and those who want to grant easy access for there users to the Icinga2 configuration.</p>
+<h3 id="create-db-for-director">Create db for director</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano /var/lib/pgsql/data/pg_hba.conf
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># TYPE  DATABASE        USER            ADDRESS                 METHOD</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># icinga</span>
+</span></span><span style="display:flex;"><span>local   icinga      icinga                            md5
+</span></span><span style="display:flex;"><span>host    icinga      icinga      127.0.0.1/32          md5
+</span></span><span style="display:flex;"><span>host    icinga      icinga      ::1/128               md5
+</span></span><span style="display:flex;"><span>local   icinga_web  icinga_web                        md5
+</span></span><span style="display:flex;"><span>host    icinga_web  icinga_web  127.0.0.1/32          md5
+</span></span><span style="display:flex;"><span>host    icinga_web  icinga_web  ::1/128               md5
+</span></span><span style="display:flex;"><span>local   director    director                          md5
+</span></span><span style="display:flex;"><span>host    director    director    127.0.0.1/32          md5
+</span></span><span style="display:flex;"><span>host    director    director    ::1/128               md5
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl restart postgresql
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>sudo -u postgres psql -c <span style="color:#e6db74">&#34;CREATE ROLE director WITH LOGIN PASSWORD &#39;director&#39;&#34;</span>
+</span></span><span style="display:flex;"><span>sudo -u postgres createdb -O director -E UTF-8 director
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>sudo -u postgres psql director -q -c <span style="color:#e6db74">&#34;CREATE USER director WITH PASSWORD &#39;CHANGEME&#39;;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">GRANT ALL PRIVILEGES ON DATABASE director TO director;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">CREATE EXTENSION pgcrypto;&#34;</span>
+</span></span></code></pre></div><h3 id="install-icingaweb2-modules">Install Icingaweb2 modules</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>mkdir -p /usr/share/icingaweb2/modules
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MODULE_NAME<span style="color:#f92672">=</span>ipl
+</span></span><span style="display:flex;"><span>MODULE_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>curl -s https://api.github.com/repos/Icinga/icinga-php-library/releases/latest  | grep tag_name | cut -d <span style="color:#e6db74">&#39;&#34;&#39;</span> -f 4<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>REPO<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://github.com/Icinga/icinga-php-library&#34;</span>
+</span></span><span style="display:flex;"><span>MODULES_PATH<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/usr/share/icingaweb2/modules&#34;</span>
+</span></span><span style="display:flex;"><span>git clone <span style="color:#e6db74">${</span>REPO<span style="color:#e6db74">}</span> <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULES_PATH<span style="color:#e6db74">}</span><span style="color:#e6db74">/</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> --branch <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULE_VERSION<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>icingacli module enable <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MODULE_NAME<span style="color:#f92672">=</span>incubator
+</span></span><span style="display:flex;"><span>MODULE_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>curl -s https://api.github.com/repos/Icinga/icingaweb2-module-incubator/releases/latest  | grep tag_name | cut -d <span style="color:#e6db74">&#39;&#34;&#39;</span> -f 4<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>REPO<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://github.com/Icinga/icingaweb2-module-</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>MODULES_PATH<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/usr/share/icingaweb2/modules&#34;</span>
+</span></span><span style="display:flex;"><span>git clone <span style="color:#e6db74">${</span>REPO<span style="color:#e6db74">}</span> <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULES_PATH<span style="color:#e6db74">}</span><span style="color:#e6db74">/</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> --branch <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULE_VERSION<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>icingacli module enable <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MODULE_NAME<span style="color:#f92672">=</span>reactbundle
+</span></span><span style="display:flex;"><span>MODULE_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>curl -s https://api.github.com/repos/Icinga/icingaweb2-module-reactbundle/releases/latest  | grep tag_name | cut -d <span style="color:#e6db74">&#39;&#34;&#39;</span> -f 4<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>REPO<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://github.com/Icinga/icingaweb2-module-</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>MODULES_PATH<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/usr/share/icingaweb2/modules&#34;</span>
+</span></span><span style="display:flex;"><span>git clone <span style="color:#e6db74">${</span>REPO<span style="color:#e6db74">}</span> <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULES_PATH<span style="color:#e6db74">}</span><span style="color:#e6db74">/</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> --branch <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULE_VERSION<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>icingacli module enable <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULE_NAME<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>ICINGAWEB_MODULEPATH<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/usr/share/icingaweb2/modules&#34;</span>
+</span></span><span style="display:flex;"><span>REPO_URL<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://github.com/icinga/icingaweb2-module-director&#34;</span>
+</span></span><span style="display:flex;"><span>TARGET_DIR<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>ICINGAWEB_MODULEPATH<span style="color:#e6db74">}</span><span style="color:#e6db74">/director&#34;</span>
+</span></span><span style="display:flex;"><span>MODULE_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>curl -s https://api.github.com/repos/Icinga/icingaweb2-module-director/releases/latest  | grep tag_name | cut -d <span style="color:#e6db74">&#39;&#34;&#39;</span> -f 4<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>git clone <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>REPO_URL<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>TARGET_DIR<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> --branch <span style="color:#e6db74">${</span>MODULE_VERSION<span style="color:#e6db74">}</span>
+</span></span></code></pre></div><h3 id="edit-director-configuration">Edit director configuration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt;&gt; /etc/icinga2/conf.d/api-users.conf
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">object ApiUser &#34;director&#34; {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        password = &#34;director&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        permissions = [ &#34;*&#34; ]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt;&gt; /etc/icingaweb2/resources.ini
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[director_db]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">type = &#34;db&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">db = &#34;pgsql&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">host = &#34;localhost&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">port = &#34;5432&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">dbname = &#34;director&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">username = &#34;director&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">password = &#34;director&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">charset = &#34;utf8&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">use_ssl = &#34;0&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>mkdir /etc/icingaweb2/modules/director/
+</span></span><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/director/config.ini
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[db]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">resource = &#34;director_db&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/director/kickstart.ini
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[config]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">endpoint = icinga.mydomain.intra
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">host = 127.0.0.1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">port = 5665
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">username = director
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">password = director
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl restart icinga2
+</span></span><span style="display:flex;"><span>icingacli module enable director
+</span></span><span style="display:flex;"><span>icingacli director kickstart run
+</span></span><span style="display:flex;"><span>icingacli director migration run --verbose
+</span></span><span style="display:flex;"><span>icingacli director migration pending --verbose
+</span></span></code></pre></div><h3 id="install-background-daemon">install Background-Daemon</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>useradd -r -g icingaweb2 -d /var/lib/icingadirector -s /bin/false icingadirector
+</span></span><span style="display:flex;"><span>install -d -o icingadirector -g icingaweb2 -m <span style="color:#ae81ff">0750</span> /var/lib/icingadirector
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>MODULE_PATH<span style="color:#f92672">=</span>/usr/share/icingaweb2/modules/director
+</span></span><span style="display:flex;"><span>cp <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>MODULE_PATH<span style="color:#e6db74">}</span><span style="color:#e6db74">/contrib/systemd/icinga-director.service&#34;</span> /etc/systemd/system/
+</span></span><span style="display:flex;"><span>systemctl daemon-reload
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>yum install php-posix -y
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl enable icinga-director.service --now
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>mkdir /etc/icingaweb2/modules/fileshipper
+</span></span><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/fileshipper/imports.ini
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[icinga2 - groups]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">basedir = &#34;/etc/icinga2/conf.d/groups/
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[icinga2 - hosts]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">basedir = &#34;/etc/icinga2/conf.d/hosts/
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="icinga" term="icinga" label="icinga" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Icinga2 on CentOS/Almlalinux/RockyOS 8]]></title>
+            <link href="https://devopstales.github.io/monitoring/icinga2_install_centos8/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/icinga2_director/?utm_source=atom_feed" rel="related" type="text/html" title="Install icinga director modules to Icingaweb2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Install nrpe tp Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_add_host/?utm_source=atom_feed" rel="related" type="text/html" title="Add host to Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/nagios-ncpa/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Cross Platform Agent" />
+            
+                <id>https://devopstales.github.io/monitoring/icinga2_install_centos8/</id>
+            
+            
+            <published>2022-12-18T00:00:00+00:00</published>
+            <updated>2022-12-18T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to install Icinga2 and Icingaweb2 webinterface.</p>
+<p>Icinga 2 is an open source, scalable and extensible monitoring tool which checks the availability of your network resources, notifies users of outages, and generates performance data for reporting.</p>
+<h3 id="configure-syslinux-and-firewall-for-the-install">Configure syslinux and Firewall for the install</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>setsebool -P httpd_can_network_connect_db <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>setsebool -P httpd_can_network_connect <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>firewall-cmd --permanent --add-service<span style="color:#f92672">=</span>http
+</span></span><span style="display:flex;"><span>firewall-cmd --permanent --add-service<span style="color:#f92672">=</span>https
+</span></span><span style="display:flex;"><span>firewall-cmd --permanent --add-service<span style="color:#f92672">=</span>postgresql
+</span></span><span style="display:flex;"><span>firewall-cmd --permanent --add-port<span style="color:#f92672">=</span>5665/tcp
+</span></span><span style="display:flex;"><span>firewall-cmd --reload
+</span></span></code></pre></div><h3 id="install-postgresql">Install postgresql</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>yum install epel-release
+</span></span><span style="display:flex;"><span>yum update --nogpgcheck
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>yum install postgresql-server postgresql nano
+</span></span><span style="display:flex;"><span>postgresql-setup initdb
+</span></span></code></pre></div><blockquote>
+<p>Icinga config mast be in the beginning of the file.</p></blockquote>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano /var/lib/pgsql/data/pg_hba.conf
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># TYPE  DATABASE        USER            ADDRESS                 METHOD</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># icinga</span>
+</span></span><span style="display:flex;"><span>local   icinga      icinga                            md5
+</span></span><span style="display:flex;"><span>host    icinga      icinga      127.0.0.1/32          md5
+</span></span><span style="display:flex;"><span>host    icinga      icinga      ::1/128               md5
+</span></span><span style="display:flex;"><span>local   icinga_web  icinga_web                        md5
+</span></span><span style="display:flex;"><span>host    icinga_web  icinga_web  127.0.0.1/32          md5
+</span></span><span style="display:flex;"><span>host    icinga_web  icinga_web  ::1/128               md5
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># &#34;local&#34; is for Unix domain socket connections only</span>
+</span></span><span style="display:flex;"><span>local   all         all                               ident
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># IPv4 local connections:</span>
+</span></span><span style="display:flex;"><span>host    all         all         127.0.0.1/32          ident
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># IPv6 local connections:</span>
+</span></span><span style="display:flex;"><span>host    all         all         ::1/128               ident
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl enable  --now postgresql
+</span></span></code></pre></div><h3 id="install-icinga2">Install Icinga2</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Main Centos 8 repo (Not up to date)</span>
+</span></span><span style="display:flex;"><span>yum install https://packages.icinga.com/epel/icinga-rpm-release-8-latest.noarch.rpm
+</span></span></code></pre></div><p>OR</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Community Centos 8 repo</span>
+</span></span><span style="display:flex;"><span>rpm --import https://packages.freedom-for-icinga.com/free-icinga.key
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>curl https://packages.freedom-for-icinga.com/epel/FREE-ICINGA-release.repo <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>-o /etc/yum.repos.d/FREE-ICINGA-release.repo
+</span></span></code></pre></div><p>OR</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Suse RockyLinux 8 repo</span>
+</span></span><span style="display:flex;"><span>curl https://download.opensuse.org/repositories/home:/wurzelbro:/icinga/RockyLinux_8/home:wurzelbro:icinga.repo <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>-o /etc/yum.repos.d/suse_wurzelbro_icinga.repo
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>dnf --enablerepo<span style="color:#f92672">=</span>powertools install nagios-plugins-all
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>yum install icinga2 icinga2-selinux nano-icinga2 icinga2-ido-pgsql
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>echo <span style="color:#e6db74">&#39;include &#34;/usr/share/nano/icinga2.nanorc&#34;&#39;</span> &gt;&gt; /etc/nanorc
+</span></span><span style="display:flex;"><span>cp /etc/nanorc ~/.nanorc
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo -u postgres psql -c <span style="color:#e6db74">&#34;CREATE ROLE icinga WITH LOGIN PASSWORD &#39;icinga&#39;&#34;</span>
+</span></span><span style="display:flex;"><span>sudo -u postgres createdb -O icinga -E UTF8 icinga
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>export PGPASSWORD<span style="color:#f92672">=</span>icinga
+</span></span><span style="display:flex;"><span>psql -U icinga -d icinga &lt; /usr/share/icinga2-ido-pgsql/schema/pgsql.sql
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt; EOF | sudo tee /etc/icinga2/features-enabled/ido-pgsql.conf
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">/**
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"> * The db_ido_pgsql library implements IDO functionality
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"> * for PostgreSQL.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"> */
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">library &#34;db_ido_pgsql&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">object IdoPgsqlConnection &#34;ido-pgsql&#34; {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  user = &#34;icinga&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  password = &#34;icinga&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  host = &#34;localhost&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  database = &#34;icinga&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>icinga2 feature enable ido-pgsql
+</span></span><span style="display:flex;"><span>icinga2 feature enable command
+</span></span><span style="display:flex;"><span>icinga2 api setup
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">object ApiUser &#34;icingaweb2&#34; {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  password = &#34;Wijsn8Z9eRs5E25d&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  permissions = [ &#34;status/query&#34;, &#34;actions/*&#34;, &#34;objects/modify/*&#34;, &#34;objects/query/*&#34; ]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}&#39;</span> &gt;&gt; /etc/icinga2/conf.d/api-users.conf
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>icinga2 node wizard
+</span></span><span style="display:flex;"><span>Welcome to the Icinga <span style="color:#ae81ff">2</span> Setup Wizard!
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>We will guide you through all required configuration details.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Please specify <span style="color:#66d9ef">if</span> this is an agent/satellite setup <span style="color:#f92672">(</span><span style="color:#e6db74">&#39;n&#39;</span> installs a master setup<span style="color:#f92672">)</span> <span style="color:#f92672">[</span>Y/n<span style="color:#f92672">]</span>: n
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Starting the Master setup routine...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Please specify the common name <span style="color:#f92672">(</span>CN<span style="color:#f92672">)</span> <span style="color:#f92672">[</span>alma8.mydomain.intra<span style="color:#f92672">]</span>: icinga.mydomain.intra
+</span></span><span style="display:flex;"><span>Reconfiguring Icinga...
+</span></span><span style="display:flex;"><span>Checking <span style="color:#66d9ef">for</span> existing certificates <span style="color:#66d9ef">for</span> common name <span style="color:#e6db74">&#39;icinga.mydomain.intra&#39;</span>...
+</span></span><span style="display:flex;"><span>Certificates not yet generated. Running <span style="color:#e6db74">&#39;api setup&#39;</span> now.
+</span></span><span style="display:flex;"><span>Generating master configuration <span style="color:#66d9ef">for</span> Icinga 2.
+</span></span><span style="display:flex;"><span><span style="color:#e6db74">&#39;api&#39;</span> feature already enabled.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Master zone name <span style="color:#f92672">[</span>master<span style="color:#f92672">]</span>:
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Default global zones: global-templates director-global
+</span></span><span style="display:flex;"><span>Do you want to specify additional global zones? <span style="color:#f92672">[</span>y/N<span style="color:#f92672">]</span>:
+</span></span><span style="display:flex;"><span>Please specify the API bind host/port <span style="color:#f92672">(</span>optional<span style="color:#f92672">)</span>:
+</span></span><span style="display:flex;"><span>Bind Host <span style="color:#f92672">[]</span>:
+</span></span><span style="display:flex;"><span>Bind Port <span style="color:#f92672">[]</span>:
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Do you want to disable the inclusion of the conf.d directory <span style="color:#f92672">[</span>Y/n<span style="color:#f92672">]</span>: n
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Done.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Now restart your Icinga <span style="color:#ae81ff">2</span> daemon to finish the installation!
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl restart icinga2
+</span></span></code></pre></div><h3 id="install-icingaweb2">Install IcingaWeb2</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>yum install nginx icingaweb2 icingacli icingaweb2-selinux
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl enable php-fpm.service --now
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">## config</span>
+</span></span><span style="display:flex;"><span>icingacli setup config webserver --fpm-uri<span style="color:#f92672">=</span>unix:/var/run/php-fpm/www.sock nginx &gt; /etc/nginx/default.d/icinga.conf
+</span></span><span style="display:flex;"><span>systemctl enable --now nginx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>sudo -u postgres psql -c <span style="color:#e6db74">&#34;CREATE ROLE icinga_web WITH LOGIN PASSWORD &#39;icinga_web&#39;&#34;</span>
+</span></span><span style="display:flex;"><span>sudo -u postgres createdb -O icinga_web -E UTF8 icinga_web
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>icingacli setup token create
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># go to</span>
+</span></span><span style="display:flex;"><span>https://icinga.devopstales.intra/icingaweb2/
+</span></span></code></pre></div><p><img src="/img/include/icingaweb1.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb2.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb3.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb4.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb5.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb6.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb7.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb8.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb9.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb10.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb11.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb12.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb13.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb14.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb15.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb16.png" alt="Example image"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="icinga" term="icinga" label="icinga" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install icinga director modules to Icingaweb2]]></title>
+            <link href="https://devopstales.github.io/monitoring/icinga2_director/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/icinga2_nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Install nrpe tp Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_add_host/?utm_source=atom_feed" rel="related" type="text/html" title="Add host to Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/nagios-ncpa/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Cross Platform Agent" />
+                <link href="https://devopstales.github.io/monitoring/nagios-nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Remote Plugin Executor" />
+            
+                <id>https://devopstales.github.io/monitoring/icinga2_director/</id>
+            
+            
+            <published>2019-12-13T00:00:00+00:00</published>
+            <updated>2019-12-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to install Icingaweb2 module director.</p>
+<p>Icinga irector is designed for those who want to automate their configuration deployment and those who want to grant easy access for there users to the Icinga2 configuration.</p>
+<h3 id="install-dependency">Install dependency</h3>
+<pre tabindex="0"><code>yum install git -y
+yum install rh-php71-php-curl rh-php71-php-pcntl rh-php71-php-posix rh-php71-php-sockets rh-php71-php-xml rh-php71-php-zip -y
+</code></pre><pre tabindex="0"><code>nano
+local   director      director                        md5
+host    director      director      127.0.0.1/32      md5
+host    director      director      ::1/128           md5
+
+systemctl restart postgresql-10
+</code></pre><h3 id="install-icingaweb2-modules">Install Icingaweb2 modules</h3>
+<pre tabindex="0"><code>MODULE_NAME=ipl
+MODULE_VERSION=v0.4.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+
+MODULE_NAME=incubator
+MODULE_VERSION=v0.5.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+
+MODULE_NAME=reactbundle
+MODULE_VERSION=v0.7.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+
+ICINGAWEB_MODULEPATH=&#34;/usr/share/icingaweb2/modules&#34;
+REPO_URL=&#34;https://github.com/icinga/icingaweb2-module-director&#34;
+TARGET_DIR=&#34;${ICINGAWEB_MODULEPATH}/director&#34;
+MODULE_VERSION=&#34;1.7.2&#34;
+git clone &#34;${REPO_URL}&#34; &#34;${TARGET_DIR}&#34;
+cd &#34;${TARGET_DIR}&#34;
+git fetch &amp;&amp; git fetch --tags
+git checkout &#34;{MODULE_VERSION}&#34;
+restorecon -R &#34;${TARGET_DIR}&#34;
+
+MODULE_NAME=fileshipper
+MODULE_VERSION=v1.1.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+</code></pre><h3 id="create-db-for-director">Create db for director</h3>
+<pre tabindex="0"><code>sudo -u postgres psql -c &#34;CREATE DATABASE director WITH ENCODING &#39;utf8&#39;;&#34;
+sudo -u postgres psql director -q -c &#34;CREATE USER director WITH PASSWORD &#39;director&#39;;
+GRANT ALL PRIVILEGES ON DATABASE director TO director;
+CREATE EXTENSION pgcrypto;&#34;
+sudo -u postgres psql director &lt; /usr/share/icingaweb2/modules/director/schema/pgsql.sql
+</code></pre><h3 id="edit-director-configuration">Edit director configuration</h3>
+<pre tabindex="0"><code>cat &lt;&lt;EOF &gt;&gt; /etc/icinga2/zones.conf
+
+object Zone &#34;director-global&#34; {
+  global = true
+}
+EOF
+
+cat &lt;&lt;EOF &gt;&gt; /etc/icinga2/conf.d/api-users.conf
+
+object ApiUser &#34;director&#34; {
+        password = &#34;director&#34;
+        permissions = [ &#34;*&#34; ]
+}
+EOF
+
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/resources.ini
+
+[icinga_director]
+type = &#34;db&#34;
+db = &#34;pgsql&#34;
+host = &#34;localhost&#34;
+port = &#34;5432&#34;
+dbname = &#34;director&#34;
+username = &#34;director&#34;
+password = &#34;director&#34;
+charset = &#34;utf8&#34;
+use_ssl = &#34;0&#34;
+EOF
+
+mkdir /etc/icingaweb2/modules/director/
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/director/config.ini
+[db]
+resource = &#34;icinga_director&#34;
+EOF
+
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/director/kickstart.ini
+[config]
+endpoint = icinga.devopstales.intra
+host = 127.0.0.1
+port = 5665
+username = director
+password = director
+EOF
+</code></pre><pre tabindex="0"><code>icingacli module enable director
+icingacli director kickstart run
+icingacli director migration run --verbose
+icingacli director migration pending --verbose
+</code></pre><pre tabindex="0"><code>mkdir /etc/icingaweb2/modules/fileshipper
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/fileshipper/imports.ini
+[icinga2 - groups]
+basedir = &#34;/etc/icinga2/conf.d/groups/
+
+[icinga2 - hosts]
+basedir = &#34;/etc/icinga2/conf.d/hosts/
+EOF
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="icinga" term="icinga" label="icinga" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install nrpe tp Icinga2]]></title>
+            <link href="https://devopstales.github.io/monitoring/icinga2_nrpe/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/icinga2_add_host/?utm_source=atom_feed" rel="related" type="text/html" title="Add host to Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/icinga2_install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/nagios-nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Remote Plugin Executor" />
+                <link href="https://devopstales.github.io/monitoring/nagios-ncpa/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Cross Platform Agent" />
+                <link href="https://devopstales.github.io/monitoring/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
+            
+                <id>https://devopstales.github.io/monitoring/icinga2_nrpe/</id>
+            
+            
+            <published>2019-12-12T00:00:00+00:00</published>
+            <updated>2019-12-12T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to nrpe check in Icinga2.</p>
+<h3 id="install-nrpe-on-the-clients">install nrpe on the clients</h3>
+<pre tabindex="0"><code>yum install nrpe nagios-plugins-all -y
+
+firewall-cmd --permanent --add-port=5665/tcp
+firewall-cmd --reload
+</code></pre><h3 id="install-nrpe-on-the-server">install nrpe on the server</h3>
+<pre tabindex="0"><code>yum install nrpe nagios-plugins-all -y
+
+firewall-cmd --permanent --add-port=5665/tcp
+firewall-cmd --reload
+</code></pre><h3 id="configurate-icinga-to-use-nrpe">configurate icinga to use nrpe</h3>
+<pre tabindex="0"><code>vi /etc/icinga2/conf.d/linux_services.conf
+apply Service &#34;nrpe-disk-root&#34; {
+  import &#34;generic-service&#34;
+  check_command = &#34;nrpe&#34;
+  vars.nrpe_command = &#34;check_disk&#34;
+  vars.nrpe_arguments = [ &#34;20%&#34;, &#34;10%&#34;, &#34;/&#34; ]
+  assign where &#34;linux-servers&#34; in host.groups
+  ignore where match(&#34;*icinga*&#34;, host.name)
+}
+
+vi /etc/icinga2/conf.d/CLIENTS/server1.conf
+object Host &#34;server1&#34; {
+  address = &#34;192.168.10.60&#34;
+  check_command = &#34;ping&#34;
+  vars.os = &#34;Linux&#34;
+}
+</code></pre><p>Test the config and restart:</p>
+<pre tabindex="0"><code>icinga2 daemon -C
+systemctl restart icinga2
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="icinga" term="icinga" label="icinga" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Add host to Icinga2]]></title>
+            <link href="https://devopstales.github.io/monitoring/icinga2_add_host/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/icinga2_install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Icinga2" />
+                <link href="https://devopstales.github.io/monitoring/nagios-ncpa/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Cross Platform Agent" />
+                <link href="https://devopstales.github.io/monitoring/nagios-nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Remote Plugin Executor" />
+                <link href="https://devopstales.github.io/monitoring/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/icinga2_add_host/</id>
+            
+            
+            <published>2019-12-11T00:00:00+00:00</published>
+            <updated>2019-12-11T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to add hosts to Icinga2.</p>
+<h3 id="create-new-host">Create new host</h3>
+<pre tabindex="0"><code>nano /etc/icinga2/conf.d/my_router.conf
+object Host &#34;Router&#34; {
+  address = &#34;192.168.1.1&#34;
+  check_command = &#34;hostalive&#34;
+}
+</code></pre><p>If we want to check the web admin interface of the router we can add a http check to see if the HTTP server is alive and responds with the proper HTTP codes</p>
+<pre tabindex="0"><code>nano /etc/icinga2/conf.d/my_router.conf
+...
+object Service &#34;http&#34; {
+  host_name = &#34;Router&#34;
+  check_command = &#34;http&#34;
+}
+</code></pre><h3 id="ad-custom-check">Ad custom check</h3>
+<p>We will us the check_udpport script. This is the syntax.</p>
+<pre tabindex="0"><code>/usr/lib64/nagios/plugins/check_udpport –H 127.0.0.1 –p 69
+</code></pre><p>Now we need to create a nwe command in icinga2:</p>
+<pre tabindex="0"><code>nano /etc/icinga2/conf.d/commands.conf
+object CheckCommand &#34;myudp&#34; {
+  command = [ PluginDir + &#34;/check_udpport&#34; ]
+
+    arguments = {
+    &#34;-H&#34; = &#34;$addr$&#34;
+    &#34;-p&#34; = &#34;$port$&#34;
+  }
+  vars.addr = &#34;$address$&#34;
+}
+</code></pre><p>We have a nwe command so we can create a service to use rhis command:</p>
+<pre tabindex="0"><code>nano /etc/icinga2/conf.d/my_router.conf
+...
+object Service &#34;dhcp&#34; {
+  host_name = Router&#34;
+  check_command = &#34;myudp&#34;
+vars.port = &#34;67&#34;
+}
+</code></pre><p>Test the config and restart:</p>
+<pre tabindex="0"><code>icinga2 daemon -C
+systemctl restart icinga2
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="icinga" term="icinga" label="icinga" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Icinga2]]></title>
+            <link href="https://devopstales.github.io/monitoring/icinga2_install/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/nagios-ncpa/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Cross Platform Agent" />
+                <link href="https://devopstales.github.io/monitoring/nagios-nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Remote Plugin Executor" />
+                <link href="https://devopstales.github.io/monitoring/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/icinga2_install/</id>
+            
+            
+            <published>2019-12-10T00:00:00+00:00</published>
+            <updated>2019-12-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this tutorial I will show you how to install Icinga2 and Icingaweb2 webinterface.</p>
+<p>Icinga 2 is an open source, scalable and extensible monitoring tool which checks the availability of your network resources, notifies users of outages, and generates performance data for reporting.</p>
+<h3 id="configure-syslinux-and-firewall-for-the-install">Configure syslinux and Firewall for the install</h3>
+<pre tabindex="0"><code>setsebool -P httpd_can_network_connect_db 1
+setsebool -P httpd_can_network_connect 1
+
+firewall-cmd --permanent --add-service=http
+firewall-cmd --permanent --add-service=https
+firewall-cmd --permanent --add-service=postgresql
+firewall-cmd --permanent --add-port=5665/tcp
+firewall-cmd --reload
+</code></pre><h3 id="install-postgresql">Install postgresql</h3>
+<pre tabindex="0"><code>yum install postgresql-server postgresql
+postgresql-setup initdb
+
+nano /var/lib/pgsql/data/pg_hba.conf
+# icinga
+local   icinga      icinga                            md5
+host    icinga      icinga      127.0.0.1/32          md5
+host    icinga      icinga      ::1/128               md5
+local   icinga_web  icinga_web                        md5
+host    icinga_web  icinga_web  127.0.0.1/32          md5
+host    icinga_web  icinga_web  ::1/128               md5
+
+# &#34;local&#34; is for Unix domain socket connections only
+local   all         all                               ident
+# IPv4 local connections:
+host    all         all         127.0.0.1/32          ident
+# IPv6 local connections:
+host    all         all         ::1/128               ident
+
+systemctl enable  --now postgresql-10
+</code></pre><h3 id="install-icinga2">Install Icinga2</h3>
+<pre tabindex="0"><code>yum install https://packages.icinga.com/epel/icinga-rpm-release-7-latest.noarch.rpm
+yum install epel-release
+
+yum install icinga2 icinga2-selinux nagios-plugins-all nano-icinga2
+
+systemctl enable --now httpd
+
+echo &#39;include &#34;/usr/share/nano/icinga2.nanorc&#34;&#39; &gt;&gt; /etc/nanorc
+cp /etc/nanorc ~/.nanorc
+
+yum install icinga2-ido-pgsql
+
+cd /tmp
+sudo -u postgres psql -c &#34;CREATE ROLE icinga WITH LOGIN PASSWORD &#39;icinga&#39;&#34;
+sudo -u postgres createdb -O icinga -E UTF8 icinga
+
+export PGPASSWORD=icinga
+psql -U icinga -d icinga &lt; /usr/share/icinga2-ido-pgsql/schema/pgsql.sql
+
+icinga2 feature enable ido-pgsql
+
+cat &lt;&lt; EOF | sudo tee /etc/icinga2/features-enabled/ido-pgsql.conf
+/**
+ * The db_ido_pgsql library implements IDO functionality
+ * for PostgreSQL.
+ */
+
+library &#34;db_ido_pgsql&#34;
+
+object IdoPgsqlConnection &#34;ido-pgsql&#34; {
+  user = &#34;icinga&#34;,
+  password = &#34;icinga&#34;,
+  host = &#34;localhost&#34;,
+  database = &#34;icinga&#34;
+}
+EOF
+
+icinga2 api setup
+
+
+ecjo &#39;
+object ApiUser &#34;icingaweb2&#34; {
+  password = &#34;Wijsn8Z9eRs5E25d&#34;
+  permissions = [ &#34;status/query&#34;, &#34;actions/*&#34;, &#34;objects/modify/*&#34;, &#34;objects/query/*&#34; ]
+}&#39; &gt;&gt; /etc/icinga2/conf.d/api-users.conf
+
+icinga2 feature enable command
+</code></pre><pre tabindex="0"><code>icinga2 node wizard
+Welcome to the Icinga 2 Setup Wizard!
+
+We&#39;ll guide you through all required configuration details.
+
+Please specify if this is a satellite setup (&#39;n&#39; installs a master setup) [Y/n]: n
+Starting the Master setup routine...
+Please specifiy the common name (CN) [icinga.devopstales.intra]:
+Checking for existing certificates for common name &#39;icinga.devopstales.intra&#39;...
+Certificates not yet generated. Running &#39;api setup&#39; now.
+information/cli: Generating new CA.
+information/base: Writing private key to &#39;/var/lib/icinga2/ca/ca.key&#39;.
+information/base: Writing X509 certificate to &#39;/var/lib/icinga2/ca/ca.crt&#39;.
+information/cli: Generating new CSR in &#39;/etc/icinga2/pki/icinga.devopstales.intra.csr&#39;.
+information/base: Writing private key to &#39;/etc/icinga2/pki/icinga.devopstales.intra.key&#39;.
+information/base: Writing certificate signing request to &#39;/etc/icinga2/pki/icinga.devopstales.intra.csr&#39;.
+information/cli: Signing CSR with CA and writing certificate to &#39;/etc/icinga2/pki/icinga.devopstales.intra.crt&#39;.
+information/cli: Copying CA certificate to &#39;/etc/icinga2/pki/ca.crt&#39;.
+Generating master configuration for Icinga 2.
+information/cli: Adding new ApiUser &#39;root&#39; in &#39;/etc/icinga2/conf.d/api-users.conf&#39;.
+information/cli: Enabling the &#39;api&#39; feature.
+Enabling feature api. Make sure to restart Icinga 2 for these changes to take effect.
+information/cli: Dumping config items to file &#39;/etc/icinga2/zones.conf&#39;.
+information/cli: Created backup file &#39;/etc/icinga2/zones.conf.orig&#39;.
+Please specify the API bind host/port (optional):
+Bind Host []: Hit Enter
+Bind Port []: Hit Enter
+information/cli: Created backup file &#39;/etc/icinga2/features-available/api.conf.orig&#39;.
+information/cli: Updating constants.conf.
+information/cli: Created backup file &#39;/etc/icinga2/constants.conf.orig&#39;.
+information/cli: Updating constants file &#39;/etc/icinga2/constants.conf&#39;.
+information/cli: Updating constants file &#39;/etc/icinga2/constants.conf&#39;.
+information/cli: Updating constants file &#39;/etc/icinga2/constants.conf&#39;.
+Done.
+
+Now restart your Icinga 2 daemon to finish the installation!
+
+systemctl restart icinga2
+</code></pre><h3 id="install-icingaweb2">Install IcingaWeb2</h3>
+<pre tabindex="0"><code>yum install centos-release-scl
+yum install icingaweb2 icingacli icingaweb2-selinux
+
+yum install httpd
+systemctl start httpd.service
+systemctl enable httpd.service
+
+icingacli setup config webserver apache
+
+## OR
+
+yum install nginx rh-php71-php-fpm rh-php71-php-pgsql
+systemctl enable --now rh-php71-php-fpm.service
+
+## config
+icingacli setup config webserver nginx &gt; /etc/nginx/default.d//icinga.conf
+systemctl enable --now nginx
+
+sudo -u postgres psql -c &#34;CREATE ROLE icinga_web WITH LOGIN PASSWORD &#39;icinga_web&#39;&#34;
+sudo -u postgres createdb -O icinga_web -E UTF8 icinga_web
+
+icingacli setup token create
+
+# go to
+https://icinga.devopstales.intra/icingaweb2/
+</code></pre><p><img src="/img/include/icingaweb1.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb2.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb3.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb4.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb5.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb6.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb7.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb8.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb9.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb10.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb11.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb12.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb13.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb14.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb15.png" alt="Example image"  class="zoomable" /></p>
+<p><img src="/img/include/icingaweb16.png" alt="Example image"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="icinga" term="icinga" label="icinga" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install alerta on Centos8]]></title>
+            <link href="https://devopstales.github.io/monitoring/alerta-on-centos8/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/alerta-on-centos7/?utm_source=atom_feed" rel="related" type="text/html" title="Install alerta on Centos7" />
+                <link href="https://devopstales.github.io/linux/gitlab-install/?utm_source=atom_feed" rel="related" type="text/html" title="Gitlab Install" />
+                <link href="https://devopstales.github.io/monitoring/prometheus-alertmanagger/?utm_source=atom_feed" rel="related" type="text/html" title="Install Alertmanagger" />
+            
+                <id>https://devopstales.github.io/monitoring/alerta-on-centos8/</id>
+            
+            
+            <published>2019-09-28T00:00:00+00:00</published>
+            <updated>2019-09-28T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>AIn this post I will show you how to install alerta monitoring dashboard on Centos 8.</p>
+<pre tabindex="0"><code>yum install epel-release -y
+yum upgrade -y
+</code></pre><h3 id="install-and-configure-postgresql">Install and configure postgresql</h3>
+<p>In a previous post I wrote about how to <a href="/linux/install-postgresql/#install-postgresql-10-on-centos-8">Install PostgreSQL 10</a></p>
+<pre tabindex="0"><code>sudo su - postgres
+createuser alerta
+createdb -O alerta alerta
+psql
+ALTER USER &#34;alerta&#34; WITH PASSWORD &#39;alerta&#39;;
+\q
+exit
+</code></pre><h3 id="install-python3-packages">install python3 packages</h3>
+<pre tabindex="0"><code>yum install python3 python3-pip python3-setuptools python3-devel python3-psycopg2 gcc git tmux nginx
+</code></pre><p>Create user for alerta and install python3 moduls with it.</p>
+<pre tabindex="0"><code>useradd alerta
+usermod -aG alerta nginx
+su - alerta
+pip3 install --user wheel alerta-server alerta uwsgi
+</code></pre><h1 id="alerta-server">alerta server</h1>
+<pre tabindex="0"><code>nano /etc/alertad.conf
+DATABASE_URL = &#39;postgres://alerta:alerta@localhost:5432/alerta&#39;
+PLUGINS=[&#39;reject&#39;]
+ALLOWED_ENVIRONMENTS=[&#39;Production&#39;, &#39;Development&#39;, &#39;Code&#39;]
+</code></pre><p>We use uwsgi to create a unix socket wgere the alerta webgui can connect.</p>
+<pre tabindex="0"><code>sudo mkdir -p /var/log/uwsgi
+sudo chown -R alerta:alerta /var/log/uwsgi
+mkdir /var/run/alerta
+chown -R alerta.alerta /var/run/alerta/
+
+echo &#34;from alerta import app&#34; &gt; /usr/share/nginx/wsgi.py
+</code></pre><pre tabindex="0"><code>nano /etc/uwsgi.ini
+[uwsgi]
+chdir = /usr/share/nginx/
+mount = /api=wsgi.py
+callable = app
+manage-script-name = true
+env = BASE_URL=/api
+
+master = true
+processes = 5
+#logger = syslog:alertad
+logto = /var/log/uwsgi/%n.log
+
+socket = /var/run/alerta/uwsgi.sock
+chmod-socket = 664
+uid = alerta
+gid = alerta
+vacuum = true
+
+die-on-term = true
+</code></pre><pre tabindex="0"><code>nano /etc/systemd/system/uwsgi.service
+[Unit]
+Description=uWSGI service
+After=syslog.target
+
+[Service]
+ExecStart=/home/alerta/.local/bin/uwsgi --ini /etc/uwsgi.ini
+RuntimeDirectory=uwsgi
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+</code></pre><pre tabindex="0"><code>systemctl enable uwsgi
+systemctl start uwsgi
+systemctl status uwsgi
+</code></pre><h1 id="alerta-webgui">alerta webgui</h1>
+<pre tabindex="0"><code>wget https://github.com/alerta/alerta-webui/releases/latest/download/alerta-webui.tar.gz
+tar zxvf alerta-webui.tar.gz
+mv dist/ /usr/share/nginx/alerta
+echo &#39;{&#34;endpoint&#34;: &#34;/api&#34;}&#39; &gt; /usr/share/nginx/dist/config.json
+</code></pre><pre tabindex="0"><code>nano /etc/nginx/nginx.conf
+    #server {
+    #    listen       80 default_server;
+    #    listen       [::]:80 default_server;
+    #    server_name  _;
+    #    root         /usr/share/nginx/html;
+
+    #    # Load configuration files for the default server block.
+    #    include /etc/nginx/default.d/*.conf;
+
+     #   location / {
+     #   }
+
+     #   error_page 404 /404.html;
+     #       location = /40x.html {
+     #   }
+
+     #   error_page 500 502 503 504 /50x.html;
+     #       location = /50x.html {
+     #   }
+    #}
+</code></pre><pre tabindex="0"><code>nano /etc/nginx/conf.d/alerta.conf
+server {
+        listen 80 default_server;
+
+        location /api { try_files $uri @api; }
+        location @api {
+            include uwsgi_params;
+            uwsgi_pass unix:/var/run/alerta/uwsgi.sock;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location / {
+                root /usr/share/nginx/alerta;
+        }
+}
+</code></pre><pre tabindex="0"><code>nginx -t
+systemctl restart nginx
+systemctl enable nginx
+</code></pre><h3 id="test">test</h3>
+<p>Send testalert with alerta client.</p>
+<pre tabindex="0"><code>su - alerta
+
+echo &#39;[DEFAULT]
+endpoint = http://localhost/api&#39; &gt;  $HOME/.alerta.conf
+
+echo &#39;export PATH=$PATH:/home/alerta/.local/bin&#39; &gt;&gt; ~/.bashrc
+PATH=$PATH:/home/alerta/.local/bin
+
+alerta query
+alerta send --resource net01 --event down --severity critical --environment Code --service Network --text &#39;net01 is down.&#39;
+alerta query
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="alerta" term="alerta" label="alerta" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install alerta on Centos7]]></title>
+            <link href="https://devopstales.github.io/monitoring/alerta-on-centos7/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/linux/gitlab-install/?utm_source=atom_feed" rel="related" type="text/html" title="Gitlab Install" />
+                <link href="https://devopstales.github.io/monitoring/prometheus-alertmanagger/?utm_source=atom_feed" rel="related" type="text/html" title="Install Alertmanagger" />
+            
+                <id>https://devopstales.github.io/monitoring/alerta-on-centos7/</id>
+            
+            
+            <published>2019-09-27T00:00:00+00:00</published>
+            <updated>2019-09-27T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>AIn this post I will show you how to install alerta monitoring dashboard on Centos 7.</p>
+<pre tabindex="0"><code>yum install epel-release nano -y
+yum upgrade -y
+</code></pre><h3 id="install-and-configure-postgresql">Install and configure postgresql</h3>
+<p>In a previous post I wrote about how to <a href="/linux/install-postgresql/#install-postgresql-10-on-centos-7">Install PostgreSQL 10</a></p>
+<pre tabindex="0"><code>sudo su - postgres
+createuser alerta
+createdb -O alerta alerta
+psql
+ALTER USER &#34;alerta&#34; WITH PASSWORD &#39;alerta&#39;;
+\q
+</code></pre><h3 id="install-python3-packages">install python3 packages</h3>
+<pre tabindex="0"><code>yum install https://centos7.iuscommunity.org/ius-release.rpm -y
+yum install python36u python36u-pip python36u-setuptools python36u-devel gcc git tmux
+yum install uwsgi-plugin-psgi nginx -y
+</code></pre><h1 id="alerta-server">alerta server</h1>
+<pre tabindex="0"><code>python3.6 -m venv alerta
+alerta/bin/pip install --upgrade pip wheel alerta-server alerta uwsgi
+</code></pre><pre tabindex="0"><code>nano /etc/alertad.conf
+DATABASE_URL = &#39;postgres://alerta:alerta@localhost:5432/alerta&#39;
+PLUGINS=[&#39;reject&#39;]
+ALLOWED_ENVIRONMENTS=[&#39;Production&#39;, &#39;Development&#39;, &#39;Code&#39;]
+</code></pre><p>We use uwsgi to create a unix socket wgere the alerta webgui can connect.</p>
+<pre tabindex="0"><code>sudo mkdir -p /var/log/uwsgi
+sudo chown -R nginx:nginx /var/log/uwsgi
+mkdir /var/run/alerta
+chown -R nginx.nginx /var/run/alerta/
+
+nano /var/www/wsgi.py
+from alerta import app
+</code></pre><pre tabindex="0"><code>nano /etc/uwsgi.ini
+[uwsgi]
+chdir = /var/www
+mount = /api=wsgi.py
+callable = app
+manage-script-name = true
+env = BASE_URL=/api
+
+master = true
+processes = 5
+#logger = syslog:alertad
+logto = /var/log/uwsgi/%n.log
+
+socket = /var/run/alerta/uwsgi.sock
+chmod-socket = 664
+uid = nginx
+gid = nginx
+vacuum = true
+
+die-on-term = true
+</code></pre><pre tabindex="0"><code>nano /etc/systemd/system/alerta-app.service
+[Unit]
+Description=uWSGI service
+After=syslog.target
+
+[Service]
+ExecStart=/opt/alerta/bin/uwsgi --ini /etc/uwsgi.ini
+RuntimeDirectory=uwsgi
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+</code></pre><pre tabindex="0"><code>systemctl enable alerta-app
+systemctl start alerta-app
+systemctl status alerta-app
+</code></pre><h1 id="alerta-webgui">alerta webgui</h1>
+<pre tabindex="0"><code>wget https://github.com/alerta/alerta-webui/releases/latest/download/alerta-webui.tar.gz
+tar zxvf alerta-webui.tar.gz
+mv dist/ /usr/share/nginx/alerta
+echo &#39;{&#34;endpoint&#34;: &#34;/api&#34;}&#39; &gt; /usr/share/nginx/dist/config.json
+</code></pre><pre tabindex="0"><code>nano /etc/nginx/nginx.conf
+    #server {
+    #    listen       80 default_server;
+    #    listen       [::]:80 default_server;
+    #    server_name  _;
+    #    root         /usr/share/nginx/html;
+
+    #    # Load configuration files for the default server block.
+    #    include /etc/nginx/default.d/*.conf;
+
+     #   location / {
+     #   }
+
+     #   error_page 404 /404.html;
+     #       location = /40x.html {
+     #   }
+
+     #   error_page 500 502 503 504 /50x.html;
+     #       location = /50x.html {
+     #   }
+    #}
+</code></pre><pre tabindex="0"><code>nano /etc/nginx/conf.d/alerta.conf
+server {
+        listen 80 default_server;
+
+        location /api { try_files $uri @api; }
+        location @api {
+            include uwsgi_params;
+            uwsgi_pass unix:/var/run/alerta/uwsgi.sock;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location / {
+                root /usr/share/nginx/alerta;
+        }
+}
+</code></pre><pre tabindex="0"><code>nginx -t
+systemctl restart nginx
+systemctl enable nginx
+</code></pre><h3 id="test">test</h3>
+<p>Send testalert with alerta client.</p>
+<pre tabindex="0"><code>nano $HOME/.alerta.conf
+[DEFAULT]
+endpoint = http://localhost/api
+
+/opt/alerta/bin/alerta query
+/opt/alerta/bin/alerta send --resource net01 --event down --severity critical --environment Code --service Network --text &#39;net01 is down.&#39;
+/opt/alerta/bin/alerta query
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="alerta" term="alerta" label="alerta" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Grafana Loki]]></title>
+            <link href="https://devopstales.github.io/monitoring/grafana-loki/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/grafana-loki/</id>
+            
+            
+            <published>2019-06-22T00:00:00+00:00</published>
+            <updated>2019-06-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Loki is a Prometheus-inspired logging service for cloud native infrastructure.
+It’s similar to well-known ELK stack but more simple use and is intended to be used mostly Kubernetes.</p>
+<h3 id="loki-components">Loki components</h3>
+<p>Loki-stack consists of three main components:</p>
+<ul>
+<li>promtail – agent to collect logs on a host and push them to a Loki instance</li>
+<li>loki – TSDB (Time-series database) logs aggregation and processing server</li>
+<li>Grafana – for querying and displaying logs</li>
+</ul>
+<h3 id="deployment">Deployment</h3>
+<pre tabindex="0"><code>yum install nginx -y
+systemct start nginx
+
+mkdir /opt/loki
+cd /opt/loki/
+</code></pre><pre tabindex="0"><code>nano loki-promtail-conf.yml
+server:
+
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+
+  filename: /tmp/positions.yaml
+
+client:
+
+  url: http://loki:3100/api/prom/push
+
+scrape_configs:
+
+  - job_name: system
+    entry_parser: raw
+    static_configs:
+    - targets:
+        - localhost
+      labels:
+        job: varlogs
+        __path__: /var/log/*log
+
+  - job_name: nginx
+    entry_parser: raw
+    static_configs:
+    - targets:
+        - localhost
+      labels:
+        job: nginx
+        __path__: /var/log/nginx/*log
+</code></pre><pre tabindex="0"><code>nano docker-compose.yml
+version: &#34;3&#34;
+
+networks:
+  loki:
+
+services:
+  loki:
+    image: grafana/loki:master
+    ports:
+      - &#34;3100:3100&#34;
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - loki
+
+  promtail:
+    image: grafana/promtail:master
+    volumes:
+       - /opt/loki/loki-promtail-conf.yml:/etc/promtail/docker-config.yaml
+      - /var/log:/var/log
+    command: -config.file=/etc/promtail/docker-config.yaml
+    networks:
+      - loki
+
+  grafana:
+    image: grafana/grafana:master
+    ports:
+      - &#34;3000:3000&#34;
+    networks:
+      - loki
+</code></pre><pre tabindex="0"><code>docker-compose up -d
+
+# add datasource
+key=”{job=\”nginx\”}” appeared – all good.
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="grafana" term="grafana" label="Grafana" />
+                             
+                                <category scheme="loki" term="loki" label="Loki" />
+                             
+                                <category scheme="logging" term="logging" label="Logging" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Prometheus for Gitlab]]></title>
+            <link href="https://devopstales.github.io/monitoring/install-prometheus-for-gitlab/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/prometheus-alertmanagger/?utm_source=atom_feed" rel="related" type="text/html" title="Install Alertmanagger" />
+                <link href="https://devopstales.github.io/monitoring/pfsense-telegraf/?utm_source=atom_feed" rel="related" type="text/html" title="Install telegraf on pfsense" />
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/install-prometheus-for-gitlab/</id>
+            
+            
+            <published>2019-06-10T00:00:00+00:00</published>
+            <updated>2019-06-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Prometheus is an open-source monitoring system with a built-in noSQL time-series database. It offers a multi-dimensional data model, a flexible query language, and diverse visualization possibilities. Prometheus collects metrics from http nedpoint. Most service dind’t have this endpoint so you need optional programs that generate additional metrics cald exporters.</p>
+<h3 id="install-prometheus-from-package">Install prometheus from package</h3>
+<pre tabindex="0"><code>curl -s https://packagecloud.io/install/repositories/prometheus-rpm/release/script.rpm.sh | sudo bash
+
+yum install prometheus2 alertmanager -y
+</code></pre><h3 id="configurate-prometheus">Configurate Prometheus</h3>
+<pre tabindex="0"><code>nano /etc/prometheus/promethsu.yml
+---
+global:
+  scrape_interval: 15s
+  scrape_timeout: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+       - localhost:9095
+
+rule_files:
+  - &#34;/etc/prometheus/alert.rules&#34;
+
+scrape_configs:
+- job_name: prometheus
+  static_configs:
+  - targets:
+    - localhost:9090
+- job_name: redis
+  static_configs:
+  - targets:
+    - localhost:9121
+- job_name: postgres
+  static_configs:
+  - targets:
+    - localhost:9187
+- job_name: node
+  static_configs:
+  - targets:
+    - localhost:9100
+- job_name: gitlab-workhorse
+  static_configs:
+  - targets:
+    - localhost:9229
+- job_name: gitlab-unicorn
+  metrics_path: &#34;/-/metrics&#34;
+  static_configs:
+  - targets:
+    - 127.0.0.1:8080
+- job_name: gitlab-sidekiq
+  static_configs:
+  - targets:
+    - 127.0.0.1:8082
+- job_name: gitlab_monitor_database
+  metrics_path: &#34;/database&#34;
+  static_configs:
+  - targets:
+    - localhost:9168
+- job_name: gitlab_monitor_sidekiq
+  metrics_path: &#34;/sidekiq&#34;
+  static_configs:
+  - targets:
+    - localhost:9168
+- job_name: gitlab_monitor_process
+  metrics_path: &#34;/process&#34;
+  static_configs:
+  - targets:
+    - localhost:9168
+- job_name: gitaly
+  static_configs:
+  - targets:
+    - localhost:9236
+- job_name: nginx
+  static_configs:
+  - targets:
+    - localhost:9913
+- job_name: &#39;playframework-app&#39;
+  scrape_interval: 5s
+  metrics_path: &#39;/metrics&#39;
+  static_configs:
+  - targets: [&#39;localhost:9000&#39;]
+</code></pre><pre tabindex="0"><code>nano /etc/prometheus/alert.rules
+groups:
+- name: host
+  rules:
+  - alert: low_connected_users
+    expr: play_current_users &lt; 2
+    for: 30s
+    labels:
+      severity: slack
+    annotations:
+      summary: &#34;Instance {{ $labels.instance }} under lower load&#34;
+      description: &#34;{{ $labels.instance }} of job {{ $labels.job }} is under lower load.&#34;
+</code></pre><p><img src="/img/include/mattermost_gitlab4.png" alt="Example image"  class="zoomable" /><br><br>
+<img src="/img/include/mattermost_gitlab5.png" alt="Example image"  class="zoomable" /><br><br>
+<img src="/img/include/mattermost_gitlab6.png" alt="Example image"  class="zoomable" /><br><br>
+<img src="/img/include/mattermost_gitlab7.png" alt="Example image"  class="zoomable" /><br><br>
+<img src="/img/include/mattermost_gitlab8.png" alt="Example image"  class="zoomable" /><br><br></p>
+<pre tabindex="0"><code>nano /etc/prometheus/alertmanager.yml
+global:
+
+templates:
+- &#39;/etc/prometheus/template/*.tmpl&#39;
+
+route:
+ group_by: [alertname, job]
+ # If an alert isn&#39;t caught by a route, send it to slack.
+ receiver: slack_general
+ routes:
+  - match:
+      severity: slack
+    receiver: slack_general
+
+receivers:
+- name: slack_general
+  slack_configs:
+  - api_url: http://mattermost.devopstales.intra/hooks/9g4qwgpkzi898jzzeszzzzutmc
+    channel: &#39;monitoring&#39;
+    username: &#34;prometheus&#34; #name ins mattermost
+    text: &#34;&#34;
+    send_resolved: true
+</code></pre><pre tabindex="0"><code>mkdir /etc/prometheus/template/
+nano /etc/prometheus/template/alertmessage.tmpl
+{{ define &#34;__slack_text&#34; }}
+{{ range .Alerts }}{{ .Annotations.description}}{{ end }}
+{{ end }}
+
+{{ define &#34;__slack_title&#34; }}
+{{ range .Alerts }} :scream: {{ .Annotations.summary}} :scream: {{ end }}
+{{ end }}
+
+{{ define &#34;slack.default.text&#34; }}{{ template &#34;__slack_text&#34; . }}{{ end }}
+{{ define &#34;slack.default.title&#34; }}{{ template &#34;__slack_title&#34; . }}{{ end }}
+</code></pre><h3 id="configurate-gitlab">Configurate Gitlab</h3>
+<p><img src="/img/include/mattermost_gitlab1.png" alt="Example image"  class="zoomable" /><br><br>
+<img src="/img/include/mattermost_gitlab2.png" alt="Example image"  class="zoomable" /><br><br>
+<img src="/img/include/mattermost_gitlab3.png" alt="Example image"  class="zoomable" /><br><br></p>
+<pre tabindex="0"><code>nano /etc/gitlab/gitlab.rb
+alertmanager[&#39;enable&#39;] = false
+prometheus[&#39;enable&#39;] = false
+node_exporter[&#39;enable&#39;] = true
+redis_exporter[&#39;enable&#39;] = true
+postgres_exporter[&#39;enable&#39;] = true
+gitlab_monitor[&#39;enable&#39;] = true
+
+gitlab-ctl reconfigure
+
+systemctl start alertmanager.service
+systemctl status alertmanager.service
+systemctl start prometheus.service
+systemctl status prometheus.service
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="gitlab" term="gitlab" label="Gitlab" />
+                             
+                                <category scheme="prometheus" term="prometheus" label="Prometheus" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Nagios Cross Platform Agent]]></title>
+            <link href="https://devopstales.github.io/monitoring/nagios-ncpa/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/nagios-nrpe/?utm_source=atom_feed" rel="related" type="text/html" title="Nagios Remote Plugin Executor" />
+                <link href="https://devopstales.github.io/monitoring/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/nagios-ncpa/</id>
+            
+            
+            <published>2019-05-07T00:00:00+00:00</published>
+            <updated>2019-05-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this article I will show you how to add Remote Linux machine and it’s services to Nagios Monitoring host using NCPA agent.</p>
+<h3 id="what-is-ncpa">What is NCPA</h3>
+<p>NCPA is written in Python and is able to run on almost any Operating System. IT build official binaries for Windows, Mac OS X, and various Linux flavors.</p>
+<h3 id="ncpa-client">NCPA Client</h3>
+<pre tabindex="0"><code>rpm -Uvh https://repo.nagios.com/nagios/7/nagios-repo-7-3.el7.noarch.rpm
+yum install ncpa -y
+
+nano /usr/local/ncpa/etc/ncpa.cfg
+# [listener]
+# allowed_hosts = &lt;nagios host&gt;
+[api]
+community_string = Password1
+[nrdp]
+# hostname =
+# [nrdp]
+# parent =
+# token =
+[plugin directives]
+plugin_path = /usr/lib64/nagios/plugins/
+
+systemctl enable ncpa_listener
+systemctl start ncpa_listener
+systemctl status ncpa_listener
+
+# https://192.168.0.100:5693/
+</code></pre><h3 id="ncpa-server">NCPA Server</h3>
+<pre tabindex="0"><code>cd /tmp
+wget https://assets.nagios.com/downloads/ncpa/check_ncpa.tar.gz
+tar xvf check_ncpa.tar.gz
+chown nagios:nagios check_ncpa.py
+chmod 775 check_ncpa.py
+mv check_ncpa.py /usr/lib64/nagios/plugins
+</code></pre><p>Test the commands</p>
+<pre tabindex="0"><code>/usr/lib64/naemon/plugins/check_ncpa.py -H localhost -t &#39;Password1&#39; -P 5693 -M system/agent_version
+/usr/lib64/naemon/plugins/check_ncpa.py -H localhost -t &#39;Password1&#39; -P 5693 -M cpu/percent -w 20 -c 40 -q &#39;aggregate=avg&#39;
+/usr/lib64/naemon/plugins/check_ncpa.py -H localhost -t &#39;Password1&#39; -P 5693 -M memory/virtual -w 50 -c 80 -u G
+/usr/lib64/naemon/plugins/check_ncpa.py -H localhost -t &#39;Password1&#39; -P 5693 -M processes -w 150 -c 200
+
+# Run custom plugin trouth NCPA
+/usr/lib64/naemon/plugins/check_ncpa.py -H localhost -t &#39;Password1&#39; -P 5693 -M plugins/check_users -q args=&#34;-w 5 -c 10&#34;
+</code></pre><pre tabindex="0"><code># store password in macro
+nano /etc/nagios/resource.cfg
+USER10 = Password1
+
+# createcustom commands for ncpa
+nano /etc/nagios/commands.cfg
+define command {
+    command_name    check_ncpa
+    command_line    $USER1$/check_ncpa.py -H $HOSTADDRESS$ -t $USER10$ -P 5693 $ARG1$
+}
+
+define command {
+    command_name    check_ncpa_cpu
+    command_line    $USER1$/check_ncpa.py -H $HOSTADDRESS$ -t $USER10$ -P 5693 cpu/percent -w 20 -c 40 -q &#39;aggregate=avg&#39;
+}
+</code></pre><pre tabindex="0"><code>nano /etc/nagios/conf.d/ncpa-test.cfg
+        define host{
+        use                    generic-host
+        host_name              devopstales
+        address                192.168.0.20
+}
+
+define service{
+        use                     generic-service
+        host_name               devopstales
+        service_description     NCPA Version
+        check_command           check_ncpa|system/agent_version
+        }
+
+define service{
+        use                     generic-service
+        host_name               devopstales
+        service_description     CPU Load
+        check_command           check_ncpa_cpu
+        }
+</code></pre><h3 id="restart-nagios">Restart nagios</h3>
+<pre tabindex="0"><code>nagios -v /etc/nagios/nagios.cfg
+
+Total Warnings: 0
+Total Errors:   0
+
+service nagios restart
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="nagios" term="nagios" label="Nagios" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Nagios Remote Plugin Executor]]></title>
+            <link href="https://devopstales.github.io/monitoring/nagios-nrpe/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/centreon-install/?utm_source=atom_feed" rel="related" type="text/html" title="Install Centreon on Centos 7" />
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/nagios-nrpe/</id>
+            
+            
+            <published>2019-05-06T00:00:00+00:00</published>
+            <updated>2019-05-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this article I will show you how to add Remote Linux machine and it’s services to Nagios Monitoring host using NRPE agent.</p>
+<h3 id="what-is-nrpe">What is NRPE</h3>
+<p>NRPE allows you to remotely execute Nagios plugins on other Linux/Unix machines.</p>
+<p><img src="/img/include/nrpe.png" alt="Example image"  class="zoomable" /></p>
+<h3 id="nrpe-client">NRPE Client</h3>
+<pre tabindex="0"><code>yum install nrpe nagios-plugins-all
+# OR
+apt-get install nagios-nrpe-server nagios-plugins
+</code></pre><h3 id="nrpe-client-config">NRPE Client Config</h3>
+<pre tabindex="0"><code>nano /etc/nagios/nrpe.cfg
+...
+only_from = 127.0.0.1 localhost &lt;nagios_ip_address&gt;
+...
+command[check_users]=/usr/lib64/nagios/plugins/check_users -w 5 -c 10
+command[check_load]=/usr/lib64/nagios/plugins/check_load -r -w 8.0,7.5,7.0 -c 11.0,10.0,9.0
+command[check_disk]=/usr/lib64/nagios/plugins/check_disk -w 15% -c 10% /
+command[check_mem]=/usr/lib64/nagios/plugins/check_mem -w 75% -c 90%
+command[check_total_procs]=/usr/lib64/nagios/plugins/check_procs -w 300 -c 400
+command[check_swap]=/usr/lib64/nagios/plugins/check_swap -w 10 -c 5
+</code></pre><h3 id="nrpe-client-logging">NRPE Client Logging</h3>
+<pre tabindex="0"><code>nano /etc/nagios/nrpe.cfg
+log_facility=local1
+debug=1
+
+nano  /etc/rsyslog.conf
+local1.*                                                /var/log/nrpe.log
+</code></pre><h3 id="start-nrpe-client">Start NRPE Client</h3>
+<pre tabindex="0"><code>systemctl start nrpe
+systemctl enable nrp
+
+ss -altn | grep 5666
+LISTEN   0         5                   0.0.0.0:5666             0.0.0.0:*       
+LISTEN   0         5                      [::]:5666                [::]:*
+
+/usr/lib64/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_total_procs
+PROCS OK: 105 processes | procs=105;300;400;0;
+</code></pre><h3 id="nrpe-server">NRPE Server</h3>
+<pre tabindex="0"><code>yum install nagios-plugins-nrpe
+</code></pre><pre tabindex="0"><code># createcustom commands for nrpe
+nano /etc/nagios/commands.cfg
+define command {
+    command_name check_nrpe
+    command_line $USER1$/check_nrpe -H $HOSTADDRESS$ -c $ARG1$
+}
+</code></pre><pre tabindex="0"><code>nano /etc/nagios/conf.d/nrpe-test.cfg
+        define host{
+        use                    generic-host
+        host_name              devopstales
+        address                192.168.0.20
+}
+
+
+define service{
+        use                     generic-service
+        host_name               tecmint
+        service_description     CPU Load
+        check_command           check_nrpe!check_load
+        }
+</code></pre><h3 id="restart-nagios">Restart nagios</h3>
+<pre tabindex="0"><code>nagios -v /etc/nagios/nagios.cfg
+
+Total Warnings: 0
+Total Errors:   0
+
+service nagios restart
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="nagios" term="nagios" label="Nagios" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Centreon on Centos 7]]></title>
+            <link href="https://devopstales.github.io/monitoring/centreon-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/centreon-install/</id>
+            
+            
+            <published>2019-04-27T00:00:00+00:00</published>
+            <updated>2019-04-27T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Centreon is a free Open Source monitoring software which allows an administrator to easily configure alerts based on thresholds, generate email alerts, add systems to be monitored quickly without the need of configuring complicated configuration files.</p>
+<h3 id="install-requisites">Install requisites</h3>
+<pre tabindex="0"><code>selinuxenabled &amp;&amp; echo enabled || echo disabled
+
+nano /etc/selinux/config
+SELINUX=disabled
+
+yum install -y epel-release mariadb-server
+mkdir /etc/systemd/system/mariadb.service.d/
+echo -ne &#34;[Service]\nLimitNOFILE=32000\n&#34; | tee /etc/systemd/system/mariadb.service.d/limits.conf
+
+systemctl daemon-reload
+systemctl enable mariadb
+systemctl start mariadb
+systemctl status mariadb
+
+yum install centos-release-scl
+</code></pre><h3 id="install-centreon">Install Centreon</h3>
+<pre tabindex="0"><code>cd /opt
+wget http://yum.centreon.com/standard/19.04/el7/stable/noarch/RPMS/centreon-release-19.04-1.el7.centos.noarch.rpm
+yum install --nogpgcheck centreon-release-19.04-1.el7.centos.noarch.rpm
+yum install -y centreon-base-config-centreon-engine centreon
+
+echo &#34;date.timezone = Europe/Budapest&#34; &gt; /etc/opt/rh/rh-php71/php.d/php-timezone.ini
+systemctl restart rh-php71-php-fpm
+
+systemctl enable httpd24-httpd
+systemctl enable snmpd
+systemctl enable snmptrapd
+systemctl enable rh-php71-php-fpm
+systemctl enable centcore
+systemctl enable centreontrapd
+systemctl enable cbd
+systemctl enable centengine
+systemctl enable centreon
+
+systemctl start rh-php71-php-fpm
+systemctl start httpd24-httpd
+systemctl start mysqld
+systemctl start cbd
+systemctl start snmpd
+systemctl start snmptrapd
+</code></pre><h3 id="configurate-centreon">Configurate centreon</h3>
+<p><img src="/img/include/centreon_1.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_2.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_3.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_4.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_5.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_6.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_7.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_8.png" alt="Example image"  class="zoomable" />
+<img src="/img/include/centreon_9.png" alt="Example image"  class="zoomable" /></p>
+<pre tabindex="0"><code>systemctl start cbd
+systemctl start centcore
+systemctl start centreontrapd
+yum install centreon-widget* -y
+</code></pre><p><img src="/img/include/centreon_10.png" alt="Example image"  class="zoomable" />
+Select Central and Click Export Configuration. <br>
+Then the poller will ativated.
+<img src="/img/include/centreon_11.png" alt="Example image"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="centreon" term="centreon" label="centreon" />
+                             
+                                <category scheme="nagios" term="nagios" label="Nagios" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install telegraf on pfsense]]></title>
+            <link href="https://devopstales.github.io/monitoring/pfsense-telegraf/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/prometheus-alertmanagger/?utm_source=atom_feed" rel="related" type="text/html" title="Install Alertmanagger" />
+            
+                <id>https://devopstales.github.io/monitoring/pfsense-telegraf/</id>
+            
+            
+            <published>2019-03-06T00:00:00+00:00</published>
+            <updated>2019-03-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Install and configure telegraf on pfsense to provides system information to prometheus.</p>
+<h3 id="install-telegraf">Install telegraf</h3>
+<ul>
+<li>At the System / Package menu install the telegraf service to the pfsense.</li>
+<li>ssh to the pfsense server and open a shell</li>
+</ul>
+<p><img src="/img/include/pfsense-telegraf.png" alt="Example image"  class="zoomable" /></p>
+<h3 id="install-nano">Install nano</h3>
+<pre tabindex="0"><code>pkg
+pkg update
+pkg install nano
+</code></pre><h3 id="configure-telegraf">Configure telegraf</h3>
+<pre tabindex="0"><code>cd /usr/local/etc
+
+nano telegraf.conf
+[[outputs.prometheus_client]]
+ listen = &#34;:9273&#34;
+
+echo &#34;telegraf_enable=&#34;YES&#34;&#34; &gt;&gt; /etc/rc.conf
+
+cd /usr/local/etc/rc.d
+./telegraf restart
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="pfsense" term="pfsense" label="pfsense" />
+                             
+                                <category scheme="prometheus" term="prometheus" label="prometheus" />
+                             
+                                <category scheme="telegraf" term="telegraf" label="telegraf" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Prometheus with Influxdb storage]]></title>
+            <link href="https://devopstales.github.io/monitoring/prometheus-influxdb/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/prometheus-node-exporter/?utm_source=atom_feed" rel="related" type="text/html" title="Install Node-exporter" />
+                <link href="https://devopstales.github.io/monitoring/prometheus-install/?utm_source=atom_feed" rel="related" type="text/html" title="Prometheus Install" />
+                <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nemon with Influxdb storage" />
+            
+                <id>https://devopstales.github.io/monitoring/prometheus-influxdb/</id>
+            
+            
+            <published>2019-02-02T00:00:00+00:00</published>
+            <updated>2019-02-02T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Example article description</blockquote><p>Use Influxdb to as storage for Prometheus.</p>
+<h3 id="install-infludxb">Install Infludxb</h3>
+<pre tabindex="0"><code>cat &lt;&lt;EOF | sudo tee /etc/yum.repos.d/influxdb.repo
+[influxdb]
+name = InfluxDB Repository - RHEL \$releasever
+baseurl = https://repos.influxdata.com/rhel/\$releasever/\$basearch/stable
+enabled = 1
+gpgcheck = 1
+gpgkey = https://repos.influxdata.com/influxdb.key
+EOF
+
+yum install influxdb -y
+</code></pre><h3 id="configure-influxdb">Configure Influxdb</h3>
+<pre tabindex="0"><code>nano /etc/influxdb/influxdb.conf
+[http]
+   enabled = true
+   bind-address = &#34;localhost:8086&#34;
+   auth-enabled = false
+</code></pre><h3 id="configure-prometheus">Configure Prometheus</h3>
+<pre tabindex="0"><code>nano /etc/prometheus/prometheus.yml
+remote_write:
+  - url: &#34;http://localhost:8086/api/v1/prom/write?db=prometheus&#34;
+
+remote_read:
+  - url: &#34;http://localhost:8086/api/v1/prom/read?db=prometheus&#34;
+
+# with authentication
+#remote_write:
+#  - url: &#34;http://localhost:8086/api/v1/prom/write?db=prometheus&amp;u=username&amp;p=password&#34;
+
+#remote_read:
+#  - url: &#34;http://localhost:8086/api/v1/prom/read?db=prometheus&amp;u=username&amp;p=password&#34;
+</code></pre><pre tabindex="0"><code>systemctl start influxdb
+systemctl enable influxdb
+
+echo &#39;CREATE DATABASE &#34;prometheus&#34;&#39; | influx
+
+systemctl start prometheus
+systemctl status prometheus
+
+influx
+USE prometheus
+select * from /.*/ limit 1
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="prometheus" term="prometheus" label="Prometheus" />
+                             
+                                <category scheme="nosql" term="nosql" label="noSQL" />
+                             
+                                <category scheme="influxdb" term="influxdb" label="Influxdb" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Nemon with Influxdb storage]]></title>
+            <link href="https://devopstales.github.io/monitoring/naemon-influxdb/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/prometheus-alertmanagger/?utm_source=atom_feed" rel="related" type="text/html" title="Install Alertmanagger" />
+            
+                <id>https://devopstales.github.io/monitoring/naemon-influxdb/</id>
+            
+            
+            <published>2019-01-01T00:00:00+00:00</published>
+            <updated>2019-01-01T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>I prefer to use Naemon (a fork of nagos) with Influxdb as a storage for graphical data.</p>
+<h3 id="install-naemon">Install Naemon</h3>
+<pre tabindex="0"><code>yum install epel-release nano -y
+yum install httpd php php-gd -y
+
+rpm -Uvh &#34;https://labs.consol.de/repo/stable/rhel7/x86_64/labs-consol-stable.rhel7.noarch.rpm&#34;
+
+yum install naemon* -y
+yum install nagios-plugins nagios-plugins-all nagios-plugins-nrpe nrpe -y
+
+nano /etc/php.ini
+date.timezone = Europe/Budapest
+
+
+systemctl enable httpd
+systemctl enable naemon
+systemctl start httpd
+systemctl start naemon
+
+htpasswd /etc/thruk/htpasswd thrukadmin
+# http://SERVER-IP/naemon
+</code></pre><h3 id="install-infludxb">Install Infludxb</h3>
+<pre tabindex="0"><code>cat &lt;&lt;EOF | sudo tee /etc/yum.repos.d/influxdb.repo
+[influxdb]
+name = InfluxDB Repository - RHEL \$releasever
+baseurl = https://repos.influxdata.com/rhel/\$releasever/\$basearch/stable
+enabled = 1
+gpgcheck = 1
+gpgkey = https://repos.influxdata.com/influxdb.key
+EOF
+
+yum install influxdb -y
+
+nano /etc/influxdb/influxdb.conf
+[http]
+   enabled = true
+   bind-address = &#34;localhost:8086&#34;
+   auth-enabled = false
+
+systemctl start influxdb
+systemctl enable influxdb
+</code></pre><h3 id="configurate-naemon">Configurate Naemon</h3>
+<pre tabindex="0"><code>sed -i &#34;s@^process_performance_data=0@#process_performance_data=0@&#34; /etc/naemon/naemon.cfg
+# config nagios
+nano /etc/naemon/module-conf.d/nagios_nagflux.cfg
+process_performance_data=1
+
+host_perfdata_file=/var/naemon/host-perfdata
+host_perfdata_file_template=DATATYPE::HOSTPERFDATA\tTIMET::$TIMET$\tHOSTNAME::$HOSTNAME$\tHOSTPERFDATA::$HOSTPERFDATA$\tHOSTCHECKCOMMAND::$HOSTCHECKCOMMAND$
+host_perfdata_file_mode=a
+host_perfdata_file_processing_interval=15
+host_perfdata_file_processing_command=process-host-perfdata-file-nagflux
+
+service_perfdata_file=/var/naemon/service-perfdata
+service_perfdata_file_template=DATATYPE::SERVICEPERFDATA\tTIMET::$TIMET$\tHOSTNAME::$HOSTNAME$\tSERVICEDESC::$SERVICEDESC$\tSERVICEPERFDATA::$SERVICEPERFDATA$\tSERVICECHECKCOMMAND::$SERVICECHECKCOMMAND$
+service_perfdata_file_mode=a
+service_perfdata_file_processing_interval=15
+service_perfdata_file_processing_command=process-service-perfdata-file-nagflux
+
+chown naemon:naemon /etc/naemon/module-conf.d/nagios_nagflux.cfg
+
+nano /etc/naemon/conf.d/histou.cfg
+define command {
+    command_name    process-host-perfdata-file-nagflux
+    command_line    /bin/mv /var/naemon/host-perfdata /var/nagflux/perfdata/$TIMET$.perfdata.host
+    }
+
+define command {
+    command_name    process-service-perfdata-file-nagflux
+    command_line    /bin/mv /var/naemon/service-perfdata /var/nagflux/perfdata/$TIMET$.perfdata.service
+    }
+
+define host {
+   name       host-grafana
+   action_url http://192.168.10.112/grafana/dashboard/script/histou.js?host=$HOSTNAME$&amp;theme=light&amp;annotations=true
+   notes_url   http://192.168.10.112/dokuwiki/doku.php?id=inventory:$HOSTNAME$
+   register   0
+}
+
+define service {
+   name       service-grafana
+   action_url http://192.168.10.112/grafana/dashboard/script/histou.js?host=$HOSTNAME$&amp;service=$SERVICEDESC$&amp;theme=light&amp;annotations=true
+   register   0
+}
+
+mkdir /var/naemon/
+chown -R naemon:naemon /var/naemon/
+
+cd /etc/thruk/ssi/
+cp extinfo-header.ssi.example extinfo-header.ssi
+cp status-header.ssi.example status-header.ssi
+
+systemctl restart naemon
+
+ll /var/naemon/
+ll /var/nagflux/perfdata/
+</code></pre><h3 id="install-nagflux">Install nagflux</h3>
+<pre tabindex="0"><code>cd /usr/bin/
+wget https://github.com/Griesbacher/nagflux/releases/download/v0.4.1/nagflux
+chmod +x nagflux
+
+mkdir -p /var/nagflux/perfdata
+mkdir -p /var/nagflux/spool
+chown -R naemon:apache /var/nagflux
+
+mkdir /etc/nagflux
+cat &lt;&lt;EOF | sudo tee /etc/nagflux/config.gcfg
+[main]
+NagiosSpoolfileFolder = &#34;/var/nagflux/perfdata&#34;
+NagiosSpoolfileWorker = 1
+InfluxWorker = 2
+MaxInfluxWorker = 5
+DumpFile = &#34;/var/log/nagflux/nagflux.dump&#34;
+NagfluxSpoolfileFolder = &#34;/var/nagflux/spool&#34;
+FieldSeparator = &#34;&amp;&#34;
+BufferSize = 1000
+FileBufferSize = 65536
+DefaultTarget = &#34;Influxdb&#34;
+
+[Log]
+LogFile = &#34;/var/log/nagflux/nagflux.log&#34;
+MinSeverity = &#34;INFO&#34;
+
+[InfluxDBGlobal]
+CreateDatabaseIfNotExists = true
+NastyString = &#34;&#34;
+NastyStringToReplace = &#34;&#34;
+HostcheckAlias = &#34;hostcheck&#34;
+
+[InfluxDB &#34;nagflux&#34;]
+Enabled = true
+Version = 1.0
+Address = &#34;http://localhost:8086&#34;
+Arguments = &#34;precision=ms&amp;db=nagflux&amp;u=admin&amp;p=Password1&#34;
+StopPullingDataIfDown = true
+
+[Livestatus]
+#tcp or file
+Type = &#34;file&#34;
+#tcp: 127.0.0.1:6557 or file /var/run/live
+Address = &#34;/var/cache/naemon/live&#34;
+MinutesToWait = 3
+Version = &#34;&#34;
+EOF
+
+mkdir /var/log/nagflux
+mkdir /var/nagflux
+
+cat &lt;&lt;EOF | sudo tee /etc/systemd/system/nagflux.service
+[Unit]
+Description=A connector which transforms performancedata from Nagios/Icinga(2)/Naemon to InfluxDB/Elasticsearch
+Documentation=https://github.com/Griesbacher/nagflux
+After=network-online.target
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/bin/nagflux -configPath /etc/nagflux/config.gcfg
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+Alias=nagflux.service
+EOF
+
+systemctl daemon-reload
+systemctl start nagflux
+systemctl enable nagflux
+
+tailf /var/log/nagflux/nagflux.log
+</code></pre><h3 id="install-grafana">Install grafana</h3>
+<pre tabindex="0"><code>curl -s https://packagecloud.io/install/repositories/grafana/stable/script.rpm.sh | sudo bash
+yum install grafana -y
+
+cp /etc/grafana/grafana.ini /etc/grafana/grafana.ini.bak
+echo &#34;&#34; &gt; /etc/grafana/grafana.ini
+nano /etc/grafana/grafana.ini
+[paths]
+logs = /var/log/grafana
+
+[log]
+mode = file
+[log.file]
+level =  Info
+daily_rotate = true
+
+[server]
+http_port = 3000
+http_addr = 0.0.0.0
+domain = localhost
+root_url = %(protocol)s://%(domain)s/grafana/
+enable_gzip = false
+
+[snapshots]
+external_enabled = false
+
+[security]
+disable_gravatar = true
+# same username and password for thruk
+admin_user = thrukadmin
+admin_password = Password1
+
+[users]
+allow_sign_up = false
+default_theme = light
+
+[auth.basic]
+enabled = false
+
+[auth.proxy]
+enabled = true
+auto_sign_up = true
+
+[alerting]
+enabled = true
+execute_alerts = true
+
+nano /etc/httpd/conf.d/grafana.conf
+&lt;IfModule !mod_proxy.c&gt;
+    LoadModule proxy_module /usr/lib64/httpd/modules/mod_proxy.so
+&lt;/IfModule&gt;
+&lt;IfModule !mod_proxy_http.c&gt;
+    LoadModule proxy_http_module /usr/lib64/httpd/modules/mod_proxy_http.so
+&lt;/IfModule&gt;
+
+&lt;Location /grafana&gt;
+    ProxyPass http://127.0.0.1:3000 retry=0 disablereuse=On
+    ProxyPassReverse http://127.0.0.1:3000/grafana
+    RewriteEngine On
+    RewriteRule .* - [E=PROXY_USER:%{LA-U:REMOTE_USER},NS]
+    SetEnvIf Request_Protocol ^HTTPS.* IS_HTTPS=1
+    SetEnvIf Authorization &#34;^.+$&#34; IS_BASIC_AUTH=1
+    # without thruk cookie auth, use the proxy user from the rewrite rule above
+    RequestHeader set X-WEBAUTH-USER &#34;%{PROXY_USER}s&#34;  env=IS_HTTPS
+    RequestHeader set X-WEBAUTH-USER &#34;%{PROXY_USER}e&#34;  env=!IS_HTTPS
+    # when thruk cookie auth is used, fallback to remote user directly
+    RequestHeader set X-WEBAUTH-USER &#34;%{REMOTE_USER}e&#34; env=!IS_BASIC_AUTH
+    RequestHeader unset Authorization
+&lt;/Location&gt;
+
+echo &#34;
+apiVersion: 1
+
+deleteDatasources:
+  - name: nagflux
+
+datasources:
+- name: nagflux
+  type: influxdb
+  url: http://localhost:8086
+  access: proxy
+  database: nagflux
+  isDefault: true
+  version: 1
+  editable: true
+&#34; &gt; /etc/grafana/provisioning/datasources/nagflux.yaml
+
+systemctl start grafana-server
+systemctl enable grafana-server
+systemctl restart httpd
+
+
+# http://SERVER-IP:3000
+# admin/admin
+
+# datasource:
+nagflux
+influxdb
+http://localhost:8086
+</code></pre><h3 id="install-histou">Install histou</h3>
+<pre tabindex="0"><code>cd /tmp
+wget -O histou.tar.gz https://github.com/Griesbacher/histou/archive/v0.4.3.tar.gz
+mkdir -p /var/www/html/histou
+cd /var/www/html/histou
+tar xzf /tmp/histou.tar.gz --strip-components 1
+cp histou.ini.example histou.ini
+cp histou.js /usr/share/grafana/public/dashboards/
+
+nano /usr/share/grafana/public/dashboards/histou.js
+var url = &#39;http://192.168.10.112/histou/&#39;;
+
+systemctl restart httpd
+systemctl restart grafana-server
+
+# http://192.168.10.112/histou/?host=localhost&amp;service=PING
+# http://192.168.10.112:3000/dashboard/script/histou.js?host=localhost&amp;service=PING
+
+# nagios config
+
+sed -i &#39;/name.*generic-host/a\        use                             host-grafana&#39; /etc/naemon/conf.d/templates/hosts.cfg
+sed -i &#39;/name.*generic-service/a\        use                             service-grafana&#39; /etc/naemon/conf.d/templates/services.cfg
+
+systemctl restart naemon
+</code></pre><h3 id="inpluxdb-commands">Inpluxdb commands</h3>
+<pre tabindex="0"><code>influx
+create database nagflux;
+CREATE USER &#34;admin&#34; WITH PASSWORD &#39;Password1&#39; WITH ALL PRIVILEGES;
+show DATABASES;
+USE nagflux;
+select * from /.*/ limit 1;
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="naemon" term="naemon" label="Naemon" />
+                             
+                                <category scheme="nosql" term="nosql" label="noSQL" />
+                             
+                                <category scheme="influxdb" term="influxdb" label="Influxdb" />
+                             
+                                <category scheme="grafana" term="grafana" label="Grafana" />
+                             
+                                <category scheme="nagios" term="nagios" label="Nagios" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Alertmanagger]]></title>
+            <link href="https://devopstales.github.io/monitoring/prometheus-alertmanagger/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/monitoring/prometheus-alertmanagger/</id>
+            
+            
+            <published>2018-10-18T00:00:00+00:00</published>
+            <updated>2018-10-18T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Example article description</blockquote><p>The Alertmanager handles alerts sent by client applications such as the Prometheus server.</p>
+<h3 id="download-alertmanager">Download Alertmanager</h3>
+<pre tabindex="0"><code>wget https://github.com/prometheus/alertmanager/releases/download/v0.15.0-rc.1/alertmanager-0.15.0-rc.1.linux-amd64.tar.gz
+tar -xzf alertmanager-0.15.0-rc.1.linux-amd64.tar.gz
+</code></pre><h3 id="install-binaris">Install binaris</h3>
+<pre tabindex="0"><code>useradd --no-create-home --shell /bin/false alertmanager
+
+mkdir /etc/alertmanager
+mkdir /etc/alertmanager/template
+mkdir -p /var/lib/alertmanager/data
+touch /etc/alertmanager/alertmanager.yml
+
+chown -R alertmanager:alertmanager /etc/alertmanager
+chown -R alertmanager:alertmanager /var/lib/alertmanager
+
+cp alertmanager-*linux-amd64/alertmanager /usr/local/bin/
+cp alertmanager-*linux-amd64/amtool /usr/local/bin/
+
+chown alertmanager:alertmanager /usr/local/bin/alertmanager
+chown alertmanager:alertmanager /usr/local/bin/amtool
+</code></pre><h3 id="create-servis-for-alertmanager">Create servis for Alertmanager</h3>
+<pre tabindex="0"><code>nano /etc/systemd/system/alertmanager.service
+[Unit]
+Description=Prometheus Alertmanager Service
+Wants=network-online.target
+After=network.target
+
+[Service]
+User=alertmanager
+Group=alertmanager
+Type=simple
+ExecStart=/usr/local/bin/alertmanager \
+    --config.file /etc/alertmanager/alertmanager.yml \
+    --storage.path /var/lib/alertmanager/data
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+</code></pre><h3 id="configure-alertmanager">Configure Alertmanager</h3>
+<pre tabindex="0"><code>nano /etc/alertmanager/alertmanager.yml
+global:
+  smtp_smarthost: &#39;localhost:25&#39;
+  smtp_from: &#39;alertmanager@devopstales.intra&#39;
+#  smtp_auth_username: &#39;alertmanager&#39;
+#  smtp_auth_password: &#39;password&#39;
+
+templates:
+- &#39;/etc/alertmanager/template/*.tmpl&#39;
+
+route:
+  repeat_interval: 3h
+  receiver: mails
+
+receivers:
+- name: &#39;mails&#39;
+  email_configs:
+  - to: &#39;admin@devopstales.intra&#39;
+</code></pre><h3 id="configure-prometheus">Configure Prometheus</h3>
+<pre tabindex="0"><code>nano /etc/prometheus/prometheus.yml
+global:
+  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+       - localhost:9093
+</code></pre><pre tabindex="0"><code>sudo systemctl daemon-reload
+sudo systemctl enable alertmanager
+sudo systemctl start alertmanager
+sudo systemctl ststus alertmanager
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="prometheus" term="prometheus" label="Prometheus" />
+                             
+                                <category scheme="nosql" term="nosql" label="noSQL" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install Node-exporter]]></title>
+            <link href="https://devopstales.github.io/monitoring/prometheus-node-exporter/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/monitoring/prometheus-install/?utm_source=atom_feed" rel="related" type="text/html" title="Prometheus Install" />
+            
+                <id>https://devopstales.github.io/monitoring/prometheus-node-exporter/</id>
+            
+            
+            <published>2018-10-17T00:00:00+00:00</published>
+            <updated>2018-10-17T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Example article description</blockquote><p>Install node-exporter to provides detailed information about the system, including CPU, disk, and memory usage.</p>
+<h3 id="download-node-exporter">Download Node-exporter</h3>
+<pre tabindex="0"><code>cd /tmp
+wget https://github.com/prometheus/node_exporter/releases/download/v0.16.0/node_exporter-0.16.0.linux-amd64.tar.gz
+tar -xzf node_exporter-0.16.0.linux-amd64.tar.gz
+</code></pre><h3 id="install-binaris">Install binaris</h3>
+<pre tabindex="0"><code>sudo useradd -rs /bin/false node_exporter
+
+sudo mv node_exporter*linux-amd64/node_exporter /usr/local/bin
+mkdir -p /etc/node_exporter/data
+
+chown -R node_exporter:node_exporter /etc/node_exporter
+
+# host role based teg
+cat &lt;&lt;EOF &gt; /etc/node_exporter/data/roles.prom
+machine_role{role=&#34;postfix&#34;} 1
+machine_role{role=&#34;apache&#34;} 1
+EOF
+</code></pre><h3 id="create-servis-for-node-exporter">Create servis for Node-exporter</h3>
+<pre tabindex="0"><code>cat &lt;&lt;EOF &gt; /etc/systemd/system/node_exporter.service
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter --collector.textfile.directory /etc/node_exporter/data/
+
+[Install]
+WantedBy=multi-user.target
+EOF
+</code></pre><pre tabindex="0"><code>systemctl daemon-reload
+systemctl enable node_exporter
+systemctl start node_exporter
+systemctl status node_exporter
+</code></pre><h3 id="configure-prometheus">Configure Prometheus</h3>
+<pre tabindex="0"><code>nano /etc/prometheus/prometheus.yml
+global:
+  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+       - localhost:9093
+
+rule_files:
+  # - &#34;first_rules.yml&#34;
+  # - &#34;second_rules.yml&#34;
+
+scrape_configs:
+  - job_name: &#39;prometheus_metrics&#39;
+    scrape_interval: 5s
+    static_configs:
+      - targets: [&#39;prometheus01.devopstales.intra:9090&#39;]
+
+  - job_name: &#39;node_exporter_metrics&#39;
+    scrape_interval: 5s
+    static_configs:
+      - targets: [&#39;prometheus01.devopstales.intra:9100&#39;]
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="prometheus" term="prometheus" label="Prometheus" />
+                             
+                                <category scheme="nosql" term="nosql" label="noSQL" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Prometheus Install]]></title>
+            <link href="https://devopstales.github.io/monitoring/prometheus-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/monitoring/prometheus-install/</id>
+            
+            
+            <published>2018-08-21T00:00:00+00:00</published>
+            <updated>2018-08-21T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Example article description</blockquote><p>Prometheus is an open-source monitoring system with a built-in noSQL time-series database. It offers a multi-dimensional data model, a flexible query language, and diverse visualization possibilities. Prometheus collects metrics from http nedpoint. Most service dind&rsquo;t have this endpoint so you need optional programs that generate additional metrics cald exporters.</p>
+<p>In this tutorial, you&rsquo;ll install, configure, and secure Prometheus and Node Exporter to generate metrics about your server&rsquo;s performance.</p>
+<h3 id="download-prometheus">Download Prometheus</h3>
+<pre tabindex="0"><code>curl -LO &#34;https://github.com/prometheus/prometheus/releases/download/v2.2.1/prometheus-2.2.1.linux-amd64.tar.gz&#34;
+tar -xzf prometheus-2.2.1.linux-amd64.tar.gz
+</code></pre><h3 id="install-binaris">Install binaris</h3>
+<pre tabindex="0"><code>cp prometheus-*linux-amd64/prometheus /usr/local/bin/
+cp prometheus-*linux-amd64/promtool /usr/local/bin/
+
+useradd --no-create-home --shell /bin/false prometheus
+
+mkdir /etc/prometheus
+mkdir /var/lib/prometheus
+
+chown prometheus:prometheus /var/lib/prometheus
+chown prometheus:prometheus /usr/local/bin/prometheus
+chown prometheus:prometheus /usr/local/bin/promtool
+
+cp -r prometheus-*linux-amd64/consoles /etc/prometheus
+cp -r prometheus-*linux-amd64/console_libraries /etc/prometheus
+
+chown -R prometheus:prometheus /etc/prometheus/consoles
+chown -R prometheus:prometheus /etc/prometheus/console_libraries
+
+cp prometheus-*linux-amd64/prometheus.yml /etc/prometheus/
+chown -R prometheus:prometheus /etc/prometheus/prometheus.yml
+</code></pre><h3 id="create-servis-for-prometheus">Create servis for prometheus</h3>
+<pre tabindex="0"><code>nano /etc/systemd/system/prometheus.service
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+    --config.file /etc/prometheus/prometheus.yml \
+    --storage.tsdb.path /var/lib/prometheus/ \
+    --web.console.templates=/etc/prometheus/consoles \
+    --web.console.libraries=/etc/prometheus/console_libraries
+
+[Install]
+WantedBy=multi-user.target
+</code></pre><h3 id="configure-prometheus">Configure Prometheus</h3>
+<pre tabindex="0"><code>nano /etc/prometheus/prometheus.yml
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: &#39;prometheus&#39;
+    scrape_interval: 5s
+    static_configs:
+      - targets: [&#39;localhost:9090&#39;]
+</code></pre><pre tabindex="0"><code>systemctl daemon-reload
+systemctl start prometheus
+systemctl status prometheus
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="prometheus" term="prometheus" label="Prometheus" />
+                             
+                                <category scheme="nosql" term="nosql" label="noSQL" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
 </feed>

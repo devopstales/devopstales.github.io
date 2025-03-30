@@ -1,21 +1,2468 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
-    <generator uri="https://gohugo.io/" version="0.89.2">Hugo</generator><title type="html"><![CDATA[SSoes on devopstales]]></title>
+    <generator uri="https://gohugo.io/" version="0.145.0">Hugo</generator><title type="html"><![CDATA[SSOs on devopstales]]></title>
     
         <subtitle type="html"><![CDATA[Blog about dev and ops stuff]]></subtitle>
     
     
     
-            <link href="https://devopstales.github.io/sso/" rel="alternate" type="text/html" title="HTML" />
-            <link href="https://devopstales.github.io/sso/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
-            <link href="https://devopstales.github.io/sso/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2025-03-10T15:30:47+00:00</updated>
+            <link href="https://devopstales.github.io/sso/" rel="alternate" type="text/html" title="html" />
+            <link href="https://devopstales.github.io/sso/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
+            <link href="https://devopstales.github.io/sso/atom.xml" rel="self" type="application/atom+xml" title="atom" />
+    <updated>2025-03-30T13:01:43+00:00</updated>
     
     
-    <author>
-            <name>Balázs Páldi</name>
-            </author>
+    
     
         <id>https://devopstales.github.io/sso/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Foreman openidc SSO with keycloak]]></title>
+            <link href="https://devopstales.github.io/sso/foreman-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/mattermost-keycloak-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Free sso for Mattermost Teams Edition" />
+                <link href="https://devopstales.github.io/sso/k8s-kuberos/?utm_source=atom_feed" rel="related" type="text/html" title="Kubectl authentication with Kuberos" />
+                <link href="https://devopstales.github.io/sso/k8s-gangway/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes authentication with Keycloak and gangway" />
+                <link href="https://devopstales.github.io/sso/k8s-dasboard-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gatekeeper" />
+                <link href="https://devopstales.github.io/sso/grafana-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Grafana" />
+            
+                <id>https://devopstales.github.io/sso/foreman-sso/</id>
+            
+            
+            <published>2020-05-15T00:00:00+00:00</published>
+            <updated>2020-05-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>I this post I will show you how you can configure Foreman to use Keycloak asz an OIDC SSO authentication provider.</p>
+<p>I use a Self-signed certificate for keycloak so my first step is to add the root CA of this certificate as a trusted certificate on the foreman server:</p>
+<pre tabindex="0"><code>cp rootca.crt /etc/pki/ca-trust/source/anchors/
+update-ca-trust
+</code></pre><h3 id="install-requirements">install requirements</h3>
+<pre tabindex="0"><code>yum install mod_auth_openidc keycloak-httpd-client-install
+</code></pre><p>The <code>keycloak-httpd-client-install</code> is a commandline tool thet helps to configure the apache2&rsquo;s <code>mod_auth_openidc</code> plugin with Keycloak. This feature is not yet supported by foreman-installer. As a result, re-running the foreman-installer command can purge the changes in Apache files added by the keycloak-httpd-client-install.</p>
+<pre tabindex="0"><code>keycloak-httpd-client-install \
+--app-name foreman-openidc \
+--keycloak-server-url &#34;https://keycloak.mydomain.intra&#34; \
+--keycloak-admin-usernam &#34;admin&#34; \
+--keycloak-realm &#34;ssl-realm&#34; \
+--keycloak-admin-realm master \
+--keycloak-auth-role root-admin \
+-t openidc -l /users/extlogin
+
+systemct restart httpd
+</code></pre><h3 id="configure-keycloak">Configure Keycloak</h3>
+<p>We need to create two mappers for the new client in keycloak:</p>
+<p><img src="/img/include/foreman-sso-1.png" alt="Example image"  class="zoomable" /><br/>
+<img src="/img/include/foreman-sso-2.png" alt="Example image"  class="zoomable" /><br/></p>
+<p>Then in Keycloak create a group called <code>foreman-admin</code> and add the test user for it.</p>
+<h3 id="configure-foreman">Configure Foreman:</h3>
+<pre tabindex="0"><code>Administer / Settings / Authentication
+Authorize login delegation = yes
+Authorize login delegation auth source user autocreate = External
+OIDC Algorithm = RS256
+# the client id from keycloak
+OIDC Audience = foreman.mydomain.intra-foreman-openidc
+OIDC Issuer = https://keycloak.mydomain.intra/auth/realms/ssl-realm
+OIDC JWKs URL = https://keycloak.mydomain.intra/auth/realms/ssl-realm/protocol/openid-connect/certs
+</code></pre><p>Create an user groupe in foreman called <code>foreman-admin</code> and map with the external group called <code>foreman-admin</code>.
+<img src="/img/include/foreman-sso-3.png" alt="Example image"  class="zoomable" /><br/>
+<img src="/img/include/foreman-sso-4.png" alt="Example image"  class="zoomable" /><br/>
+<img src="/img/include/foreman-sso-5.png" alt="Example image"  class="zoomable" /><br/></p>
+<p>The log out and go the he url of the foreman. It will redirect to Keycloak to login. Add the test users credentials the login wit it.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="sso" term="sso" label="SSO" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="katello" term="katello" label="Katello" />
+                             
+                                <category scheme="foreman" term="foreman" label="Foreman" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Free sso for Mattermost Teams Edition]]></title>
+            <link href="https://devopstales.github.io/sso/mattermost-keycloak-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/k8s-kuberos/?utm_source=atom_feed" rel="related" type="text/html" title="Kubectl authentication with Kuberos" />
+                <link href="https://devopstales.github.io/sso/k8s-gangway/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes authentication with Keycloak and gangway" />
+                <link href="https://devopstales.github.io/sso/k8s-dasboard-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gatekeeper" />
+                <link href="https://devopstales.github.io/sso/grafana-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Grafana" />
+                <link href="https://devopstales.github.io/sso/openshift-sso2/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO with Gitlab" />
+            
+                <id>https://devopstales.github.io/sso/mattermost-keycloak-sso/</id>
+            
+            
+            <published>2020-02-16T00:00:00+00:00</published>
+            <updated>2020-02-16T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this article I will show you how to use Keycloak as an authentication provider for  Mattermost Teams Edition.</p>
+<p>Slack and Mattermost are very similar products. With Mattermost Teams Edition you can get almost all the functionality of the payed Slack. The only problem is sso. In Mattermost you can use google sso login in the E20 licensing what is more costly the Slack. (Slack: 8$/user Mattermost E20: 8.5$/user) In  Mattermost Teams Edition (the free edition of Mattermost) the only authentication provider you can use is gitlab, but thanks to <a href="https://qiita.com/wadahiro/items/8b118c34aae904353865">wadahiro</a> we can use Keycloak instead of gitlab.</p>
+<h3 id="configurate-mattermost">Configurate MAttermost</h3>
+<pre tabindex="0"><code>nano /etc/mattermost/config.json
+...
+&#34;GitLabSettings&#34;: {
+    &#34;Enable&#34;: false,
+    &#34;Secret&#34;: &#34;&lt;secret&gt;&#34;,
+    &#34;Id&#34;: &#34;mattermost&#34;,
+    &#34;Scope&#34;: &#34;&#34;,
+    &#34;AuthEndpoint&#34;: &#34;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/auth&#34;,
+    &#34;TokenEndpoint&#34;: &#34;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/token&#34;,
+    &#34;UserApiEndpoint&#34;: &#34;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/userinfo&#34;
+},
+</code></pre><h3 id="create-client-on-keycloak">Create Client on Keycloak</h3>
+<p>In keycloak go to <code>Configure &gt; Clients</code> and create a new client for Mattermostw With the fallowing data:</p>
+<ul>
+<li>Standard Flow Enabled: <code>ON</code></li>
+<li>Access Type: <code>confidential</code></li>
+<li>Valid Redirect URIs: <code>http://&lt;Mattermost-FQDN&gt;/signup/gitlab/complete</code></li>
+</ul>
+<p><img src="/img/include/mattermost_sso1.png" alt="image"  class="zoomable" /> <br></p>
+<h3 id="create-mapper-for-correct-data">Create mapper for correct data</h3>
+<p>Mattermost <a href="https://github.com/mattermost/mattermost-server/blob/v4.10.0/model/gitlab/gitlab.go#L19-L25">want</a> the fallowing data from the authentication provider:</p>
+<pre tabindex="0"><code>type GitLabUser struct {
+	Id       int64  `json:&#34;id&#34;`
+	Username string `json:&#34;username&#34;`
+	Login    string `json:&#34;login&#34;`
+	Email    string `json:&#34;email&#34;`
+	Name     string `json:&#34;name&#34;`
+}
+</code></pre><p>Create mapping for username:</p>
+<p><img src="/img/include/mattermost_sso2.png" alt="image"  class="zoomable" /> <br></p>
+<p>The only problematic data is the ID. For the test run you can use a self generated id like this:</p>
+<p><img src="/img/include/mattermost_sso3.png" alt="image"  class="zoomable" /> <br></p>
+<h3 id="create-user-for-test">Create user for test</h3>
+<p>For testing purposes we’re going to create a local user in Keycloak.</p>
+<p><img src="/img/include/mattermost_sso4.png" alt="image"  class="zoomable" /> <br></p>
+<p>Now we need to create an attribute for this user with the mattermost id and the value should be an integer between 1 and 9999999999999999999.</p>
+<p><img src="/img/include/mattermost_sso5.png" alt="image"  class="zoomable" /> <br></p>
+<p>If you have many users you didn&rsquo;t want to create id for them manually. If you use LDAP for users the best fit for this need was the employeeNumber or EmployeeId ldap attribute.</p>
+<p><img src="/img/include/mattermost_sso6.png" alt="image"  class="zoomable" /> <br></p>
+<p>If you use ActiveDirectory this attribute maybe null so we need to generate it with a powershell script.</p>
+<pre tabindex="0"><code>ForEach ($User in ((Get-ADUser -Filter * -Properties SamAccountName,EmployeeId)))
+{
+if ( ([string]::IsNullOrEmpty($User.EmployeeId)))
+{
+$DATE = (Get-ADuser $User.SamAccountName -Properties whencreated).whencreated.ToString(&#39;yyMMddHHmmss&#39;)
+$RANDOM = (Get-Random -Maximum 9999)
+$DATA = -join ($DATE, $RANDOM)
+$User.SamAccountName
+$DATA
+Set-ADUser $User.SamAccountName -employeeID $DATA
+}
+}
+</code></pre>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="sso" term="sso" label="SSO" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="keycloak" />
+                             
+                                <category scheme="mattermost" term="mattermost" label="Mattermost" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubectl authentication with Kuberos]]></title>
+            <link href="https://devopstales.github.io/sso/k8s-kuberos/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/k8s-gangway/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes authentication with Keycloak and gangway" />
+                <link href="https://devopstales.github.io/sso/k8s-dasboard-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gatekeeper" />
+                <link href="https://devopstales.github.io/sso/grafana-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Grafana" />
+                <link href="https://devopstales.github.io/sso/openshift-sso2/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO with Gitlab" />
+                <link href="https://devopstales.github.io/sso/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
+            
+                <id>https://devopstales.github.io/sso/k8s-kuberos/</id>
+            
+            
+            <published>2020-01-07T00:00:00+00:00</published>
+            <updated>2020-01-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Kuberos is an OIDC authentication helper for kubectl login.</p>
+<blockquote>
+<p>Kuberos hase bean dpricated at May 10, 2019.</p></blockquote>
+
+
+<H3>Parts of the Kubernetes series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/ansible-k8s-install/">Install K8S with ansible</a></li>
+     <li>Part1b: <a href="../../kubernetes/k8s-install/">Install K8S with kubeadm</a></li>
+     <li>Part1c: <a href="../../kubernetes/k8s-install-containerd/">Install K8S with kubeadm and containerd</a></li>
+     <li>Part1d: <a href="../../kubernetes/k8s-install-with-swap/">Install K8S with kubeadm and allow swap</a></li>
+     <li>Part1e: <a href="../../kubernetes/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb/">Intall metal-lb with K8S</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-nginx-ingress/">Install Nginx ingress to K8S</a></li>
+<!--      <li>Part3b: k8s-multiple-nginx-ingress -->
+<!--      <li>Part3c: k8s-contour-ingress -->
+     <li>Part4: <a href="../../kubernetes/k8s-cert-manager/">Install cert-manager to K8S</a></li>
+<!-- local folder (+ autoprovisioning ) -->
+     <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+     <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+     <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... -->
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+<!-- istio-install.md -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
+<!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
+<!-- logs to graylog -->
+</ul>
+
+
+
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>    command:
+</span></span><span style="display:flex;"><span>    - /hyperkube
+</span></span><span style="display:flex;"><span>    - apiserver
+</span></span><span style="display:flex;"><span>    - --advertise-address<span style="color:#f92672">=</span>10.10.40.30
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    - --oidc-issuer-url<span style="color:#f92672">=</span>https://keycloak.devopstales.intra/auth/realms/mydomain
+</span></span><span style="display:flex;"><span>    - --oidc-client-id<span style="color:#f92672">=</span>k8s
+</span></span><span style="display:flex;"><span>    - --oidc-username-claim<span style="color:#f92672">=</span>email
+</span></span><span style="display:flex;"><span>    - --oidc-groups-claim<span style="color:#f92672">=</span>groups
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl restart docker kubelet
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">cat &lt;&lt;&#39;EOF&#39;&gt; values.yaml</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">replicaCount</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kuberos</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">oidcClientURL</span>: <span style="color:#ae81ff">https://keycloak.devopstales.intra/auth/realms/mydomain</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">oidcClientID</span>: <span style="color:#ae81ff">k8s</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">oidcSecret</span>: <span style="color:#ae81ff">43219919-0904-4338</span>-<span style="color:#ae81ff">bc0f-c986e1891a7a</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">clusters</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openshift</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">apiServer</span>: <span style="color:#ae81ff">https://192.168.0.106:6443</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># `apiServer` is the url for kubectl</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">#   This is typically  https://api.fqdn</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">caCrt</span>: |-<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      -----BEGIN CERTIFICATE-----
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      MIIDZDCCAkygAwIBAgIIe/R9sc8oJiAwDQYJKoZIhvcNAQELBQAwFTETMBEGA1UE
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      AxMKa3ViZXJuZXRlczAeFw0xOTEyMjcxNzM3MzlaFw0yMDEyMjYxNzM3MzlaMBkx
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      FzAVBgNVBAMTDmt1YmUtYXBpc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      MIIBCgKCAQEAzAg7MflA/HVTVcZPsGJH71cfcJ/U1CtEYbXfu/AQbhGg09XKmeK9
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      aGEK3kSgi/Hyoi7M+e/ntx1+Gp/jwc8kanMFRLgxdKCxxi4MOswZF/q2loUdNoE/
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      OQVPWQi8Hgznubw/0gINUkIq8mRx9Bb+RcRnJEfD3CXkxDhUNeCvvjeTrujguF0h
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      pgfzrLoc2kGdJYpHiLqow8jRq7XXk0RzZaqCQjAEZgqWamwbTTqFZh3v+1gF/2s0
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      EbFVVL2Ctu1dOGe1FkZxte7/Po1XBkPLQuRXbH3QRiJkPfyOW16T1nWk1QTcpCdH
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      HO/l+CY2nLPFZL1BM83QuVmPgR1T1p+5tQIDAQABo4GzMIGwMA4GA1UdDwEB/wQE
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      AwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATCBiAYDVR0RBIGAMH6CEms4cy5teWRv
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      bWFpbi5pbnRyYYIKa3ViZXJuZXRlc4ISa3ViZXJuZXRlcy5kZWZhdWx0ghZrdWJl
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      cm5ldGVzLmRlZmF1bHQuc3ZjgiRrdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      ZXIubG9jYWyHBApgAAGHBMCoAGowDQYJKoZIhvcNAQELBQADggEBAJZ7jxPR72V6
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      PYL3SKCWaS+RgTuGuSm0pYu26cBmPOjsugd8DUrJ7+iAnKDHUmmw22sWheLLCokc
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      YU/AIfdbbsz0+f+/qthkO7zJmAJgdIAOMJ5MQCbxMBt+6L813r1R3QI7kAGxHvzV
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      loKJVIIHq/6K3gFEZDfo0myvNvtOIpBCeMnZRK+8hx3UNcHckZbhkan1Z1j9t9iw
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      b6Vv5jY1+9t2Iltd2wuNaUvHicx+3X6JPAqVR6H0jI3i+QSyT1EHXtBtbQBBpP4T
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      5WDz+9uDa1mIDHtww7DTnJwY+hGI7fVF2H7XQaM4xwhGnwIwbkSh45JWVtUEHMou
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      Q7T4bTyrwuQ=
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      -----END CERTIFICATE-----</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># `caCrt` is the public / CA cert for the cluster</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># cat /etc/kubernetes/pki/apiserver.crt</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">ingress</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/proxy-buffer-size</span>: <span style="color:#e6db74">&#34;64k&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ingress.kubernetes.io/force-ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">kubectl.devopstales.intra</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">default-cert</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#ae81ff">kubectl.devopstales.intra</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">image</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">repository</span>: <span style="color:#ae81ff">negz/kuberos</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tag</span>: <span style="color:#ae81ff">ede4085</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">pullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>: {}
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Add your service annotations here.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">resources</span>: {}
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm repo add devopstales https://devopstales.github.io/helm-charts
+</span></span><span style="display:flex;"><span>helm upgrade --install kuberos devopstales/kuberos --namespace kuberos -f values.yaml
+</span></span></code></pre></div><p><img src="/img/include/kuberos.png" alt="kuberos"  class="zoomable" /></p>
+<p>Below is an example of a <code>ClusterRoleBinding</code> that binds the role <code>cluster-admin</code> to the Keycloak group <code>devops-team</code>. (In my case it came from ldap) Create your own role bindings to fit your needs and apply them to the cluster.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano devops-team_ClusterRoleBinding.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin-it-afdeling</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">roleRef</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">subjects</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devops-team</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano user_ClusterRoleBinding.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales-admin</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">subjects</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">User</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">roleRef</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="k8s-security" term="k8s-security" label="k8s-security" />
+                             
+                                <category scheme="k8s-authentication" term="k8s-authentication" label="k8s-authentication" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="helm2" term="helm2" label="helm2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes authentication with Keycloak and gangway]]></title>
+            <link href="https://devopstales.github.io/sso/k8s-gangway/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/k8s-dasboard-auth/?utm_source=atom_feed" rel="related" type="text/html" title="Dashboard authentication with Keycloak and gatekeeper" />
+                <link href="https://devopstales.github.io/sso/grafana-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Grafana" />
+                <link href="https://devopstales.github.io/sso/openshift-sso2/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO with Gitlab" />
+                <link href="https://devopstales.github.io/sso/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
+                <link href="https://devopstales.github.io/sso/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
+            
+                <id>https://devopstales.github.io/sso/k8s-gangway/</id>
+            
+            
+            <published>2020-01-06T00:00:00+00:00</published>
+            <updated>2020-01-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Kuberos is an OIDC authentication helper for kubectl loin.</p>
+<blockquote>
+<p>VMware has depricated gangway at Jul 16, 2021.</p></blockquote>
+
+
+<H3>Parts of the Kubernetes series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/ansible-k8s-install/">Install K8S with ansible</a></li>
+     <li>Part1b: <a href="../../kubernetes/k8s-install/">Install K8S with kubeadm</a></li>
+     <li>Part1c: <a href="../../kubernetes/k8s-install-containerd/">Install K8S with kubeadm and containerd</a></li>
+     <li>Part1d: <a href="../../kubernetes/k8s-install-with-swap/">Install K8S with kubeadm and allow swap</a></li>
+     <li>Part1e: <a href="../../kubernetes/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb/">Intall metal-lb with K8S</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-nginx-ingress/">Install Nginx ingress to K8S</a></li>
+<!--      <li>Part3b: k8s-multiple-nginx-ingress -->
+<!--      <li>Part3c: k8s-contour-ingress -->
+     <li>Part4: <a href="../../kubernetes/k8s-cert-manager/">Install cert-manager to K8S</a></li>
+<!-- local folder (+ autoprovisioning ) -->
+     <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+     <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+     <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... -->
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+<!-- istio-install.md -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
+<!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
+<!-- logs to graylog -->
+</ul>
+
+
+
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>    command:
+</span></span><span style="display:flex;"><span>    - /hyperkube
+</span></span><span style="display:flex;"><span>    - apiserver
+</span></span><span style="display:flex;"><span>    - --advertise-address<span style="color:#f92672">=</span>10.10.40.30
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    - --oidc-issuer-url<span style="color:#f92672">=</span>https://keycloak.devopstales.intra/auth/realms/mydomain
+</span></span><span style="display:flex;"><span>    - --oidc-client-id<span style="color:#f92672">=</span>k8s
+</span></span><span style="display:flex;"><span>    - --oidc-username-claim<span style="color:#f92672">=</span>email
+</span></span><span style="display:flex;"><span>    - --oidc-groups-claim<span style="color:#f92672">=</span>groups
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl restart docker kubelet
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano gangway.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Namespace</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway-key</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">data</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">sessionkey</span>: <span style="color:#e6db74">&#34;ZTZNYlJUbDdHcHlSeXVFU0J6ZDZmbUs5Mks5a21NWEo=&#34;</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ConfigMap</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">data</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">gangway.yaml</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    clusterName: &#34;minikube&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    authorizeURL: &#34;https://keycloak.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/auth&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    tokenURL: &#34;https://keycloak.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/token&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    audience: &#34;https://keycloak.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/userinfo&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Used to specify the scope of the requested Oauth authorization.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # scopes: [&#34;openid&#34;, &#34;profile&#34;, &#34;email&#34;, &#34;offline_access&#34;]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # scopes: [&#34;groups&#34;]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # scopes: [&#34;openid&#34;, &#34;profile&#34;, &#34;email&#34;, &#34;offline_access&#34;, &#34;groups&#34;]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Where to redirect back to. This should be a URL where gangway is reachable.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Typically this also needs to be registered as part of the oauth application
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # with the oAuth provider.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Env var: GANGWAY_REDIRECT_URL
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    redirectURL: &#34;https://gangway.devopstales.intra/callback&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    clientID: &#34;k8s&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    clientSecret: &#34;43219919-0904-4338-bc0f-c986e1891a7a&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # The JWT claim to use as the username. This is used in UI.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Default is &#34;nickname&#34;. This is combined with the clusterName
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # for the &#34;user&#34; portion of the kubeconfig.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Env var: GANGWAY_USERNAME_CLAIM
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # usernameClaim: &#34;sub&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    usernameClaim: &#34;preferred_username&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    emailClaim: &#34;email&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # The API server endpoint used to configure kubectl
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Env var: GANGWAY_APISERVER_URL
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # apiServerURL: &#34;https://kube.codeformuenster.org:6443&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    apiServerURL: &#34;https://192.168.0.106:8443&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # The path to find the CA bundle for the API server. Used to configure kubectl.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # This is typically mounted into the default location for workloads running on
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # a Kubernetes cluster and doesn&#39;t need to be set.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Env var: GANGWAY_CLUSTER_CA_PATH
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # cluster_ca_path: &#34;/var/run/secrets/kubernetes.io/serviceaccount/ca.crt&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # The path to a root CA to trust for self signed certificates at the Oauth2 URLs
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Env var: GANGWAY_TRUSTED_CA_PATH
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # for self signd certificate:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    trustedCAPath: /gangway/rootca.crt
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # The path gangway uses to create urls (defaults to &#34;&#34;)
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # Env var: GANGWAY_HTTP_PATH
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # httpPath: &#34;https://${GANGWAY_HTTP_PATH}&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    # for self signd certificate:</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rootca.crt</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    -----BEGIN CERTIFICATE-----
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    MIIEATCCAumgAwIBAgIUXHOQsGW+UHpCphHViHSvyBny8BwwDQYJKoZIhvcNAQEL
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    BQAwgY4xCzAJBgNVBAYTAkhVMQ0wCwYDVQQIDARQZXN0MREwDwYDVQQHDAhCdWRh
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    cGVzdDETMBEGA1UECgwKTXkgQ29tcGFueTELMAkGA1UECwwCT1UxFzAVBgNVBAMM
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    Dm15ZG9tYWluLmludHJhMSIwIAYJKoZIhvcNAQkBFhNyb290QG15ZG9tYWluLmlu
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    dHJhMCAXDTE5MTIyNzE3MTk0OVoYDzIxMTkxMjAzMTcxOTQ5WjCBjjELMAkGA1UE
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    BhMCSFUxDTALBgNVBAgMBFBlc3QxETAPBgNVBAcMCEJ1ZGFwZXN0MRMwEQYDVQQK
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    DApNeSBDb21wYW55MQswCQYDVQQLDAJPVTEXMBUGA1UEAwwObXlkb21haW4uaW50
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    cmExIjAgBgkqhkiG9w0BCQEWE3Jvb3RAbXlkb21haW4uaW50cmEwggEiMA0GCSqG
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDevUZouW101hAu68qojvfmnC3fUIA9L5nj
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    J+OTbgwDhxYduHVcmwFcrZJzBn/udm72sAUsjmoc34ZoEQVr1mCjrnDdb3NtOWBI
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    XYmN7/RySzu5DSFLFv8Sj+27VvGLpYTXgDEt+IQpV4EgosX6DzjYK7BtmqaWCY3t
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    aClGnzxEotlxMakTCt9eALD+l/ffV4NbiS6sPNaOFHbG8CKRnfzDzqh78qYaSH8d
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    wWxGLGAvciNm1wv1G3NIkjMIZlkMqAv6uTzEtfOPQrHigG8sbb4hHAg8a9RtH2Sk
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    nXjZRb3Wfo+XJ2eUCZyC6pwvZfEuZBuRAAo12Ycp/Ve2FC3kvpzLAgMBAAGjUzBR
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    MB0GA1UdDgQWBBTRPLiCReojvBQXna2zkBBTsKdsnzAfBgNVHSMEGDAWgBTRPLiC
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    ReojvBQXna2zkBBTsKdsnzAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUA
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    A4IBAQBXp676KZ7VTPc/RPI+QIyb0ugPE+w6fkpw1PIzG+y0h53AsOu15tXxKX5L
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    SwotjXoDuTnqQqLZ5wTFSiolscay+MpEDnoIdo+Pw7u3q3bpn6GmDjae1BaIL/En
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    wvxvvJQsOJrXfEUQeC6M75i/MrYPSwhWNDAbqJTY2qEuRXcj/AALGrnlF5DEEd+O
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    RYw79sj+xU88/kCOVWI35LwiH+/0QWFyKcPQvY8nER69nt5evFGqUQPE6qlOJKg/
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    YD8dK+OF26Ta/qz0iKNAfh3WDgYU4lHAawKtwAbpBVBLlzLl+bD11BQvn6zDWVWA
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    rfrwKUIO+dwSL3ZKS0kA0OlN3dyy
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    -----END CERTIFICATE-----</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">strategy</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">gcr.io/heptio-images/gangway:v3.2.0</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">command</span>: [<span style="color:#e6db74">&#34;gangway&#34;</span>, <span style="color:#e6db74">&#34;-config&#34;</span>, <span style="color:#e6db74">&#34;/gangway/gangway.yaml&#34;</span>]
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">env</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">GANGWAY_SESSION_SECURITY_KEY</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">valueFrom</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">secretKeyRef</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">key</span>: <span style="color:#ae81ff">sessionkey</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway-key</span>
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">GANGWAY_PORT</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;8080&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">requests</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;100m&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">limits</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;200m&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;512Mi&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">volumeMounts</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/gangway/</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">livenessProbe</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">httpGet</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">initialDelaySeconds</span>: <span style="color:#ae81ff">20</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">timeoutSeconds</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">periodSeconds</span>: <span style="color:#ae81ff">60</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">failureThreshold</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">readinessProbe</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">httpGet</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">timeoutSeconds</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">periodSeconds</span>: <span style="color:#ae81ff">10</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">failureThreshold</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">configMap</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;http&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">targetPort</span>: <span style="color:#e6db74">&#34;http&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">extensions/v1beta1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ingress.kubernetes.io/rewrite-target</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ingress.kubernetes.io/force-ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/proxy-buffer-size</span>: <span style="color:#e6db74">&#34;64k&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">gangway.devopstales.intra</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">serviceName</span>: <span style="color:#ae81ff">gangway</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">servicePort</span>: <span style="color:#ae81ff">http</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">gangway-tls</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">gangway.devopstales.intra</span>
+</span></span></code></pre></div><p><img src="/img/include/gangway.png" alt="gangway"  class="zoomable" /></p>
+<p>Below is an example of a <code>ClusterRoleBinding</code> that binds the role <code>cluster-admin</code> to the Keycloak group <code>devops-team</code>. (In my case it came from ldap) Create your own role bindings to fit your needs and apply them to the cluster.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano devops-team_ClusterRoleBinding.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin-it-afdeling</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">roleRef</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">subjects</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devops-team</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano user_ClusterRoleBinding.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales-admin</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">subjects</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">User</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">roleRef</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="k8s-security" term="k8s-security" label="k8s-security" />
+                             
+                                <category scheme="k8s-authentication" term="k8s-authentication" label="k8s-authentication" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="helm2" term="helm2" label="helm2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Dashboard authentication with Keycloak and gatekeeper]]></title>
+            <link href="https://devopstales.github.io/sso/k8s-dasboard-auth/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/grafana-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Grafana" />
+                <link href="https://devopstales.github.io/sso/openshift-sso2/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO with Gitlab" />
+                <link href="https://devopstales.github.io/sso/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
+                <link href="https://devopstales.github.io/sso/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
+                <link href="https://devopstales.github.io/sso/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
+            
+                <id>https://devopstales.github.io/sso/k8s-dasboard-auth/</id>
+            
+            
+            <published>2020-01-03T00:00:00+00:00</published>
+            <updated>2020-01-03T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to add a keycloak gatekeeper authentication proxy for Kubernetes Dashboard.</p>
+
+
+<H3>Parts of the Kubernetes series</H3>
+<ul>
+     <li>Part1a: <a href="../../kubernetes/ansible-k8s-install/">Install K8S with ansible</a></li>
+     <li>Part1b: <a href="../../kubernetes/k8s-install/">Install K8S with kubeadm</a></li>
+     <li>Part1c: <a href="../../kubernetes/k8s-install-containerd/">Install K8S with kubeadm and containerd</a></li>
+     <li>Part1d: <a href="../../kubernetes/k8s-install-with-swap/">Install K8S with kubeadm and allow swap</a></li>
+     <li>Part1e: <a href="../../kubernetes/k8s-kubeadm-ha/">Install K8S with kubeadm in HA mode</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb/">Intall metal-lb with K8S</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-metallb-bgp-pfsense/">Intall metal-lb with BGP</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-nginx-ingress/">Install Nginx ingress to K8S</a></li>
+<!--      <li>Part3b: k8s-multiple-nginx-ingress -->
+<!--      <li>Part3c: k8s-contour-ingress -->
+     <li>Part4: <a href="../../kubernetes/k8s-cert-manager/">Install cert-manager to K8S</a></li>
+<!-- local folder (+ autoprovisioning ) -->
+     <li>Part5a: <a href="../../kubernetes/k8s-local-pv/">Use local persisten volume with K8S</a></li>
+     <li>Part5b: <a href="../../kubernetes/k8s-ceph/">Use ceph persisten volume with K8S</a></li>
+     <li>Part5c: <a href="../../kubernetes/k8s-ceph-storage-with-csi-driver/">Use ceph CSI persisten volume with K8S</a></li>
+     <li>Part5d: <a href="../../kubernetes/k8s-cephfs-storage-with-csi-driver/">Kubernetes CephFS volume with CSI driver</a></li>
+     <li>Part5e: <a href="../../kubernetes/k8s-longhorn/">Use Project Longhorn as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/k8s-install-openebs/">Use OpenEBS as persisten volume with K8S</a></li>
+     <li>Part5f: <a href="../../kubernetes/kk8s-vmware/">vSphere persistent storage for K8S</a></li>
+     <li>Part6: <a href="../../kubernetes/k8s-ceph-csi-extand/">Kubernetes volume expansion with Ceph RBD CSI driver</a></li>
+<!-- Kadalu (based on glustergs) -->
+<!-- linstore (based on drbd) -->
+<!-- kubernetes netwoking caliko vs ... -->
+     <li>Part7a: <a href="../../kubernetes/k8s-ipvs/">Install k8s with IPVS mode</a></li>
+     <li>Part7b: <a href="../../kubernetes/k8s-calico-ebpf/">Install k8s with IPVS mode</a></li>
+     <li>Part8: <a href="../../kubernetes/k8s-helm-rbac/">Use Helm with K8S</a></li>
+     <li>Part9: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless helm2 install</a></li>
+     <li>Part10: <a href="../../sso/k8s-dasboard-auth/">Kubernetes Dashboard SSO</a></li>
+     <li>Part11: <a href="../../sso/k8s-kuberos/">Kuberos for K8S</a></li>
+     <li>Part12: <a href="../../sso/k8s-gangway/">Gangway for K8S</a></li>
+<!-- istio-install.md -->
+     <li>Part13a: <a href="../../kubernetes/k8s-velero-backup/">Velero Backup for K8S</a></li>
+     <li>Part13b: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
+<!-- grafana loki -->
+     <li>Part14a: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part14b: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
+<!-- logs to graylog -->
+</ul>
+
+
+
+<p>Kubernetes does not have its own user management and relies on external providers like Keycloak. First we need to integrate an OpeniD prodiver (for me keycloak) with the kubernetes api server.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano /etc/kubernetes/manifests/kube-apiserver.yaml
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>    command:
+</span></span><span style="display:flex;"><span>    - /hyperkube
+</span></span><span style="display:flex;"><span>    - apiserver
+</span></span><span style="display:flex;"><span>    - --advertise-address<span style="color:#f92672">=</span>10.10.40.30
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    - --oidc-issuer-url<span style="color:#f92672">=</span>https://keycloak.devopstales.intra/auth/realms/mydomain
+</span></span><span style="display:flex;"><span>    - --oidc-client-id<span style="color:#f92672">=</span>k8s
+</span></span><span style="display:flex;"><span>    - --oidc-username-claim<span style="color:#f92672">=</span>email
+</span></span><span style="display:flex;"><span>    - --oidc-groups-claim<span style="color:#f92672">=</span>groups
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># for self sign cert or custom ca</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">#- --oidc-ca-file=/etc/kubernetes/pki/rootca.pem</span>
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl restart docker kubelet
+</span></span></code></pre></div><p>We need an authentication proxy before the dasboard. I will use keycloak-gatekeeper for that purpose.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano proxy-deplayment.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kubernetes-dashboard</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">image</span>: <span style="color:#e6db74">&#34;keycloak/keycloak-gatekeeper:latest&#34;</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">command</span>:
+</span></span><span style="display:flex;"><span>            - <span style="color:#ae81ff">/opt/keycloak-gatekeeper</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">discovery-url=https://keycloak.devopstales.intra/auth/realms/mydomain/.well-known/openid-configuration</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">client-id=k8s</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">client-secret=43219919-0904-4338-bc0f-c986e1891a7a</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">listen=0.0.0.0:3000</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">encryption-key=AgXa7xRcoClDEU0ZDSH4X0XhL5Qy2Z2j</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">redirection-url=https://dashboard.devopstales.intra</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">enable-refresh-tokens=true</span>
+</span></span><span style="display:flex;"><span>            - --<span style="color:#ae81ff">upstream-url=https://kubernetes-dashboard</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># debug:</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">#- --upstream-url=http://echo:8080</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># for self sign cert or custom ca</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">#- --skip-upstream-tls-verify</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e">#- --skip-openid-provider-tls-verify</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">3000</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kubernetes-dashboard</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">3000</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">http</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">extensions/v1beta1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/proxy-buffer-size</span>: <span style="color:#e6db74">&#34;64k&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">cert-manager.io/cluster-issuer</span>: <span style="color:#ae81ff">ca-issuer</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">kubernetes-dashboard</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#ae81ff">dashboard.devopstales.intra</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">dasboard-proxy-tls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">dashboard.devopstales.intra</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>             <span style="color:#f92672">serviceName</span>: <span style="color:#ae81ff">dasboard-proxy</span>
+</span></span><span style="display:flex;"><span>             <span style="color:#f92672">servicePort</span>: <span style="color:#ae81ff">3000</span>
+</span></span></code></pre></div><p>Now you can login at dashboard.devopstales.intra but you haven&rsquo;t got any privileges so lets create. some.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano devops-team_ClusterRoleBinding.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin-it-afdeling</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">roleRef</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">subjects</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Group</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devops-team</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano user_ClusterRoleBinding.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRoleBinding</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales-admin</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">subjects</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">User</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">devopstales</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">roleRef</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">apiGroup</span>: <span style="color:#ae81ff">rbac.authorization.k8s.io</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterRole</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-admin</span>
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="k8s-security" term="k8s-security" label="k8s-security" />
+                             
+                                <category scheme="k8s-authentication" term="k8s-authentication" label="k8s-authentication" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="helm2" term="helm2" label="helm2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[SSO login to Grafana]]></title>
+            <link href="https://devopstales.github.io/sso/grafana-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/openshift-sso2/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO with Gitlab" />
+                <link href="https://devopstales.github.io/sso/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
+                <link href="https://devopstales.github.io/sso/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
+                <link href="https://devopstales.github.io/sso/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
+                <link href="https://devopstales.github.io/sso/rundeck-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Rundeck SSO" />
+            
+                <id>https://devopstales.github.io/sso/grafana-sso/</id>
+            
+            
+            <published>2019-06-28T00:00:00+00:00</published>
+            <updated>2019-06-28T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Configurate Gitab to use Keycloak as SSO Identity Proider.</p>
+<h3 id="configurate-keycloak">Configurate Keycloak</h3>
+<p>Login to Keycloak and create client for Grafana:
+<img src="/img/include/gitlab-keycloak1.png" alt="Example image"  class="zoomable" /></p>
+<h3 id="configurate-gitlab">Configurate Gitlab</h3>
+<pre tabindex="0"><code>nano /etc/grafana/grafana.ini
+#################################### Generic OAuth ##########################
+[auth.generic_oauth]
+enabled = true
+name = SSO
+allow_sign_up = true
+client_id = gitlab
+client_secret = 47fd3013-4333-4825-bbfa-b7688548d9cf
+# for old version
+# scopes = user:email,read:org
+scopes = openid email profile
+auth_url = https://sso.devopstales.intra/auth/realms/gitlab/protocol/openid-connect/auth
+token_url = https://sso.devopstales.intra/auth/realms/gitlab/protocol/openid-connect/token
+api_url = https://sso.devopstales.intra/auth/realms/gitlab/protocol/openid-connect/userinfo
+;team_ids =
+;allowed_organizations =
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="grafana" term="grafana" label="Grafana" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Openshift SSO with Gitlab]]></title>
+            <link href="https://devopstales.github.io/sso/openshift-sso2/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
+                <link href="https://devopstales.github.io/sso/nextcloud-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Nextcloud SSO" />
+                <link href="https://devopstales.github.io/sso/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
+                <link href="https://devopstales.github.io/sso/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
+                <link href="https://devopstales.github.io/sso/rundeck-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Rundeck SSO" />
+            
+                <id>https://devopstales.github.io/sso/openshift-sso2/</id>
+            
+            
+            <published>2019-06-17T00:00:00+00:00</published>
+            <updated>2019-06-17T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Configure Openshift Cluster to use Gitlab as a user backend for login with oauth2 and SSO.</p>
+
+
+<H3>Parts of the Openshift series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/ansible-openshift-install/">Install Opeshift</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift-auto-approval-csr/">How to Enable Auto Approval of CSR in Openshift v3.11</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift-add-node/">Add new workers to Openshift cluster</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift-cert/">Chane the certificates of the Openshift cluster</a></li>
+     <li>Part5: <a href="../../kubernetes/openshift-ldap/">LDAP authentication for Openshift</a></li>
+     <li>Part6: <a href="../../sso/openshift-sso/">Keycloak SSO authentication for Openshift</a></li>
+     <li>Part7: <a href="../../sso/openshift-sso2/">Gitlab SSO authentication for Openshift</a></li>
+     <li>Part8a: <a href="../../kubernetes/openshift-ceph/">Ceph persistent storage for Openshift</a></li>
+     <li>Part8b: <a href="../../kubernetes/openshift-vmware/">vSphere persistent storage for Openshift</a></li>
+     <li>Part9: <a href="../../kubernetes/openshift-helm/">Helm on Openshift</a></li>
+     <li>Part10: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless Helm on Openshift</a></li>
+     <li>Part11: <a href="../../kubernetes/openshift-extregistry/">Use external docker registry on Openshift</a></li>
+     <li>Part12: <a href="../../kubernetes/openshift-secondary-router/">Secondary router on Openshift</a></li>
+     <li>Part13a: <a href="../../kubernetes/openshift-letsencrypt/">Use Letsencrypt on Openshift</a></li>
+     <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
+     <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
+     <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+
+<p>With Ansible-openshift you can not change the authetication method after Install !! If you installed the cluster with htpasswd, then change to LDAP the playbook trys to add a second authentication methot for the config. It is forbidden to add a second type of identity provider in the version 3.11 of Ansible-openshift. To solve this problem we must change the configuration manually.</p>
+<h3 id="environment">Environment</h3>
+<pre tabindex="0"><code>192.168.1.40    deployer
+192.168.1.41    openshift01 # master node
+192.168.1.42    openshift02 # infra node
+192.168.1.43    openshift03 # worker node
+</code></pre><h3 id="configuration-gitlab">Configuration Gitlab</h3>
+<p>Login to Gitlab and create client for the app:
+<img src="/img/include/openshift_gitlab_sso.png" alt="Example image"  class="zoomable" /></p>
+<h3 id="configurate-the-cluster">Configurate The cluster</h3>
+<pre tabindex="0"><code># on all openshift hosts
+nano /etc/origin/master/master-config.yaml
+...
+  identityProviders:
+  - name: gitlabsso
+    challenge: true
+    login: true
+    mappingMethod: claim
+    provider:
+      apiVersion: v1
+      kind: GitLabIdentityProvider
+      legacy: true
+      clientID: 7305abce637a123654a2c9dd4f8caec1156a1bc41cd80be4db0f14253fe24e58
+      clientSecret: 2d5aebe7831c99383d876cc235febb401906263de748a29b03b058f62f15c2f7
+      url: https://gitlab.devopstales.intra/
+  - challenge: true
+</code></pre><h3 id="reconfigurate-the-cluster">Reconfigurate the cluster</h3>
+<pre tabindex="0"><code># on all openshift hosts
+master-restart api
+master-restart controllers
+</code></pre>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="openshift" term="openshift" label="Openshift" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="openshift" term="openshift" label="Openshift" />
+                             
+                                <category scheme="gitlab" term="gitlab" label="Gitlab" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Nextcloud SSO]]></title>
+            <link href="https://devopstales.github.io/sso/nextcloud-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/nexus-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Sonatype Nexus SSO" />
+                <link href="https://devopstales.github.io/sso/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
+                <link href="https://devopstales.github.io/sso/rundeck-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Rundeck SSO" />
+                <link href="https://devopstales.github.io/sso/mod-auth-openidc/?utm_source=atom_feed" rel="related" type="text/html" title="Apaceh2 oauth plugin" />
+                <link href="https://devopstales.github.io/sso/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
+            
+                <id>https://devopstales.github.io/sso/nextcloud-sso/</id>
+            
+            
+            <published>2019-05-25T00:00:00+00:00</published>
+            <updated>2019-05-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Nextcloud is a suite of client-server software for creating and using file hosting services. Nextcloud application functionally is similar to Dropbox.</p>
+<h2 id="configuring-keycloak-and-nextcloud">Configuring Keycloak and Nextcloud</h2>
+<h3 id="keycloak-side">Keycloak side</h3>
+<ul>
+<li>login to keycloak using the admin account</li>
+<li>Under <code>Clients</code>, create a new client with <code>Client ID</code> &ldquo;nextcloud&rdquo; and <code>Root URL</code> &ldquo;cloud.devopstales.intra&rdquo;</li>
+<li>On next screen, under the <code>Settings</code> tab, change <code>Access Type</code> from <code>public</code> to <code>confidential</code>, then Save</li>
+<li>Go the the <code>Credentials</code> tab, note the <code>Secret</code></li>
+<li>OPTIONAL: If there is no registered user yet you can create a test user: go to <code>Users</code>, click the <code>Add User</code> button, fill the <code>Username</code> with &ldquo;test&rdquo; and save. Then go to the <code>Credentials</code> tab, put the new password, toggle the <code>Temporary</code> option to <code>OFF</code>, press <code>Reset Password</code> and confirm</li>
+</ul>
+<p>Keycloak is now ready to be used for Nextcloud.</p>
+<h3 id="nextcloud-side">NextCloud side</h3>
+<ul>
+<li>login to your Nextcloud instance with the admin account</li>
+<li>Click on the user profile, then <code>Apps</code>
+<img src="/img/include/nextcloud_sso1.png" alt="Example image"  class="zoomable" /><br><br></li>
+<li>Go to <code>Social &amp; communication</code> and install the <code>Social Login</code> app</li>
+<li>Go to <code>Settings</code> (in your user profile) the <code>Social Login</code><br><br>
+<img src="/img/include/nextcloud_sso2.png" alt="Example image"  class="zoomable" /><br><br></li>
+<li>Add a new <code>Custom OpenID Connect</code> by clicking on the <code>+</code> to its side</li>
+<li>Fill the following:
+<ul>
+<li><code>Title</code> -&gt; &ldquo;keycloak&rdquo;</li>
+<li><code>Authorize url</code> -&gt; <code>https://keycloak.devopstales.intra:8443/auth/realms/mydomain/protocol/openid-connect/auth</code></li>
+<li><code>Token url</code> -&gt; <code>https:/keycloak.devopstales.intra:8443/auth/realms/mydomain/protocol/openid-connect/token</code></li>
+<li><code>Client id</code> -&gt; &ldquo;nextcloud&rdquo;</li>
+<li><code>Client Secret</code> -&gt; put the secret you noted down during the Keycloak configuration</li>
+<li><code>Scope</code> -&gt; &ldquo;openid&rdquo;</li>
+</ul>
+</li>
+<li>Press <code>Save</code></li>
+</ul>
+<p>Your Nextcloud instance is now configured. Log out and log back in using the <code>Alternative Logins -&gt; keycloak</code> method on the login page. It should redirect you to a keycloak auth form where you can log in with a registered keycloak user, then back to Nextcloud where you are now logged.
+<img src="/img/include/nextcloud_sso3.png" alt="Example image"  class="zoomable" /><br><br></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="nextcloud" term="nextcloud" label="nextcloud" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Sonatype Nexus SSO]]></title>
+            <link href="https://devopstales.github.io/sso/nexus-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/hashicorp-sso/?utm_source=atom_feed" rel="related" type="text/html" title="SSO for hashicorp vault" />
+                <link href="https://devopstales.github.io/sso/rundeck-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Rundeck SSO" />
+                <link href="https://devopstales.github.io/sso/mod-auth-openidc/?utm_source=atom_feed" rel="related" type="text/html" title="Apaceh2 oauth plugin" />
+                <link href="https://devopstales.github.io/sso/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
+                <link href="https://devopstales.github.io/sso/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+            
+                <id>https://devopstales.github.io/sso/nexus-sso/</id>
+            
+            
+            <published>2019-05-23T00:00:00+00:00</published>
+            <updated>2019-05-23T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Nexus Repository OSS is an artifact repository with universal support for popular formats.</p>
+<h3 id="install-nexus">Install Nexus</h3>
+<pre tabindex="0"><code>cd /opt
+wget https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+tar xvf latest-unix.tar.gz -C /opt
+ln -s /opt/nexus-3.16.1-02/ /opt/nexus
+
+adduser -s /bin/false nexus
+chown -R nexus:nexus /opt/nexus
+chown -R nexus:nexus /opt/sonatype-work/
+
+echo &#39;run_as_user=&#34;nexus&#34;&#39; &gt; /opt/nexus/bin/nexus.rc
+
+nano /opt/nexus/bin/nexus
+INSTALL4J_JAVA_HOME_OVERRIDE=/usr/lib/jvm/jre-1.8.0
+</code></pre><h3 id="create-sistemd-serice-for-nexus">Create sistemd serice for Nexus</h3>
+<pre tabindex="0"><code>echo &#39;[Unit]
+Description=nexus service
+After=network.target
+
+[Service]
+Type=forking
+LimitNOFILE=65536
+ExecStart=/opt/nexus/bin/nexus start
+ExecStop=/opt/nexus/bin/nexus stop
+User=nexus
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target&#39; &gt; /etc/systemd/system/nexus.service
+</code></pre><h3 id="start-nexus">Start Nexus</h3>
+<pre tabindex="0"><code>sudo systemctl daemon-reload
+sudo systemctl enable nexus.service
+sudo systemctl start nexus.service
+
+tailf /opt/sonatype-work/nexus3/log/nexus.log
+### To check, point your browser to http://localhost:8081. Default username is admin with password admin123.
+</code></pre><h3 id="install-keycloak-authentication-plugin">Install Keycloak authentication plugin</h3>
+<pre tabindex="0"><code>NEXUS_PLUGINS=/opt/nexus/system
+KEYCLOAK_PLUGIN_VERSION=0.3.3-SNAPSHOT
+cd /opt
+mkdir -p ${NEXUS_PLUGINS}/org/github/flytreeleft/nexus3-keycloak-plugin/${KEYCLOAK_PLUGIN_VERSION}/
+cd ${NEXUS_PLUGINS}/org/github/flytreeleft/nexus3-keycloak-plugin/${KEYCLOAK_PLUGIN_VERSION}/
+wget https://github.com/flytreeleft/nexus3-keycloak-plugin/releases/download/${KEYCLOAK_PLUGIN_VERSION}/nexus3-keycloak-plugin-${KEYCLOAK_PLUGIN_VERSION}.jar
+chmod 644 ${NEXUS_PLUGINS}/org/github/flytreeleft/nexus3-keycloak-plugin/${KEYCLOAK_PLUGIN_VERSION}/nexus3-keycloak-plugin-${KEYCLOAK_PLUGIN_VERSION}.jar
+echo &#34;mvn\\:org.github.flytreeleft/nexus3-keycloak-plugin/${KEYCLOAK_PLUGIN_VERSION} = 200&#34; &gt;&gt; /opt/nexus/etc/karaf/startup.properties
+</code></pre><p>Login to your Keycloak, and navigate relm &gt; client
+<img src="/img/include/nexus_sso1.png" alt="Example image"  class="zoomable" /><br><br>
+Configurate Service Account Roles
+<img src="/img/include/nexus_sso2.png" alt="Example image"  class="zoomable" /><br><br>
+Configurate User Roles
+<img src="/img/include/nexus_sso4.png" alt="Example image"  class="zoomable" /><br><br></p>
+<pre tabindex="0"><code>nano /opt/nexus/etc/keycloak.json
+{
+  &#34;realm&#34;: &#34;mydomain&#34;,
+  &#34;auth-server-url&#34;: &#34;http://nexus.devopstales.intra:8080/auth&#34;,
+  &#34;ssl-required&#34;: &#34;external&#34;,
+  &#34;resource&#34;: &#34;web&#34;,
+  &#34;credentials&#34;: {
+    &#34;secret&#34;: &#34;41e39b6b-e23a-4fb1-be21-d30c02941ffc&#34;
+  },
+  &#34;confidential-port&#34;: 0
+}
+
+systemct restart nexus
+</code></pre><p>After login to nexus you can navigate to the realm administration. Activate the Keycloak Authentication Realm plugin by dragging it to the right hand side.
+<img src="/img/include/nexus_sso3.png" alt="Example image"  class="zoomable" /><br><br>
+Mapp the Keycloak roles to nexus
+<img src="/img/include/nexus_sso5.png" alt="Example image"  class="zoomable" /><br><br>
+Go to server administration &gt; system &gt; capabilities &gt; add <br>
+type: Ruth auth <br>
+HTTP Header: X-Proxy-REMOTE-USER <br>
+<img src="/img/include/nexus_sso6.png" alt="Example image"  class="zoomable" /><br><br></p>
+<pre tabindex="0"><code>yum install mod_auth_openidc httpd mod_ssl -y
+nano /etc/httpd/conf.d/nexus-site.conf
+ProxyRequests Off
+ProxyPreserveHost On
+
+&lt;VirtualHost *:80&gt;
+    ServerName nexus.devopstales.intra
+     Redirect permanent / https://nexus.devopstales.intra
+    ErrorLog /var/log/httpd/error.log
+    CustomLog /var/log/httpd/access.log common
+&lt;/VirtualHost&gt;
+
+&lt;VirtualHost *:443&gt;
+    ServerAdmin webmaster@example.com
+    ServerName nexus.devopstales.intra
+    ServerAlias www.nexus.devopstales.intra
+    DirectoryIndex index.html index.php
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/domain.pem
+    SSLCertificateKeyFile /etc/httpd/ssl/domain.pem
+    SSLCertificateChainFile /etc/httpd/ssl/domain.pem
+
+    AllowEncodedSlashes NoDecode
+    AllowEncodedSlashes On
+    RequestHeader set X-Forwarded-Proto &#34;https&#34;
+
+    # keycloak
+    OIDCProviderMetadataURL https://nexus.devopstales.intra:8443/auth/realms/mydomain/.well-known/openid-configuration
+    OIDCSSLValidateServer Off
+    OIDCClientID web
+    OIDCClientSecret 41e39b6b-e23a-4fb1-be21-d30c02941ffc
+    OIDCRedirectURI https://nexus.devopstales.intra/redirect_uri
+    OIDCCryptoPassphrase passphrase
+    OIDCJWKSRefreshInterval 3600
+    OIDCScope &#34;openid email profile&#34;
+    # maps the prefered_username claim to the REMOTE_USER environment variable
+    OIDCRemoteUserClaim preferred_username
+
+    &lt;Location /&gt;
+      AuthType openid-connect
+      Require valid-user
+      RequestHeader set &#34;X-Proxy-REMOTE-USER&#34; %{REMOTE_USER}s
+      ProxyPass http://localhost:8081/ nocanon
+      ProxyPassReverse http://localhost:8081/
+    &lt;/Location&gt;
+
+    ErrorLog /var/log/httpd/error.log
+    CustomLog /var/log/httpd/access.log common
+&lt;/VirtualHost&gt;
+
+# secure neus server
+nano /opt/nexus/etc/nexus-default.properties
+application-host=127.0.0.1
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="nexus-oss" term="nexus-oss" label="Nexus OSS" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[SSO for hashicorp vault]]></title>
+            <link href="https://devopstales.github.io/sso/hashicorp-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/rundeck-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Rundeck SSO" />
+                <link href="https://devopstales.github.io/sso/mod-auth-openidc/?utm_source=atom_feed" rel="related" type="text/html" title="Apaceh2 oauth plugin" />
+                <link href="https://devopstales.github.io/sso/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
+                <link href="https://devopstales.github.io/sso/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/sso/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
+            
+                <id>https://devopstales.github.io/sso/hashicorp-sso/</id>
+            
+            
+            <published>2019-05-20T00:00:00+00:00</published>
+            <updated>2019-05-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I wil shiw you hiw to configure Hashicorp vault with Keycloak for SSO.</p>
+<pre tabindex="0"><code>vault auth enable oidc
+
+vault write auth/oidc/config \
+    oidc_discovery_url=&#34;https://sso.devopstales.intra/auth/realms/mydomain&#34; \
+    oidc_client_id=&#34;web&#34; \
+    oidc_client_secret=&#34;07d66ebd-1018-46c6-9c88-80aa3d4c2f68&#34; \
+    default_role=&#34;reader&#34;
+</code></pre><pre tabindex="0"><code>vault write auth/oidc/role/reader \
+        bound_audiences=&#34;web&#34; \
+        allowed_redirect_uris=&#34;http://192.168.0.112:8200/ui/vault/auth/oidc/oidc/callback&#34; \
+        allowed_redirect_uris=&#34;http://192.168.0.112:8250/oidc/callback&#34; \
+        user_claim=&#34;sub&#34; \
+        policies=&#34;reader&#34;
+</code></pre><pre tabindex="0"><code>nano reader.hcl
+# Read permission on the k/v secrets
+path &#34;/secret/*&#34; {
+    capabilities = [&#34;read&#34;, &#34;list&#34;]
+}
+
+nano manager.hcl
+# Manage k/v secrets
+path &#34;/secret/*&#34; {
+    capabilities = [&#34;create&#34;, &#34;read&#34;, &#34;update&#34;, &#34;delete&#34;, &#34;list&#34;]
+}
+</code></pre><pre tabindex="0"><code>vault policy write reader reader.hcl
+vault policy write manager manager.hcl
+
+vault policy list
+</code></pre><p><img src="/img/include/vault-oidc.png" alt="Example image"  class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hashicorp-vault" term="hashicorp-vault" label="HashiCorp Vault" />
+                             
+                                <category scheme="centos" term="centos" label="Centos" />
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="Oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Rundeck SSO]]></title>
+            <link href="https://devopstales.github.io/sso/rundeck-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/mod-auth-openidc/?utm_source=atom_feed" rel="related" type="text/html" title="Apaceh2 oauth plugin" />
+                <link href="https://devopstales.github.io/sso/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
+                <link href="https://devopstales.github.io/sso/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/sso/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
+                <link href="https://devopstales.github.io/sso/keycloak1/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with mysql" />
+            
+                <id>https://devopstales.github.io/sso/rundeck-sso/</id>
+            
+            
+            <published>2019-05-14T00:00:00+00:00</published>
+            <updated>2019-05-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will use Preauthenticated Mode for Rundeck with mod_auth_openidc and Keycloak</p>
+<p>“Preauthenticated” means that the user name and role list are provided to Rundeck from another system, usually a reverse proxy set up “in front” of the Rundeck web application, such as Apache HTTPD.</p>
+<h3 id="configurate-mapping-in-keycloak">Configurate mapping in Keycloak</h3>
+<p>Login to Keycloak and create client for the app:
+<img src="/img/include/gitlab-keycloak1.png" alt="Example image"  class="zoomable" /></p>
+<p>At Mappers create mappers for user information:</p>
+<ul>
+<li>name: Audience
+<ul>
+<li>mapper type: Audience</li>
+<li>Included Client Audience: web</li>
+<li>Add to ID token: on</li>
+</ul>
+</li>
+<li>name: groups
+<ul>
+<li>Mapper Type: Group Membership</li>
+<li>Token Claim Name: groups</li>
+<li>Full group path: off</li>
+</ul>
+</li>
+</ul>
+<h3 id="install-httpd">Install httpd</h3>
+<pre tabindex="0"><code>yum install mod_auth_openidc httpd php mod_ssl -y
+</code></pre><h3 id="configurate-rundeck">Configurate Rundeck</h3>
+<pre tabindex="0"><code>nano /etc/rundeck/rundeck-config.properties
+grails.serverURL=https://oauth.devopstales.intra
+# Pre Auth mode settings
+rundeck.security.authorization.preauthenticated.enabled=true
+rundeck.security.authorization.preauthenticated.attributeName=REMOTE_USER_GROUPS
+rundeck.security.authorization.preauthenticated.delimiter=;
+# Header from which to obtain user name
+rundeck.security.authorization.preauthenticated.userNameHeader=X-Forwarded-User
+# Header from which to obtain list of roles
+rundeck.security.authorization.preauthenticated.userRolesHeader=X-Forwarded-Roles
+</code></pre><h3 id="create-vhost">Create vhost</h3>
+<pre tabindex="0"><code>nano /etc/httpd/conf.d/outh-site.conf
+# NameVirtualHost *:80
+&lt;VirtualHost *:80&gt;
+   ServerName oauth.devopstales.intra
+   DocumentRoot /var/www/oauth/
+   Redirect permanent / https://oauth.devopstales.intra
+&lt;/VirtualHost&gt;
+
+&lt;VirtualHost *:443&gt;
+    ServerAdmin webmaster@example.com
+    ServerName oauth.devopstales.intra
+    ServerAlias www.oauth.devopstales.intra
+    DocumentRoot /var/www/oauth/
+    DirectoryIndex index.html index.php
+    ErrorLog /var/log/httpd/oauth-error.log
+    CustomLog /var/log/httpd/oauth-access.log combined
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/domain.pem
+    SSLCertificateKeyFile /etc/httpd/ssl/domain.pem
+    SSLCertificateChainFile /etc/httpd/ssl/domain.pem
+
+    # keycloak
+    OIDCProviderMetadataURL https://sso.devopstales.intra/auth/realms/mydomain/.well-known/openid-configuration
+    OIDCSSLValidateServer Off
+    OIDCClientID web
+    OIDCClientSecret 6b6c68c3-ad51-4124-ac37-4784ed58797e
+    OIDCRedirectURI https://oauth.devopstales.intra/redirect_uri
+    OIDCCryptoPassphrase passphrase
+    OIDCJWKSRefreshInterval 3600
+    OIDCScope &#34;openid email profile&#34;
+    # maps the prefered_username claim to the REMOTE_USER environment variable
+    OIDCRemoteUserClaim preferred_username
+
+    ProxyPreserveHost On
+
+    &lt;Location /&gt;
+        AuthType openid-connect
+            Require valid-user
+        RequestHeader set &#34;X-Forwarded-User&#34; %{REMOTE_USER}s
+        RequestHeader set &#34;X-Forwarded-Roles&#34; %{OIDC_CLAIM_groups}e
+        ProxyPass  http://localhost:4440/
+        ProxyPassReverse http://localhost:4440/
+    &lt;/Location&gt;
+
+&lt;/VirtualHost&gt;
+</code></pre><h3 id="start-apache">Start apache</h3>
+<pre tabindex="0"><code>systemct start httpd
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="rundeck" term="rundeck" label="rundeck" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Apaceh2 oauth plugin]]></title>
+            <link href="https://devopstales.github.io/sso/mod-auth-openidc/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/openshift-sso/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift SSO authentication" />
+                <link href="https://devopstales.github.io/sso/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/sso/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
+                <link href="https://devopstales.github.io/sso/keycloak1/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with mysql" />
+                <link href="https://devopstales.github.io/sso/keycloak2/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with postgresql" />
+            
+                <id>https://devopstales.github.io/sso/mod-auth-openidc/</id>
+            
+            
+            <published>2019-05-13T00:00:00+00:00</published>
+            <updated>2019-05-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Configure Apache plugin to use Keycloak as a user backend for login with OpenID and SSO.</p>
+<p>mod_auth_openidc is an OpenID Connect Relying Party implementation for Apache HTTP Server 2.x</p>
+<h3 id="install-the-plugin">Install the plugin</h3>
+<pre tabindex="0"><code>yum install mod_auth_openidc httpd php mod_ssl -y
+
+mkdir -p /var/www/html/oauth/protected
+echo &#34;index&#34; &gt; /var/www/html/oauth/index.htm
+</code></pre><pre tabindex="0"><code>nano /var/www/html/oauth/protected/index.php
+&lt;!DOCTYPE html&gt;
+&lt;html lang=&#34;en&#34;&gt;
+
+&lt;head&gt;
+
+   &lt;meta charset=&#34;utf-8&#34;&gt;
+   &lt;meta http-equiv=&#34;X-UA-Compatible&#34; content=&#34;IE=edge&#34;&gt;
+   &lt;meta name=&#34;viewport&#34; content=&#34;width=device-width, initial-scale=1&#34;&gt;
+   &lt;meta name=&#34;description&#34; content=&#34;&#34;&gt;
+   &lt;meta name=&#34;author&#34; content=&#34;&#34;&gt;
+
+   &lt;title&gt;OpenID Connect: Received Claims&lt;/title&gt;
+
+&lt;/head&gt;
+
+&lt;body&gt;
+         &lt;h3&gt;
+            Claims sent back from OpenID Connect via the Apache module
+         &lt;/h3&gt;
+         &lt;br/&gt;
+
+
+   &lt;!-- OpenAthens attribtues --&gt;
+      &lt;?php session_start(); ?&gt;
+
+         &lt;h2&gt;Claims&lt;/h2&gt;
+         &lt;br/&gt;
+         &lt;div class=&#34;row&#34;&gt;
+
+               &lt;table class=&#34;table&#34; style=&#34;width:80%;&#34; border=&#34;1&#34;&gt;
+                 &lt;?php foreach ($_SERVER as $key=&gt;$value): ?&gt;
+                    &lt;?php if ( preg_match(&#34;/OIDC_/i&#34;, $key) ): ?&gt;
+                       &lt;tr&gt;
+                          &lt;td data-toggle=&#34;tooltip&#34; title=&lt;?php echo $key; ?&gt;&gt;&lt;?php echo $key; ?&gt;&lt;/td&gt;
+                          &lt;td data-toggle=&#34;tooltip&#34; title=&lt;?php echo $value; ?&gt;&gt;&lt;?php echo $value; ?&gt;&lt;/td&gt;
+                       &lt;/tr&gt;
+                    &lt;?php endif; ?&gt;
+                 &lt;?php endforeach; ?&gt;
+               &lt;/table&gt;
+
+&lt;/body&gt;&lt;/html&gt;
+</code></pre><h3 id="create-vhost">Create vhost</h3>
+<pre tabindex="0"><code>nano /etc/httpd/conf.d/aouth-site.conf
+# NameVirtualHost *:80
+&lt;VirtualHost *:80&gt;
+   ServerName oauth.devopstales.intra
+   DocumentRoot /var/www/oauth/
+   Redirect permanent / https://oauth.devopstales.intra
+&lt;/VirtualHost&gt;
+
+&lt;VirtualHost *:443&gt;
+    ServerAdmin webmaster@example.com
+    ServerName oauth.devopstales.intra
+    ServerAlias www.oauth.devopstales.intra
+    DocumentRoot /var/www/html/oauth/
+    DirectoryIndex index.html index.php
+    ErrorLog /var/log/httpd/oauth-error.log
+    CustomLog /var/log/httpd/oauth-access.log combined
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/domain.pem
+    SSLCertificateKeyFile /etc/httpd/ssl/domain.pem
+    SSLCertificateChainFile /etc/httpd/ssl/domain.pem
+
+    # keycloak server
+    OIDCProviderMetadataURL http://sso.devopstales.intra/auth/realms/mydomain/.well-known/openid-configuration
+    # for self signed certificate
+    OIDCSSLValidateServer Off
+    OIDCClientID web
+    OIDCClientSecret 5b721a2b-681f-402d-807c-b98c80672c16
+    OIDCRedirectURI http://oauth.devopstales.intra/protected/redirect_uri
+    OIDCCryptoPassphrase passphrase
+    OIDCJWKSRefreshInterval 3600
+
+    &lt;Location /protected/&gt;
+       AuthType openid-connect
+       Require valid-user
+    &lt;/Location&gt;
+
+&lt;/VirtualHost&gt;
+</code></pre><h3 id="start-apache">Start apache</h3>
+<pre tabindex="0"><code>systemct start httpd
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="httpd" term="httpd" label="httpd" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Openshift SSO authentication]]></title>
+            <link href="https://devopstales.github.io/sso/openshift-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/sso/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
+                <link href="https://devopstales.github.io/sso/keycloak1/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with mysql" />
+                <link href="https://devopstales.github.io/sso/keycloak2/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with postgresql" />
+            
+                <id>https://devopstales.github.io/sso/openshift-sso/</id>
+            
+            
+            <published>2019-04-13T00:00:00+00:00</published>
+            <updated>2019-04-13T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Configure Openshift Cluster to use Keycloak as a user backend for login with oauth2 and SSO.</p>
+
+
+<H3>Parts of the Openshift series</H3>
+<ul>
+     <li>Part1: <a href="../../kubernetes/ansible-openshift-install/">Install Opeshift</a></li>
+     <li>Part2: <a href="../../kubernetes/openshift-auto-approval-csr/">How to Enable Auto Approval of CSR in Openshift v3.11</a></li>
+     <li>Part3: <a href="../../kubernetes/openshift-add-node/">Add new workers to Openshift cluster</a></li>
+     <li>Part4: <a href="../../kubernetes/openshift-cert/">Chane the certificates of the Openshift cluster</a></li>
+     <li>Part5: <a href="../../kubernetes/openshift-ldap/">LDAP authentication for Openshift</a></li>
+     <li>Part6: <a href="../../sso/openshift-sso/">Keycloak SSO authentication for Openshift</a></li>
+     <li>Part7: <a href="../../sso/openshift-sso2/">Gitlab SSO authentication for Openshift</a></li>
+     <li>Part8a: <a href="../../kubernetes/openshift-ceph/">Ceph persistent storage for Openshift</a></li>
+     <li>Part8b: <a href="../../kubernetes/openshift-vmware/">vSphere persistent storage for Openshift</a></li>
+     <li>Part9: <a href="../../kubernetes/openshift-helm/">Helm on Openshift</a></li>
+     <li>Part10: <a href="../../kubernetes/k8s-tillerless-helm/">Tillerless Helm on Openshift</a></li>
+     <li>Part11: <a href="../../kubernetes/openshift-extregistry/">Use external docker registry on Openshift</a></li>
+     <li>Part12: <a href="../../kubernetes/openshift-secondary-router/">Secondary router on Openshift</a></li>
+     <li>Part13a: <a href="../../kubernetes/openshift-letsencrypt/">Use Letsencrypt on Openshift</a></li>
+     <li>Part13b: <a href="../../kubernetes/openshift-cert-manager/">Install cert-managger on Openshift</a></li>
+     <li>Part14: <a href="../../kubernetes/ansible-operator-overview/">Create Openshift operators</a></li>
+     <li>Part15: <a href="../../kubernetes/openshift-kompose/">Convert docker-compose file to Opeshift</a></li>
+     <li>Part16a: <a href="../../kubernetes/openshift-elasticsearch-error/">Opeshift elasticsearch search-guard error</a></li>
+     <li>Part16b: <a href="../../kubernetes/openshift-log4shell/">Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)</a></li>
+</ul>
+
+
+
+<p>With Ansible-openshift you can not change the authetication method after Install !! If you installed the cluster with htpasswd, then change to LDAP the playbook trys to add a second authentication methot for the config. It is forbidden to add a second type of identity provider in the version 3.11 of Ansible-openshift. To solv this problem we must change the configuration manually.</p>
+<h3 id="environment">Environment</h3>
+<pre tabindex="0"><code>192.168.1.40    deployer
+192.168.1.41    openshift01 # master node
+192.168.1.42    openshift02 # infra node
+192.168.1.43    openshift03 # worker node
+</code></pre><h3 id="configuration-on-keycloak">Configuration on Keycloak</h3>
+<pre tabindex="0"><code>create new client on keycloak in relm mydomain
+Client ID: openshift
+Clyent Protocol: openid-connect
+Access type: confidential
+Valid Redirect URIs: https://master.openshift.mydomain.itra/*
+delete other urls
+
+# On Credentials tap copy the secret to clientSecrethez in config.
+</code></pre><h3 id="configurate-the-cluster">Configurate The cluster</h3>
+<pre tabindex="0"><code># on all openshift hosts
+nano /etc/origin/master/master-config.yaml
+...
+  identityProviders:
+  - name: keycloak
+    challenge: false
+    login: true
+    provider:
+      apiVersion: v1
+      kind: OpenIDIdentityProvider
+      clientID: openshift
+      clientSecret: ef03ffe6-854a-48b4-a26d-190c2861e3c8
+      claims:
+        id:
+        - sub
+        preferredUsername:
+        - preferred_username
+        name:
+        - name
+        email:
+        - email
+      urls:
+        authorize: https://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/auth
+        token: https://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/token
+        logoutURL: &#34;https://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/logout?redirect_uri=https://master.openshift.mydomain.itra/console&#34;
+  - challenge: true
+</code></pre><h3 id="reconfigurate-the-cluster">Reconfigurate the cluster</h3>
+<pre tabindex="0"><code># on all openshift hosts
+master-restart api
+master-restart controllers
+</code></pre>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="openshift" term="openshift" label="Openshift" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="openshift" term="openshift" label="Openshift" />
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[OpenProject SSO]]></title>
+            <link href="https://devopstales.github.io/sso/openproject-sso/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/gitlab-keycloak/?utm_source=atom_feed" rel="related" type="text/html" title="SSO login to Gitlab" />
+                <link href="https://devopstales.github.io/sso/keycloak1/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with mysql" />
+                <link href="https://devopstales.github.io/sso/keycloak2/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with postgresql" />
+            
+                <id>https://devopstales.github.io/sso/openproject-sso/</id>
+            
+            
+            <published>2019-04-06T00:00:00+00:00</published>
+            <updated>2019-04-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Configurate openproject to use Keycloak as sso Identity Provider.</p>
+<h3 id="configure-openproject">Configure OpenProject</h3>
+<p>Login to openproject with admin and change the config of Self-registrtion to automatic account activation:
+Administraion &gt; System Settings &gt; Authentication &gt; Self-registration</p>
+<pre tabindex="0"><code>nano /opt/openproject/config/configuration.yml
+default:
+  omniauth_direct_login_provider: openid
+  openid_connect:
+    openid:
+      host: &#34;sso.devopstales.intra&#34;
+      identifier: &#34;project&#34;
+      secret: &#34;57583084-b54b-4b32-935b-73776f27b89f&#34;
+      icon: &#34;openid_connect/auth_provider-google.png&#34;
+      display_name: &#34;SSO&#34;
+      authorization_endpoint: &#34;http://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/auth&#34;
+      token_endpoint: &#39;http://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/token&#39;
+      userinfo_endpoint: &#39;http://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/userinfo&#39;
+      end_session_endpoint: &#39;http://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/logout&#39;
+      check_session_iframe: &#39;http://sso.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/login-status-iframe.html&#39;
+      sso: true
+      issuer: &#39;http://project.devopstales.intra/login&#39;
+      discovery: false
+
+service openproject restart
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="openproject" term="openproject" label="openproject" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[SSO login to Gitlab]]></title>
+            <link href="https://devopstales.github.io/sso/gitlab-keycloak/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/openproject-sso/?utm_source=atom_feed" rel="related" type="text/html" title="OpenProject SSO" />
+                <link href="https://devopstales.github.io/sso/keycloak1/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with mysql" />
+                <link href="https://devopstales.github.io/sso/keycloak2/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with postgresql" />
+            
+                <id>https://devopstales.github.io/sso/gitlab-keycloak/</id>
+            
+            
+            <published>2019-04-06T00:00:00+00:00</published>
+            <updated>2019-04-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Configurate Gitab to use Keycloak as SSO Identity Proider.</p>
+<h3 id="configurate-keycloak">Configurate Keycloak</h3>
+<p>Login to Keycloak and create client for Gitlab:
+<img src="/img/include/gitlab-keycloak1.png" alt="Example image"  class="zoomable" /></p>
+<p>At Mappers create mappers for all user information to GitLab:</p>
+<ul>
+<li>Name: name
+<ul>
+<li>Mapper Type: User Property</li>
+<li>Property: Username</li>
+</ul>
+</li>
+<li>Name: email
+<ul>
+<li>Mapper Type: User Property</li>
+<li>Property: Email</li>
+</ul>
+</li>
+<li>Name: first_name
+<ul>
+<li>Mapper Type: User Property</li>
+<li>Property: FirstName</li>
+</ul>
+</li>
+<li>Name: last_name
+<ul>
+<li>Mapper Type: User Property</li>
+<li>Property: LastName</li>
+</ul>
+</li>
+</ul>
+<h3 id="configurate-gitlab">Configurate Gitlab</h3>
+<pre tabindex="0"><code>nano /etc/gitlab/gitlab.rb
+gitlab_rails[&#39;omniauth_enabled&#39;] = true
+gitlab_rails[&#39;omniauth_block_auto_created_users&#39;] = false
+gitlab_rails[&#39;omniauth_allow_single_sign_on&#39;] = [&#39;oauth2_generic&#39;]
+# gitlab_rails[&#39;omniauth_auto_sign_in_with_provider&#39;] = &#39;oauth2_generic&#39;
+
+gitlab_rails[&#39;omniauth_providers&#39;] = [
+{
+        &#39;name&#39; =&gt; &#39;oauth2_generic&#39;,
+        &#39;app_id&#39; =&gt; &#39;gitlab&#39;,
+        &#39;app_secret&#39; =&gt; &#39;KEYCLOAK SECRET GOES HERE&#39;,
+        &#39;args&#39; =&gt; {
+        client_options: {
+                &#39;site&#39; =&gt; &#39;http://sso.devopstales.intra&#39;, # including port if necessary
+                &#39;user_info_url&#39; =&gt; &#39;/auth/realms/devopstales/protocol/openid-connect/userinfo&#39;,
+                &#39;authorize_url&#39; =&gt; &#39;/auth/realms/devopstales/protocol/openid-connect/auth&#39;,
+                &#39;token_url&#39; =&gt; &#39;/auth/realms/devopstales/protocol/openid-connect/token&#39;,
+        },
+        user_response_structure: {
+        #root_path: [&#39;user&#39;], # i.e. if attributes are returned in JsonAPI format (in a &#39;user&#39; node nested under a &#39;data&#39; node)
+        attributes: { email:&#39;email&#39;, first_name:&#39;given_name&#39;, last_name:&#39;family_name&#39;, name:&#39;name&#39;, nickname:&#39;preferred_username&#39; }, # if the nickname attribute of a user is called &#39;username&#39;
+        id_path: &#39;preferred_username&#39;
+        },
+        }
+}
+]
+
+gitlab-ctl reconfigure
+</code></pre><h3 id="gitlab-mattermost-config">Gitlab Mattermost config</h3>
+<pre tabindex="0"><code># on gitlab gui:
+login: admin area / Applications / new
+Redirect URI use:
+http://mattermost.devopstales.intra/login/gitlab/complete
+http://mattermost.devopstales.intra/signup/gitlab/complete
+
+# configfile
+nano /etc/gitlab/gitlab.rb
+
+mattermost_external_url &#39;http://mattermost.devopstales.intra&#39;
+mattermost[&#39;enable&#39;] = true
+mattermost[&#39;service_address&#39;] = &#34;127.0.0.1&#34;
+mattermost[&#39;service_port&#39;] = &#34;8065&#34;
+mattermost[&#39;sql_driver_name&#39;] = &#39;postgres&#39;
+mattermost[&#39;sql_data_source&#39;] = &#34;postgres://mmuser:Password1@127.0.0.1:5432/mattermost?sslmode=disable&amp;connect_timeout=10&#34;
+mattermost[&#39;log_file_directory&#39;] = &#39;/var/log/gitlab/mattermost/&#39;
+mattermost_nginx[&#39;enable&#39;] = false
+
+mattermost[&#39;gitlab_enable&#39;] = true
+mattermost[&#39;gitlab_id&#39;] = &#34;&lt;ID&gt;&#34; # oauth id drom gitlab gui
+mattermost[&#39;gitlab_secret&#39;] = &#34;&lt;token&gt;&#34; # oauth token drom gitlab gui
+mattermost[&#39;gitlab_scope&#39;] = &#34;&#34;
+mattermost[&#39;gitlab_auth_endpoint&#39;] = &#34;http://gitlab.devopstales.intra/oauth/authorize&#34;
+mattermost[&#39;gitlab_token_endpoint&#39;] = &#34;http://gitlab.devopstales.intra/oauth/token&#34;
+mattermost[&#39;gitlab_user_api_endpoint&#39;] = &#34;http://gitlab.devopstales.intra/api/v4/user&#34;
+
+gitlab-ctl reconfigure
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="gitlab" term="gitlab" label="Gitlab" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install keycloak with mysql]]></title>
+            <link href="https://devopstales.github.io/sso/keycloak1/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/keycloak2/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with postgresql" />
+            
+                <id>https://devopstales.github.io/sso/keycloak1/</id>
+            
+            
+            <published>2019-04-05T00:00:00+00:00</published>
+            <updated>2019-04-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Keycloak is an open source identity and access management solution.</p>
+<h3 id="install-dependencies">Install dependencies</h3>
+<pre tabindex="0"><code>yum install -y epel-release
+yum install -y java-1.8.0-openjdk-headless tmux nano mariadb-server unzip nginx
+
+cd /opt/
+wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-5.1.47.zip
+unzip mysql-connector-java-5.1.47.zip
+</code></pre><h3 id="configure-database">Configure database</h3>
+<pre tabindex="0"><code>service mariadb start
+
+mysql -uroot
+CREATE DATABASE keycloak CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+GRANT ALL PRIVILEGES ON keycloak.* TO &#39;keycloak&#39;@&#39;%&#39; identified by &#39;Password1&#39;;
+GRANT ALL PRIVILEGES ON keycloak.* TO &#39;keycloak&#39;@&#39;localhost&#39; identified by &#39;Password1&#39;;
+FLUSH privileges;
+exit;
+</code></pre><h3 id="install-keycloak">Install keycloak</h3>
+<pre tabindex="0"><code>groupadd -r keycloak
+useradd -m -d /var/lib/keycloak -s /sbin/nologin -r -g keycloak keycloak
+
+mkdir -p /opt/keycloak/
+cd /opt/keycloak/
+
+# https://www.keycloak.org/downloads.html
+wget https://downloads.jboss.org/keycloak/4.8.2.Final/keycloak-4.8.2.Final.tar.gz
+
+tar -xzf keycloak-4.8.2.Final.tar.gz
+ln -s /opt/keycloak/keycloak-4.8.2.Final /opt/keycloak/current
+chown keycloak: -R /opt/keycloak
+sudo -u keycloak chmod 700 /opt/keycloak/current/standalone
+
+mkdir /var/log/keycloak
+chown keycloak: -R /var/log/keycloak
+
+chown keycloak: -R /opt/keycloak
+sudo -u keycloak chmod 700 /opt/keycloak/current/standalone
+</code></pre><pre tabindex="0"><code>echo &#39;[Unit]
+Description=Keycloak
+After=network.target syslog.target
+
+[Service]
+Type=idle
+User=keycloak
+Group=keycloak
+ExecStart=/opt/keycloak/current/bin/standalone.sh -b 0.0.0.0
+TimeoutStartSec=600
+TimeoutStopSec=600
+
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=keycloak
+
+[Install]
+WantedBy=multi-user.target
+&#39; &gt; /etc/systemd/system/keycloak.service
+</code></pre><pre tabindex="0"><code>echo &#39;if $programname == &#34;keycloak&#34; then /var/log/keycloak/jboss.log
+&amp; stop
+&#39;&gt;/etc/rsyslog.d/keycloak.conf
+
+systemctl daemon-reload
+service rsyslog restart
+systemctl start keycloak.service
+</code></pre><h3 id="configure-wildfly">Configure wildfly</h3>
+<pre tabindex="0"><code>cd /opt/keycloak/current/
+
+./bin/jboss-cli.sh -c &#39;module add --name=org.mysql  --dependencies=javax.api,javax.transaction.api --resources=/opt/mysql-connector-java-5.1.47/mysql-connector-java-5.1.47.jar&#39;
+
+./bin/jboss-cli.sh &#39;embed-server,/subsystem=datasources/jdbc-driver=org.mysql:add(driver-name=org.mysql,driver-module-name=org.mysql,driver-class-name=com.mysql.jdbc.Driver)&#39;
+
+./bin/jboss-cli.sh &#39;embed-server,/subsystem=datasources/data-source=KeycloakDS:remove&#39;
+
+./bin/jboss-cli.sh &#39;embed-server,/subsystem=datasources/data-source=KeycloakDS:add(driver-name=org.mysql,enabled=true,use-java-context=true,connection-url=&#34;jdbc:mysql://localhost:3306/keycloak?useSSL=false&amp;amp;useLegacyDatetimeCode=false&amp;amp;serverTimezone=Europe/Budapest&amp;amp;characterEncoding=UTF-8&#34;,jndi-name=&#34;java:/jboss/datasources/KeycloakDS&#34;,user-name=keycloak,password=&#34;Password1&#34;,valid-connection-checker-class-name=org.jboss.jca.adapters.jdbc.extensions.mysql.MySQLValidConnectionChecker,validate-on-match=true,exception-sorter-class-name=org.jboss.jca.adapters.jdbc.extensions.mysql.MySQLValidConnectionChecker)&#39;
+
+./bin/add-user-keycloak.sh -u admin -p Password1 -r master
+
+# for nginx proxy
+./bin/jboss-cli.sh &#39;embed-server,/subsystem=undertow/server=default-server/http-listener=default:write-attribute(name=proxy-address-forwarding,value=true)&#39;
+
+./bin/jboss-cli.sh &#39;embed-server,/socket-binding-group=standard-sockets/socket-binding=proxy-https:add(port=443)&#39;
+
+./bin/jboss-cli.sh &#39;embed-server,/subsystem=undertow/server=default-server/http-listener=default:write-attribute(name=redirect-socket,value=proxy-https)&#39;
+
+# disabla color in log
+./bin/jboss-cli.sh -c &#39;/subsystem=logging/console-handler=CONSOLE:write-attribute(name=named-formatter, value=PATTERN)&#39;
+</code></pre><h3 id="configurate-proxy">Configurate proxy</h3>
+<pre tabindex="0"><code>systemctl restart keycloak.service
+
+echo &#39;upstream keycloak {
+    # Use IP Hash for session persistence
+    ip_hash;
+
+    # List of Keycloak servers
+    server 127.0.0.1:8080;
+}
+
+
+server {
+    listen 80;
+    server_name sso.devopstales.intra;
+
+    # Redirect all HTTP to HTTPS
+    location / {
+      return 301 https://$server_name$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name sso.devopstales.intra;
+
+    ssl_certificate /etc/nginx/ssl/domain.pem;
+    ssl_certificate_key /etc/nginx/ssl/domain.pem;
+    ssl_session_cache shared:SSL:1m;
+    ssl_prefer_server_ciphers on;
+
+    location / {
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For  $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto  $scheme;
+      proxy_pass http://keycloak;
+    }
+}
+&#39; &gt; /etc/nginx/conf.d/keycloak.conf
+
+mkdir /etc/nginx/ssl
+
+systemctl restart nginx
+
+# go to sso.devopstales.intra
+# login admin / Password1
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="wildfly" term="wildfly" label="Wildfly" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="mysql" term="mysql" label="mysql" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Install keycloak with postgresql]]></title>
+            <link href="https://devopstales.github.io/sso/keycloak2/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/sso/keycloak1/?utm_source=atom_feed" rel="related" type="text/html" title="Install keycloak with mysql" />
+            
+                <id>https://devopstales.github.io/sso/keycloak2/</id>
+            
+            
+            <published>2019-04-05T00:00:00+00:00</published>
+            <updated>2019-04-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Keycloak is an open source identity and access management solution.</p>
+<h3 id="install-dependencies">Install dependencies</h3>
+<pre tabindex="0"><code>yum install -y epel-release
+yum install -y java-1.8.0-openjdk-headless tmux nano mariadb-server unzip httpd
+
+cd /opt
+# https://jdbc.postgresql.org/download.html
+wget https://jdbc.postgresql.org/download/postgresql-42.2.5.jar
+</code></pre><h3 id="install-and-configure-database">Install and configure database</h3>
+<p>In a previous post I wrote about how to <a href="/linux/install-postgresql/#install-postgresql-10-on-centos-7">Install PostgreSQL 10</a></p>
+<pre tabindex="0"><code>nano /var/lib/pgsql/10/data/pg_hba.conf
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+local   all             keycloak                                md5
+
+su - postgres
+createuser keycloak
+psql
+ALTER USER keycloak WITH ENCRYPTED password &#39;Password1&#39;;
+CREATE DATABASE keycloak WITH ENCODING=&#39;UTF8&#39; OWNER=keycloak;
+\q
+</code></pre><h3 id="install-keycloak">Install keycloak</h3>
+<pre tabindex="0"><code>groupadd -r keycloak
+useradd -m -d /var/lib/keycloak -s /sbin/nologin -r -g keycloak keycloak
+
+mkdir -p /opt/keycloak/
+cd /opt/keycloak/
+
+# https://www.keycloak.org/downloads.html
+wget https://downloads.jboss.org/keycloak/4.8.2.Final/keycloak-4.8.2.Final.tar.gz
+
+tar -xzf keycloak-4.8.2.Final.tar.gz
+ln -s /opt/keycloak/keycloak-4.8.2.Final /opt/keycloak/current
+chown keycloak: -R /opt/keycloak
+sudo -u keycloak chmod 700 /opt/keycloak/current/standalone
+
+mkdir /var/log/keycloak
+chown keycloak: -R /var/log/keycloak
+
+chown keycloak: -R /opt/keycloak
+sudo -u keycloak chmod 700 /opt/keycloak/current/standalone
+</code></pre><pre tabindex="0"><code>echo &#39;[Unit]
+Description=Keycloak
+After=network.target syslog.target
+
+[Service]
+Type=idle
+User=keycloak
+Group=keycloak
+ExecStart=/opt/keycloak/current/bin/standalone.sh -b 0.0.0.0
+TimeoutStartSec=600
+TimeoutStopSec=600
+
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=keycloak
+
+[Install]
+WantedBy=multi-user.target
+&#39; &gt; /etc/systemd/system/keycloak.service
+</code></pre><pre tabindex="0"><code>echo &#39;if $programname == &#34;keycloak&#34; then /var/log/keycloak/jboss.log
+&amp; stop
+&#39;&gt;/etc/rsyslog.d/keycloak.conf
+
+systemctl daemon-reload
+service rsyslog restart
+systemctl start keycloak.service
+</code></pre><h3 id="configure-wildfly">Configure wildfly</h3>
+<pre tabindex="0"><code>cd /opt/keycloak/current/modules
+mkdir -p org/postgresql/main
+cp /opt/postgresql-42.2.5.jar .
+
+echo &#39;&lt;?xml version=&#34;1.0&#34; ?&gt;
+&lt;module xmlns=&#34;urn:jboss:module:1.3&#34; name=&#34;org.postgresql&#34;&gt;
+
+    &lt;resources&gt;
+        &lt;resource-root path=&#34;postgresql-42.2.5.jar&#34;/&gt;
+	&lt;/resources&gt;
+
+	&lt;dependencies&gt;
+		&lt;module name=&#34;javax.api&#34;/&gt;
+		&lt;module name=&#34;javax.transaction.api&#34;/&gt;
+	&lt;/dependencies&gt;
+&lt;/module&gt;&#39; &gt; org/postgresql/main/module.xml
+</code></pre><pre tabindex="0"><code>cd /opt/keycloak/current/standalone/configuration/
+nano standalone.xml
+...
+        &lt;datasources&gt;
+				&lt;datasource jndi-name=&#34;java:jboss/datasources/KeycloakDS&#34; pool-name=&#34;KeycloakDS&#34; enabled=&#34;true&#34; use-java-context=&#34;true&#34;&gt;
+					&lt;connection-url&gt;jdbc:postgresql://localhost:5432/keycloak&lt;/connection-url&gt;
+					&lt;driver&gt;postgresql&lt;/driver&gt;
+					&lt;pool&gt;
+						&lt;max-pool-size&gt;20&lt;/max-pool-size&gt;
+					&lt;/pool&gt;
+					&lt;security&gt;
+						&lt;user-name&gt;keycloak&lt;/user-name&gt;
+						&lt;password&gt;Password1&lt;/password&gt;
+					&lt;/security&gt;
+				&lt;/datasource&gt;
+...
+        &lt;drivers&gt;
+					&lt;driver name=&#34;postgresql&#34; module=&#34;org.postgresql&#34;&gt;
+						&lt;xa-datasource-class&gt;org.postgresql.xa.PGXADataSource&lt;/xa-datasource-class&gt;
+				&lt;/driver&gt;
+...
+&lt;default-bindings context-service=&#34;java:jboss/ee/concurrency/context/default&#34; datasource=&#34;java:jboss/datasources/KeycloakDS&#34;
+</code></pre><pre tabindex="0"><code>cd /opt/keycloak/current
+./bin/add-user-keycloak.sh -u admin -p Password1 -r master
+systemctl restart keycloak.service
+</code></pre><h3 id="configurate-proxy">Configurate proxy</h3>
+<pre tabindex="0"><code>echo &#39;&lt;VirtualHost *:80&gt;
+    ServerName sso.devopstales.intra
+
+    ProxyPreserveHost On
+#    SSLProxyEngine On
+#    SSLProxyCheckPeerCN on
+#    SSLProxyCheckPeerExpire on
+    RequestHeader set X-Forwarded-Proto &#34;https&#34;
+    RequestHeader set X-Forwarded-Port &#34;80&#34; #443
+    ProxyPass / http://127.0.0.1:8080/
+    ProxyPassReverse / http://127.0.0.1:8080/
+&lt;/VirtualHost&gt;&#39; &gt; /etc/apache2/sites-available/keycloak.conf
+
+sudo a2enmod headers
+a2enmod proxy
+a2enmod rewrite
+a2ensite keycloak.confcd
+service httpd restart
+
+# go to sso.devopstales.intra
+# login admin / Password1
+</code></pre>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="keycloak" term="keycloak" label="Keycloak" />
+                             
+                                <category scheme="wildfly" term="wildfly" label="Wildfly" />
+                             
+                                <category scheme="oauth2" term="oauth2" label="oauth2" />
+                             
+                                <category scheme="oidc" term="oidc" label="oidc" />
+                             
+                                <category scheme="postgresql" term="postgresql" label="postgresql" />
+                             
+                                <category scheme="centos" term="centos" label="CentOS" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
 </feed>

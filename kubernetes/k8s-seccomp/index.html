@@ -1,5 +1,7 @@
+
+
 <!DOCTYPE html>
-<html class="no-js" lang="en">
+<html class="no-js" lang="en"  data-mode="auto" >
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,11 +22,11 @@
     "headline" : "Hardening Kubernetes with seccomp",
     "description" : "In this post I will attempt to demystify the relationship of seccomp and Kubernetes This first part will look at containers and pods.\n",
     "inLanguage" : "en-US",
-    "author" : "Balázs Páldi",
-    "creator" : "Balázs Páldi",
-    "publisher": "Balázs Páldi",
-    "accountablePerson" : "Balázs Páldi",
-    "copyrightHolder" : "Balázs Páldi",
+    "author" : "Páldi Balázs",
+    "creator" : "Páldi Balázs",
+    "publisher": "Páldi Balázs",
+    "accountablePerson" : "Páldi Balázs",
+    "copyrightHolder" : "Páldi Balázs",
     "copyrightYear" : "2021",
     "datePublished": "2021-09-03",
     "dateModified" : "2021-09-03",
@@ -41,14 +43,27 @@
 	<title>Hardening Kubernetes with seccomp - devopstales</title>
 	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
 	<meta name="description" content="">
-	<meta property="og:title" content="Hardening Kubernetes with seccomp" />
-<meta property="og:description" content="In this post I will attempt to demystify the relationship of seccomp and Kubernetes This first part will look at containers and pods." />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="https://devopstales.github.io/kubernetes/k8s-seccomp/" /><meta property="article:section" content="kubernetes" />
-<meta property="article:published_time" content="2021-09-03T00:00:00+00:00" />
-<meta property="article:modified_time" content="2021-09-03T00:00:00+00:00" />
-<meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-dmz-bgp/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-secure-install/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubedash-1.0/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-user-namespace/" /><meta property="og:see_also" content="https://devopstales.github.io/kubernetes/trivy-operator-2.5/" />
-
+	<meta property="og:url" content="https://devopstales.github.io/kubernetes/k8s-seccomp/">
+  <meta property="og:site_name" content="devopstales">
+  <meta property="og:title" content="Hardening Kubernetes with seccomp">
+  <meta property="og:description" content="In this post I will attempt to demystify the relationship of seccomp and Kubernetes This first part will look at containers and pods.">
+  <meta property="og:locale" content="en">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="kubernetes">
+    <meta property="article:published_time" content="2021-09-03T00:00:00+00:00">
+    <meta property="article:modified_time" content="2021-09-03T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+    <meta property="article:tag" content="Docker">
+    <meta property="article:tag" content="Containerd">
+    <meta property="article:tag" content="CRI-O">
+    <meta property="article:tag" content="Seccomp">
+      <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/">
+      <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-dmz-bgp/">
+      <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-secure-install/">
+      <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/kubedash-1.0/">
+      <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-user-namespace/">
+      <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/trivy-operator-2.5/">
+      <meta property="og:see_also" content="https://devopstales.github.io/kubernetes/k8s-migrate-from-psp/">
 
 	
 	<link rel="dns-prefetch" href="//fonts.googleapis.com">
@@ -58,18 +73,7 @@
 	<link rel="stylesheet" href="https://devopstales.github.io/css/coffeebox.css"><link rel="stylesheet" href="https://devopstales.github.io/css/cookie.css">
 	<link rel="shortcut icon" href="https://devopstales.github.io/favicon.ico">
 		
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-X895P3LHPJ"></script>
-<script>
-var doNotTrack = false;
-if (!doNotTrack) {
-	window.dataLayer = window.dataLayer || [];
-	function gtag(){dataLayer.push(arguments);}
-	gtag('js', new Date());
-	gtag('config', 'G-X895P3LHPJ', { 'anonymize_ip': false });
-}
-</script>
-
-        <link href='https://www.googletagmanager.com' rel="preconnect" crossorigin>
+    <link href='https://www.googletagmanager.com' rel="preconnect" crossorigin>
   <link rel="dns-prefetch" href='https://www.googletagmanager.com'>
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 	new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -107,83 +111,49 @@ if (!doNotTrack) {
 	</div>
 		
 <nav class="menu">
-	<button class="menu__btn" aria-haspopup="true" aria-expanded="false" tabindex="0">
-		<span class="menu__btn-title" tabindex="-1">Menu</span>
-	</button>
-	<ul class="menu__list">
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">home</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/devops/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">DevOps</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/linux/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">Linux</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/windows/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">Windows</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/virtualization/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">Virtualization</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/kubernetes/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">Kubernetes</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/cloud/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">cloud</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/sso/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">sso</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/monitoring/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">monitoring</span>
-				
-			</a>
-		</li>
-		<li class="menu__item">
-			<a class="menu__link" href="https://devopstales.github.io/mikrotik/">
-				<i class='fa fa-heart'></i>
-				<span class="menu__text">mikrotik</span>
-				
-			</a>
-		</li>
-	</ul>
+  <ul class="menu__list">
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/">home</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/devops/">DevOps</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/linux/">Linux</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/windows/">Windows</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/virtualization/">Virtualization</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/kubernetes/">Kubernetes</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/cloud/">cloud</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/sso/">sso</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/monitoring/">monitoring</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/mikrotik/">mikrotik</a>
+          
+        </li>
+  </ul>
 </nav>
-
 	</div>
 </header>
 		<div class="wrapper flex">
@@ -195,7 +165,7 @@ if (!doNotTrack) {
 			<h1 class="post__title">Hardening Kubernetes with seccomp</h1>
 			<div class="post__meta meta">
 <div class="meta__item-datetime meta__item">
-	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg><time class="meta__text" datetime="2021-09-03T00:00:00Z">September 03, 2021</time></div><div class="meta__item-categories meta__item"><svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg><span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0a14 14 0 1 1 0 28 1 1 0 0 1 0-28m0 3a3 3 0 1 0 0 22 3 3 0 0 0 0-22m1 4h-2v8.4l6.8 4.4L22 18l-6-3.8z"/></svg><time class="meta__text" datetime="2021-09-03T00:00:00Z">September 03, 2021</time></div><div class="meta__item-categories meta__item"><svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2 1 2h8v11H0V2z"/></svg><span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
 	</span>
 </div></div>
 		</header>
@@ -223,6 +193,8 @@ if (!doNotTrack) {
 	</div>
 </div><div class="content post__content clearfix">
 			<p>In this post I will attempt to demystify the relationship of <code>seccomp</code> and Kubernetes This first part will look at containers and pods.</p>
+
+
 <H3>Parts of the K8S Security Lab series</H3>
 <H5>Container Runetime Security</H5>
 <ul>
@@ -375,266 +347,266 @@ https://github.com/weaveworks/kured
 <p>For example Docker&rsquo;s default seccomp profile disables approximately 44 system calls of the 300+ currently availble.</p>
 <h3 id="test-seccomp-profile">Test Seccomp profile.</h3>
 <p>For the test I will use <code>amicontained</code> to inspection tool. First test in a simple docker.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker run --rm -it r.j3ss.co/amicontained bash
-Container Runtime: docker
-Has Namespaces:
-	pid: true
-	user: false
-AppArmor Profile: docker-default <span style="color:#f92672">(</span>enforce<span style="color:#f92672">)</span>
-Capabilities:
-	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
-Seccomp: filtering
-Blocked Syscalls <span style="color:#f92672">(</span>60<span style="color:#f92672">)</span>:
-	SYSLOG SETPGID SETSID USELIB USTAT SYSFS VHANGUP PIVOT_ROOT _SYSCTL ACCT SETTIMEOFDAY MOUNT UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME IOPL IOPERM CREATE_MODULE INIT_MODULE DELETE_MODULE GET_KERNEL_SYMS QUERY_MODULE QUOTACTL NFSSERVCTL GETPMSG PUTPMSG AFS_SYSCALL TUXCALL SECURITY LOOKUP_DCOOKIE CLOCK_SETTIME VSERVER MBIND SET_MEMPOLICY GET_MEMPOLICY KEXEC_LOAD ADD_KEY REQUEST_KEY KEYCTL MIGRATE_PAGES UNSHARE MOVE_PAGES PERF_EVENT_OPEN FANOTIFY_INIT NAME_TO_HANDLE_AT OPEN_BY_HANDLE_AT SETNS PROCESS_VM_READV PROCESS_VM_WRITEV KCMP FINIT_MODULE KEXEC_FILE_LOAD BPF USERFAULTFD PKEY_MPROTECT PKEY_ALLOC PKEY_FREE
-Looking <span style="color:#66d9ef">for</span> Docker.sock
-</code></pre></div><p>As you can see with the default Docker secom profile 60 Syscalls are being blocked. Now test wit default Kubernetes config on docker.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl run -it bash --image<span style="color:#f92672">=</span>r.j3ss.co/amicontained --restart<span style="color:#f92672">=</span>Never bash
-Container Runtime: docker
-Has Namespaces:
- pid: true
- user: false
-AppArmor Profile: unconfined
-Capabilities:
- BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
-Seccomp: disabled
-Blocked Syscalls <span style="color:#f92672">(</span>21<span style="color:#f92672">)</span>:
- MSGRCV SYSLOG SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
-Looking <span style="color:#66d9ef">for</span> Docker.sock
-</code></pre></div><p>In the output above you can see that seccomp is disabled and that 21 syscalls are being blocked. Now test wit default Kubernetes config on rke2 (containerd).</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl run -it bash --image<span style="color:#f92672">=</span>r.j3ss.co/amicontained --restart<span style="color:#f92672">=</span>Never bash
-Container Runtime: kube
-Has Namespaces:
-	pid: true
-	user: false
-AppArmor Profile: system_u:system_r:container_t:s0:c575,c847
-Capabilities:
-	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
-Seccomp: disabled
-Blocked Syscalls <span style="color:#f92672">(</span>22<span style="color:#f92672">)</span>:
-	SYSLOG SETPGID SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
-Looking <span style="color:#66d9ef">for</span> Docker.sock
-pod default/bash terminated <span style="color:#f92672">(</span>Error<span style="color:#f92672">)</span>
-</code></pre></div><p>The <code>containerd</code> is similar then docker so lets test with <code>CRI-O</code>.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl run -it bash --image<span style="color:#f92672">=</span>bash --restart<span style="color:#f92672">=</span>Never bash
-<span style="color:#75715e"># apk add curl</span>
-<span style="color:#75715e"># curl -LO k8s.work/amicontained</span>
-<span style="color:#75715e"># chmod +x amicontained</span>
-<span style="color:#75715e"># ./amicontained</span>
-Container Runtime: kube
-Has Namespaces:
-	pid: true
-	user: false
-AppArmor Profile: system_u:system_r:spc_t:s0
-Capabilities:
-	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service
-Seccomp: disabled
-Blocked Syscalls <span style="color:#f92672">(</span>22<span style="color:#f92672">)</span>:
-	MSGRCV SYSLOG SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
-Looking <span style="color:#66d9ef">for</span> Docker.sock
-</code></pre></div><h3 id="enable-runtimedefault-seccomp-profile">Enable RuntimeDefault seccomp profile</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker run --rm -it r.j3ss.co/amicontained bash
+</span></span><span style="display:flex;"><span>Container Runtime: docker
+</span></span><span style="display:flex;"><span>Has Namespaces:
+</span></span><span style="display:flex;"><span>	pid: true
+</span></span><span style="display:flex;"><span>	user: false
+</span></span><span style="display:flex;"><span>AppArmor Profile: docker-default <span style="color:#f92672">(</span>enforce<span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>Capabilities:
+</span></span><span style="display:flex;"><span>	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+</span></span><span style="display:flex;"><span>Seccomp: filtering
+</span></span><span style="display:flex;"><span>Blocked Syscalls <span style="color:#f92672">(</span>60<span style="color:#f92672">)</span>:
+</span></span><span style="display:flex;"><span>	SYSLOG SETPGID SETSID USELIB USTAT SYSFS VHANGUP PIVOT_ROOT _SYSCTL ACCT SETTIMEOFDAY MOUNT UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME IOPL IOPERM CREATE_MODULE INIT_MODULE DELETE_MODULE GET_KERNEL_SYMS QUERY_MODULE QUOTACTL NFSSERVCTL GETPMSG PUTPMSG AFS_SYSCALL TUXCALL SECURITY LOOKUP_DCOOKIE CLOCK_SETTIME VSERVER MBIND SET_MEMPOLICY GET_MEMPOLICY KEXEC_LOAD ADD_KEY REQUEST_KEY KEYCTL MIGRATE_PAGES UNSHARE MOVE_PAGES PERF_EVENT_OPEN FANOTIFY_INIT NAME_TO_HANDLE_AT OPEN_BY_HANDLE_AT SETNS PROCESS_VM_READV PROCESS_VM_WRITEV KCMP FINIT_MODULE KEXEC_FILE_LOAD BPF USERFAULTFD PKEY_MPROTECT PKEY_ALLOC PKEY_FREE
+</span></span><span style="display:flex;"><span>Looking <span style="color:#66d9ef">for</span> Docker.sock
+</span></span></code></pre></div><p>As you can see with the default Docker secom profile 60 Syscalls are being blocked. Now test wit default Kubernetes config on docker.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl run -it bash --image<span style="color:#f92672">=</span>r.j3ss.co/amicontained --restart<span style="color:#f92672">=</span>Never bash
+</span></span><span style="display:flex;"><span>Container Runtime: docker
+</span></span><span style="display:flex;"><span>Has Namespaces:
+</span></span><span style="display:flex;"><span> pid: true
+</span></span><span style="display:flex;"><span> user: false
+</span></span><span style="display:flex;"><span>AppArmor Profile: unconfined
+</span></span><span style="display:flex;"><span>Capabilities:
+</span></span><span style="display:flex;"><span> BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+</span></span><span style="display:flex;"><span>Seccomp: disabled
+</span></span><span style="display:flex;"><span>Blocked Syscalls <span style="color:#f92672">(</span>21<span style="color:#f92672">)</span>:
+</span></span><span style="display:flex;"><span> MSGRCV SYSLOG SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
+</span></span><span style="display:flex;"><span>Looking <span style="color:#66d9ef">for</span> Docker.sock
+</span></span></code></pre></div><p>In the output above you can see that seccomp is disabled and that 21 syscalls are being blocked. Now test wit default Kubernetes config on rke2 (containerd).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl run -it bash --image<span style="color:#f92672">=</span>r.j3ss.co/amicontained --restart<span style="color:#f92672">=</span>Never bash
+</span></span><span style="display:flex;"><span>Container Runtime: kube
+</span></span><span style="display:flex;"><span>Has Namespaces:
+</span></span><span style="display:flex;"><span>	pid: true
+</span></span><span style="display:flex;"><span>	user: false
+</span></span><span style="display:flex;"><span>AppArmor Profile: system_u:system_r:container_t:s0:c575,c847
+</span></span><span style="display:flex;"><span>Capabilities:
+</span></span><span style="display:flex;"><span>	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+</span></span><span style="display:flex;"><span>Seccomp: disabled
+</span></span><span style="display:flex;"><span>Blocked Syscalls <span style="color:#f92672">(</span>22<span style="color:#f92672">)</span>:
+</span></span><span style="display:flex;"><span>	SYSLOG SETPGID SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
+</span></span><span style="display:flex;"><span>Looking <span style="color:#66d9ef">for</span> Docker.sock
+</span></span><span style="display:flex;"><span>pod default/bash terminated <span style="color:#f92672">(</span>Error<span style="color:#f92672">)</span>
+</span></span></code></pre></div><p>The <code>containerd</code> is similar then docker so lets test with <code>CRI-O</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl run -it bash --image<span style="color:#f92672">=</span>bash --restart<span style="color:#f92672">=</span>Never bash
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># apk add curl</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># curl -LO k8s.work/amicontained</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># chmod +x amicontained</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># ./amicontained</span>
+</span></span><span style="display:flex;"><span>Container Runtime: kube
+</span></span><span style="display:flex;"><span>Has Namespaces:
+</span></span><span style="display:flex;"><span>	pid: true
+</span></span><span style="display:flex;"><span>	user: false
+</span></span><span style="display:flex;"><span>AppArmor Profile: system_u:system_r:spc_t:s0
+</span></span><span style="display:flex;"><span>Capabilities:
+</span></span><span style="display:flex;"><span>	BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service
+</span></span><span style="display:flex;"><span>Seccomp: disabled
+</span></span><span style="display:flex;"><span>Blocked Syscalls <span style="color:#f92672">(</span>22<span style="color:#f92672">)</span>:
+</span></span><span style="display:flex;"><span>	MSGRCV SYSLOG SETSID VHANGUP PIVOT_ROOT ACCT SETTIMEOFDAY UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME INIT_MODULE DELETE_MODULE LOOKUP_DCOOKIE KEXEC_LOAD FANOTIFY_INIT OPEN_BY_HANDLE_AT FINIT_MODULE KEXEC_FILE_LOAD BPF
+</span></span><span style="display:flex;"><span>Looking <span style="color:#66d9ef">for</span> Docker.sock
+</span></span></code></pre></div><h3 id="enable-runtimedefault-seccomp-profile">Enable RuntimeDefault seccomp profile</h3>
 <p>Enable in local kubelet config:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">nano /var/lib/kubelet/config.yaml
-...
---feature-gates<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;...,SeccompDefault=true&#34;</span>
---seccomp-default RuntimeDefault
-
-systemctl restart kubelet
-</code></pre></div><p>Enable in running kubelet config:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl edit cm kubelet-config-1.22 -n kub-system
-...
-- --feature-gates<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;...,SeccompDefault=true&#34;</span>
-- --seccomp-default RuntimeDefault
-</code></pre></div><p>Then test:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl run -it bash --image<span style="color:#f92672">=</span>r.j3ss.co/amicontained --restart<span style="color:#f92672">=</span>Never bash
-Container Runtime: docker
-Has Namespaces:
- pid: true
- user: false
-AppArmor Profile: unconfined
-Capabilities:
- BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
-Seccomp: filtering
-Blocked Syscalls <span style="color:#f92672">(</span>61<span style="color:#f92672">)</span>:
- MSGRCV PTRACE SYSLOG SETSID USELIB USTAT SYSFS VHANGUP PIVOT_ROOT _SYSCTL ACCT SETTIMEOFDAY MOUNT UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME IOPL IOPERM CREATE_MODULE INIT_MODULE DELETE_MODULE GET_KERNEL_SYMS QUERY_MODULE QUOTACTL NFSSERVCTL GETPMSG PUTPMSG AFS_SYSCALL TUXCALL SECURITY LOOKUP_DCOOKIE CLOCK_SETTIME VSERVER MBIND SET_MEMPOLICY GET_MEMPOLICY KEXEC_LOAD ADD_KEY REQUEST_KEY KEYCTL MIGRATE_PAGES UNSHARE MOVE_PAGES PERF_EVENT_OPEN FANOTIFY_INIT NAME_TO_HANDLE_AT OPEN_BY_HANDLE_AT SETNS PROCESS_VM_READV PROCESS_VM_WRITEV KCMP FINIT_MODULE KEXEC_FILE_LOAD BPF USERFAULTFD PKEY_MPROTECT PKEY_ALLOC PKEY_FREE
-Looking <span style="color:#66d9ef">for</span> Docker.sock
-</code></pre></div><h3 id="customizing-a-profile">Customizing a Profile</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano /var/lib/kubelet/config.yaml
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>--feature-gates<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;...,SeccompDefault=true&#34;</span>
+</span></span><span style="display:flex;"><span>--seccomp-default RuntimeDefault
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl restart kubelet
+</span></span></code></pre></div><p>Enable in running kubelet config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl edit cm kubelet-config-1.22 -n kub-system
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>- --feature-gates<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;...,SeccompDefault=true&#34;</span>
+</span></span><span style="display:flex;"><span>- --seccomp-default RuntimeDefault
+</span></span></code></pre></div><p>Then test:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl run -it bash --image<span style="color:#f92672">=</span>r.j3ss.co/amicontained --restart<span style="color:#f92672">=</span>Never bash
+</span></span><span style="display:flex;"><span>Container Runtime: docker
+</span></span><span style="display:flex;"><span>Has Namespaces:
+</span></span><span style="display:flex;"><span> pid: true
+</span></span><span style="display:flex;"><span> user: false
+</span></span><span style="display:flex;"><span>AppArmor Profile: unconfined
+</span></span><span style="display:flex;"><span>Capabilities:
+</span></span><span style="display:flex;"><span> BOUNDING -&gt; chown dac_override fowner fsetid kill setgid setuid setpcap net_bind_service net_raw sys_chroot mknod audit_write setfcap
+</span></span><span style="display:flex;"><span>Seccomp: filtering
+</span></span><span style="display:flex;"><span>Blocked Syscalls <span style="color:#f92672">(</span>61<span style="color:#f92672">)</span>:
+</span></span><span style="display:flex;"><span> MSGRCV PTRACE SYSLOG SETSID USELIB USTAT SYSFS VHANGUP PIVOT_ROOT _SYSCTL ACCT SETTIMEOFDAY MOUNT UMOUNT2 SWAPON SWAPOFF REBOOT SETHOSTNAME SETDOMAINNAME IOPL IOPERM CREATE_MODULE INIT_MODULE DELETE_MODULE GET_KERNEL_SYMS QUERY_MODULE QUOTACTL NFSSERVCTL GETPMSG PUTPMSG AFS_SYSCALL TUXCALL SECURITY LOOKUP_DCOOKIE CLOCK_SETTIME VSERVER MBIND SET_MEMPOLICY GET_MEMPOLICY KEXEC_LOAD ADD_KEY REQUEST_KEY KEYCTL MIGRATE_PAGES UNSHARE MOVE_PAGES PERF_EVENT_OPEN FANOTIFY_INIT NAME_TO_HANDLE_AT OPEN_BY_HANDLE_AT SETNS PROCESS_VM_READV PROCESS_VM_WRITEV KCMP FINIT_MODULE KEXEC_FILE_LOAD BPF USERFAULTFD PKEY_MPROTECT PKEY_ALLOC PKEY_FREE
+</span></span><span style="display:flex;"><span>Looking <span style="color:#66d9ef">for</span> Docker.sock
+</span></span></code></pre></div><h3 id="customizing-a-profile">Customizing a Profile</h3>
 <p>One way to write <code>seccomp</code> filter is to use Berkeley packet filter (BPF) language. Using this language isn&rsquo;t really simple or convenient. We can write JSON that is compiled into profile by <code>libseccomp</code>.</p>
 <p>If you were to create a profile to allow a container to execute a ping against a website, you can use <code>strace</code> command to find the syscalls it makes:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">strace -fqc ping -c <span style="color:#ae81ff">20</span> www.google.com% time     seconds  usecs/call     calls    errors syscall
------- ----------- ----------- --------- --------- ----------------
- 29.55    0.000078           <span style="color:#ae81ff">4</span>        <span style="color:#ae81ff">20</span>        <span style="color:#ae81ff">11</span> openat
- 14.02    0.000037           <span style="color:#ae81ff">9</span>         <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">4</span> socket
- 11.74    0.000031           <span style="color:#ae81ff">3</span>        <span style="color:#ae81ff">12</span>           mprotect
-  6.06    0.000016           <span style="color:#ae81ff">2</span>         <span style="color:#ae81ff">7</span>           read
-  5.68    0.000015           <span style="color:#ae81ff">1</span>        <span style="color:#ae81ff">17</span>           mmap
-  5.68    0.000015           <span style="color:#ae81ff">3</span>         <span style="color:#ae81ff">5</span>           capget
-  4.92    0.000013          <span style="color:#ae81ff">13</span>         <span style="color:#ae81ff">1</span>           munmap
-  3.79    0.000010           <span style="color:#ae81ff">1</span>         <span style="color:#ae81ff">9</span>           fstat
-  3.41    0.000009           <span style="color:#ae81ff">9</span>         <span style="color:#ae81ff">1</span>           write
-  3.41    0.000009           <span style="color:#ae81ff">1</span>         <span style="color:#ae81ff">9</span>           close
-  2.65    0.000007           <span style="color:#ae81ff">2</span>         <span style="color:#ae81ff">3</span>           brk
-  2.65    0.000007           <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">2</span>           prctl
-  2.27    0.000006           <span style="color:#ae81ff">3</span>         <span style="color:#ae81ff">2</span>           getuid
-  1.52    0.000004           <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">1</span>           setuid
-  1.52    0.000004           <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">1</span>           capset
-  1.14    0.000003           <span style="color:#ae81ff">3</span>         <span style="color:#ae81ff">1</span>           geteuid
-  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">9</span>         <span style="color:#ae81ff">9</span> access
-  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">1</span>           execve
-  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">3</span>           fcntl
-  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">1</span>           arch_prctl
------- ----------- ----------- --------- --------- ----------------
-100.00    0.000264                   <span style="color:#ae81ff">109</span>        <span style="color:#ae81ff">24</span> total
-</code></pre></div><p>A nothe solution is a tool called <a href="https://github.com/pjbgf/zaz">zaz</a> created by <a href="https://github.com/pjbgf">Paulo Gomes</a> That generate a seccomp prifile for you with the minimum system calls:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">zaz seccomp docker alpine <span style="color:#e6db74">&#34;ping -c5 8.8.8.8&#34;</span>
-</code></pre></div><p>A basic seccomp has three key elements: the <code>defaultAction</code>, the <code>architectures</code> (or <code>archMap</code>) and the <code>syscalls</code>:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">mkdir</span> <span style="color:#960050;background-color:#1e0010">/var/lib/kubelet/seccomp</span>
-<span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">/var/lib/kubelet/seccomp/sample.json</span>
-{
-    <span style="color:#f92672">&#34;defaultAction&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ERRNO&#34;</span>,
-    <span style="color:#f92672">&#34;architectures&#34;</span>: [
-        <span style="color:#e6db74">&#34;SCMP_ARCH_X86_64&#34;</span>,
-        <span style="color:#e6db74">&#34;SCMP_ARCH_X86&#34;</span>,
-        <span style="color:#e6db74">&#34;SCMP_ARCH_X32&#34;</span>
-    ],
-    <span style="color:#f92672">&#34;syscalls&#34;</span>: [
-        {
-            <span style="color:#f92672">&#34;names&#34;</span>: [
-                <span style="color:#e6db74">&#34;arch_prctl&#34;</span>,
-                <span style="color:#e6db74">&#34;sched_yield&#34;</span>,
-                <span style="color:#e6db74">&#34;futex&#34;</span>,
-                <span style="color:#e6db74">&#34;write&#34;</span>,
-                <span style="color:#e6db74">&#34;mmap&#34;</span>,
-                <span style="color:#e6db74">&#34;exit_group&#34;</span>,
-                <span style="color:#e6db74">&#34;madvise&#34;</span>,
-                <span style="color:#e6db74">&#34;rt_sigprocmask&#34;</span>,
-                <span style="color:#e6db74">&#34;getpid&#34;</span>,
-                <span style="color:#e6db74">&#34;gettid&#34;</span>,
-                <span style="color:#e6db74">&#34;tgkill&#34;</span>,
-                <span style="color:#e6db74">&#34;rt_sigaction&#34;</span>,
-                <span style="color:#e6db74">&#34;read&#34;</span>,
-                <span style="color:#e6db74">&#34;getpgrp&#34;</span>
-            ],
-            <span style="color:#f92672">&#34;action&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ALLOW&#34;</span>,
-   <span style="color:#f92672">&#34;args&#34;</span>: [],
-   <span style="color:#f92672">&#34;comment&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
-   <span style="color:#f92672">&#34;includes&#34;</span>: {},
-   <span style="color:#f92672">&#34;excludes&#34;</span>: {}
-        }
-    ]
-}
-</code></pre></div><p>The <code>defaultAction</code> is <code>SCMP_ACT_ERRNO</code> which will block the execution of any system call. The we list the <code>syscalls</code> what we want to whitelist.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>strace -fqc ping -c <span style="color:#ae81ff">20</span> www.google.com% time     seconds  usecs/call     calls    errors syscall
+</span></span><span style="display:flex;"><span>------ ----------- ----------- --------- --------- ----------------
+</span></span><span style="display:flex;"><span> 29.55    0.000078           <span style="color:#ae81ff">4</span>        <span style="color:#ae81ff">20</span>        <span style="color:#ae81ff">11</span> openat
+</span></span><span style="display:flex;"><span> 14.02    0.000037           <span style="color:#ae81ff">9</span>         <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">4</span> socket
+</span></span><span style="display:flex;"><span> 11.74    0.000031           <span style="color:#ae81ff">3</span>        <span style="color:#ae81ff">12</span>           mprotect
+</span></span><span style="display:flex;"><span>  6.06    0.000016           <span style="color:#ae81ff">2</span>         <span style="color:#ae81ff">7</span>           read
+</span></span><span style="display:flex;"><span>  5.68    0.000015           <span style="color:#ae81ff">1</span>        <span style="color:#ae81ff">17</span>           mmap
+</span></span><span style="display:flex;"><span>  5.68    0.000015           <span style="color:#ae81ff">3</span>         <span style="color:#ae81ff">5</span>           capget
+</span></span><span style="display:flex;"><span>  4.92    0.000013          <span style="color:#ae81ff">13</span>         <span style="color:#ae81ff">1</span>           munmap
+</span></span><span style="display:flex;"><span>  3.79    0.000010           <span style="color:#ae81ff">1</span>         <span style="color:#ae81ff">9</span>           fstat
+</span></span><span style="display:flex;"><span>  3.41    0.000009           <span style="color:#ae81ff">9</span>         <span style="color:#ae81ff">1</span>           write
+</span></span><span style="display:flex;"><span>  3.41    0.000009           <span style="color:#ae81ff">1</span>         <span style="color:#ae81ff">9</span>           close
+</span></span><span style="display:flex;"><span>  2.65    0.000007           <span style="color:#ae81ff">2</span>         <span style="color:#ae81ff">3</span>           brk
+</span></span><span style="display:flex;"><span>  2.65    0.000007           <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">2</span>           prctl
+</span></span><span style="display:flex;"><span>  2.27    0.000006           <span style="color:#ae81ff">3</span>         <span style="color:#ae81ff">2</span>           getuid
+</span></span><span style="display:flex;"><span>  1.52    0.000004           <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">1</span>           setuid
+</span></span><span style="display:flex;"><span>  1.52    0.000004           <span style="color:#ae81ff">4</span>         <span style="color:#ae81ff">1</span>           capset
+</span></span><span style="display:flex;"><span>  1.14    0.000003           <span style="color:#ae81ff">3</span>         <span style="color:#ae81ff">1</span>           geteuid
+</span></span><span style="display:flex;"><span>  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">9</span>         <span style="color:#ae81ff">9</span> access
+</span></span><span style="display:flex;"><span>  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">1</span>           execve
+</span></span><span style="display:flex;"><span>  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">3</span>           fcntl
+</span></span><span style="display:flex;"><span>  0.00    0.000000           <span style="color:#ae81ff">0</span>         <span style="color:#ae81ff">1</span>           arch_prctl
+</span></span><span style="display:flex;"><span>------ ----------- ----------- --------- --------- ----------------
+</span></span><span style="display:flex;"><span>100.00    0.000264                   <span style="color:#ae81ff">109</span>        <span style="color:#ae81ff">24</span> total
+</span></span></code></pre></div><p>A nothe solution is a tool called <a href="https://github.com/pjbgf/zaz">zaz</a> created by <a href="https://github.com/pjbgf">Paulo Gomes</a> That generate a seccomp prifile for you with the minimum system calls:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>zaz seccomp docker alpine <span style="color:#e6db74">&#34;ping -c5 8.8.8.8&#34;</span>
+</span></span></code></pre></div><p>A basic seccomp has three key elements: the <code>defaultAction</code>, the <code>architectures</code> (or <code>archMap</code>) and the <code>syscalls</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">mkdir</span> <span style="color:#960050;background-color:#1e0010">/var/lib/kubelet/seccomp</span>
+</span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">/var/lib/kubelet/seccomp/sample.json</span>
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;defaultAction&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ERRNO&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;architectures&#34;</span>: [
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SCMP_ARCH_X86_64&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SCMP_ARCH_X86&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SCMP_ARCH_X32&#34;</span>
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;syscalls&#34;</span>: [
+</span></span><span style="display:flex;"><span>        {
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;names&#34;</span>: [
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;arch_prctl&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;sched_yield&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;futex&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;write&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;mmap&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;exit_group&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;madvise&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;rt_sigprocmask&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;getpid&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;gettid&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;tgkill&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;rt_sigaction&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;read&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;getpgrp&#34;</span>
+</span></span><span style="display:flex;"><span>            ],
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;action&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ALLOW&#34;</span>,
+</span></span><span style="display:flex;"><span>   <span style="color:#f92672">&#34;args&#34;</span>: [],
+</span></span><span style="display:flex;"><span>   <span style="color:#f92672">&#34;comment&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+</span></span><span style="display:flex;"><span>   <span style="color:#f92672">&#34;includes&#34;</span>: {},
+</span></span><span style="display:flex;"><span>   <span style="color:#f92672">&#34;excludes&#34;</span>: {}
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    ]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The <code>defaultAction</code> is <code>SCMP_ACT_ERRNO</code> which will block the execution of any system call. The we list the <code>syscalls</code> what we want to whitelist.</p>
 <h3 id="the-different-types-of-actions">The different types of actions</h3>
 <p>Below is a list of all the different types of actions and what they do:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">SCMP_ACT_KILL_THREAD <span style="color:#f92672">(</span>or SCMP_ACT_KILL<span style="color:#f92672">)</span>
-Does not execute the syscall and terminate the thread that attempted making the call. Note that depending on the application being enforced <span style="color:#f92672">(</span>i.e. multi-threading<span style="color:#f92672">)</span> and its error handling, syscalls blocked using this action may <span style="color:#66d9ef">do</span> so silently which may result in side effects on the overall application.
-
-SCMP_ACT_TRAP
-Does not execute the syscall. The kernel will send a thread-directed SIGSYS signal to the thread that attempted making the call.
-
-SCMP_ACT_ERRNO
-Does not execute the syscall, returns error instead. Note that depending on the error handling of the application being enforced, syscalls blocked using this action may <span style="color:#66d9ef">do</span> so silently which may result in side effects on the overall application.
-
-SCMP_ACT_TRACE
-The decision on whether or not to execute the syscall will come from a tracer. If no tracer is present behaves like SECCOMP_RET_ERRNO.
-This can be used to automate profile generation and also can be used to change the syscall being made. Not recommended when trying to enforce seccomp to line of business applications.
-
-SCMP_ACT_ALLOW
-Executes the syscall.
-
-SCMP_ACT_LOG <span style="color:#f92672">(</span>since Linux 4.14<span style="color:#f92672">)</span>
-Executes the syscall. Useful <span style="color:#66d9ef">for</span> running seccomp in <span style="color:#e6db74">&#34;complain-mode&#34;</span>, logging the syscalls that are mapped <span style="color:#f92672">(</span>or catch-all<span style="color:#f92672">)</span> and not blocking their execution. It can be used together with other action types to provide an allow and deny list approach.
-
-SCMP_ACT_KILL_PROCESS <span style="color:#f92672">(</span>since Linux 4.14<span style="color:#f92672">)</span>
-Does not execute the syscall and terminates the entire process with a core dump. Very useful when automating the profile generation.
-</code></pre></div><h3 id="configure-on-a-pod">Configure on a pod</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>SCMP_ACT_KILL_THREAD <span style="color:#f92672">(</span>or SCMP_ACT_KILL<span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>Does not execute the syscall and terminate the thread that attempted making the call. Note that depending on the application being enforced <span style="color:#f92672">(</span>i.e. multi-threading<span style="color:#f92672">)</span> and its error handling, syscalls blocked using this action may <span style="color:#66d9ef">do</span> so silently which may result in side effects on the overall application.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SCMP_ACT_TRAP
+</span></span><span style="display:flex;"><span>Does not execute the syscall. The kernel will send a thread-directed SIGSYS signal to the thread that attempted making the call.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SCMP_ACT_ERRNO
+</span></span><span style="display:flex;"><span>Does not execute the syscall, returns error instead. Note that depending on the error handling of the application being enforced, syscalls blocked using this action may <span style="color:#66d9ef">do</span> so silently which may result in side effects on the overall application.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SCMP_ACT_TRACE
+</span></span><span style="display:flex;"><span>The decision on whether or not to execute the syscall will come from a tracer. If no tracer is present behaves like SECCOMP_RET_ERRNO.
+</span></span><span style="display:flex;"><span>This can be used to automate profile generation and also can be used to change the syscall being made. Not recommended when trying to enforce seccomp to line of business applications.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SCMP_ACT_ALLOW
+</span></span><span style="display:flex;"><span>Executes the syscall.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SCMP_ACT_LOG <span style="color:#f92672">(</span>since Linux 4.14<span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>Executes the syscall. Useful <span style="color:#66d9ef">for</span> running seccomp in <span style="color:#e6db74">&#34;complain-mode&#34;</span>, logging the syscalls that are mapped <span style="color:#f92672">(</span>or catch-all<span style="color:#f92672">)</span> and not blocking their execution. It can be used together with other action types to provide an allow and deny list approach.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SCMP_ACT_KILL_PROCESS <span style="color:#f92672">(</span>since Linux 4.14<span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>Does not execute the syscall and terminates the entire process with a core dump. Very useful when automating the profile generation.
+</span></span></code></pre></div><h3 id="configure-on-a-pod">Configure on a pod</h3>
 <p>With Kubernetes version v1.19 Seccomp Profile for a Container is GA. The sintax looks like this:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">some-pod</span>
-  <span style="color:#f92672">labels</span>:
-    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">some-pod</span>
-<span style="color:#f92672">spec</span>:
-  <span style="color:#f92672">securityContext</span>:
-    <span style="color:#f92672">seccompProfile</span>:
-      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Localhost</span>
-      <span style="color:#f92672">localhostProfile</span>: <span style="color:#ae81ff">sample.json</span>
-  <span style="color:#f92672">containers</span>:
-    <span style="color:#ae81ff">...</span>
-</code></pre></div><p>Valid options for <code>type</code> include <code>RuntimeDefault</code>, <code>Unconfined</code>, and <code>Localhost</code>. Here is an example that sets the Seccomp profile to the node&rsquo;s container runtime default profile:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
-<span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
-<span style="color:#f92672">metadata</span>:
-  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">some-pod</span>
-  <span style="color:#f92672">labels</span>:
-    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">some-pod</span>
-<span style="color:#f92672">spec</span>:
-  <span style="color:#f92672">securityContext</span>:
-    <span style="color:#f92672">seccompProfile</span>:
-      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RuntimeDefault</span>
-  <span style="color:#f92672">containers</span>:
-    <span style="color:#ae81ff">...</span>
-</code></pre></div><p>This Configuration is the same then setting <code>SeccompDefault=true</code> in kubelet config.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">some-pod</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">some-pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">securityContext</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">seccompProfile</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Localhost</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">localhostProfile</span>: <span style="color:#ae81ff">sample.json</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#ae81ff">...</span>
+</span></span></code></pre></div><p>Valid options for <code>type</code> include <code>RuntimeDefault</code>, <code>Unconfined</code>, and <code>Localhost</code>. Here is an example that sets the Seccomp profile to the node&rsquo;s container runtime default profile:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">some-pod</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">some-pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">securityContext</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">seccompProfile</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RuntimeDefault</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#ae81ff">...</span>
+</span></span></code></pre></div><p>This Configuration is the same then setting <code>SeccompDefault=true</code> in kubelet config.</p>
 <h3 id="add-audit-profile">Add audit profile</h3>
 <p>Since linux kernel 4.14 it is now possible to define parts of your profile to run in audit mode, logging into syslog all the system calls you want without blocking them. To do that you can use the action SCMT_ACT_LOG:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">/var/lib/kubelet/seccomp/audit.json</span>
-{
-    <span style="color:#f92672">&#34;defaultAction&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_LOG&#34;</span>,
-    <span style="color:#f92672">&#34;architectures&#34;</span>: [
-        <span style="color:#e6db74">&#34;SCMP_ARCH_X86_64&#34;</span>,
-        <span style="color:#e6db74">&#34;SCMP_ARCH_X86&#34;</span>,
-        <span style="color:#e6db74">&#34;SCMP_ARCH_X32&#34;</span>
-    ],
-    <span style="color:#f92672">&#34;syscalls&#34;</span>: [
-        {
-            <span style="color:#f92672">&#34;names&#34;</span>: [
-                <span style="color:#e6db74">&#34;arch_prctl&#34;</span>,
-                <span style="color:#e6db74">&#34;sched_yield&#34;</span>,
-                <span style="color:#e6db74">&#34;futex&#34;</span>,
-                <span style="color:#e6db74">&#34;write&#34;</span>,
-                <span style="color:#e6db74">&#34;mmap&#34;</span>,
-                <span style="color:#e6db74">&#34;exit_group&#34;</span>,
-                <span style="color:#e6db74">&#34;madvise&#34;</span>,
-                <span style="color:#e6db74">&#34;rt_sigprocmask&#34;</span>,
-                <span style="color:#e6db74">&#34;getpid&#34;</span>,
-                <span style="color:#e6db74">&#34;gettid&#34;</span>,
-                <span style="color:#e6db74">&#34;tgkill&#34;</span>,
-                <span style="color:#e6db74">&#34;rt_sigaction&#34;</span>,
-                <span style="color:#e6db74">&#34;read&#34;</span>,
-                <span style="color:#e6db74">&#34;getpgrp&#34;</span>
-            ],
-            <span style="color:#f92672">&#34;action&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ALLOW&#34;</span>
-        },
-        {
-            <span style="color:#f92672">&#34;names&#34;</span>: [
-                <span style="color:#e6db74">&#34;add_key&#34;</span>,
-                <span style="color:#e6db74">&#34;keyctl&#34;</span>,
-                <span style="color:#e6db74">&#34;ptrace&#34;</span>
-            ],
-            <span style="color:#f92672">&#34;action&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ERRNO&#34;</span>
-        }
-    ]
-}
-</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">~ $ tail /var/log/syslog
-
-Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749294<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">21</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412d5b code<span style="color:#f92672">=</span>0x7ffc0000    <span style="color:#75715e"># access</span>
-Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749306<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">257</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412ec8 code<span style="color:#f92672">=</span>0x7ffc0000   <span style="color:#75715e"># openat</span>
-Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749315<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412c99 code<span style="color:#f92672">=</span>0x7ffc0000     <span style="color:#75715e"># fstat</span>
-Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749317<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">9</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f84130e6 code<span style="color:#f92672">=</span>0x7ffc0000     <span style="color:#75715e"># mmap</span>
-Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749323<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412d8b code<span style="color:#f92672">=</span>0x7ffc0000     <span style="color:#75715e"># close</span>
-</code></pre></div><h3 id="set-capabilities-for-a-container">Set capabilities for a Container</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">nano</span> <span style="color:#960050;background-color:#1e0010">/var/lib/kubelet/seccomp/audit.json</span>
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;defaultAction&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_LOG&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;architectures&#34;</span>: [
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SCMP_ARCH_X86_64&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SCMP_ARCH_X86&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SCMP_ARCH_X32&#34;</span>
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;syscalls&#34;</span>: [
+</span></span><span style="display:flex;"><span>        {
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;names&#34;</span>: [
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;arch_prctl&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;sched_yield&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;futex&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;write&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;mmap&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;exit_group&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;madvise&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;rt_sigprocmask&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;getpid&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;gettid&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;tgkill&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;rt_sigaction&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;read&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;getpgrp&#34;</span>
+</span></span><span style="display:flex;"><span>            ],
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;action&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ALLOW&#34;</span>
+</span></span><span style="display:flex;"><span>        },
+</span></span><span style="display:flex;"><span>        {
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;names&#34;</span>: [
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;add_key&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;keyctl&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;ptrace&#34;</span>
+</span></span><span style="display:flex;"><span>            ],
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;action&#34;</span>: <span style="color:#e6db74">&#34;SCMP_ACT_ERRNO&#34;</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    ]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>~ $ tail /var/log/syslog
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749294<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">21</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412d5b code<span style="color:#f92672">=</span>0x7ffc0000    <span style="color:#75715e"># access</span>
+</span></span><span style="display:flex;"><span>Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749306<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">257</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412ec8 code<span style="color:#f92672">=</span>0x7ffc0000   <span style="color:#75715e"># openat</span>
+</span></span><span style="display:flex;"><span>Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749315<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412c99 code<span style="color:#f92672">=</span>0x7ffc0000     <span style="color:#75715e"># fstat</span>
+</span></span><span style="display:flex;"><span>Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749317<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">9</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f84130e6 code<span style="color:#f92672">=</span>0x7ffc0000     <span style="color:#75715e"># mmap</span>
+</span></span><span style="display:flex;"><span>Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f92672">[</span>461698.749323<span style="color:#f92672">]</span> audit: ... syscall<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span> compat<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> ip<span style="color:#f92672">=</span>0x7ff8f8412d8b code<span style="color:#f92672">=</span>0x7ffc0000     <span style="color:#75715e"># close</span>
+</span></span></code></pre></div><h3 id="set-capabilities-for-a-container">Set capabilities for a Container</h3>
 <p>With version 1.22 you should be able to change the sysctl in the security context of your pod manifests, allowing containers that are running as unprivileged users to bind low ports.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f92672">securityContext</span>:
-     <span style="color:#f92672">sysctls</span>:
-     - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">net.ipv4.ip_unprivileged_port_start</span>
-          <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;1&#34;</span>
-</code></pre></div><h3 id="final-words">Final Words</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">securityContext</span>:
+</span></span><span style="display:flex;"><span>     <span style="color:#f92672">sysctls</span>:
+</span></span><span style="display:flex;"><span>     - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">net.ipv4.ip_unprivileged_port_start</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;1&#34;</span>
+</span></span></code></pre></div><h3 id="final-words">Final Words</h3>
 <p>Whatever you define in your seccomp profile, the kernel will enforce it. Even if that is not what you want. For example, if you block access to calls such as exit or exit_group your container may not be able to exit and it could trap the container in an exit loop indefinitely. Leading to high CPU usage of your cluster.</p>
 		</div>
 		<footer class="post__footer">
 			
 <div class="post__tags tags clearfix">
-	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M32 19c0 1-1 2-1 2L21 31s-1 1-2 1-2-1-2-1L2 16c-1-1-1.4-2-1.4-2S0 12.5 0 11V3C0 1.5.8.8.8.8S1.5 0 3 0h8c1.5 0 3 .6 3 .6S15 1 16 2l15 15s1 1 1 2zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M4 0h8s2 0 4 2l15 15s2 2 0 4L21 31s-2 2-4 0L2 16s-2-2-2-4V3s0-3 4-3m3 10a3 3 0 0 0 0-6 3 3 0 0 0 0 6"/></svg>
 	<ul class="tags__list">
 		<li class="tags__item">
 			<a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a>
@@ -675,17 +647,6 @@ Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f
 </div>
 
 
-<div class="authorbox clearfix">
-	<figure class="authorbox__avatar">
-		<img alt="Balázs Páldi avatar" src="https://devopstales.github.io/img/avatar1.jpg" class="avatar" height="90" width="90">
-	</figure>
-	<div class="authorbox__header">
-		<span class="authorbox__name">About Balázs Páldi</span>
-	</div>
-	<div class="authorbox__description">
-		I love to tackle new technologies, and because of that, I started to use Docker before It became the thing. Currently, I&rsquo;m working as a DevOps Engineer.
-	</div>
-</div>
 <script src="https://utteranc.es/client.js"
         repo="devopstales/devopstales.github.io"
         issue-term="url"
@@ -699,13 +660,12 @@ Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f
 			</div>
 			<aside class="sidebar"><div class="widget-search widget">
 	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
-		<label>
-			<input class="widget-search__field" type="search" placeholder="SEARCH…" value="" name="q" aria-label="SEARCH…">
-		</label>
+		<input class="widget-search__field" type="search" placeholder="Search…" value="" name="q" aria-label="Search…">
 		<input class="widget-search__submit" type="submit" value="Search">
-		<input type="hidden" name="sitesearch" value="https://devopstales.github.io/" />
+		<input type="hidden" name="sitesearch" value="/">
 	</form>
 </div>
+
 
 <div class="widget-recent widget">
 
@@ -717,7 +677,7 @@ Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f
             <li><a href="https://devopstales.github.io/series/cluster-mesh" class="text-uppercase">cluster-mesh (5)</a>
             </li>
             
-            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container-runtimes (20)</a>
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container runtimes (20)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
@@ -729,7 +689,7 @@ Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f
             <li><a href="https://devopstales.github.io/series/k8s-gitops" class="text-uppercase">k8s-gitops (7)</a>
             </li>
             
-            <li><a href="https://devopstales.github.io/series/k8s-lessons" class="text-uppercase">k8s-lessons (10)</a>
+            <li><a href="https://devopstales.github.io/series/k8s-lessons" class="text-uppercase">k8s-lessons (12)</a>
             </li>
             
             <li><a href="https://devopstales.github.io/series/k8s-network" class="text-uppercase">k8s-network (30)</a>
@@ -762,12 +722,6 @@ Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f
 			<a class="widget-social__link widget__link btn" title="Slack" rel="noopener noreferrer" href='https://devopstales.slack.com' target="_blank">
 				<svg fill="#ffffff" xmlns="http://www.w3.org/2000/svg"  viewBox="0 0 24 24" width="24px" height="24px"><path d="M9 7C8.359 7 4.639 7 4 7 2.895 7 2 7.895 2 9c0 1.105.895 2 2 2 .639 0 4.359 0 5 0 1.105 0 2-.895 2-2C11 7.895 10.105 7 9 7zM11 4c0 .598 0 2 0 2S9.507 6 9 6C7.895 6 7 5.105 7 4s.895-2 2-2S11 2.895 11 4zM7 14c0 .641 0 4.361 0 5 0 1.105.895 2 2 2 1.105 0 2-.895 2-2 0-.639 0-4.359 0-5 0-1.105-.895-2-2-2C7.895 12 7 12.895 7 14zM4 12c.598 0 2 0 2 0s0 1.493 0 2c0 1.105-.895 2-2 2s-2-.895-2-2S2.895 12 4 12zM14 16c.641 0 4.361 0 5 0 1.105 0 2-.895 2-2 0-1.105-.895-2-2-2-.639 0-4.359 0-5 0-1.105 0-2 .895-2 2C12 15.104 12.895 16 14 16zM12 19c0-.598 0-2 0-2s1.493 0 2 0c1.105 0 2 .895 2 2 0 1.105-.895 2-2 2S12 20.104 12 19zM16 9c0-.641 0-4.361 0-5 0-1.105-.895-2-2-2-1.105 0-2 .895-2 2 0 .639 0 4.359 0 5 0 1.105.895 2 2 2C15.104 11 16 10.104 16 9zM19 11c-.598 0-2 0-2 0s0-1.493 0-2c0-1.105.895-2 2-2 1.105 0 2 .895 2 2S20.104 11 19 11z"/></svg>
 				<span>Slack</span>
-			</a>
-		</div>
-		<div class="widget-social__item widget__item">
-			<a class="widget-social__link widget__link btn" title="Twitter" rel="noopener noreferrer" href="https://twitter.com/_devopstales" target="_blank">
-				<svg class="widget-social__link-icon icon icon-twitter" width="24" height="24" viewBox="0 0 384 312"><path d="m384 36.9c-14.1 6.3-29.3 10.5-45.2 12.4 16.3-9.7 28.8-25.2 34.6-43.6-15.2 9-32.1 15.6-50 19.1-14.4-15.2-34.9-24.8-57.5-24.8-43.5 0-78.8 35.3-78.8 78.8 0 6.2.7 12.2 2 17.9-65.5-3.3-123.5-34.6-162.4-82.3-6.7 11.6-10.6 25.2-10.6 39.6 0 27.3 13.9 51.4 35 65.6-12.9-.4-25.1-4-35.7-9.9v1c0 38.2 27.2 70 63.2 77.2-6.6 1.8-13.6 2.8-20.8 2.8-5.1 0-10-.5-14.8-1.4 10 31.3 39.1 54.1 73.6 54.7-27 21.1-60.9 33.7-97.8 33.7-6.4 0-12.6-.4-18.8-1.1 34.9 22.4 76.3 35.4 120.8 35.4 144.9 0 224.1-120 224.1-224.1 0-3.4-.1-6.8-.2-10.2 15.4-11.1 28.7-25 39.3-40.8z"/></svg>
-				<span>Twitter</span>
 			</a>
 		</div>
 		<div class="widget-social__item widget__item">
@@ -833,183 +787,184 @@ Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-hierarchical-namespace-controller/">Hierarchical namespace controller</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-custom-kube-scheduler/">Custom Kube-Scheduler</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-kube-scheduler-profile/">Kube-Schedulerrofile</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/move-certificate-authority-to-anoter-server/">Move Windows Certificate Authority to another server</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/wazuh-pfsense-syslog/">Send Pfsense logs to Wazuh</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/custom-ssl-and-dns-on-aks-ingress-controller/">Configure custom SSL and DNS on AKS Ingress Controller</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/azure-private-dns-with-aks-ingress-controller/">Use Azure Private DNS with AKS Ingress Controller</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/aks-ingress-controller-v2/">Install Nginx Ingress Controller to AKS with application routing add-on</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-vxlan/">Kubernetes with external Ingress Controller with Haproxy and VXLAN</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/home/k8s-dmz-bgp/">Kubernetes with external Ingress Controller with Haproxy and BGP</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/cloud/aks-azure-key-vault-known-issues-and-resolutions/">Known Issues of Azure Key Vault AKS integration and resolutions</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-rbac/">What is RBAC in Kubernetes?</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/devops/tecton-basics/">Tekton Basics</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-hierarchical-namespace-controller/">Hierarchical namespace controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-custom-kube-scheduler/">Custom Kube-Scheduler</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/">Kube-Schedulerrofile</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/cloud/custom-ssl-and-dns-on-aks-ingress-controller/">Configure custom SSL and DNS on AKS Ingress Controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/cloud/azure-private-dns-with-aks-ingress-controller/">Use Azure Private DNS with AKS Ingress Controller</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/cloud/aks-ingress-controller-v2/">Install Nginx Ingress Controller to AKS with application routing add-on</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/">Kubernetes with external Ingress Controller with Haproxy and VXLAN</a></li>
 		</ul>
 	</div>
 </div>
 <div class="widget-taglist widget">
-	<h4 class="widget__title">Tags</h4>
-	<div class="widget__content">
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/active-directory/" title="active-directory">active-directory</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/admission-controller/" title="Admission Controller">Admission Controller</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aks/" title="AKS">AKS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="alerta">alerta</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/almalinux/" title="AlmaLinux">AlmaLinux</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aws/" title="AWS">AWS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="calico">calico</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="Centos">Centos</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="centreon">centreon</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/certificate-authority/" title="Certificate Authority">Certificate Authority</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="Cilium">Cilium</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cloud-sql/" title="Cloud Sql">Cloud Sql</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="cluster">cluster</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster-mesh/" title="cluster-mesh">cluster-mesh</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cni-genie/" title="CNI-Genie">CNI-Genie</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/container-runtimes/" title="Container runtimes">Container runtimes</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/coredns/" title="CoreDNS">CoreDNS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cosign/" title="Cosign">Cosign</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/devops/" title="devops">devops</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="docker">docker</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="docker-compose">docker-compose</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ebpf/" title="ebpf">ebpf</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ecr/" title="ECR">ECR</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/eks/" title="EKS">EKS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="elasticsearch">elasticsearch</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/falco/" title="falco">falco</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="fedora">fedora</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora-coreos/" title="Fedora CoreOS">Fedora CoreOS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/firecracker/" title="Firecracker">Firecracker</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/flannel/" title="flannel">flannel</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="foreman">foreman</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="gcp">gcp</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/github/" title="GitHub">GitHub</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab-runner/" title="gitlab-runner">gitlab-runner</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitops/" title="gitops">gitops</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gke/" title="GKE">GKE</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gns3/" title="GNS3">GNS3</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="google cloud platform">google cloud platform</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="grafana">grafana</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/group-policy/" title="Group Policy ">Group Policy </a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gvisor/" title="gvisor">gvisor</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/haproxy/" title="haproxy">haproxy</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm/" title="helm">helm</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="helm-controller">helm-controller</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="helm2">helm2</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="helm3">helm3</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="httpd">httpd</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="icinga">icinga</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ingress/" title="ingress">ingress</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="ipmitool">ipmitool</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipsec/" title="ipsec">ipsec</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="jitsi">jitsi</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8S">K8S</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kata-container/" title="kata-container">kata-container</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="katello">katello</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keepassxc/" title="keepassxc">keepassxc</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-apiserver/" title="kube-apiserver">kube-apiserver</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-openid-connect/" title="kube-openid-connect">kube-openid-connect</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="kube-proxy">kube-proxy</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-vip/" title="kube-vip">kube-vip</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubedash/" title="kubedash">kubedash</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/linkerd/" title="linkerd">linkerd</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="logging">logging</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="loki">loki</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/microk8s/" title="microk8s">microk8s</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mikrotik/" title="mikrotik">mikrotik</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/multus/" title="multus">multus</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="mutating webhook">mutating webhook</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="mysql">mysql</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nerdctl/" title="nerdctl">nerdctl</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="nextcloud">nextcloud</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nmstate/" title="nmstate">nmstate</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="noSQL">noSQL</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/notary/" title="Notary">Notary</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="oauth2">oauth2</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oidc/" title="oidc">oidc</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="openproject">openproject</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="OPNsense">OPNsense</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="pfsense">pfsense</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="postgresql">postgresql</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="privacyidea">privacyidea</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="prometheus">prometheus</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxy/" title="proxy">proxy</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="pxe">pxe</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/radius/" title="RADIUS">RADIUS</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="rancher">rancher</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rbac/" title="RBAC">RBAC</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="redmine">redmine</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="registry">registry</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rke2/" title="rke2">rke2</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/routeros/" title="routeros">routeros</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rsyslog/" title="rsyslog">rsyslog</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="rundeck">rundeck</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/seccomp/" title="seccomp">seccomp</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/siem/" title="SIEM">SIEM</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/skupper/" title="skupper">skupper</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="sonarqube">sonarqube</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/squid/" title="squid">squid</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sso/" title="sso">sso</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/submariner/" title="submariner">submariner</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="telegraf">telegraf</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/terraform/" title="terraform">terraform</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/trivy-operator/" title="trivy-operator">trivy-operator</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi-controller/" title="Unifi Controller">Unifi Controller</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/veeam-backup/" title="veeam backup">veeam backup</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="vmware">vmware</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/volume-expansion/" title="volume expansion">volume expansion</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vsphere/" title="vSphere">vSphere</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vxlan/" title="vxlan">vxlan</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wazuh/" title="Wazuh">Wazuh</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="windows">windows</a>
-		<a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
-	</div>
+    <h4 class="widget__title">Tags</h4>
+    <div class="widget__content">
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/active-directory/" title="Active Directory">Active Directory</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/admission-controller/" title="Admission Controller">Admission Controller</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aks/" title="AKS">AKS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="Alerta">Alerta</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/almalinux/" title="AlmaLinux">AlmaLinux</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aws/" title="AWS">AWS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="Calico">Calico</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="CentOS">CentOS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="Centreon">Centreon</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/certificate-authority/" title="Certificate Authority">Certificate Authority</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="Cilium">Cilium</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cloud-sql/" title="Cloud Sql">Cloud Sql</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="Cluster">Cluster</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster-mesh/" title="Cluster-Mesh">Cluster-Mesh</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cni-genie/" title="CNI-Genie">CNI-Genie</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/container-runtimes/" title="Container Runtimes">Container Runtimes</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/coredns/" title="CoreDNS">CoreDNS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cosign/" title="Cosign">Cosign</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/devops/" title="Devops">Devops</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="Docker">Docker</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="Docker Compose">Docker Compose</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ebpf/" title="Ebpf">Ebpf</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ecr/" title="ECR">ECR</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/eks/" title="EKS">EKS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="Elasticsearch">Elasticsearch</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/falco/" title="Falco">Falco</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="Fedora">Fedora</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora-coreos/" title="Fedora CoreOS">Fedora CoreOS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/firecracker/" title="Firecracker">Firecracker</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/flannel/" title="Flannel">Flannel</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="Foreman">Foreman</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="GCP">GCP</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/github/" title="GitHub">GitHub</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab-runner/" title="Gitlab-Runner">Gitlab-Runner</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitops/" title="Gitops">Gitops</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gke/" title="GKE">GKE</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gns3/" title="GNS3">GNS3</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="Google Cloud Platform">Google Cloud Platform</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="Grafana">Grafana</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/group-policy-/" title="Group Policy ">Group Policy </a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gvisor/" title="GVisor">GVisor</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/haproxy/" title="HAproxy">HAproxy</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm/" title="Helm">Helm</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="Helm-Controller">Helm-Controller</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="Helm2">Helm2</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="Helm3">Helm3</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="Httpd">Httpd</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="Icinga">Icinga</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ingress/" title="Ingress">Ingress</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="Ipmitool">Ipmitool</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipsec/" title="Ipsec">Ipsec</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="Jitsi">Jitsi</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8s">K8s</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kata-container/" title="Kata-Container">Kata-Container</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="Katello">Katello</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keepassxc/" title="Keepassxc">Keepassxc</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-apiserver/" title="Kube-Apiserver">Kube-Apiserver</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-openid-connect/" title="Kube-Openid-Connect">Kube-Openid-Connect</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="Kube-Proxy">Kube-Proxy</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-vip/" title="Kube-Vip">Kube-Vip</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubedash/" title="Kubedash">Kubedash</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/linkerd/" title="Linkerd">Linkerd</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="Logging">Logging</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="Loki">Loki</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/microk8s/" title="Microk8s">Microk8s</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mikrotik/" title="Mikrotik">Mikrotik</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/multus/" title="Multus">Multus</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="Mutating Webhook">Mutating Webhook</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="Mysql">Mysql</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nerdctl/" title="Nerdctl">Nerdctl</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="Nextcloud">Nextcloud</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nmstate/" title="Nmstate">Nmstate</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="NoSQL">NoSQL</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/notary/" title="Notary">Notary</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="Oauth2">Oauth2</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oidc/" title="Oidc">Oidc</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="Openproject">Openproject</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="Opnsense">Opnsense</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="Pfsense">Pfsense</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="Postgresql">Postgresql</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="Privacyidea">Privacyidea</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="Prometheus">Prometheus</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxy/" title="Proxy">Proxy</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/radius/" title="RADIUS">RADIUS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="Rancher">Rancher</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rbac/" title="RBAC">RBAC</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="Redmine">Redmine</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="Registry">Registry</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rke2/" title="Rke2">Rke2</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/routeros/" title="Routeros">Routeros</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rsyslog/" title="Rsyslog">Rsyslog</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="Rundeck">Rundeck</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/seccomp/" title="Seccomp">Seccomp</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/siem/" title="SIEM">SIEM</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/skupper/" title="Skupper">Skupper</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="Sonarqube">Sonarqube</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/squid/" title="Squid">Squid</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sso/" title="Sso">Sso</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/submariner/" title="Submariner">Submariner</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/tekton/" title="Tekton">Tekton</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="Telegraf">Telegraf</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/terraform/" title="Terraform">Terraform</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/trivy-operator/" title="Trivy-Operator">Trivy-Operator</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi-controller/" title="Unifi Controller">Unifi Controller</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/veeam-backup/" title="Veeam Backup">Veeam Backup</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="Vmware">Vmware</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/volume-expansion/" title="Volume Expansion">Volume Expansion</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vsphere/" title="VSphere">VSphere</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vxlan/" title="Vxlan">Vxlan</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wazuh/" title="Wazuh">Wazuh</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="Windows">Windows</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
+    </div>
 </div>
 </aside>
 		</div>
@@ -1023,7 +978,7 @@ Nov <span style="color:#ae81ff">25</span> 19:38:18 kernel: <span style="color:#f
 		
 		<div class="footer__copyright">
 			&copy; 2025 devopstales.
-			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/mansoorbarri/roadster/" rel="nofollow noopener" target="_blank">Roadster</a> theme.</span>
 		</div>
 	</div>
 </footer>

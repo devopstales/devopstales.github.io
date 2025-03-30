@@ -1,21 +1,625 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
-    <generator uri="https://gohugo.io/" version="0.89.2">Hugo</generator><title type="html"><![CDATA[Mikrotiks on devopstales]]></title>
+    <generator uri="https://gohugo.io/" version="0.145.0">Hugo</generator><title type="html"><![CDATA[Mikrotiks on devopstales]]></title>
     
         <subtitle type="html"><![CDATA[Blog about dev and ops stuff]]></subtitle>
     
     
     
-            <link href="https://devopstales.github.io/mikrotik/" rel="alternate" type="text/html" title="HTML" />
-            <link href="https://devopstales.github.io/mikrotik/index.xml" rel="alternate" type="application/rss+xml" title="RSS" />
-            <link href="https://devopstales.github.io/mikrotik/atom.xml" rel="self" type="application/atom+xml" title="Atom" />
-    <updated>2025-03-10T15:30:47+00:00</updated>
+            <link href="https://devopstales.github.io/mikrotik/" rel="alternate" type="text/html" title="html" />
+            <link href="https://devopstales.github.io/mikrotik/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
+            <link href="https://devopstales.github.io/mikrotik/atom.xml" rel="self" type="application/atom+xml" title="atom" />
+    <updated>2025-03-30T13:01:43+00:00</updated>
     
     
-    <author>
-            <name>Balázs Páldi</name>
-            </author>
+    
     
         <id>https://devopstales.github.io/mikrotik/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[MikroTik - RouterOS: PPPOE Server]]></title>
+            <link href="https://devopstales.github.io/mikrotik/ros-pppoe-server/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/mikrotik/ros-wifi/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic Wifi Config" />
+                <link href="https://devopstales.github.io/mikrotik/ros-web-content-filter/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Web Content Filter" />
+                <link href="https://devopstales.github.io/mikrotik/ros-secure/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Secure your router" />
+                <link href="https://devopstales.github.io/mikrotik/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
+                <link href="https://devopstales.github.io/cloud/aws-s2s-vpn/?utm_source=atom_feed" rel="related" type="text/html" title="AWS - pfsense: Site-to-site VPN using static routes" />
+            
+                <id>https://devopstales.github.io/mikrotik/ros-pppoe-server/</id>
+            
+            
+            <published>2022-07-17T00:00:00+00:00</published>
+            <updated>2022-07-17T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to configure a PPPOE Server on on MikroTik RouterOS router.</p>
+<h3 id="architecture">Architecture</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>       | NAT Network
+</span></span><span style="display:flex;"><span>  -----------
+</span></span><span style="display:flex;"><span>  | RuterOS |
+</span></span><span style="display:flex;"><span>  -----------
+</span></span><span style="display:flex;"><span>Host only |  <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>              <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>               <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>       DHCP     <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>Internet <span style="color:#66d9ef">for</span> NAT <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>Internal Network  |
+</span></span><span style="display:flex;"><span>             -----------
+</span></span><span style="display:flex;"><span>	     | pfsense |
+</span></span><span style="display:flex;"><span>	     -----------
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># base		 </span>
+</span></span><span style="display:flex;"><span>int print
+</span></span><span style="display:flex;"><span>int set <span style="color:#ae81ff">0</span> name<span style="color:#f92672">=</span>WAN
+</span></span><span style="display:flex;"><span>int set <span style="color:#ae81ff">1</span> name<span style="color:#f92672">=</span>MANAGEMENT
+</span></span><span style="display:flex;"><span>int set <span style="color:#ae81ff">2</span> name<span style="color:#f92672">=</span>LAN 
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># enable dhcp client			 </span>
+</span></span><span style="display:flex;"><span>ip dhcp-client add interface<span style="color:#f92672">=</span>WAN disabled<span style="color:#f92672">=</span>no
+</span></span><span style="display:flex;"><span>ip dhcp-client add interface<span style="color:#f92672">=</span>MANAGEMENT disabled<span style="color:#f92672">=</span>no
+</span></span><span style="display:flex;"><span>ip dhcp-client print detail
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># outbound nat for interget</span>
+</span></span><span style="display:flex;"><span>ip firewall nat add chain<span style="color:#f92672">=</span>srcnat action<span style="color:#f92672">=</span>masquerade out-interface<span style="color:#f92672">=</span>WAN
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># set static ip</span>
+</span></span><span style="display:flex;"><span>ip address add address<span style="color:#f92672">=</span>10.10.10.1/24 interface<span style="color:#f92672">=</span>LAN
+</span></span><span style="display:flex;"><span>ip address print
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># configure ros as dns server</span>
+</span></span><span style="display:flex;"><span>ip dns set allow-remote-requests<span style="color:#f92672">=</span>yes servers<span style="color:#f92672">=</span>8.8.8.8
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># add dhcp server on LAN</span>
+</span></span><span style="display:flex;"><span>ip dhcp-server setup   
+</span></span><span style="display:flex;"><span>Select interface to run DHCP server on 
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>dhcp server interface: LAN
+</span></span><span style="display:flex;"><span>Select network <span style="color:#66d9ef">for</span> DHCP addresses 
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>dhcp address space: 10.10.10.0/24
+</span></span><span style="display:flex;"><span>Select gateway <span style="color:#66d9ef">for</span> given network 
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>gateway <span style="color:#66d9ef">for</span> dhcp network: 10.10.10.1
+</span></span><span style="display:flex;"><span>Select pool of ip addresses given out by DHCP server 
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>addresses to give out: 10.10.10.50-10.10.10.100 
+</span></span><span style="display:flex;"><span>Select DNS servers 
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>dns servers: 8.8.8.8,8.8.4.4
+</span></span><span style="display:flex;"><span>Select lease time 
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>lease time: 1d
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># pppoe</span>
+</span></span><span style="display:flex;"><span>ip pool add name<span style="color:#f92672">=</span>pppoe-pool ranges<span style="color:#f92672">=</span>10.10.20.10-10.10.20.100
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>ppp profile add name<span style="color:#f92672">=</span>pppoe-profile local-address<span style="color:#f92672">=</span>10.10.20.1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>remote-address<span style="color:#f92672">=</span>pppoe-pool dns-server<span style="color:#f92672">=</span>10.10.20.1 rate-limit<span style="color:#f92672">=</span>512k/6512k
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>interface pppoe-server server add interface<span style="color:#f92672">=</span>LAN <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>max-mtu<span style="color:#f92672">=</span><span style="color:#ae81ff">1488</span> max-mru<span style="color:#f92672">=</span><span style="color:#ae81ff">1488</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>keepalive-timeout<span style="color:#f92672">=</span>disabled one-session-per-host<span style="color:#f92672">=</span>yes <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>max-sessions<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> default-profile<span style="color:#f92672">=</span>pppoe-profile <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>authentication<span style="color:#f92672">=</span>pap disabled<span style="color:#f92672">=</span>no
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>ip firewall nat add chain<span style="color:#f92672">=</span>srcnat src-address<span style="color:#f92672">=</span>10.10.20.0/24 action<span style="color:#f92672">=</span>masquerade
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>ppp secret add name<span style="color:#f92672">=</span>tester password<span style="color:#f92672">=</span>Password1 profile<span style="color:#f92672">=</span>pppoe-profile out-interface<span style="color:#f92672">=</span>WAN
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                             
+                                <category scheme="routeros" term="routeros" label="routeros" />
+                             
+                                <category scheme="pfsense" term="pfsense" label="pfsense" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[MikroTik - RouterOS: Basic Wifi Config]]></title>
+            <link href="https://devopstales.github.io/mikrotik/ros-wifi/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/mikrotik/ros-web-content-filter/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Web Content Filter" />
+                <link href="https://devopstales.github.io/mikrotik/ros-secure/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Secure your router" />
+                <link href="https://devopstales.github.io/mikrotik/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
+                <link href="https://devopstales.github.io/linux/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
+            
+                <id>https://devopstales.github.io/mikrotik/ros-wifi/</id>
+            
+            
+            <published>2022-07-16T00:00:00+00:00</published>
+            <updated>2022-07-16T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how to configure a basic wifi on MikroTik RouterOS router.</p>
+<p>For ease of use bridged wireless setup will be made so that your wired hosts are in the same Ethernet broadcast domain as wireless clients.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip address remove ether2
+</span></span><span style="display:flex;"><span>/interface bridge add name<span style="color:#f92672">=</span>local
+</span></span><span style="display:flex;"><span>/interface bridge port add interface<span style="color:#f92672">=</span>ether2 bridge<span style="color:#f92672">=</span>local
+</span></span><span style="display:flex;"><span>/ip address add address<span style="color:#f92672">=</span>192.168.88.1/24 interface<span style="color:#f92672">=</span>local
+</span></span></code></pre></div><p>The important part is to make sure that our wireless is protected, so the first step is the security profile.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/interface wireless security-profiles
+</span></span><span style="display:flex;"><span>  add name<span style="color:#f92672">=</span>myProfile authentication-types<span style="color:#f92672">=</span>wpa2-psk mode<span style="color:#f92672">=</span>dynamic-keys <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>    wpa2-pre-shared-key<span style="color:#f92672">=</span><span style="color:#ae81ff">1234567890</span>
+</span></span></code></pre></div><p>Now when the security profile is ready we can enable the wireless interface and set the desired parameters:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/interface wireless
+</span></span><span style="display:flex;"><span>  enable wlan1;
+</span></span><span style="display:flex;"><span>  set wlan1 band<span style="color:#f92672">=</span>2ghz-b/g/n channel-width<span style="color:#f92672">=</span>20/40mhz-Ce distance<span style="color:#f92672">=</span>indoors <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>    mode<span style="color:#f92672">=</span>ap-bridge ssid<span style="color:#f92672">=</span>MikroTik-006360 wireless-protocol<span style="color:#f92672">=</span>802.11 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>    security-profile<span style="color:#f92672">=</span>myProfile frequency-mode<span style="color:#f92672">=</span>regulatory-domain <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>    set country<span style="color:#f92672">=</span>latvia antenna-gain<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span>
+</span></span></code></pre></div><p>The last step is to add a wireless interface to a local bridge, otherwise connected clients will not get an IP address:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/interface bridge port
+</span></span><span style="display:flex;"><span>  add interface<span style="color:#f92672">=</span>wlan1 bridge<span style="color:#f92672">=</span>local
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                             
+                                <category scheme="routeros" term="routeros" label="routeros" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[MikroTik - RouterOS: Web Content Filter]]></title>
+            <link href="https://devopstales.github.io/mikrotik/ros-web-content-filter/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/mikrotik/ros-secure/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Secure your router" />
+                <link href="https://devopstales.github.io/mikrotik/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
+                <link href="https://devopstales.github.io/linux/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
+            
+                <id>https://devopstales.github.io/mikrotik/ros-web-content-filter/</id>
+            
+            
+            <published>2022-07-14T00:00:00+00:00</published>
+            <updated>2022-07-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can can filter web content with MikroTik RouterOS router.</p>
+<p>Sometimes you may want to block certain websites, for example, deny access to entertainment sites for employees, deny access to porn, and so on. This can be achieved by redirecting HTTP traffic to a proxy server and use an access-list to allow or deny certain websites.</p>
+<p>First, we need to add a NAT rule to redirect HTTP to our proxy. We will use RouterOS built-in proxy server running on port 8080.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip firewall nat
+</span></span><span style="display:flex;"><span>  add chain<span style="color:#f92672">=</span>dst-nat protocol<span style="color:#f92672">=</span>tcp dst-port<span style="color:#f92672">=</span><span style="color:#ae81ff">80</span> src-address<span style="color:#f92672">=</span>192.168.88.0/24 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>    action<span style="color:#f92672">=</span>redirect to-ports<span style="color:#f92672">=</span><span style="color:#ae81ff">8080</span>
+</span></span></code></pre></div><p>Enable web proxy and drop some websites:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip proxy set enabled<span style="color:#f92672">=</span>yes
+</span></span><span style="display:flex;"><span>/ip proxy access add dst-host<span style="color:#f92672">=</span>www.facebook.com action<span style="color:#f92672">=</span>deny
+</span></span><span style="display:flex;"><span>/ip proxy access add dst-host<span style="color:#f92672">=</span>*.youtube.* action<span style="color:#f92672">=</span>deny
+</span></span><span style="display:flex;"><span>/ip proxy access add dst-host<span style="color:#f92672">=</span>:vimeo action<span style="color:#f92672">=</span>deny
+</span></span></code></pre></div><h3 id="l7-filtering">L7 Filtering</h3>
+<p>There is a different method called Layer 7 filtering. It use regular expression matches:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip firewall layer7-protocol add name<span style="color:#f92672">=</span>torrentsites regexp<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;^.*(get|GET).+(torrent|\
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">thepiratebay|isohunt|entertane|demonoid).*\$\&#34;
+</span></span></span></code></pre></div><p>Drop connection to this sites:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip firewall filter add chain<span style="color:#f92672">=</span>forward src-address<span style="color:#f92672">=</span>192.168.88.0/24 layer7-protokol<span style="color:#f92672">=</span>torrentsites <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span>torrentsites
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add chain<span style="color:#f92672">=</span>forward src-address<span style="color:#f92672">=</span>192.168.88.0/24 protokol<span style="color:#f92672">=</span>l7 dst-port<span style="color:#f92672">=</span><span style="color:#ae81ff">53</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>layer7-protokol<span style="color:#f92672">=</span>torrentsites action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span>torrentsitesDropDNS
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add chain<span style="color:#f92672">=</span>forward src-address<span style="color:#f92672">=</span>192.168.88.0/24 content<span style="color:#f92672">=</span>torrent <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span>torrent_drop
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add chain<span style="color:#f92672">=</span>forward src-address<span style="color:#f92672">=</span>192.168.88.0/24 content<span style="color:#f92672">=</span>tracker <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span>tracker_drop
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add chain<span style="color:#f92672">=</span>forward src-address<span style="color:#f92672">=</span>192.168.88.0/24 content<span style="color:#f92672">=</span>getpeer <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span>getpeer_drop
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add chain<span style="color:#f92672">=</span>forward src-address<span style="color:#f92672">=</span>192.168.88.0/24 content<span style="color:#f92672">=</span>info_hash <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span>info_hash_drop
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add chain<span style="color:#f92672">=</span>forward src-address<span style="color:#f92672">=</span>192.168.88.0/24 content<span style="color:#f92672">=</span>announce_peers <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span>announce_peers_drop
+</span></span></code></pre></div><h3 id="dns-poisoning">DNS Poisoning</h3>
+<p>The third method is to use a dns server that block harmful contents to resolve:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># configure the dns sever</span>
+</span></span><span style="display:flex;"><span>/ip dns set servers<span style="color:#f92672">=</span>195.46.39.39,195,46,39,40
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Intercept all the dns requests and redirect to RouterOS</span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add action<span style="color:#f92672">=</span>dst-nat chain<span style="color:#f92672">=</span>dstnat dst-port<span style="color:#f92672">=</span><span style="color:#ae81ff">53</span> in-interface<span style="color:#f92672">=</span>ether2 protocol<span style="color:#f92672">=</span>tcp to-address<span style="color:#f92672">=</span>192.168.88.1 to-port<span style="color:#f92672">=</span><span style="color:#ae81ff">53</span>
+</span></span><span style="display:flex;"><span>/ip firewall filter add action<span style="color:#f92672">=</span>dst-nat chain<span style="color:#f92672">=</span>dstnat dst-port<span style="color:#f92672">=</span><span style="color:#ae81ff">53</span> in-interface<span style="color:#f92672">=</span>ether2 protocol<span style="color:#f92672">=</span>udp to-address<span style="color:#f92672">=</span>192.168.88.1 to-port<span style="color:#f92672">=</span><span style="color:#ae81ff">53</span>
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                             
+                                <category scheme="routeros" term="routeros" label="routeros" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[MikroTik - RouterOS: Secure your router]]></title>
+            <link href="https://devopstales.github.io/mikrotik/ros-secure/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/mikrotik/ros-basic/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: Basic configuration" />
+                <link href="https://devopstales.github.io/linux/pfsense-2fa/?utm_source=atom_feed" rel="related" type="text/html" title="Google Authenticator on pfSense" />
+            
+                <id>https://devopstales.github.io/mikrotik/ros-secure/</id>
+            
+            
+            <published>2022-07-12T00:00:00+00:00</published>
+            <updated>2022-07-12T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you can secure your MikroTik RouterOS router.</p>
+<h2 id="user-management">User Management</h2>
+<p>Creating a New User and New Group Policy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>user add name<span style="color:#f92672">=</span>devopstales group<span style="color:#f92672">=</span>full password<span style="color:#f92672">=</span>Password1
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>user group add name<span style="color:#f92672">=</span>monitor policy<span style="color:#f92672">=</span>read,telnet,winbox,local
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>user add name<span style="color:#f92672">=</span>nmc group<span style="color:#f92672">=</span>monitor password<span style="color:#f92672">=</span>Password1
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>user print
+</span></span><span style="display:flex;"><span>Columns: NAME, GROUP, LAST-LOGGED-IN
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME         GROUP    LAST-LOGGED-IN      </span>
+</span></span><span style="display:flex;"><span>;;; system default user
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">0</span> admin        full     jun/14/2022 10:21:31
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">1</span> vagrant      full     jul/17/2022 09:47:17
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">2</span> devopstales  full                         
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">3</span> nmc          monitor
+</span></span></code></pre></div><p>Enable Disable User:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>user disable <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>user print
+</span></span><span style="display:flex;"><span>Flags: X - DISABLED
+</span></span><span style="display:flex;"><span>Columns: NAME, GROUP, LAST-LOGGED-IN
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   NAME         GROUP    LAST-LOGGED-IN      </span>
+</span></span><span style="display:flex;"><span>;;; system default user
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">0</span>   admin        full     jun/14/2022 10:21:31
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">1</span>   vagrant      full     jul/17/2022 09:47:17
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">2</span>   devopstales  full                         
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">3</span> X nmc          monitor     
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>user enable <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>user print
+</span></span><span style="display:flex;"><span>Columns: NAME, GROUP, LAST-LOGGED-IN
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME         GROUP    LAST-LOGGED-IN      </span>
+</span></span><span style="display:flex;"><span>;;; system default user
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">0</span> admin        full     jun/14/2022 10:21:31
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">1</span> vagrant      full     jul/17/2022 09:47:17
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">2</span> devopstales  full                         
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">3</span> nmc          monitor
+</span></span></code></pre></div><p>Restrict User Access for MikroTik by IP Address:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>user set nmc address<span style="color:#f92672">=</span>202.4.100.35,172.16.1.0/24,2405:7600:b:4::2
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>user print
+</span></span><span style="display:flex;"><span>Columns: NAME, GROUP, ADDRESS, LAST-LOGGED-IN
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME         GROUP    ADDRESS               LAST-LOGGED-IN      </span>
+</span></span><span style="display:flex;"><span>;;; system default user
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">0</span> admin        full                           jun/14/2022 10:21:31
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">1</span> vagrant      full                           jul/17/2022 09:47:17
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">2</span> devopstales  full                                               
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">3</span> nmc          monitor  202.4.100.35/32                           
+</span></span><span style="display:flex;"><span>                        172.16.1.0/24                             
+</span></span><span style="display:flex;"><span>                        2405:7600:b:4::2/128
+</span></span></code></pre></div><h3 id="restrict-access-by-ip">Restrict access by IP</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># RouterOS 6</span>
+</span></span><span style="display:flex;"><span>/user set admin allowed-address<span style="color:#f92672">=</span>192.168.88.0/24
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># RouterOS 7</span>
+</span></span><span style="display:flex;"><span>/user set admin address<span style="color:#f92672">=</span>192.168.88.0/24
+</span></span></code></pre></div><h2 id="mac-connectivity-access">MAC Connectivity Access</h2>
+<p>By default connecting to the router by MAC adress is allowd from all interface. This is a security risk so we will disable on the WAN interface:</p>
+<p>First we will create an inteface list and add the interfaces we want to allow the connection to this list:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/interface list add name<span style="color:#f92672">=</span>listBridge
+</span></span><span style="display:flex;"><span>/interface list member add list<span style="color:#f92672">=</span>listBridge interface<span style="color:#f92672">=</span>ether2
+</span></span></code></pre></div><p>Allow the connection only from this list:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Apply newly created list to the MAC server:</span>
+</span></span><span style="display:flex;"><span>tool mac-server set allowed-interface-list<span style="color:#f92672">=</span>listBridge
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Do the same for Winbox MAC access</span>
+</span></span><span style="display:flex;"><span>tool mac-server mac-winbox set allowed-interface-list<span style="color:#f92672">=</span>listBridge
+</span></span></code></pre></div><h2 id="neighbor-discovery">Neighbor Discovery</h2>
+<p>MikroTik Neighbor discovery protocol is used to show and recognize other MikroTik routers in the network. Disable neighbor discovery on public interfaces:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip neighbor discovery-settings set discover-interface-list<span style="color:#f92672">=</span>listBridge
+</span></span></code></pre></div><h3 id="firewall-rules">Firewall rules</h3>
+<p>IP connectivity on the WAN interface must be limited in the firewall. We will accept only ICMP(ping/traceroute), IP Winbox, and ssh access.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip firewall filter
+</span></span><span style="display:flex;"><span>  add chain<span style="color:#f92672">=</span>input connection-state<span style="color:#f92672">=</span>established,related action<span style="color:#f92672">=</span>accept comment<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;accept established,related&#34;</span>;
+</span></span><span style="display:flex;"><span>  add chain<span style="color:#f92672">=</span>input connection-state<span style="color:#f92672">=</span>invalid action<span style="color:#f92672">=</span>drop;
+</span></span><span style="display:flex;"><span>  add chain<span style="color:#f92672">=</span>input in-interface<span style="color:#f92672">=</span>ether1 protocol<span style="color:#f92672">=</span>icmp action<span style="color:#f92672">=</span>accept comment<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;allow ICMP&#34;</span>;
+</span></span><span style="display:flex;"><span>  add chain<span style="color:#f92672">=</span>input in-interface<span style="color:#f92672">=</span>ether1 protocol<span style="color:#f92672">=</span>tcp port<span style="color:#f92672">=</span><span style="color:#ae81ff">8291</span> action<span style="color:#f92672">=</span>accept comment<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;allow Winbox&#34;</span>;
+</span></span><span style="display:flex;"><span>  add chain<span style="color:#f92672">=</span>input in-interface<span style="color:#f92672">=</span>ether1 protocol<span style="color:#f92672">=</span>tcp port<span style="color:#f92672">=</span><span style="color:#ae81ff">22</span> action<span style="color:#f92672">=</span>accept comment<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;allow SSH&#34;</span>;
+</span></span><span style="display:flex;"><span>  add chain<span style="color:#f92672">=</span>input in-interface<span style="color:#f92672">=</span>ether1 action<span style="color:#f92672">=</span>drop comment<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;block everything else&#34;</span>;
+</span></span></code></pre></div><p>Although the firewall protects the router from the public interface, you may still want to disable RouterOS services.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip service disable telnet,ftp,www,api
+</span></span></code></pre></div><p>Change default service ports, this will immediately stop most of the random SSH brute force login attempts:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip service set ssh port<span style="color:#f92672">=</span><span style="color:#ae81ff">2200</span>
+</span></span></code></pre></div><p>Additionally, each service can be secured by allowed IP address:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip service set winbox address<span style="color:#f92672">=</span>192.168.88.0/24
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                             
+                                <category scheme="routeros" term="routeros" label="routeros" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[MikroTik - RouterOS: Basic configuration]]></title>
+            <link href="https://devopstales.github.io/mikrotik/ros-basic/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/mikrotik/ros-basic/</id>
+            
+            
+            <published>2022-07-10T00:00:00+00:00</published>
+            <updated>2022-07-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you the basic configuration of a MikroTik RouterOS router.</p>
+<h2 id="connecting-to-the-router">Connecting to the Router</h2>
+<p>There are two types of routers:</p>
+<ul>
+<li>With default configuration</li>
+<li>Without default configuration. When no specific configuration is found, IP address 192.168.88.1/24 is set on ether1 or combo1, or sfp1.</li>
+</ul>
+<h2 id="connect-to-the-router">Connect to the Router</h2>
+<p>You cen connect to the router with tree differente mode:</p>
+<ul>
+<li>Web conssole</li>
+<li>WinBox client discowers and connect to MikroTik RouterOS by mac-adress or IP</li>
+<li>ssh connection</li>
+</ul>
+<p>As you see there is several options to connect and configure, but here we will use one method that suits our needs.</p>
+<p>Connect Routers <code>ether1</code> port to the <code>WAN</code> cable and connect your <code>PC</code> to <code>ether2</code>.  Now open WinBox and look for your router in neighbor discovery.</p>
+<p><img src="img/include/ros_basic_01.png" alt="WinBox neighbor discovery"  class="zoomable" /></p>
+<p>If you see the router in the list, click on MAC address and click Connect.</p>
+<p>After connection open a terminal with the <code>New Termonal</code> menu and reset the configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/system reset-configuration no-defaults<span style="color:#f92672">=</span>yes skip-backup<span style="color:#f92672">=</span>yes
+</span></span></code></pre></div><h3 id="set-admin-password">Set admin password</h3>
+<p>Every Router has a factory preconfigured user <code>admin</code> with an <code>empty</code> password. To set the passford <code>Password1</code> to user <code>admin</code> Use the command from terminal:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>user set admin password<span style="color:#f92672">=</span>Password1
+</span></span></code></pre></div><h2 id="configuring-ip-access">Configuring IP Access</h2>
+<p>Since MAC connection is not very stable, the first thing we need to do is to set up a router so that IP connectivity is available:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip address add address<span style="color:#f92672">=</span>192.168.88.1/24 interface<span style="color:#f92672">=</span>ether2
+</span></span></code></pre></div><h2 id="routeros-license-keys">RouterOS license keys</h2>
+<p>MikroTik hardware routers that run RouterOS come preinstalled with a RouterOS license, if you have purchased a RouterOS based device, nothing must be done regarding the license.</p>
+<p>Licensing information can be read from CLI system console:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/system license print
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    software-id: <span style="color:#e6db74">&#34;43NU-NLT9&#34;</span>
+</span></span><span style="display:flex;"><span>         nlevel: <span style="color:#ae81ff">6</span>
+</span></span><span style="display:flex;"><span>       features: 
+</span></span></code></pre></div><h2 id="configuring-internet-connection">Configuring Internet Connection</h2>
+<p>The next step is to get internet access to the router. There can be several types of internet connections, but the most common ones are:</p>
+<ul>
+<li>dynamic public IP address;</li>
+<li>static public IP address;</li>
+<li>PPPoE connection.</li>
+</ul>
+<h3 id="dynamic-public-ip">Dynamic Public IP</h3>
+<p>Configure a DHCP client to get ip from a DHCP server:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/ip dhcp-client add disabled<span style="color:#f92672">=</span>no interface<span style="color:#f92672">=</span>ether1 comment<span style="color:#f92672">=</span>WAN
+</span></span></code></pre></div><h3 id="static-public-ip">Static Public IP</h3>
+<p>If ther is no DHCP server in the network you can configure a static ip address and DNS server:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># static ip</span>
+</span></span><span style="display:flex;"><span>/ip address add address<span style="color:#f92672">=</span>1.2.3.100/24 interface<span style="color:#f92672">=</span>ether1 comment<span style="color:#f92672">=</span>WAN
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Default Gateway</span>
+</span></span><span style="display:flex;"><span>/ip route add gateway<span style="color:#f92672">=</span>1.2.3.1
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Configure dns server</span>
+</span></span><span style="display:flex;"><span>/ip dns set servers<span style="color:#f92672">=</span>8.8.8.8
+</span></span></code></pre></div><h3 id="pppoe-connection">PPPoE Connection</h3>
+<p>PPPoE connection also gives you a dynamic IP address and can configure dynamically DNS and default gateway. Typically service provider (ISP) gives you a username and password for the connection</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/interface pppoe-client
+</span></span><span style="display:flex;"><span>  add disabled<span style="color:#f92672">=</span>no interface<span style="color:#f92672">=</span>ether1 user<span style="color:#f92672">=</span>admin password<span style="color:#f92672">=</span>Password1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>    add-default-route<span style="color:#f92672">=</span>yes use-peer-dns<span style="color:#f92672">=</span>yes comment<span style="color:#f92672">=</span>WAN
+</span></span></code></pre></div><h3 id="verify-connectivity">Verify Connectivity</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ip address print
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Flags: D - DYNAMIC
+</span></span><span style="display:flex;"><span>Columns: ADDRESS, NETWORK, INTERFACE
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   ADDRESS           NETWORK       INTERFACE</span>
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">0</span>   192.168.88.1/24   192.168.88.0  ether2
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">1</span> D 10.0.2.15/24      10.0.2.0      ether1
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ping 8.8.8.8
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  SEQ HOST                                     SIZE TTL TIME       STATUS
+</span></span><span style="display:flex;"><span>    <span style="color:#ae81ff">0</span> 8.8.8.8                                    <span style="color:#ae81ff">56</span> <span style="color:#ae81ff">254</span> 37ms402us
+</span></span><span style="display:flex;"><span>    <span style="color:#ae81ff">1</span> 8.8.8.8                                    <span style="color:#ae81ff">56</span> <span style="color:#ae81ff">254</span> 4ms978us
+</span></span><span style="display:flex;"><span>    <span style="color:#ae81ff">2</span> 8.8.8.8                                    <span style="color:#ae81ff">56</span> <span style="color:#ae81ff">254</span> 4ms992us
+</span></span><span style="display:flex;"><span>    <span style="color:#ae81ff">3</span> 8.8.8.8                                    <span style="color:#ae81ff">56</span> <span style="color:#ae81ff">254</span> 4ms97us
+</span></span><span style="display:flex;"><span>    sent<span style="color:#f92672">=</span><span style="color:#ae81ff">4</span> received<span style="color:#f92672">=</span><span style="color:#ae81ff">4</span> packet-loss<span style="color:#f92672">=</span>0% min-rtt<span style="color:#f92672">=</span>4ms97us avg-rtt<span style="color:#f92672">=</span>12ms867us max-rtt<span style="color:#f92672">=</span>37ms402us
+</span></span></code></pre></div><h3 id="how-to-change-mikrotik-routeros-names">How to change MikroTik RouterOS names</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#f92672">[</span>vagrant@MikroTik<span style="color:#f92672">]</span> &gt; system identity print
+</span></span><span style="display:flex;"><span>  name: MikroTik
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>vagrant@MikroTik<span style="color:#f92672">]</span> &gt; system identity set name<span style="color:#f92672">=</span>ros01.mydomain.intra
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>vagrant@ros01.mydomain.intra<span style="color:#f92672">]</span> &gt; system identity print
+</span></span><span style="display:flex;"><span>  name: ros01.mydomain.intra
+</span></span></code></pre></div><h3 id="time-server-configuration">Time Server Configuration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>system ntp client print 
+</span></span><span style="display:flex;"><span>     enabled: no
+</span></span><span style="display:flex;"><span>        mode: unicast
+</span></span><span style="display:flex;"><span>     servers: 
+</span></span><span style="display:flex;"><span>  freq-drift: <span style="color:#ae81ff">0</span> PPM
+</span></span><span style="display:flex;"><span>      status: stopped
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>system clock print 
+</span></span><span style="display:flex;"><span>                  time: 10:30:15
+</span></span><span style="display:flex;"><span>                  date: jul/17/2022
+</span></span><span style="display:flex;"><span>  time-zone-autodetect: yes
+</span></span><span style="display:flex;"><span>        time-zone-name: manual
+</span></span><span style="display:flex;"><span>            gmt-offset: +00:00
+</span></span><span style="display:flex;"><span>            dst-active: no
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>system clock set time-zone-autodetect<span style="color:#f92672">=</span>no
+</span></span><span style="display:flex;"><span>system clock set time-zone-name<span style="color:#f92672">=</span>CET
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>system clock print
+</span></span><span style="display:flex;"><span>                  time: 12:36:54
+</span></span><span style="display:flex;"><span>                  date: jul/17/2022
+</span></span><span style="display:flex;"><span>  time-zone-autodetect: no
+</span></span><span style="display:flex;"><span>        time-zone-name: CET
+</span></span><span style="display:flex;"><span>            gmt-offset: +02:00
+</span></span><span style="display:flex;"><span>            dst-active: yes
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># RouterOS 7</span>
+</span></span><span style="display:flex;"><span>system ntp client set enabled<span style="color:#f92672">=</span>yes
+</span></span><span style="display:flex;"><span>system/ntp/client/servers/add address<span style="color:#f92672">=</span>2001:4860:4860::8844
+</span></span><span style="display:flex;"><span>system/ntp/client/servers/add address<span style="color:#f92672">=</span>202.4.100.106
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># RouterOS 6</span>
+</span></span><span style="display:flex;"><span>system ntp client set enabled<span style="color:#f92672">=</span>yes primary-ntp<span style="color:#f92672">=</span>2001:4860:4860::8844 secondary-ntp<span style="color:#f92672">=</span>202.4.100.106
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="mikrotik" term="mikrotik" label="mikrotik" />
+                             
+                                <category scheme="routeros" term="routeros" label="routeros" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
 </feed>
