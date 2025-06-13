@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/kubernetes/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/kubernetes/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/kubernetes/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2025-03-30T13:15:04+00:00</updated>
+    <updated>2025-06-13T11:15:41+00:00</updated>
     
     
     
@@ -18,11 +18,417 @@
     
         
         <entry>
+            <title type="html"><![CDATA[Why Kubernetes Pods See Host Resources (And How to Fix It)]]></title>
+            <link href="https://devopstales.github.io/kubernetes/kubernetes-resource-visibility/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/cluster-api/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Cluster API: a step by stap guide" />
+                <link href="https://devopstales.github.io/kubernetes/automatic-k8s-certificate-renewal/?utm_source=atom_feed" rel="related" type="text/html" title="Automatic Kubernetes Certificate Renewal" />
+                <link href="https://devopstales.github.io/kubernetes/rke2-ingress-loadbalancer/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 With MetalLB and NGINX Ingress Controller" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-change-ip/?utm_source=atom_feed" rel="related" type="text/html" title="How to Change IP on Kubernetes node." />
+                <link href="https://devopstales.github.io/kubernetes/image-security-admission-controller-v3/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V3" />
+            
+                <id>https://devopstales.github.io/kubernetes/kubernetes-resource-visibility/</id>
+            
+            
+            <published>2025-05-15T00:00:00+00:00</published>
+            <updated>2025-05-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>When you check resource usage inside a Kubernetes pod, you might be surprised to see the full host machine&rsquo;s resources - even when you&rsquo;ve set strict limits. Let&rsquo;s explore why this happens and how to fix it.</p>
+<h2 id="why-do-pods-see-host-resources">Why Do Pods See Host Resources?</h2>
+<p>Even if you define resource <code>limits</code> in a Kubernetes pod spec, tools inside the container like:</p>
+<ul>
+<li><code>free</code>, <code>top</code></li>
+<li><code>cat /proc/meminfo</code></li>
+<li><code>cat /proc/cpuinfo</code></li>
+</ul>
+<p>&hellip;still show <strong>total host resources</strong> by default.</p>
+<p>This is because Linux containers are just processes on the host, and unless further isolated, they have visibility into the full <code>/proc</code> filesystem of the host kernel.</p>
+<hr>
+<h2 id="what-kubernetes-actually-enforces">What Kubernetes Actually Enforces</h2>
+<p>Kubernetes uses <strong>Linux cgroups</strong> to <strong>enforce limits</strong> on:</p>
+<ul>
+<li><strong>CPU usage</strong> (throttled)</li>
+<li><strong>Memory usage</strong> (killed on OOM)</li>
+</ul>
+<p>So while the <strong>usage is constrained</strong>, <strong>visibility is not</strong> — unless additional isolation is applied.</p>
+<hr>
+<h2 id="solutions-to-limit-resource-visibility">Solutions to Limit Resource Visibility</h2>
+<p>Here are your options to make pods see only their allocated resources, listed from most lightweight to most secure:</p>
+<h3 id="option-1-use-cgroup-v2--cgroup-namespaces-limited-visibility-fix">Option 1: Use cgroup v2 + Cgroup Namespaces (Limited Visibility Fix)</h3>
+<p>With cgroup v2 and cgroup namespaces, the pod can be made to see only its limited resources.</p>
+<p>Requirements:</p>
+<ul>
+<li>Linux kernel 5.14+ (some features in 5.10+)</li>
+<li>Container runtime that supports cgroup v2 and namespaces:</li>
+<li>containerd v1.5+</li>
+<li>CRI-O v1.22+</li>
+<li>Kubernetes v1.25+ (improved cgroup v2 support)</li>
+</ul>
+<p>How to enable:</p>
+<p>Edit your bootloader configuration (e.g., GRUB) to enable systemd&rsquo;s unified cgroup hierarchy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># On your node, edit /etc/default/grub and add:</span>
+</span></span><span style="display:flex;"><span>GRUB_CMDLINE_LINUX<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;systemd.unified_cgroup_hierarchy=1&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Then update grub and reboot</span>
+</span></span><span style="display:flex;"><span>sudo update-grub
+</span></span><span style="display:flex;"><span>sudo reboot
+</span></span></code></pre></div><p>Configure your runtime to use cgroup v2 (example for containerd):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">plugins</span>.<span style="color:#e6db74">&#34;io.containerd.grpc.v1.cri&#34;</span>.<span style="color:#a6e22e">containerd</span>.<span style="color:#a6e22e">runtimes</span>.<span style="color:#a6e22e">runc</span>.<span style="color:#a6e22e">options</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">SystemdCgroup</span> = <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><p>Confirm Kubernetes and Kernel Support</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat /proc/filesystems | grep cgroup2
+</span></span><span style="display:flex;"><span>mount | grep cgroup2
+</span></span></code></pre></div><p>Verify from Inside the Pod</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat /sys/fs/cgroup/memory.max
+</span></span><span style="display:flex;"><span>cat /sys/fs/cgroup/cpu.max
+</span></span></code></pre></div><p>More on User namespace configuration <a href="/kubernetes/k8s-user-namespace/">HERE</a></p>
+<h3 id="option-2-use-gvisor--kata-containers-sandboxed-runtimes">Option 2: Use gVisor / Kata Containers (Sandboxed Runtimes)</h3>
+<p>These are sandboxed container runtimes that offer much stronger isolation:</p>
+<ul>
+<li>gVisor: User-space kernel; better isolation, lower performance.</li>
+<li>Kata Containers: Lightweight VMs per pod.</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">node.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">RuntimeClass</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gvisor</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">handler</span>: <span style="color:#ae81ff">runsc</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">runtimeClassName</span>: <span style="color:#ae81ff">gvisor</span>
+</span></span></code></pre></div><p>More abaut gvisor <a href="/kubernetes/gvisor-cri-o/">HERE</a> and <a href="/kubernetes/gvisor-containerd/">HERE</a></p>
+<h3 id="option-3-use-lxcfs-fakes-proc-files-for-containers">Option 3: Use lxcfs (Fakes /proc Files for Containers)</h3>
+<p><code>lxcfs</code> is a FUSE filesystem that virtualizes /proc/meminfo, /proc/cpuinfo, and /proc/stat to show only the container&rsquo;s assigned resources.</p>
+<p>How to Enable lxcfs in Kubernetes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo apt install lxcfs -y  <span style="color:#75715e"># Debian/Ubuntu</span>
+</span></span><span style="display:flex;"><span>sudo yum install lxcfs -y  <span style="color:#75715e"># RHEL/CentOS</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">lxcfs-pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">myapp</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">busybox</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">command</span>: [<span style="color:#e6db74">&#34;top&#34;</span>]
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">limits</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;256Mi&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;500m&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">volumeMounts</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">lxcfs-proc</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/proc/meminfo</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">subPath</span>: <span style="color:#ae81ff">meminfo</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">lxcfs-proc</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/proc/cpuinfo</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">subPath</span>: <span style="color:#ae81ff">cpuinfo</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">lxcfs-proc</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPath</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/var/lib/lxcfs/proc/</span>
+</span></span></code></pre></div><h3 id="option-4-use-a-sidecar-container-to-override-proc">Option 4: Use a Sidecar Container to Override /proc</h3>
+<p>Some tools (like <code>frappe/k8s-proc-limits</code>) dynamically modify /proc files inside the container to reflect limits.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">proc-limited-pod</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">app</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">limits</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;256Mi&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;500m&#34;</span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">proc-limiter</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">frappe/k8s-proc-limits</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">volumeMounts</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">mountPath</span>: <span style="color:#ae81ff">/host/proc</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">proc</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">env</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">MEMORY_LIMIT</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">valueFrom</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">resourceFieldRef</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">resource</span>: <span style="color:#ae81ff">limits.memory</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">CPU_LIMIT</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">valueFrom</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">resourceFieldRef</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">resource</span>: <span style="color:#ae81ff">limits.cpu</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">proc</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPath</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/proc</span>
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="k8s-security" term="k8s-security" label="k8s-security" />
+                             
+                                <category scheme="k8s-lessons" term="k8s-lessons" label="k8s-lessons" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="secuity" term="secuity" label="Secuity" />
+                             
+                                <category scheme="gvisor" term="gvisor" label="gvisor" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Kubernetes Cluster API: a step by stap guide]]></title>
+            <link href="https://devopstales.github.io/kubernetes/cluster-api/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/automatic-k8s-certificate-renewal/?utm_source=atom_feed" rel="related" type="text/html" title="Automatic Kubernetes Certificate Renewal" />
+                <link href="https://devopstales.github.io/kubernetes/rke2-ingress-loadbalancer/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 With MetalLB and NGINX Ingress Controller" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-change-ip/?utm_source=atom_feed" rel="related" type="text/html" title="How to Change IP on Kubernetes node." />
+                <link href="https://devopstales.github.io/kubernetes/image-security-admission-controller-v3/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V3" />
+                <link href="https://devopstales.github.io/kubernetes/continuous-image-security/?utm_source=atom_feed" rel="related" type="text/html" title="Continuous Image Security" />
+            
+                <id>https://devopstales.github.io/kubernetes/cluster-api/</id>
+            
+            
+            <published>2025-04-06T00:00:00+00:00</published>
+            <updated>2025-04-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can install and manage a Kubernetes cluster with Cluster API.</p>
+<h2 id="what-is-clusterapi">What is ClusterAPI?</h2>
+<p>The Cluster API project was started by the Kubernetes Special Interest Group (SIG) Cluster Lifecycle and automates cluster lifecycle management for platform operators using Kubernetes-style APIs and conventions. Currently, more than 100 Kubernetes installers and distributions exist, each with a unique default configurations. Acknowledging this ClusterAPI concentrated on community based providers that bootstrap different kinds of Kubernetes clusters and architectures.</p>
+<p>The most commonly used providers are cloud based solutions like AWS, Azure or GCP, or private cloud providers (CloudStack, OpenStack, OpenNebula), but you can also use virtualization engines like vSphere, Proxmox, Nautanix, KubVirt, Virtink, Harwester. The most intrestingsolutions are the hardware based providers like Metal3.</p>
+<h2 id="create-clusterapi-clusters-with-kind">Create ClusterAPI Clusters with Kind</h2>
+<p>For this demo I will use ClusterAPI&rsquo;s kind provider to create a cluster. The only dependencies are kubectl and kind. The we will install ClusterAPI&rsquo;s client.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.4/clusterctl-linux-amd64 -o clusterctl
+</span></span><span style="display:flex;"><span>chmod +x ./clusterctl
+</span></span><span style="display:flex;"><span>sudo mv ./clusterctl /usr/local/bin/clusterctl
+</span></span><span style="display:flex;"><span>clusterctl version
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># OR</span>
+</span></span><span style="display:flex;"><span>brew install kind
+</span></span><span style="display:flex;"><span>brew install kubernetes-cli
+</span></span><span style="display:flex;"><span>brew install kubectx
+</span></span><span style="display:flex;"><span>brew install clusterctl
+</span></span></code></pre></div><p>To manage the new clusters we need a management kubernetes cluster where we will install the ClusterAPI controller and it&rsquo;s CRDs. For this demo I will use a kind cluster for this porpose too.</p>
+<p>Fo this the management kind cluster need to be communicat with the underlying docker engine on the host. To do that we need to mount the docker engine socket into the kind cluster&rsquo;s vm.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">cat &gt; cluster-mgmt.yaml &lt;&lt;EOF</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Cluster</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kind.x-k8s.io/v1alpha4</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">nodes</span>:
+</span></span><span style="display:flex;"><span>- <span style="color:#f92672">role</span>: <span style="color:#ae81ff">control-plane</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraMounts</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">hostPath</span>: <span style="color:#ae81ff">/var/lib/docker</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">containerPath</span>: <span style="color:#ae81ff">/var/lib/docker</span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">hostPath</span>: <span style="color:#ae81ff">/var/run/docker.sock</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">containerPath</span>: <span style="color:#ae81ff">/var/run/docker.sock</span>
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kind create cluster --config cluster-mgmt.yaml --name mgmt
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>docker ps                                                                                                                   
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>CONTAINER ID   IMAGE                  COMMAND                  CREATED              STATUS          PORTS                                      NAMES
+</span></span><span style="display:flex;"><span>414fd857c0fb   kindest/node:v1.32.2   <span style="color:#e6db74">&#34;/usr/local/bin/entr…&#34;</span>   About a minute ago   Up <span style="color:#ae81ff">58</span> seconds   127.0.0.1:43483-&gt;6443/tcp                  mgmt-control-plane
+</span></span><span style="display:flex;"><span>1815dce2b51f   nginx:latest           <span style="color:#e6db74">&#34;/docker-entrypoint.…&#34;</span>   <span style="color:#ae81ff">2</span> weeks ago          Up <span style="color:#ae81ff">49</span> minutes   0.0.0.0:80-&gt;80/tcp, 0.0.0.0:443-&gt;443/tcp   kubedash-proxy
+</span></span></code></pre></div><p>Install the ClusterAPI operator and CRDs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export CLUSTER_TOPOLOGY<span style="color:#f92672">=</span>true
+</span></span><span style="display:flex;"><span>clusterctl init --infrastructure docker
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>kubectl get pod -n capd-system                                                                      
+</span></span><span style="display:flex;"><span>kubectl get pod -n capi-kubeadm-bootstrap-system
+</span></span><span style="display:flex;"><span>kubectl get pod -n capi-kubeadm-control-plane-system
+</span></span><span style="display:flex;"><span>kubectl get crd | grep cluster
+</span></span></code></pre></div><p>Once the management cluster is ready, you can create your first workload cluster.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>clusterctl generate cluster capi-quickstart --flavor development <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>--kubernetes-version v1.31.0 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>--control-plane-machine-count<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>--worker-machine-count<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>&gt; capi-quickstart.yaml
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f capi-quickstart.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>kubectl get cluster
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>clusterctl describe cluster capi-quickstart
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>kubectl get kubeadmcontrolplane
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>NAME              CLUSTERCLASS   PHASE         AGE     VERSION
+</span></span><span style="display:flex;"><span>capi-quickstart   quick-start    Provisioned   5m47s   v1.31.0
+</span></span></code></pre></div><h3 id="deploy-cni">Deploy CNI</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># First, get the kubeconfig</span>
+</span></span><span style="display:flex;"><span>clusterctl get kubeconfig capi-quickstart &gt; kubeconfig.capi-quickstart.yaml
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install Calico</span>
+</span></span><span style="display:flex;"><span>kubectl --kubeconfig<span style="color:#f92672">=</span>./kubeconfig.capi-quickstart.yaml apply <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>-f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+</span></span></code></pre></div><h2 id="upgrade-cluster">Upgrade cluster</h2>
+<p>As I sead earlier ClusterApi is a Kubernetes cluster lifecycle manager so you can use it to upgrade your cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl get kubeadmcontrolplane,machinedeployments
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>kubectl patch cluster capi-quickstart --type json <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>--patch <span style="color:#e6db74">&#39;[{&#34;op&#34;: &#34;replace&#34;, &#34;path&#34;: &#34;/spec/topology/version&#34;, &#34;value&#34;: &#34;v1.32.2&#34;}]&#39;</span>
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Automatic Kubernetes Certificate Renewal]]></title>
+            <link href="https://devopstales.github.io/kubernetes/automatic-k8s-certificate-renewal/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/rke2-ingress-loadbalancer/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 With MetalLB and NGINX Ingress Controller" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-change-ip/?utm_source=atom_feed" rel="related" type="text/html" title="How to Change IP on Kubernetes node." />
+                <link href="https://devopstales.github.io/kubernetes/image-security-admission-controller-v3/?utm_source=atom_feed" rel="related" type="text/html" title="RKE2 Image security Admission Controller V3" />
+                <link href="https://devopstales.github.io/kubernetes/continuous-image-security/?utm_source=atom_feed" rel="related" type="text/html" title="Continuous Image Security" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-prometheus-stack/?utm_source=atom_feed" rel="related" type="text/html" title="K8S Logging And Monitoring" />
+            
+                <id>https://devopstales.github.io/kubernetes/automatic-k8s-certificate-renewal/</id>
+            
+            
+            <published>2024-12-20T00:00:00+00:00</published>
+            <updated>2024-12-20T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can automate the Kubernetes Certificate renewal.</p>
+<p>Create a Bash script for renewing the certificates:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano /usr/local/bin/k8s-certs-renew.sh
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;## Expiration before renewal ##&#34;</span>
+</span></span><span style="display:flex;"><span>/usr/local/bin/kubeadm certs check-expiration
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;## Renewing certificates managed by kubeadm ##&#34;</span>
+</span></span><span style="display:flex;"><span>/usr/local/bin/kubeadm certs renew all
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;## Restarting control plane pods managed by kubeadm ##&#34;</span>
+</span></span><span style="display:flex;"><span>/usr/local/bin/crictl pods --namespace kube-system --name <span style="color:#e6db74">&#39;kube-scheduler-*|kube-controller-manager-*|kube-apiserver-*|etcd-*&#39;</span> -q | /usr/bin/xargs /usr/local/bin/crictl rmp -f
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;## Updating /root/.kube/config ##&#34;</span>
+</span></span><span style="display:flex;"><span>cp /etc/kubernetes/admin.conf /root/.kube/config
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;## Waiting for apiserver to be up again ##&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">until</span> printf <span style="color:#e6db74">&#34;&#34;</span> 2&gt;&gt;/dev/null &gt;&gt;/dev/tcp/127.0.0.1/6443; <span style="color:#66d9ef">do</span> sleep 1; <span style="color:#66d9ef">done</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;## Expiration after renewal ##&#34;</span>
+</span></span><span style="display:flex;"><span>/usr/local/bin/kubeadm certs check-expiration
+</span></span></code></pre></div><p>Create a systemd service to call the script:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/etc/systemd/system/k8s-certs-renew.service
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>Unit<span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span>Description<span style="color:#f92672">=</span>Renew K8S control plane certificates
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>Service<span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span>Type<span style="color:#f92672">=</span>oneshot
+</span></span><span style="display:flex;"><span>ExecStart<span style="color:#f92672">=</span>/usr/local/bin/k8s-certs-renew.sh
+</span></span></code></pre></div><p>Create a systemd timer to trigger the service at regular intervals:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat /etc/systemd/system/k8s-certs-renew.timer
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>Unit<span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span>Description<span style="color:#f92672">=</span>Timer to renew K8S control plane certificates
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>Timer<span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span>OnCalendar<span style="color:#f92672">=</span>Fri *-*-1,2,3,4,5,6,7 03:10:00
+</span></span><span style="display:flex;"><span>RandomizedDelaySec<span style="color:#f92672">=</span>30min
+</span></span><span style="display:flex;"><span>Persistent<span style="color:#f92672">=</span>yes
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>Install<span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span>WantedBy<span style="color:#f92672">=</span>multi-user.target
+</span></span></code></pre></div><p>Execute the following commands to complete the process:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl daemon-reload
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl restart k8s-certs-renew.timer
+</span></span></code></pre></div><p><a href="https://github.com/yuyicai/update-kube-cert">https://github.com/yuyicai/update-kube-cert</a></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="k8s-security" term="k8s-security" label="k8s-security" />
+                             
+                                <category scheme="k8s-network" term="k8s-network" label="k8s-network" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="secuity" term="secuity" label="Secuity" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
             <title type="html"><![CDATA[What is RBAC in Kubernetes?]]></title>
             <link href="https://devopstales.github.io/kubernetes/k8s-rbac/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/kubernetes/k8s-custom-kube-scheduler/?utm_source=atom_feed" rel="related" type="text/html" title="Custom Kube-Scheduler" />
-                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Schedulerrofile" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Scheduler Profile" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-hierarchical-namespace-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Hierarchical namespace controller" />
                 <link href="https://devopstales.github.io/kubernetes/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and VXLAN" />
@@ -204,7 +610,7 @@
             <link href="https://devopstales.github.io/kubernetes/k8s-hierarchical-namespace-controller/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/kubernetes/k8s-custom-kube-scheduler/?utm_source=atom_feed" rel="related" type="text/html" title="Custom Kube-Scheduler" />
-                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Schedulerrofile" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Scheduler Profile" />
                 <link href="https://devopstales.github.io/kubernetes/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and VXLAN" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-dmz-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and BGP" />
@@ -417,7 +823,7 @@
             <title type="html"><![CDATA[Custom Kube-Scheduler]]></title>
             <link href="https://devopstales.github.io/kubernetes/k8s-custom-kube-scheduler/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Schedulerrofile" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="related" type="text/html" title="Kube-Scheduler Profile" />
                 <link href="https://devopstales.github.io/kubernetes/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and VXLAN" />
                 <link href="https://devopstales.github.io/kubernetes/k8s-dmz-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and BGP" />
@@ -644,7 +1050,7 @@
     
         
         <entry>
-            <title type="html"><![CDATA[Kube-Schedulerrofile]]></title>
+            <title type="html"><![CDATA[Kube-Scheduler Profile]]></title>
             <link href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
                 <link href="https://devopstales.github.io/kubernetes/k3s-helm-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Install and use rancher helm-controller" />
@@ -7993,7 +8399,9 @@ requested amount of system resource. That means no mather the container use the 
                         
                             
                              
-                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                                <category scheme="k8s-security" term="k8s-security" label="k8s-security" />
+                             
+                                <category scheme="k8s-lessons" term="k8s-lessons" label="k8s-lessons" />
                             
                         
                     
