@@ -31,7 +31,7 @@
     "datePublished": "2024-01-20",
     "dateModified" : "2024-01-20",
     "url" : "https://devopstales.github.io/kubernetes/k8s-secure-install/",
-    "wordCount" : "2560",
+    "wordCount" : "1912",
     "keywords" : [ "Kubernetes Hardening Guide", "kubernetes deployment", "Kubernetes Secuity", "Best Practices", "CRI-O", "Cilium", "seccomp", "selinux", "User namespace", "CISA", "Blog" ]
     
 }
@@ -178,8 +178,8 @@
       <ul>
         <li><a href="#selinux-and-firewall-config">Selinux and Firewall Config</a></li>
         <li><a href="#linux-configurations">Linux Configurations</a></li>
-        <li><a href="#etcd">etcd</a></li>
         <li><a href="#cri-o">CRI-O</a></li>
+        <li><a href="#install-gvisor">Install gVisor</a></li>
         <li><a href="#kubeadm-install">Kubeadm install</a></li>
         <li><a href="#kubeadm-init-config">Kubeadm init config</a></li>
         <li><a href="#install-kubernetes">Install Kubernetes</a></li>
@@ -342,8 +342,11 @@ https://github.com/weaveworks/kured
 
 
 
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>yum install -y epel-release
-</span></span><span style="display:flex;"><span>yum install -y nano wget
+<p>I will start wit an Almalinux 9. Wirst I will install the nececary packages end enable repositories. TheI will upgrade the system to the latest package versions.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>dnf config-manager --set-enabled crb
+</span></span><span style="display:flex;"><span>dnf install -y epel-release
+</span></span><span style="display:flex;"><span>dnf install -y nano wget
+</span></span><span style="display:flex;"><span>dnf upgrade -y
 </span></span></code></pre></div><h3 id="selinux-and-firewall-config">Selinux and Firewall Config</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl enable firewalld
 </span></span><span style="display:flex;"><span>systemctl start firewalld
@@ -362,7 +365,8 @@ https://github.com/weaveworks/kured
 </span></span><span style="display:flex;"><span>Policy deny_unknown status:     allowed
 </span></span><span style="display:flex;"><span>Memory protection checking:     actual <span style="color:#f92672">(</span>secure<span style="color:#f92672">)</span>
 </span></span><span style="display:flex;"><span>Max kernel policy version:      <span style="color:#ae81ff">33</span>
-</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9345/tcp --permanent
+</span></span></code></pre></div><p>Now that we enabéed the firewall we will create the nececary firewall rules for the Kubernetes components.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo firewall-cmd --add-port<span style="color:#f92672">=</span>9345/tcp --permanent
 </span></span><span style="display:flex;"><span>sudo firewall-cmd --add-port<span style="color:#f92672">=</span>6443/tcp --permanent
 </span></span><span style="display:flex;"><span>sudo firewall-cmd --add-port<span style="color:#f92672">=</span>10250/tcp --permanent
 </span></span><span style="display:flex;"><span>sudo firewall-cmd --add-port<span style="color:#f92672">=</span>2379/tcp --permanent
@@ -406,7 +410,7 @@ https://github.com/weaveworks/kured
 </span></span><span style="display:flex;"><span>  icmp-blocks: 
 </span></span><span style="display:flex;"><span>  rich rules: 
 </span></span></code></pre></div><h3 id="linux-configurations">Linux Configurations</h3>
-<p>Enable cgroupV2</p>
+<p>Now we will enable cgroup V2 for better performance and security.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo dnf install -y grubby
 </span></span><span style="display:flex;"><span>sudo grubby <span style="color:#ae81ff">\
 </span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --update-kernel<span style="color:#f92672">=</span>ALL <span style="color:#ae81ff">\
@@ -458,41 +462,33 @@ https://github.com/weaveworks/kured
 </span></span><span style="display:flex;"><span>sudo bash -c <span style="color:#e6db74">&#39;cat &lt;&lt;EOF &gt;&gt; /etc/fstab
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">none /sys/fs/bpf bpf rw,relatime 0 0
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF&#39;</span>
-</span></span></code></pre></div><h3 id="etcd">etcd</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>useradd -r -c <span style="color:#e6db74">&#34;etcd user&#34;</span> -s /sbin/nologin -M etcd
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>head -c <span style="color:#ae81ff">32</span> /dev/urandom | base64
-</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">nano /etc/kubernetes/etcd-encription.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apiserver.config.k8s.io/v1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">EncryptionConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">secrets</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">providers</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">identity</span>: {}
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">aesgcm</span>:
-</span></span><span style="display:flex;"><span>        <span style="color:#f92672">keys</span>:
-</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">key1</span>
-</span></span><span style="display:flex;"><span>          <span style="color:#f92672">secret</span>: <span style="color:#ae81ff">&lt;BASE 64 ENCODED SECRET&gt;</span>
 </span></span></code></pre></div><h3 id="cri-o">CRI-O</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>VERSION<span style="color:#f92672">=</span>1.28
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>KUBERNETES_VERSION<span style="color:#f92672">=</span>v1.32
+</span></span><span style="display:flex;"><span>CRIO_VERSION<span style="color:#f92672">=</span>v1.32
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/CentOS_8/devel:kubic:libcontainers:stable.repo
-</span></span><span style="display:flex;"><span>sudo curl -L -o /etc/yum.repos.d/devel_kubic_libcontainers_stable_cri-o_<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>/CentOS_8/devel:kubic:libcontainers:stable:cri-o:<span style="color:#e6db74">${</span>VERSION<span style="color:#e6db74">}</span>.repo
+</span></span><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF | tee /etc/yum.repos.d/cri-o.repo
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[cri-o]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">name=CRI-O
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">baseurl=https://download.opensuse.org/repositories/isv:/cri-o:/stable:/$CRIO_VERSION/rpm/
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">enabled=1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">gpgcheck=1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">gpgkey=https://download.opensuse.org/repositories/isv:/cri-o:/stable:/$CRIO_VERSION/rpm/repodata/repomd.xml.key
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>yum install -y cri-o
+</span></span><span style="display:flex;"><span>yum install -y cri-o container-selinux fuse-overlayfs conmon
 </span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Configure User anmespacing in CRI-O</span>
 </span></span><span style="display:flex;"><span>mkdir /etc/crio/crio.conf.d/
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>sed -i <span style="color:#e6db74">&#39;s|^cgroup_manager|#cgroup_manager|&#39;</span> /etc/crio/crio.conf
-</span></span><span style="display:flex;"><span>sed -i <span style="color:#e6db74">&#39;s|^conmon_cgroup|#conmon_cgroup|&#39;</span> /etc/crio/crio.conf
+</span></span><span style="display:flex;"><span>sed -i <span style="color:#e6db74">&#39;s|^cgroup_manager|#cgroup_manager|&#39;</span> /etc/crio/crio.conf.d/10-crio.conf
+</span></span><span style="display:flex;"><span>sed -i <span style="color:#e6db74">&#39;s|^conmon_cgroup|#conmon_cgroup|&#39;</span> /etc/crio/crio.conf.d/10-crio.conf
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/crio/crio.conf.d/01-crio-base.conf
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[crio]
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">storage_driver = &#34;overlay&#34;
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">storage_option = [&#34;overlay.mount_program=/usr/bin/fuse-overlayfs&#34;]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[crio.runtime]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">selinux = true
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">cgroup_manager = &#34;cgroupfs&#34;
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">conmon_cgroup = &#39;pod&#39;
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
@@ -502,23 +498,51 @@ https://github.com/weaveworks/kured
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">activation_annotation = &#34;io.kubernetes.cri-o.userns-mode&#34;
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">allowed_annotations = [&#34;io.kubernetes.cri-o.userns-mode&#34;]
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test CRIO selinux config</span>
-</span></span><span style="display:flex;"><span>egrep -r <span style="color:#e6db74">&#34;selinux&#34;</span> /etc/crio/
-</span></span><span style="display:flex;"><span>/etc/crio/crio.conf:selinux <span style="color:#f92672">=</span> true
 </span></span></code></pre></div><p>The <strong>CRI-O</strong> will run the containers with the <code>containers</code> user so I need to create <code>/etc/subuid</code> and <code>/etc/subgid</code> on nodes.</p>
 <blockquote>
 <p>SubUID/GIDs are a range of user/group IDs that a user is allowed to use.</p></blockquote>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;containers:200000:268435456&#34;</span> &gt;&gt; /etc/subuid
 </span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;containers:200000:268435456&#34;</span> &gt;&gt; /etc/subgid
+</span></span></code></pre></div><h3 id="install-gvisor">Install gVisor</h3>
+<p>gVisor provides an additional layer of isolation between running applications and the host operating system. It includes an Open Container Initiative (OCI) runtime called <code>runsc</code> that makes it easy to work with existing container tooling. The <code>runsc</code> runtime integrates with Docker, CRI-O and Kubernetes, making it simple to run sandboxed containers.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt; ~/gvisor.sh
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">#!/bash
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">(
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  set -e
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  ARCH=$(uname -m)
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  URL=https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  wget ${URL}/runsc ${URL}/runsc.sha512 \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    ${URL}/containerd-shim-runsc-v1 ${URL}/containerd-shim-runsc-v1.sha512
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  sha512sum -c runsc.sha512 \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    -c containerd-shim-runsc-v1.sha512
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  rm -f *.sha512
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  chmod a+rx runsc containerd-shim-runsc-v1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  sudo mv runsc containerd-shim-runsc-v1 /usr/local/bin
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">)
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>bash gvisor.sh
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>runsc: OK
+</span></span><span style="display:flex;"><span>containerd-shim-runsc-v1: OK
+</span></span></code></pre></div><p>Now I need to configure <code>CRI-O</code> to use <code>runsc</code> as low-level runetime egine.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>mkdir /etc/crio/crio.conf.d/
+</span></span><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/crio/crio.conf.d/99-gvisor
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Path to the gVisor runtime binary that uses runsc
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[crio.runtime.runtimes.runsc]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">runtime_path = &#34;/usr/local/bin/runsc&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl enable crio
+</span></span><span style="display:flex;"><span>systemctl restart crio
+</span></span><span style="display:flex;"><span>systemctl status crio
 </span></span></code></pre></div><h3 id="kubeadm-install">Kubeadm install</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF &gt; /etc/yum.repos.d/kubernetes.repo
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt;EOF | tee /etc/yum.repos.d/kubernetes.repo
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[kubernetes]
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">name=Kubernetes
-</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">baseurl=https://pkgs.k8s.io/core:/stable:/v${VERSION}/rpm/
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">baseurl=https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/rpm/
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">enabled=1
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">gpgcheck=1
-</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">gpgkey=https://pkgs.k8s.io/core:/stable:/v${VERSION}/rpm/repodata/repomd.xml.key
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">gpgkey=https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/rpm/repodata/repomd.xml.key
 </span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>CRIP_VERSION<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>crio --version | grep <span style="color:#e6db74">&#34;^Version&#34;</span> | awk <span style="color:#e6db74">&#39;{print $2}&#39;</span><span style="color:#66d9ef">)</span>
@@ -526,333 +550,30 @@ https://github.com/weaveworks/kured
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;exclude=kubelet, kubectl, kubeadm, cri-o&#34;</span> &gt;&gt; /etc/yum.conf
 </span></span></code></pre></div><h3 id="kubeadm-init-config">Kubeadm init config</h3>
-<p>Set Kubernetes version:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">clusterName</span>: <span style="color:#ae81ff">k8s-main</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kubernetesVersion</span>: <span style="color:#ae81ff">1.28.2</span>
-</span></span></code></pre></div><p>Configure authentication and enable webhooks:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiServer</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">authorization-mode</span>: <span style="color:#e6db74">&#34;Node,RBAC&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">enable-admission-plugins</span>: <span style="color:#e6db74">&#34;NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook&#34;</span>
-</span></span></code></pre></div><p>Set node ip and load-balancer ip if you use an external load-balancer for multi node infra:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>nano 010-kubeadm-conf-1-32-0.yaml
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta4</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">bootstrapTokens</span>:
 </span></span><span style="display:flex;"><span>- <span style="color:#f92672">token</span>: <span style="color:#e6db74">&#34;c2t0rj.cofbfnwwrb387890&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ttl</span>: <span style="color:#e6db74">&#34;48h&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">usages</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#ae81ff">signing</span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#ae81ff">authentication</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">localAPIEndpoint</span>:
 </span></span><span style="display:flex;"><span>  <span style="color:#75715e"># local ip and port</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">advertiseAddress</span>: <span style="color:#ae81ff">192.168.56.12</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">advertiseAddress</span>: <span style="color:#ae81ff">192.168.100.10</span>
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">bindPort</span>: <span style="color:#ae81ff">6443</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># load-balancer ip or node ip and port</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">controlPlaneEndpoint</span>: <span style="color:#e6db74">&#34;192.168.56.12:6443&#34;</span>
-</span></span></code></pre></div><p>Configure Certificate and rotation:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">nodeRegistration</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kubeletExtraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">rotate-server-certificates</span>: <span style="color:#e6db74">&#34;true&#34;</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">certificatesDir</span>: <span style="color:#ae81ff">/etc/kubernetes/pki</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiServer</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kubelet-certificate-authority</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/pki/ca.crt&#34;</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">enableServer</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">serverTLSBootstrap</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">rotateCertificates</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">featureGates</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">RotateKubeletServerCertificate</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">JoinConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">nodeRegistration</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kubeletExtraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">rotate-server-certificates</span>: <span style="color:#e6db74">&#34;true&#34;</span>
-</span></span></code></pre></div><p>Configure kubernetes to use CRI-O:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">nodeRegistration</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">criSocket</span>: <span style="color:#e6db74">&#34;unix:///var/run/crio/crio.sock&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">criSocket</span>: <span style="color:#ae81ff">unix:///var/run/crio/crio.sock</span>
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">taints</span>: <span style="color:#66d9ef">null</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">JoinConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">nodeRegistration</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">criSocket</span>: <span style="color:#e6db74">&#34;unix:///var/run/crio/crio.sock&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">IfNotPresent</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">taints</span>: <span style="color:#66d9ef">null</span>
-</span></span></code></pre></div><p>Set CNI Network in kubernetes config:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">networking</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">serviceSubnet</span>: <span style="color:#e6db74">&#34;10.96.0.0/12&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">podSubnet</span>: <span style="color:#e6db74">&#34;10.244.0.0/16&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">dnsDomain</span>: <span style="color:#e6db74">&#34;cluster.local&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiServer</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">service-node-port-range</span>: <span style="color:#e6db74">&#34;30000-50000&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">anonymous-auth</span>: <span style="color:#e6db74">&#34;true&#34;</span>
-</span></span></code></pre></div><p>Apply Pod Security Standards at the Cluster Level:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">cat &lt;&lt;EOF &gt; /etc/kubernetes/k8s-pss.yaml</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apiserver.config.k8s.io/v1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AdmissionConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">plugins</span>:
-</span></span><span style="display:flex;"><span>- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">PodSecurity</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">configuration</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">pod-security.admission.config.k8s.io/v1beta1</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PodSecurityConfiguration</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">defaults</span>:
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">enforce</span>: <span style="color:#e6db74">&#34;restricted&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">enforce-version</span>: <span style="color:#e6db74">&#34;latest&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">audit</span>: <span style="color:#e6db74">&#34;restricted&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">audit-version</span>: <span style="color:#e6db74">&#34;latest&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">warn</span>: <span style="color:#e6db74">&#34;restricted&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">warn-version</span>: <span style="color:#e6db74">&#34;latest&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">exemptions</span>:
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">usernames</span>: []
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">runtimeClasses</span>: []
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">namespaces</span>: [<span style="color:#ae81ff">kube-system, cis-operator-system, cilium-spire, ceph-storage-system]</span>
-</span></span><span style="display:flex;"><span><span style="color:#ae81ff">EOF</span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Add your own exemption namespaces.</span>
-</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiServer</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">admission-control-config-file</span>: <span style="color:#ae81ff">/etc/kubernetes/k8s-pss.yaml</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraVolumes</span>:
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;kubernetes-pss&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/k8s-pss.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/k8s-pss.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;File&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">propagation</span>: <span style="color:#ae81ff">Bidirectional</span>
-</span></span></code></pre></div><p>Configure etcd folder and encryption:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">etcd</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">local</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">dataDir</span>: <span style="color:#ae81ff">/var/lib/etcd</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiServer</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">encryption-provider-config</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/etcd-encription.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraVolumes</span>:
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;etc-kubernetes-etcd-enc&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/etcd-encription.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/etcd-encription.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;File&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">propagation</span>: <span style="color:#ae81ff">HostToContainer</span>
-</span></span></code></pre></div><p>Configure default kernel option protection:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">InitConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">nodeRegistration</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kubeletExtraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">protect-kernel-defaults</span>: <span style="color:#e6db74">&#34;true&#34;</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">protectKernelDefaults</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">JoinConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">nodeRegistration</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kubeletExtraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">protect-kernel-defaults</span>: <span style="color:#e6db74">&#34;true&#34;</span>
-</span></span></code></pre></div><p>Enable Profiling:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiServer</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">profiling</span>: <span style="color:#e6db74">&#34;false&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">scheduler</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">profiling</span>: <span style="color:#e6db74">&#34;false&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">controllerManager</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">profiling</span>: <span style="color:#e6db74">&#34;false&#34;</span>
-</span></span></code></pre></div><p>Enable secomp profiles:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">featureGates</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">SeccompDefault</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">seccompDefault</span>: <span style="color:#66d9ef">true</span>
-</span></span></code></pre></div><p>Enable swaping:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">failSwapOn</span>: <span style="color:#66d9ef">false</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">featureGates</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">NodeSwap</span>: <span style="color:#66d9ef">true</span>
-</span></span></code></pre></div><p>Enable KubeletInUserNamespace:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubelet.config.k8s.io/v1beta1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeletConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">cgroupDriver</span>: <span style="color:#e6db74">&#34;cgroupfs&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">featureGates</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">KubeletInUserNamespace</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeproxy.config.k8s.io/v1alpha1</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">KubeProxyConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">mode</span>: <span style="color:#e6db74">&#34;iptables&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># or &#34;userspace&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">conntrack</span>:
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Skip setting sysctl value &#34;net.netfilter.nf_conntrack_max&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">maxPerCore</span>: <span style="color:#ae81ff">0</span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Skip setting &#34;net.netfilter.nf_conntrack_tcp_timeout_established&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tcpEstablishedTimeout</span>: <span style="color:#ae81ff">0s</span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Skip setting &#34;net.netfilter.nf_conntrack_tcp_timeout_close&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tcpCloseWaitTimeout</span>: <span style="color:#ae81ff">0s</span>
-</span></span></code></pre></div><p>Enable audit logging:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># 010-kubeadm-conf-1-28-2.yaml</span>
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">kubeadm.k8s.io/v1beta3</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ClusterConfiguration</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiServer</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraArgs</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">audit-log-maxage</span>: <span style="color:#e6db74">&#34;30&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">audit-log-maxbackup</span>: <span style="color:#e6db74">&#34;10&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">audit-log-maxsize</span>: <span style="color:#e6db74">&#34;100&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">audit-log-path</span>: <span style="color:#e6db74">&#34;/var/log/kube-audit/audit.log&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">audit-policy-file</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/audit-policy.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">extraVolumes</span>:
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;audit-config&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/audit-policy.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/etc/kubernetes/audit-policy.yaml&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">readOnly</span>: <span style="color:#66d9ef">true</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;File&#34;</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;audit-log&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPath</span>: <span style="color:#e6db74">&#34;/var/log/kube-audit&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">mountPath</span>: <span style="color:#e6db74">&#34;/var/log/kube-audit&#34;</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">pathType</span>: <span style="color:#e6db74">&#34;DirectoryOrCreate&#34;</span>
-</span></span></code></pre></div><p>Configure audit-log policy:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">cat &lt;&lt; EOF &gt;&gt; /etc/kubernetes/audit-policy.yaml</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">audit.k8s.io/v1</span> <span style="color:#75715e"># This is required.</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Policy</span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Don&#39;t generate audit events for all requests in RequestReceived stage.</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">omitStages</span>:
-</span></span><span style="display:flex;"><span>  - <span style="color:#e6db74">&#34;RequestReceived&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#f92672">rules</span>:
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Log pod changes at RequestResponse level</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">RequestResponse</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># Resource &#34;pods&#34; doesn&#39;t match requests to any subresource of pods,</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># which is consistent with the RBAC policy.</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;pods&#34;</span>, <span style="color:#e6db74">&#34;deployments&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">RequestResponse</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;rbac.authorization.k8s.io&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># Resource &#34;pods&#34; doesn&#39;t match requests to any subresource of pods,</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># which is consistent with the RBAC policy.</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;clusterroles&#34;</span>, <span style="color:#e6db74">&#34;clusterrolebindings&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Log &#34;pods/log&#34;, &#34;pods/status&#34; at Metadata level</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Metadata</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;pods/log&#34;</span>, <span style="color:#e6db74">&#34;pods/status&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Don&#39;t log requests to a configmap called &#34;controller-leader&#34;</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">None</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;configmaps&#34;</span>]
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resourceNames</span>: [<span style="color:#e6db74">&#34;controller-leader&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Don&#39;t log watch requests by the &#34;system:kube-proxy&#34; on endpoints or services</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">None</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">users</span>: [<span style="color:#e6db74">&#34;system:kube-proxy&#34;</span>]
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">verbs</span>: [<span style="color:#e6db74">&#34;watch&#34;</span>]
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;endpoints&#34;</span>, <span style="color:#e6db74">&#34;services&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Don&#39;t log authenticated requests to certain non-resource URL paths.</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">None</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">userGroups</span>: [<span style="color:#e6db74">&#34;system:authenticated&#34;</span>]
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nonResourceURLs</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;/api*&#34;</span> <span style="color:#75715e"># Wildcard matching.</span>
-</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;/version&#34;</span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Log the request body of configmap changes in kube-system.</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Request</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;configmaps&#34;</span>]
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># This rule only applies to resources in the &#34;kube-system&#34; namespace.</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># The empty string &#34;&#34; can be used to select non-namespaced resources.</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">namespaces</span>: [<span style="color:#e6db74">&#34;kube-system&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Log configmap changes in all other namespaces at the RequestResponse level.</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">RequestResponse</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;configmaps&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Log secret changes in all other namespaces at the Metadata level.</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Metadata</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
-</span></span><span style="display:flex;"><span>      <span style="color:#f92672">resources</span>: [<span style="color:#e6db74">&#34;secrets&#34;</span>]
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Log all other resources in core and extensions at the Request level.</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Request</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">resources</span>:
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#75715e"># core API group</span>
-</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">group</span>: <span style="color:#e6db74">&#34;extensions&#34;</span> <span style="color:#75715e"># Version of group should NOT be included.</span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># A catch-all rule to log all other requests at the Metadata level.</span>
-</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">level</span>: <span style="color:#ae81ff">Metadata</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Long-running requests like watches that fall under this rule will not</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># generate an audit event in RequestReceived.</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#f92672">omitStages</span>:
-</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;RequestReceived&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#ae81ff">EOF</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">taints</span>: []
 </span></span></code></pre></div><h3 id="install-kubernetes">Install Kubernetes</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl enable --now crio
-</span></span><span style="display:flex;"><span>crictl info
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>kubeadm config images pull --config 010-kubeadm-conf-1-28-2.yaml
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubeadm config images pull --config 010-kubeadm-conf-1-32-2.yaml
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>systemctl enable kubelet.service
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>kubeadm init --skip-phases<span style="color:#f92672">=</span>addon/kube-proxy --config 010-kubeadm-conf-1-28-2.yaml
+</span></span><span style="display:flex;"><span>kubeadm init --skip-phases<span style="color:#f92672">=</span>addon/kube-proxy --config 010-kubeadm-conf-1-32-2.yaml
 </span></span></code></pre></div><h3 id="post-install">Post Install</h3>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>mkdir -p $HOME/.kube
 </span></span><span style="display:flex;"><span>sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
@@ -1144,6 +865,8 @@ https://github.com/weaveworks/kured
 	</article>
 </main>
 
+
+
 <div class=coffee_box>
   <div class=coffee_box_wrapper>
     <h3 class=coffee_box_heading>
@@ -1234,12 +957,6 @@ https://github.com/weaveworks/kured
 	<h4 class="widget-social__title widget__title">Social</h4>
 	<div class="widget-social__content widget__content">
 		<div class="widget-social__item widget__item">
-			<a class="widget-social__link widget__link btn" title="Slack" rel="noopener noreferrer" href='https://devopstales.slack.com' target="_blank">
-				<svg fill="#ffffff" xmlns="http://www.w3.org/2000/svg"  viewBox="0 0 24 24" width="24px" height="24px"><path d="M9 7C8.359 7 4.639 7 4 7 2.895 7 2 7.895 2 9c0 1.105.895 2 2 2 .639 0 4.359 0 5 0 1.105 0 2-.895 2-2C11 7.895 10.105 7 9 7zM11 4c0 .598 0 2 0 2S9.507 6 9 6C7.895 6 7 5.105 7 4s.895-2 2-2S11 2.895 11 4zM7 14c0 .641 0 4.361 0 5 0 1.105.895 2 2 2 1.105 0 2-.895 2-2 0-.639 0-4.359 0-5 0-1.105-.895-2-2-2C7.895 12 7 12.895 7 14zM4 12c.598 0 2 0 2 0s0 1.493 0 2c0 1.105-.895 2-2 2s-2-.895-2-2S2.895 12 4 12zM14 16c.641 0 4.361 0 5 0 1.105 0 2-.895 2-2 0-1.105-.895-2-2-2-.639 0-4.359 0-5 0-1.105 0-2 .895-2 2C12 15.104 12.895 16 14 16zM12 19c0-.598 0-2 0-2s1.493 0 2 0c1.105 0 2 .895 2 2 0 1.105-.895 2-2 2S12 20.104 12 19zM16 9c0-.641 0-4.361 0-5 0-1.105-.895-2-2-2-1.105 0-2 .895-2 2 0 .639 0 4.359 0 5 0 1.105.895 2 2 2C15.104 11 16 10.104 16 9zM19 11c-.598 0-2 0-2 0s0-1.493 0-2c0-1.105.895-2 2-2 1.105 0 2 .895 2 2S20.104 11 19 11z"/></svg>
-				<span>Slack</span>
-			</a>
-		</div>
-		<div class="widget-social__item widget__item">
 			<a class="widget-social__link widget__link btn" title="GitHub" rel="noopener noreferrer" href="https://github.com/devopstales" target="_blank">
 				<svg class="widget-social__link-icon icon icon-github" width="24" height="24" viewBox="0 0 384 374"><path d="m192 0c-106.1 0-192 85.8-192 191.7 0 84.7 55 156.6 131.3 181.9 9.6 1.8 13.1-4.2 13.1-9.2 0-4.6-.2-16.6-.3-32.6-53.4 11.6-64.7-25.7-64.7-25.7-8.7-22.1-21.3-28-21.3-28-17.4-11.9 1.3-11.6 1.3-11.6 19.3 1.4 29.4 19.8 29.4 19.8 17.1 29.3 44.9 20.8 55.9 15.9 1.7-12.4 6.7-20.8 12.2-25.6-42.6-4.8-87.5-21.3-87.5-94.8 0-20.9 7.5-38 19.8-51.4-2-4.9-8.6-24.3 1.9-50.7 0 0 16.1-5.2 52.8 19.7 15.3-4.2 31.7-6.4 48.1-6.5 16.3.1 32.7 2.2 48.1 6.5 36.7-24.8 52.8-19.7 52.8-19.7 10.5 26.4 3.9 45.9 1.9 50.7 12.3 13.4 19.7 30.5 19.7 51.4 0 73.7-44.9 89.9-87.7 94.6 6.9 5.9 13 17.6 13 35.5 0 25.6-.2 46.3-.2 52.6 0 5.1 3.5 11.1 13.2 9.2 76.2-25.5 131.2-97.3 131.2-182 0-105.9-86-191.7-192-191.7z"/></svg>
 				<span>GitHub</span>
@@ -1302,6 +1019,7 @@ https://github.com/weaveworks/kured
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/nginx-to-haproxy-ingress-migration/">Migrating from NGINX Ingress Controller to HAProxy: A Step-by-Step Guide</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/kubernetes-resource-visibility/">Why Kubernetes Pods See Host Resources (And How to Fix It)</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/cluster-api/">Kubernetes Cluster API: a step by stap guide</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/automatic-k8s-certificate-renewal/">Automatic Kubernetes Certificate Renewal</a></li>
@@ -1311,7 +1029,6 @@ https://github.com/weaveworks/kured
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-hierarchical-namespace-controller/">Hierarchical namespace controller</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-custom-kube-scheduler/">Custom Kube-Scheduler</a></li>
 			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/">Kube-Scheduler Profile</a></li>
-			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/cloud/custom-ssl-and-dns-on-aks-ingress-controller/">Configure custom SSL and DNS on AKS Ingress Controller</a></li>
 		</ul>
 	</div>
 </div>
@@ -1421,6 +1138,7 @@ https://github.com/weaveworks/kured
             <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nerdctl/" title="Nerdctl">Nerdctl</a>
             <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="Nextcloud">Nextcloud</a>
             <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nginx/" title="Nginx">Nginx</a>
             <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nmstate/" title="Nmstate">Nmstate</a>
             <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="NoSQL">NoSQL</a>
             <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/notary/" title="Notary">Notary</a>
@@ -1492,7 +1210,7 @@ https://github.com/weaveworks/kured
 	<div class="container footer__container flex">
 		
 		<div class="footer__copyright">
-			&copy; 2025 devopstales.
+			&copy; 2026 devopstales.
 			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/mansoorbarri/roadster/" rel="nofollow noopener" target="_blank">Roadster</a> theme.</span>
 		</div>
 	</div>
