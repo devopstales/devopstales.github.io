@@ -9,12 +9,543 @@
             <link href="https://devopstales.github.io/kubernetes/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/kubernetes/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/kubernetes/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-02-22T12:12:24+00:00</updated>
+    <updated>2026-02-23T17:30:50+00:00</updated>
     
     
     
     
         <id>https://devopstales.github.io/kubernetes/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Migrating from NGINX Ingress Controller to Traefik: A Step-by-Step Guide]]></title>
+            <link href="https://devopstales.github.io/kubernetes/nginx-to-traefic-ingress-migration/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/cloud/custom-ssl-and-dns-on-aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Configure custom SSL and DNS on AKS Ingress Controller" />
+                <link href="https://devopstales.github.io/cloud/azure-private-dns-with-aks-ingress-controller/?utm_source=atom_feed" rel="related" type="text/html" title="Use Azure Private DNS with AKS Ingress Controller" />
+                <link href="https://devopstales.github.io/cloud/aks-ingress-controller-v2/?utm_source=atom_feed" rel="related" type="text/html" title="Install Nginx Ingress Controller to AKS with application routing add-on" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and VXLAN" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-dmz-bgp/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes with external Ingress Controller with Haproxy and BGP" />
+            
+                <id>https://devopstales.github.io/kubernetes/nginx-to-traefic-ingress-migration/</id>
+            
+            
+            <published>2026-02-23T00:00:00+00:00</published>
+            <updated>2026-02-23T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>With Ingress NGINX retiring in March 2026, learn how to migrate to Traefik Proxy with practical examples, annotation mappings, and zero-downtime strategies.</blockquote><p>The Kubernetes community announced the retirement of Ingress NGINX with best-effort maintenance ending March 2026. This guide walks you through a safe, tested migration path to Traefik Proxy—with code examples, annotation mappings, and production tips.</p>
+<blockquote>
+<p>⚠️ <strong>Important</strong>: The Kubernetes SIG Network and Security Response Committee announced that <a href="https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/">Ingress NGINX will be retired in March 2026</a>. After this date, there will be no security patches, bug fixes, or new releases. Existing deployments will continue to function, but running unmaintained infrastructure in production carries significant risk.</p></blockquote>
+<p>If you&rsquo;re using <code>ingress-nginx</code> today, now is the time to plan your migration. In this post, I&rsquo;ll walk you through migrating to <strong>Traefik Proxy</strong>—a cloud-native, dynamic ingress controller with automatic service discovery and a clear migration path.</p>
+<p>🔗 <strong>Sources</strong>:</p>
+<ul>
+<li><a href="https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/">Kubernetes Blog: Ingress NGINX Retirement</a></li>
+<li><a href="https://doc.traefik.io/traefik/migrate/nginx-to-traefik/">Traefik: Migrate from NGINX to Traefik</a></li>
+</ul>
+<hr>
+<h2 id="why-migrate-the-ingress-nginx-retirement-timeline">Why Migrate? The Ingress NGINX Retirement Timeline</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Date</th>
+          <th>Milestone</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Nov 2025</strong></td>
+          <td>Retirement announcement by Kubernetes SIG Network &amp; SRC</td>
+      </tr>
+      <tr>
+          <td><strong>Mar 2026</strong></td>
+          <td>Best-effort maintenance ends; no more releases or security fixes</td>
+      </tr>
+      <tr>
+          <td><strong>Post-Mar 2026</strong></td>
+          <td>Repositories become read-only; artifacts remain available</td>
+      </tr>
+  </tbody>
+</table>
+<blockquote>
+<p>✅ <strong>Good news</strong>: Your existing <code>ingress-nginx</code> deployments won&rsquo;t break. But without security updates, you&rsquo;ll accumulate technical debt and exposure to newly discovered vulnerabilities.</p></blockquote>
+<h3 id="why-traefik">Why Traefik?</h3>
+<p>Traefik isn&rsquo;t just a replacement—it&rsquo;s a <strong>modernization</strong>:</p>
+<ul>
+<li>🚀 <strong>Automatic service discovery</strong>: Watches Kubernetes API; no manual config reloads</li>
+<li>🔐 <strong>Let&rsquo;s Encrypt built-in</strong>: Automatic TLS provisioning and renewal</li>
+<li>🧩 <strong>Middleware architecture</strong>: Chainable components for auth, rate limiting, headers, redirects</li>
+<li>📊 <strong>Native metrics</strong>: Prometheus, Datadog, OpenTelemetry—no exporters needed</li>
+<li>🌐 <strong>Full protocol support</strong>: HTTP/1.1, HTTP/2, HTTP/3, gRPC, TCP, WebSocket</li>
+<li>🆓 <strong>100% open source</strong> (Apache 2.0), with optional enterprise features</li>
+</ul>
+<hr>
+<h2 id="migration-strategy-4-phases-to-zero-downtime">Migration Strategy: 4 Phases to Zero Downtime</h2>
+<div class="mermaid">
+graph LR
+    A[Phase 1: Assess] --> B[Phase 2: Parallel Deploy]
+    B --> C[Phase 3: Traffic Shift]
+    C --> D[Phase 4: Decommission]
+</div>
+<hr>
+<h2 id="phase-1-assess-your-current-setup">Phase 1: Assess Your Current Setup</h2>
+<p>First, confirm you&rsquo;re using Ingress NGINX:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl get pods --all-namespaces <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --selector app.kubernetes.io/name<span style="color:#f92672">=</span>ingress-nginx
+</span></span></code></pre></div><p>Then inventory your annotations:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl get ingress -A -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{range .items[*]}{.metadata.name}{&#34;\t&#34;}{.metadata.annotations}{&#34;\n&#34;}{end}&#39;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  | grep nginx.ingress.kubernetes.io
+</span></span></code></pre></div><h2 id="phase-2-deploy-traefik-in-parallel">Phase 2: Deploy Traefik in Parallel</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add the Traefik Helm repo</span>
+</span></span><span style="display:flex;"><span>helm repo add traefik https://traefik.github.io/charts
+</span></span><span style="display:flex;"><span>helm repo update
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install in a dedicated namespace</span>
+</span></span><span style="display:flex;"><span>helm install traefik traefik/traefik <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace traefik <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ingressClass.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ingressClass.isDefaultClass<span style="color:#f92672">=</span>false <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ports.web.redirectTo.port<span style="color:#f92672">=</span>websecure <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ports.websecure.tls.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesIngress.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesCRD.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set replicaCount<span style="color:#f92672">=</span><span style="color:#ae81ff">2</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set logs.level<span style="color:#f92672">=</span>INFO
+</span></span></code></pre></div><p>Verify Installation</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check pods and service</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n traefik
+</span></span><span style="display:flex;"><span>kubectl get svc -n traefik
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Confirm the IngressClass exists</span>
+</span></span><span style="display:flex;"><span>kubectl get ingressclass traefik -o yaml
+</span></span></code></pre></div><h2 id="phase-3-migrate-ingress-resources-with-examples">Phase 3: Migrate Ingress Resources (With Examples)</h2>
+<p><strong>Before (NGINX):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">example-ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/rewrite-target</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">my-app.tld</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">my-app-tls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">example.com</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/app</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">app-service</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</span></span></code></pre></div><p><strong>After (Traefik):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">example-ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">traefik</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.entrypoints</span>: <span style="color:#ae81ff">websecure</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Path rewrite via Middleware (see advanced section)</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">my-app.tld</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">my-app-tls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">example.com</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/app</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">app-service</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</span></span></code></pre></div><h3 id="the-zero-modification-approach-traefiks-nginx-provider">The Zero-Modification Approach: Traefik&rsquo;s NGINX Provider</h3>
+<p>Here&rsquo;s the best part: <strong>you don&rsquo;t need to modify existing Ingress resources immediately</strong>. Traefik v3.6.2+ includes an <strong>Ingress NGINX Provider</strong> that understands NGINX annotations and translates them automatically.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install Traefik with NGINX compatibility layer</span>
+</span></span><span style="display:flex;"><span>helm upgrade --install traefik traefik/traefik <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace traefik --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesIngressNginx.enabled<span style="color:#f92672">=</span>true
+</span></span></code></pre></div><p>Or using a values file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># traefik-values.yaml</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">providers</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">kubernetesIngressNginx</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm upgrade --install traefik traefik/traefik <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace traefik --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --values traefik-values.yaml
+</span></span></code></pre></div><p>Your existing Ingress resources work <strong>unchanged</strong>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">myapp</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/enable-cors</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/cors-allow-origin</span>: <span style="color:#e6db74">&#34;https://example.com&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">nginx </span> <span style="color:#75715e"># Traefik watches this class</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">myapp.example.com</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">name</span>: <span style="color:#ae81ff">whoami</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</span></span></code></pre></div><hr>
+<h2 id="annotation-migration-reference">Annotation Migration Reference</h2>
+<table>
+  <thead>
+      <tr>
+          <th>NGINX Annotation</th>
+          <th>Traefik Equivalent</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/ssl-redirect: &quot;true&quot;</code></td>
+          <td><code>traefik.ingress.kubernetes.io/router.entrypoints: websecure</code></td>
+          <td>Or use NGINX provider</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/rewrite-target: /path</code></td>
+          <td>Middleware <code>StripPrefix</code></td>
+          <td>Requires Middleware CRD</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/enable-cors: &quot;true&quot;</code></td>
+          <td>Middleware <code>Headers</code> + CORS</td>
+          <td>Chainable middleware</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/cors-allow-origin: &quot;*&quot;</code></td>
+          <td>Middleware <code>Headers</code></td>
+          <td>See CORS middleware docs</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/proxy-body-size: &quot;10m&quot;</code></td>
+          <td><code>serversTransport.maxBodySize</code></td>
+          <td>Global setting</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/rate-limit: &quot;100&quot;</code></td>
+          <td>Middleware <code>RateLimit</code></td>
+          <td>Token bucket algorithm</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/auth-url</code></td>
+          <td>Middleware <code>ForwardAuth</code></td>
+          <td>Direct equivalent</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/backend-protocol: &quot;HTTPS&quot;</code></td>
+          <td>Service <code>scheme: https</code></td>
+          <td>In ServiceSpec</td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h2 id="phase-4-traffic-migration-strategies">Phase 4: Traffic Migration Strategies</h2>
+<h3 id="option-a-dns-based-migration-simple">Option A: DNS-Based Migration (Simple)</h3>
+<ol>
+<li><strong>Add Traefik to DNS</strong> - Add Traefik&rsquo;s LoadBalancer IP to your DNS records alongside NGINX (round-robin)</li>
+<li><strong>Monitor traffic</strong> - Watch logs on both controllers to verify traffic distribution</li>
+<li><strong>Remove NGINX from DNS</strong> - Once validated, update DNS to point only to Traefik</li>
+<li><strong>Wait for propagation</strong> - Allow 24-48 hours for DNS caches to expire</li>
+<li><strong>Uninstall NGINX</strong> - Safe to remove after propagation window</li>
+</ol>
+<h3 id="option-b-weighted-traffic-shift-production-ready">Option B: Weighted Traffic Shift (Production-Ready)</h3>
+<p>Use an external load balancer (Cloudflare, AWS ALB, HAProxy) in front of both controllers:</p>
+<div class="mermaid">
+graph TD
+    A[External LB<br/>Cloudflare / AWS ALB / HAProxy] -->|10% | B[NGINX]
+    A -->|90% | C[Traefik]
+</div>
+<p><strong>Gradual weight shift:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Stage</th>
+          <th>NGINX</th>
+          <th>Traefik</th>
+          <th>Duration</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>1</td>
+          <td>100%</td>
+          <td>0%</td>
+          <td>Baseline</td>
+      </tr>
+      <tr>
+          <td>2</td>
+          <td>90%</td>
+          <td>10%</td>
+          <td>24 hours</td>
+      </tr>
+      <tr>
+          <td>3</td>
+          <td>50%</td>
+          <td>50%</td>
+          <td>24 hours</td>
+      </tr>
+      <tr>
+          <td>4</td>
+          <td>10%</td>
+          <td>90%</td>
+          <td>24 hours</td>
+      </tr>
+      <tr>
+          <td>5</td>
+          <td>0%</td>
+          <td>100%</td>
+          <td>Final</td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h2 id="phase-5-decommission-nginx">Phase 5: Decommission NGINX</h2>
+<h3 id="step-1-preserve-the-ingressclass">Step 1: Preserve the IngressClass</h3>
+<p>Before uninstalling, preserve the <code>nginx</code> IngressClass to avoid breaking existing resources:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm upgrade ingress-nginx ingress-nginx <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --repo https://kubernetes.github.io/ingress-nginx <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace ingress-nginx <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --reuse-values <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set-json <span style="color:#e6db74">&#39;controller.ingressClassResource.annotations={&#34;helm.sh/resource-policy&#34;: &#34;keep&#34;}&#39;</span>
+</span></span></code></pre></div><h3 id="step-2-delete-admission-webhooks">Step 2: Delete Admission Webhooks</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission
+</span></span><span style="display:flex;"><span>kubectl delete -A MutatingWebhookConfiguration ingress-nginx-admission
+</span></span></code></pre></div><h3 id="step-3-uninstall-nginx">Step 3: Uninstall NGINX</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm uninstall ingress-nginx --namespace ingress-nginx
+</span></span><span style="display:flex;"><span>kubectl delete namespace ingress-nginx
+</span></span></code></pre></div><h3 id="step-4-transfer-loadbalancer-ip-optional">Step 4: Transfer LoadBalancer IP (Optional)</h3>
+<p>If you need to preserve your external IP, configure Traefik to claim it:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># traefik-values.yaml (AWS NLB example)</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">LoadBalancer</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">loadBalancerClass</span>: <span style="color:#ae81ff">service.k8s.aws/nlb</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">service.beta.kubernetes.io/aws-load-balancer-type</span>: <span style="color:#e6db74">&#34;external&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">service.beta.kubernetes.io/aws-load-balancer-nlb-target-type</span>: <span style="color:#e6db74">&#34;ip&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">service.beta.kubernetes.io/aws-load-balancer-eip-allocations</span>: <span style="color:#e6db74">&#34;eipalloc-xxx,eipalloc-yyy&#34;</span>
+</span></span></code></pre></div><h2 id="advanced-traefik-middleware-examples">Advanced: Traefik Middleware Examples</h2>
+<h3 id="rate-limiting">Rate Limiting</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">rate-limit</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rateLimit</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">average</span>: <span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">burst</span>: <span style="color:#ae81ff">50</span>
+</span></span></code></pre></div><h3 id="cors-headers">CORS Headers</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cors-headers</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">headers</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">accessControlAllowMethods</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">GET</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">POST</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">OPTIONS</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">accessControlAllowHeaders</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;*&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">accessControlAllowOriginList</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;https://example.com&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">accessControlMaxAge</span>: <span style="color:#ae81ff">100</span>
+</span></span></code></pre></div><h3 id="path-rewrite-replacement-for-rewrite-target">Path Rewrite (replacement for <code>rewrite-target</code>)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">strip-app-prefix</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">stripPrefix</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">prefixes</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">/app</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">example-ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.middlewares</span>: <span style="color:#ae81ff">default-strip-app-prefix@kubernetescrd</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># ... rest of ingress</span>
+</span></span></code></pre></div><hr>
+<h2 id="verification--monitoring">Verification &amp; Monitoring</h2>
+<h3 id="check-both-controllers">Check Both Controllers</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl get pods -n ingress-nginx
+</span></span><span style="display:flex;"><span>kubectl get pods -n traefik
+</span></span></code></pre></div><h3 id="get-loadbalancer-ips">Get LoadBalancer IPs</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl get svc -n ingress-nginx ingress-nginx-controller
+</span></span><span style="display:flex;"><span>kubectl get svc -n traefik traefik
+</span></span></code></pre></div><h3 id="test-traffic-via-traefik">Test Traffic via Traefik</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Get Traefik&#39;s external IP</span>
+</span></span><span style="display:flex;"><span>TRAEFIK_IP<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>kubectl get svc -n traefik traefik -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.status.loadBalancer.ingress[0].ip}&#39;</span><span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test with curl (bypass DNS)</span>
+</span></span><span style="display:flex;"><span>curl --connect-to myapp.example.com:443:<span style="color:#e6db74">${</span>TRAEFIK_IP<span style="color:#e6db74">}</span> https://myapp.example.com
+</span></span></code></pre></div><h3 id="check-traefik-logs-for-ingress-discovery">Check Traefik Logs for Ingress Discovery</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl logs -n traefik deployment/traefik | grep -i <span style="color:#e6db74">&#34;ingress&#34;</span>
+</span></span></code></pre></div><h3 id="backup-before-migration">Backup Before Migration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Export all Ingress resources</span>
+</span></span><span style="display:flex;"><span>kubectl get ingress --all-namespaces -o yaml &gt; ingress-backup.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Export NGINX ConfigMaps</span>
+</span></span><span style="display:flex;"><span>kubectl get configmap --all-namespaces <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -l app.kubernetes.io/name<span style="color:#f92672">=</span>ingress-nginx -o yaml &gt; nginx-configmaps.yaml
+</span></span></code></pre></div><hr>
+<h2 id="key-differences-nginx-vs-traefik">Key Differences: NGINX vs Traefik</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Aspect</th>
+          <th>NGINX Ingress</th>
+          <th>Traefik</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Configuration</strong></td>
+          <td>ConfigMaps, annotations</td>
+          <td>Helm values, CRDs, Gateway API</td>
+      </tr>
+      <tr>
+          <td><strong>Service Discovery</strong></td>
+          <td>Requires reload</td>
+          <td>Automatic (watches Kubernetes API)</td>
+      </tr>
+      <tr>
+          <td><strong>TLS/Let&rsquo;s Encrypt</strong></td>
+          <td>HTTP challenge (needs public exposure)</td>
+          <td>DNS challenge supported</td>
+      </tr>
+      <tr>
+          <td><strong>Metrics</strong></td>
+          <td>Requires prometheus-exporter sidecar</td>
+          <td>Built-in Prometheus, Datadog, OTLP</td>
+      </tr>
+      <tr>
+          <td><strong>Dashboard</strong></td>
+          <td>External addon required</td>
+          <td>Built-in web UI (<code>--api.dashboard=true</code>)</td>
+      </tr>
+      <tr>
+          <td><strong>TCP/UDP Routing</strong></td>
+          <td>Limited (ConfigMap-based)</td>
+          <td>Native via IngressRouteTCP/UDP CRDs</td>
+      </tr>
+      <tr>
+          <td><strong>Hot Reloading</strong></td>
+          <td>No (requires pod restart)</td>
+          <td>Yes (zero-downtime config updates)</td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="traefik-not-picking-up-ingress">Traefik Not Picking Up Ingress</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Verify IngressClass annotation</span>
+</span></span><span style="display:flex;"><span>kubectl get ingress &lt;name&gt; -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.spec.ingressClassName}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Traefik logs</span>
+</span></span><span style="display:flex;"><span>kubectl logs -n traefik deployment/traefik --tail<span style="color:#f92672">=</span><span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify RBAC</span>
+</span></span><span style="display:flex;"><span>kubectl get clusterrole traefik -o yaml | grep -A5 ingress
+</span></span></code></pre></div><h3 id="tls-certificate-issues">TLS Certificate Issues</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check certificate secret exists</span>
+</span></span><span style="display:flex;"><span>kubectl get secret &lt;tls-secret&gt; -o yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify Traefik TLSStore</span>
+</span></span><span style="display:flex;"><span>kubectl get tlsstore -A
+</span></span></code></pre></div><h3 id="502-bad-gateway">502 Bad Gateway</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Verify backend service endpoints</span>
+</span></span><span style="display:flex;"><span>kubectl get endpoints &lt;service-name&gt;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Traefik logs for upstream errors</span>
+</span></span><span style="display:flex;"><span>kubectl logs -n traefik deployment/traefik | grep -i <span style="color:#e6db74">&#34;upstream\|502&#34;</span>
+</span></span></code></pre></div><hr>
+<h2 id="conclusion">Conclusion</h2>
+<p>The retirement of Ingress NGINX is a significant moment for the Kubernetes community, but it&rsquo;s also an opportunity to modernize your ingress layer. Traefik offers:</p>
+<p>✅ <strong>Zero-downtime migration</strong> with the NGINX compatibility provider<br>
+✅ <strong>No immediate code changes</strong> to existing Ingress resources<br>
+✅ <strong>Modern architecture</strong> with automatic service discovery<br>
+✅ <strong>Built-in features</strong> that previously required add-ons</p>
+<p><strong>Migration checklist:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Inventory existing Ingress resources and annotations</li>
+<li><input disabled="" type="checkbox"> Deploy Traefik with NGINX provider enabled</li>
+<li><input disabled="" type="checkbox"> Test traffic routing through Traefik</li>
+<li><input disabled="" type="checkbox"> Implement gradual traffic shift (DNS or external LB)</li>
+<li><input disabled="" type="checkbox"> Monitor for errors during migration window</li>
+<li><input disabled="" type="checkbox"> Decommission NGINX after validation</li>
+<li><input disabled="" type="checkbox"> (Optional) Migrate to native Traefik CRDs for advanced features</li>
+</ul>
+<p>Start your migration today—don&rsquo;t wait until March 2026 when security updates end.</p>
+<hr>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/">Kubernetes Blog: Ingress NGINX Retirement</a></li>
+<li><a href="https://doc.traefik.io/traefik/migrate/nginx-to-traefik/">Traefik: Migrate from NGINX to Traefik</a></li>
+<li><a href="https://doc.traefik.io/traefik/">Traefik Documentation</a></li>
+<li><a href="https://github.com/traefik/traefik-helm-chart">Traefik Helm Chart</a></li>
+</ul>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="ingress" term="ingress" label="ingress" />
+                             
+                                <category scheme="traefik" term="traefik" label="traefik" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="ingress" term="ingress" label="ingress" />
+                             
+                                <category scheme="nginx" term="nginx" label="nginx" />
+                             
+                                <category scheme="traefik" term="traefik" label="traefik" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -183,7 +714,22 @@ graph LR
           <td>haproxy.org/affinity</td>
       </tr>
   </tbody>
-</table>]]></content>
+</table>
+<h2 id="phase-4-decommission-nginx">Phase 4: Decommission NGINX</h2>
+<h3 id="step-1-preserve-the-ingressclass">Step 1: Preserve the IngressClass</h3>
+<p>Before uninstalling, preserve the <code>nginx</code> IngressClass to avoid breaking existing resources:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm upgrade ingress-nginx ingress-nginx <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --repo https://kubernetes.github.io/ingress-nginx <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace ingress-nginx <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --reuse-values <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set-json <span style="color:#e6db74">&#39;controller.ingressClassResource.annotations={&#34;helm.sh/resource-policy&#34;: &#34;keep&#34;}&#39;</span>
+</span></span></code></pre></div><h3 id="step-2-delete-admission-webhooks">Step 2: Delete Admission Webhooks</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission
+</span></span><span style="display:flex;"><span>kubectl delete -A MutatingWebhookConfiguration ingress-nginx-admission
+</span></span></code></pre></div><h3 id="step-3-uninstall-nginx">Step 3: Uninstall NGINX</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm uninstall ingress-nginx --namespace ingress-nginx
+</span></span><span style="display:flex;"><span>kubectl delete namespace ingress-nginx
+</span></span></code></pre></div>]]></content>
             
                  
                     
