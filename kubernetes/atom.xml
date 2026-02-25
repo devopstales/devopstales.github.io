@@ -1,20 +1,879 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
-    <generator uri="https://gohugo.io/" version="0.145.0">Hugo</generator><title type="html"><![CDATA[Kubernetes on devopstales]]></title>
+    <generator uri="https://gohugo.io/" version="0.145.0">Hugo</generator><title type="html"><![CDATA[Kubernetes on DevOpsTales]]></title>
     
-        <subtitle type="html"><![CDATA[Blog about dev and ops stuff]]></subtitle>
+        <subtitle type="html"><![CDATA[Kubernetes, Cloud & Infrastructure Guides]]></subtitle>
     
     
     
             <link href="https://devopstales.github.io/kubernetes/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/kubernetes/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/kubernetes/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-02-23T18:30:27+00:00</updated>
+    <updated>2026-02-25T20:14:36+00:00</updated>
     
     
     
     
         <id>https://devopstales.github.io/kubernetes/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Implementing Mutual TLS (mTLS) with Traefik Ingress Controller: Per-Ingress Configuration]]></title>
+            <link href="https://devopstales.github.io/kubernetes/mtls-traefik-ingress/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/mtls-nginx-ingress/?utm_source=atom_feed" rel="related" type="text/html" title="Implementing Mutual TLS (mTLS) with NGINX Ingress Controller: Per-Ingress Configuration" />
+            
+                <id>https://devopstales.github.io/kubernetes/mtls-traefik-ingress/</id>
+            
+            
+            <published>2026-02-25T00:00:00+00:00</published>
+            <updated>2026-02-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Learn how to implement per-ingress mutual TLS (mTLS) authentication with Traefik Ingress Controller using TLSOption CRDs. Complete guide with certificate generation, configuration examples, and practical testing.</blockquote><p>Mutual TLS (mTLS) adds a critical security layer to your Kubernetes applications by requiring clients to authenticate with certificates—not just passwords or tokens. This guide covers <strong>per-ingress mTLS configuration</strong> with Traefik Ingress Controller, using Traefik&rsquo;s native <code>TLSOption</code> CRD for fine-grained control over which services require client certificate authentication.</p>
+<hr>
+<h2 id="understanding-mtls-tls-vs-mutual-tls">Understanding mTLS: TLS vs Mutual TLS</h2>
+<p>Standard TLS only authenticates the <strong>server</strong> to the client. mTLS extends this by requiring <strong>both parties</strong> to authenticate each other:</p>
+<div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant Traefik Ingress
+    participant Backend
+
+    Client->>Traefik Ingress: TLS ClientHello
+    Traefik Ingress->>Client: Server Certificate + Client Cert Request
+    Client->>Traefik Ingress: Client Certificate
+    Traefik Ingress->>Traefik Ingress: Verify Client Cert against CA
+    Traefik Ingress->>Client: TLS Handshake Complete
+    Client->>Traefik Ingress: Encrypted Request
+    Traefik Ingress->>Backend: Forward Request
+</div>
+<h3 id="comparison-tls-vs-mtls">Comparison: TLS vs mTLS</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>TLS</th>
+          <th>mTLS</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Server Authentication</strong></td>
+          <td>✅ Required</td>
+          <td>✅ Required</td>
+      </tr>
+      <tr>
+          <td><strong>Client Authentication</strong></td>
+          <td>❌ Not required</td>
+          <td>✅ Required (via certificate)</td>
+      </tr>
+      <tr>
+          <td><strong>Protection Against</strong></td>
+          <td>Eavesdropping, server impersonation</td>
+          <td>Eavesdropping, <strong>unauthorized clients</strong>, MITM</td>
+      </tr>
+      <tr>
+          <td><strong>Use Case</strong></td>
+          <td>Public websites, general APIs</td>
+          <td>Internal services, zero-trust networks, B2B integrations</td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h2 id="how-traefik-handles-mtls">How Traefik Handles mTLS</h2>
+<p>Traefik uses a <strong>CRD-based approach</strong> for mTLS configuration through the <code>TLSOption</code> resource. This provides several advantages:</p>
+<ul>
+<li>📋 <strong>Declarative configuration</strong> – Define mTLS requirements as Kubernetes resources</li>
+<li>🔗 <strong>Reusable policies</strong> – Apply the same TLSOption to multiple ingresses</li>
+<li>🎯 <strong>Per-ingress control</strong> – Enable mTLS selectively per route</li>
+<li>🔒 <strong>Native integration</strong> – No ConfigMap patches or deployment modifications required</li>
+</ul>
+<div class="mermaid">
+graph TB
+    A[Ingress Resource] -->|Annotation| B[TLSOption Reference]
+    B --> C[TLSOption CRD]
+    C --> D[CA Secret]
+    C --> E[Client Auth Policy]
+    E --> F{Client Cert Valid?}
+    F -->|Yes| G[Backend Service]
+    F -->|No| H[400 Bad Request]
+</div>
+<hr>
+<h2 id="per-ingress-mtls-configuration">Per-Ingress mTLS Configuration</h2>
+<p>This approach enables mTLS on <strong>specific ingress resources</strong>, giving you fine-grained control over which services require client certificate authentication.</p>
+<h3 id="step-1-deploy-traefik-ingress-controller">Step 1: Deploy Traefik Ingress Controller</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add the Traefik Helm repo</span>
+</span></span><span style="display:flex;"><span>helm repo add traefik https://traefik.github.io/charts
+</span></span><span style="display:flex;"><span>helm repo update
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install Traefik Ingress Controller</span>
+</span></span><span style="display:flex;"><span>helm install traefik traefik/traefik <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace traefik <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ingressClass.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ingressClass.isDefaultClass<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesCRD.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesIngress.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ports.websecure.tls.enabled<span style="color:#f92672">=</span>true
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify pods are running</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n traefik
+</span></span></code></pre></div><h3 id="step-2-deploy-a-test-application">Step 2: Deploy a Test Application</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create deployment</span>
+</span></span><span style="display:flex;"><span>kubectl create deployment demo-app --image<span style="color:#f92672">=</span>httpd --port<span style="color:#f92672">=</span><span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expose via ClusterIP service</span>
+</span></span><span style="display:flex;"><span>kubectl expose deployment demo-app --name<span style="color:#f92672">=</span>demo-app --namespace<span style="color:#f92672">=</span>example
+</span></span></code></pre></div><h3 id="step-3-generate-certificate-authority-ca">Step 3: Generate Certificate Authority (CA)</h3>
+<p>The CA signs client certificates and is used by Traefik to verify incoming client requests.</p>
+<p><strong>Create OpenSSL CA configuration</strong> (<code>openssl-ca.cnf</code>):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ini" data-lang="ini"><span style="display:flex;"><span><span style="color:#a6e22e">HOME</span>            <span style="color:#f92672">=</span> <span style="color:#e6db74">.</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">RANDFILE</span>        <span style="color:#f92672">=</span> <span style="color:#e6db74">$ENV::HOME/.rnd</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ ca ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_ca</span>    <span style="color:#f92672">=</span> <span style="color:#e6db74">CA_default</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ CA_default ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_days</span>     <span style="color:#f92672">=</span> <span style="color:#e6db74">365</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_crl_days</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">30</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_md</span>       <span style="color:#f92672">=</span> <span style="color:#e6db74">sha256</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">preserve</span>         <span style="color:#f92672">=</span> <span style="color:#e6db74">no</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">x509_extensions</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">ca_extensions</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">email_in_dn</span>     <span style="color:#f92672">=</span> <span style="color:#e6db74">no</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">copy_extensions</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">copy</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">base_dir</span>      <span style="color:#f92672">=</span> <span style="color:#e6db74">.</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">certificate</span>   <span style="color:#f92672">=</span> <span style="color:#e6db74">$base_dir/cacert.pem</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">private_key</span>   <span style="color:#f92672">=</span> <span style="color:#e6db74">$base_dir/cakey.pem</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">new_certs_dir</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">$base_dir</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">database</span>      <span style="color:#f92672">=</span> <span style="color:#e6db74">$base_dir/index.txt</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">serial</span>        <span style="color:#f92672">=</span> <span style="color:#e6db74">$base_dir/serial.txt</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">unique_subject</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">no</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ req ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_bits</span>       <span style="color:#f92672">=</span> <span style="color:#e6db74">4096</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_keyfile</span>    <span style="color:#f92672">=</span> <span style="color:#e6db74">cakey.pem</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">distinguished_name</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">ca_distinguished_name</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">x509_extensions</span>    <span style="color:#f92672">=</span> <span style="color:#e6db74">ca_extensions</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">string_mask</span>        <span style="color:#f92672">=</span> <span style="color:#e6db74">utf8only</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ ca_distinguished_name ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">countryName</span>         <span style="color:#f92672">=</span> <span style="color:#e6db74">Country Name (2 letter code)</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">countryName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">US</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">stateOrProvinceName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">California</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">localityName_default</span>        <span style="color:#f92672">=</span> <span style="color:#e6db74">San Francisco</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">organizationName_default</span>    <span style="color:#f92672">=</span> <span style="color:#e6db74">MyOrganization</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">organizationalUnitName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">Security</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">commonName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">My Certificate Authority</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">emailAddress_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">security@example.com</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ ca_extensions ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">subjectKeyIdentifier</span>   <span style="color:#f92672">=</span> <span style="color:#e6db74">hash</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">authorityKeyIdentifier</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">keyid:always, issuer</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">basicConstraints</span>       <span style="color:#f92672">=</span> <span style="color:#e6db74">critical, CA:true</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">keyUsage</span>               <span style="color:#f92672">=</span> <span style="color:#e6db74">keyCertSign, cRLSign</span>
+</span></span></code></pre></div><p><strong>Generate CA certificate:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>openssl req -new -x509 -config openssl-ca.cnf -days <span style="color:#ae81ff">365</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -newkey rsa:4096 -sha256 -noenc -out cacert.pem -outform PEM
+</span></span></code></pre></div><p><strong>Output files:</strong></p>
+<ul>
+<li><code>cacert.pem</code> – CA certificate (public)</li>
+<li><code>cakey.pem</code> – CA private key (keep secure!)</li>
+</ul>
+<hr>
+<h3 id="step-4-generate-client-certificate">Step 4: Generate Client Certificate</h3>
+<p><strong>Generate client private key:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>openssl genpkey -out client.key -algorithm RSA -pkeyopt rsa_keygen_bits:4096
+</span></span></code></pre></div><p><strong>Create CSR configuration</strong> (<code>openssl-csr.cnf</code>):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ini" data-lang="ini"><span style="display:flex;"><span><span style="color:#66d9ef">[ req ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_bits</span>       <span style="color:#f92672">=</span> <span style="color:#e6db74">4096</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">default_keyfile</span>    <span style="color:#f92672">=</span> <span style="color:#e6db74">client.key</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">distinguished_name</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">client_distinguished_name</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">req_extensions</span>     <span style="color:#f92672">=</span> <span style="color:#e6db74">client_req_extensions</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">string_mask</span>        <span style="color:#f92672">=</span> <span style="color:#e6db74">utf8only</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ client_distinguished_name ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">countryName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">US</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">stateOrProvinceName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">California</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">localityName_default</span>        <span style="color:#f92672">=</span> <span style="color:#e6db74">San Francisco</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">organizationName_default</span>    <span style="color:#f92672">=</span> <span style="color:#e6db74">MyOrganization</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">organizationalUnitName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">Engineering</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">commonName_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">authorized-client</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">emailAddress_default</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">engineering@example.com</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ client_req_extensions ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">subjectKeyIdentifier</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">hash</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">basicConstraints</span>     <span style="color:#f92672">=</span> <span style="color:#e6db74">CA:FALSE</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">keyUsage</span>             <span style="color:#f92672">=</span> <span style="color:#e6db74">digitalSignature, keyEncipherment</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">subjectAltName</span>       <span style="color:#f92672">=</span> <span style="color:#e6db74">@alternate_names</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">nsComment</span>            <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;OpenSSL Generated Certificate&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[ alternate_names ]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">DNS.1</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">client.example.com</span>
+</span></span></code></pre></div><p><strong>Create Certificate Signing Request (CSR):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>openssl req -new -config openssl-csr.cnf -key client.key <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -out client.csr -outform PEM
+</span></span></code></pre></div><p><strong>Initialize CA database and sign the client certificate:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>touch index.txt
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;01&#34;</span> &gt; serial.txt
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>openssl ca -config openssl-ca.cnf <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -policy signing_policy <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -extensions signing_req <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -out client.pem <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -infiles client.csr
+</span></span></code></pre></div><blockquote>
+<p>💡 <strong>Note</strong>: The <code>signing_policy</code> and <code>signing_req</code> sections should be added to your <code>openssl-ca.cnf</code> file (see full configuration in the CA generation step above).</p></blockquote>
+<p><strong>Create PKCS#12 bundle for browser import:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>PASSWORD<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>uuidgen<span style="color:#66d9ef">)</span> <span style="color:#f92672">&amp;&amp;</span> echo <span style="color:#e6db74">&#34;Export password: </span>$PASSWORD<span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>openssl pkcs12 -export -inkey client.key -in client.pem <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -name <span style="color:#e6db74">&#34;Client Certificate&#34;</span> -out client.p12 -passout pass:<span style="color:#e6db74">&#34;</span>$PASSWORD<span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><hr>
+<h3 id="step-5-store-ca-certificate-as-kubernetes-secret">Step 5: Store CA Certificate as Kubernetes Secret</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl create secret generic ca-mtls <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --from-file<span style="color:#f92672">=</span>ca.crt<span style="color:#f92672">=</span>./cacert.pem <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -n example
+</span></span></code></pre></div><blockquote>
+<p>⚠️ <strong>Important</strong>: Traefik extracts the CA certificate from the <code>ca.crt</code> or <code>tls.ca</code> key of the secret. Use one of these exact key names.</p></blockquote>
+<hr>
+<h3 id="step-6-create-traefik-tlsoption-crd">Step 6: Create Traefik TLSOption CRD</h3>
+<p>The <code>TLSOption</code> resource defines the mTLS requirements for Traefik:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">TLSOption</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mtlsoption</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">example</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">clientAuth</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">clientAuthType</span>: <span style="color:#ae81ff">RequireAndVerifyClientCert</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">secretNames</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">ca-mtls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">minVersion</span>: <span style="color:#ae81ff">VersionTLS12</span>
+</span></span></code></pre></div><p>Apply the configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f tlsoption.yaml
+</span></span></code></pre></div><p><strong>Key configuration options:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Purpose</th>
+          <th>Values</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>clientAuth.clientAuthType</code></td>
+          <td>Client certificate verification mode</td>
+          <td><code>NoClientCert</code>, <code>RequestClientCert</code>, <code>RequireAndVerifyClientCert</code></td>
+      </tr>
+      <tr>
+          <td><code>clientAuth.secretNames</code></td>
+          <td>List of secrets containing CA certificates</td>
+          <td>Array of secret names</td>
+      </tr>
+      <tr>
+          <td><code>minVersion</code></td>
+          <td>Minimum TLS version allowed</td>
+          <td><code>VersionTLS10</code>, <code>VersionTLS11</code>, <code>VersionTLS12</code>, <code>VersionTLS13</code></td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h3 id="step-7-configure-ingress-with-tlsoption-annotation">Step 7: Configure Ingress with TLSOption Annotation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mtls-ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">example</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.entrypoints</span>: <span style="color:#ae81ff">websecure</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Link to TLSOption: ${NAMESPACE}-${TLSOPTION-NAME}@kubernetescrd</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.tls.options</span>: <span style="color:#ae81ff">example-mtlsoption@kubernetescrd</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">traefik</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">secure-app.example.com</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo-app</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#ae81ff">secure-app.example.com</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">traefik-tls-secret</span>
+</span></span></code></pre></div><p>Apply the configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f ingress-mtls.yaml
+</span></span></code></pre></div><blockquote>
+<p>💡 <strong>Annotation format</strong>: <code>${NAMESPACE}-${TLSOPTION-NAME}@kubernetescrd</code></p></blockquote>
+<hr>
+<h3 id="step-8-create-server-tls-secret-optional-but-recommended">Step 8: Create Server TLS Secret (Optional but Recommended)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Generate server certificate</span>
+</span></span><span style="display:flex;"><span>openssl req -x509 -nodes -days <span style="color:#ae81ff">365</span> -newkey rsa:2048 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -keyout server.key -out server.crt <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -subj <span style="color:#e6db74">&#34;/CN=secure-app.example.com/O=MyOrganization&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create Kubernetes TLS secret</span>
+</span></span><span style="display:flex;"><span>kubectl create secret tls traefik-tls-secret <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --key server.key <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cert server.crt <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -n example
+</span></span></code></pre></div><hr>
+<h2 id="validation-and-testing">Validation and Testing</h2>
+<h3 id="test-without-client-certificate-should-fail">Test Without Client Certificate (Should Fail)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -v https://secure-app.example.com
+</span></span></code></pre></div><p><strong>Expected response:</strong></p>
+<pre tabindex="0"><code>&lt; HTTP/1.1 400 Bad Request
+&lt; Content-Type: text/html
+&lt; 
+tls: failed to verify client certificate: x509: certificate signed by unknown authority
+</code></pre><h3 id="test-with-client-certificate-should-succeed">Test With Client Certificate (Should Succeed)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -v https://secure-app.example.com <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cacert cacert.pem <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cert client.pem <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --key client.key
+</span></span></code></pre></div><p><strong>Expected response:</strong></p>
+<pre tabindex="0"><code>* SSL certificate verify ok.
+* Using client certificate:
+*   subject: CN=authorized-client, OU=Engineering, O=MyOrganization
+&gt; GET / HTTP/1.1
+&lt; HTTP/1.1 200 OK
+</code></pre><h3 id="test-using-openssl">Test Using OpenSSL</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>openssl s_client -connect secure-app.example.com:443 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -key client.key -cert client.pem -state
+</span></span></code></pre></div><p><strong>Expected output:</strong></p>
+<pre tabindex="0"><code>SSL handshake has read 2543 bytes and written 4321 bytes
+Verification: OK
+</code></pre><h3 id="browser-testing">Browser Testing</h3>
+<div class="mermaid">
+graph LR
+    A[User opens browser] --> B[HTTPS request initiated]
+    B --> C[Server presents certificate]
+    C --> D{Browser trusts CA?}
+    D -->|No| E[Show security warning]
+    D -->|Yes| F[Server requests client certificate]
+    F --> G{User selects certificate}
+    G -->|Valid cert| H[Access granted]
+    G -->|No cert / Invalid| I[400 Bad Request]
+</div>
+<ol>
+<li><strong>Import CA certificate</strong> (<code>cacert.pem</code>) into your browser&rsquo;s trusted root certificates</li>
+<li><strong>Import client certificate</strong> (<code>client.p12</code>) into your browser</li>
+<li><strong>Navigate to</strong> <code>https://secure-app.example.com</code></li>
+<li><strong>Browser will prompt</strong> for certificate selection—choose your client certificate</li>
+</ol>
+<hr>
+<h2 id="architecture-flow">Architecture Flow</h2>
+<div class="mermaid">
+graph TB
+    A[Client] -->|Request + Client Cert| B[Traefik Ingress]
+    B -->|Check: Has router.tls.options?| C{Annotation Present?}
+    C -->|Yes| D[Load TLSOption CRD]
+    C -->|No| E[Forward Without Verification]
+    D --> F[Verify Client Cert against CA Secret]
+    F -->|Valid| G[Backend Service A]
+    F -->|Invalid| H[400 Bad Request]
+    E --> I[Backend Service B]
+</div>
+<hr>
+<h2 id="multiple-tlsoptions-for-different-security-levels">Multiple TLSOptions for Different Security Levels</h2>
+<p>You can create multiple <code>TLSOption</code> resources for different security requirements:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Strict mTLS for internal APIs</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">TLSOption</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">strict-mtls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">internal</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">clientAuth</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">clientAuthType</span>: <span style="color:#ae81ff">RequireAndVerifyClientCert</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">secretNames</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">internal-ca-mtls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">minVersion</span>: <span style="color:#ae81ff">VersionTLS13</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Optional mTLS for partner APIs</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">TLSOption</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">optional-mtls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">partners</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">clientAuth</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">clientAuthType</span>: <span style="color:#ae81ff">RequestClientCert</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">secretNames</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">partner-ca-mtls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">minVersion</span>: <span style="color:#ae81ff">VersionTLS12</span>
+</span></span></code></pre></div><p>Then reference them in your ingresses:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Internal API - strict mTLS required</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">traefik.ingress.kubernetes.io/router.tls.options</span>: <span style="color:#ae81ff">internal-strict-mtls@kubernetescrd</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Partner API - client cert requested but optional</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">traefik.ingress.kubernetes.io/router.tls.options</span>: <span style="color:#ae81ff">partners-optional-mtls@kubernetescrd</span>
+</span></span></code></pre></div><hr>
+<h2 id="production-considerations">Production Considerations</h2>
+<h3 id="certificate-management">Certificate Management</h3>
+<ul>
+<li>🔁 <strong>Rotate certificates regularly</strong> – Implement automated rotation before expiration</li>
+<li>📦 <strong>Use cert-manager</strong> – Integrate with <a href="https://cert-manager.io/">cert-manager</a> for automated certificate lifecycle</li>
+<li>🔐 <strong>Secure CA private key</strong> – Store in HSM or secure vault, never in version control</li>
+<li>📅 <strong>Monitor expiration</strong> – Set up alerts for certificates expiring within 30 days</li>
+</ul>
+<h3 id="security-best-practices">Security Best Practices</h3>
+<ul>
+<li>🔒 <strong>Restrict namespace access</strong> – Limit RBAC permissions to the Traefik namespace</li>
+<li>📋 <strong>Maintain certificate inventory</strong> – Track issued certificates and expiration dates</li>
+<li>🔄 <strong>Implement revocation</strong> – Use CRL or OCSP for compromised certificates</li>
+<li>🔍 <strong>Enable detailed logging</strong> – Log client certificate subjects for audit trails</li>
+<li>🛡️ <strong>Use TLS 1.3</strong> – Set <code>minVersion: VersionTLS13</code> for maximum security</li>
+</ul>
+<h3 id="dns-and-networking">DNS and Networking</h3>
+<ul>
+<li>🌐 <strong>Configure DNS A records</strong> – Point your domain to the Traefik LoadBalancer IP</li>
+<li>📊 <strong>Monitor failed authentications</strong> – Set up alerts for unusual 400 error rates</li>
+<li>📈 <strong>Enable Traefik metrics</strong> – Monitor TLS handshake failures via Prometheus</li>
+</ul>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="issue-400-bad-request--no-client-certificate">Issue: 400 Bad Request – No Client Certificate</h3>
+<p><strong>Symptoms:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -k https://secure-app.example.com
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Returns: 400 Bad Request</span>
+</span></span></code></pre></div><p><strong>Solutions:</strong></p>
+<ol>
+<li>Verify client certificate is being sent: <code>curl --cert client.pem --key client.key</code></li>
+<li>Check CA secret exists in the correct namespace</li>
+<li>Verify TLSOption annotation format: <code>namespace-name@kubernetescrd</code></li>
+<li>Check Traefik logs: <code>kubectl logs -n traefik -l app.kubernetes.io/name=traefik</code></li>
+</ol>
+<h3 id="issue-ssl-certificate-verify-failed">Issue: SSL Certificate Verify Failed</h3>
+<p><strong>Symptoms:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl: <span style="color:#f92672">(</span>60<span style="color:#f92672">)</span> SSL certificate problem: unable to get local issuer certificate
+</span></span></code></pre></div><p><strong>Solutions:</strong></p>
+<ol>
+<li>Import CA certificate: <code>curl --cacert cacert.pem</code></li>
+<li>Verify server certificate chain is complete</li>
+<li>Check SAN matches your domain</li>
+</ol>
+<h3 id="issue-tlsoption-not-applied">Issue: TLSOption Not Applied</h3>
+<p><strong>Symptoms:</strong> mTLS not enforced despite annotation</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Verify annotation format: <code>${NAMESPACE}-${TLSOPTION-NAME}@kubernetescrd</code></li>
+<li>Check TLSOption exists in the referenced namespace</li>
+<li>Verify CA secret has <code>ca.crt</code> or <code>tls.ca</code> key</li>
+<li>Ensure Traefik CRD provider is enabled</li>
+</ol>
+<h3 id="issue-client-certificate-not-passed-to-backend">Issue: Client Certificate Not Passed to Backend</h3>
+<p><strong>Symptoms:</strong> Backend doesn&rsquo;t receive client certificate headers</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Traefik passes client certificate in <code>X-Forwarded-Tls-Client-Cert</code> header</li>
+<li>Verify backend reads the correct header</li>
+<li>Check Traefik configuration for certificate forwarding</li>
+</ol>
+<hr>
+<h2 id="conclusion">Conclusion</h2>
+<p>Implementing <strong>per-ingress mTLS</strong> with Traefik Ingress Controller provides flexible, fine-grained security for your Kubernetes applications. Using Traefik&rsquo;s native <code>TLSOption</code> CRD offers several advantages:</p>
+<ul>
+<li>✅ <strong>Declarative configuration</strong> – Define mTLS as Kubernetes resources</li>
+<li>✅ <strong>Reusable policies</strong> – Apply TLSOptions across multiple ingresses</li>
+<li>✅ <strong>Selective mTLS enforcement</strong> – Only specific services require client certificates</li>
+<li>✅ <strong>Mixed public/internal services</strong> – Some endpoints public, others protected</li>
+<li>✅ <strong>Native integration</strong> – No deployment patches or ConfigMap modifications</li>
+</ul>
+<p>By requiring client certificates at the ingress boundary for selected services, you protect sensitive applications while maintaining accessibility for public-facing endpoints.</p>
+<hr>
+<p><strong>Found this guide helpful?</strong> Share your mTLS implementation experiences in the comments below.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="ingress" term="ingress" label="ingress" />
+                             
+                                <category scheme="traefik" term="traefik" label="traefik" />
+                             
+                                <category scheme="security" term="security" label="security" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="ingress" term="ingress" label="ingress" />
+                             
+                                <category scheme="traefik" term="traefik" label="traefik" />
+                             
+                                <category scheme="mtls" term="mtls" label="mtls" />
+                             
+                                <category scheme="security" term="security" label="security" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Implementing Mutual TLS (mTLS) with NGINX Ingress Controller: Per-Ingress Configuration]]></title>
+            <link href="https://devopstales.github.io/kubernetes/mtls-nginx-ingress/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/kubernetes/mtls-nginx-ingress/</id>
+            
+            
+            <published>2026-02-24T00:00:00+00:00</published>
+            <updated>2026-02-24T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Learn how to implement per-ingress mutual TLS (mTLS) authentication with NGINX Ingress Controller. Complete guide with certificate generation, configuration examples, and practical testing.</blockquote><p>Mutual TLS (mTLS) adds a critical security layer to your Kubernetes applications by requiring clients to authenticate with certificates—not just passwords or tokens. This guide covers <strong>per-ingress mTLS configuration</strong> with NGINX Ingress Controller, giving you fine-grained control over which services require client certificate authentication.</p>
+<hr>
+<h2 id="understanding-mtls-tls-vs-mutual-tls">Understanding mTLS: TLS vs Mutual TLS</h2>
+<p>Standard TLS only authenticates the <strong>server</strong> to the client. mTLS extends this by requiring <strong>both parties</strong> to authenticate each other:</p>
+<div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant NGINX Ingress
+    participant Backend
+
+    Client->>NGINX Ingress: TLS ClientHello
+    NGINX Ingress->>Client: Server Certificate
+    Client->>NGINX Ingress: Verify Server Cert
+    NGINX Ingress->>Client: Request Client Certificate
+    Client->>NGINX Ingress: Client Certificate
+    NGINX Ingress->>NGINX Ingress: Verify Client Cert against CA
+    NGINX Ingress->>Client: TLS Handshake Complete
+    Client->>NGINX Ingress: Encrypted Request
+    NGINX Ingress->>Backend: Forward Request
+</div>
+<h3 id="comparison-tls-vs-mtls">Comparison: TLS vs mTLS</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>TLS</th>
+          <th>mTLS</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Server Authentication</strong></td>
+          <td>✅ Required</td>
+          <td>✅ Required</td>
+      </tr>
+      <tr>
+          <td><strong>Client Authentication</strong></td>
+          <td>❌ Not required</td>
+          <td>✅ Required (via certificate)</td>
+      </tr>
+      <tr>
+          <td><strong>Protection Against</strong></td>
+          <td>Eavesdropping, server impersonation</td>
+          <td>Eavesdropping, <strong>unauthorized clients</strong>, MITM</td>
+      </tr>
+      <tr>
+          <td><strong>Use Case</strong></td>
+          <td>Public websites, general APIs</td>
+          <td>Internal services, zero-trust networks, B2B integrations</td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h2 id="per-ingress-mtls-configuration">Per-Ingress mTLS Configuration</h2>
+<p>This approach enables mTLS on <strong>specific ingress resources</strong>, giving you fine-grained control over which services require client certificate authentication.</p>
+<h3 id="step-1-deploy-nginx-ingress-controller">Step 1: Deploy NGINX Ingress Controller</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># For minikube</span>
+</span></span><span style="display:flex;"><span>minikube addons enable ingress
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify pods are running</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n ingress-nginx
+</span></span></code></pre></div><h3 id="step-2-deploy-a-test-application">Step 2: Deploy a Test Application</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create deployment</span>
+</span></span><span style="display:flex;"><span>kubectl create deployment demo-app --image<span style="color:#f92672">=</span>httpd --port<span style="color:#f92672">=</span><span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expose via ClusterIP service</span>
+</span></span><span style="display:flex;"><span>kubectl expose deployment demo-app --name<span style="color:#f92672">=</span>demo-app
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create ingress resource</span>
+</span></span><span style="display:flex;"><span>kubectl create ingress test-localhost --class<span style="color:#f92672">=</span>nginx <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;test.localdev.me/*=demo-app:80&#34;</span>
+</span></span></code></pre></div><h3 id="step-3-generate-certificate-authority-ca">Step 3: Generate Certificate Authority (CA)</h3>
+<p>The CA signs client certificates and is used by NGINX to verify incoming client requests.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>openssl req -x509 -sha256 -newkey rsa:4096 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -keyout ca.key -out ca.crt -days <span style="color:#ae81ff">365</span> -nodes <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -subj <span style="color:#e6db74">&#39;/CN=My Certificate Authority/O=MyOrganization&#39;</span>
+</span></span></code></pre></div><h3 id="step-4-create-ca-secret-in-kubernetes">Step 4: Create CA Secret in Kubernetes</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl create secret generic ca-secret <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --from-file<span style="color:#f92672">=</span>ca.crt<span style="color:#f92672">=</span>ca.crt <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --from-file<span style="color:#f92672">=</span>ca.key<span style="color:#f92672">=</span>ca.key <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -n default
+</span></span></code></pre></div><blockquote>
+<p>🔒 <strong>Security Note</strong>: Store the CA private key securely. Consider using a dedicated secrets management solution in production.</p></blockquote>
+<h3 id="step-5-generate-client-certificate">Step 5: Generate Client Certificate</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create client private key and CSR</span>
+</span></span><span style="display:flex;"><span>openssl req -new -newkey rsa:4096 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -keyout client.key -out client.csr -nodes <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -subj <span style="color:#e6db74">&#39;/CN=authorized-client/O=MyOrganization&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Sign client certificate with CA</span>
+</span></span><span style="display:flex;"><span>openssl x509 -req -sha256 -days <span style="color:#ae81ff">365</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -in client.csr -CA ca.crt -CAkey ca.key <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -set_serial <span style="color:#ae81ff">01</span> -out client.crt
+</span></span></code></pre></div><h3 id="step-6-enable-server-side-tls-optional-but-recommended">Step 6: Enable Server-Side TLS (Optional but Recommended)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Generate self-signed server certificate</span>
+</span></span><span style="display:flex;"><span>openssl req -x509 -nodes -days <span style="color:#ae81ff">365</span> -newkey rsa:2048 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -keyout server.key -out server.crt <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -subj <span style="color:#e6db74">&#34;/CN=test.localdev.me/O=MyOrganization&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create Kubernetes TLS secret</span>
+</span></span><span style="display:flex;"><span>kubectl create secret tls self-tls <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --key server.key <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cert server.crt
+</span></span></code></pre></div><h3 id="step-7-configure-ingress-with-mtls-annotations">Step 7: Configure Ingress with mTLS Annotations</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">test-localhost</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">kubernetes.io/ingress.class</span>: <span style="color:#ae81ff">nginx</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Reference the CA secret for client verification</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/auth-tls-secret</span>: <span style="color:#e6db74">&#34;default/ca-secret&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Enable client certificate verification</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/auth-tls-verify-client</span>: <span style="color:#e6db74">&#34;on&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Set verification chain depth</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/auth-tls-verify-depth</span>: <span style="color:#e6db74">&#34;1&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Pass client certificate to backend service (optional)</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">test.localdev.me</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">self-tls</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">test.localdev.me</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">demo-app</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</span></span></code></pre></div><p>Apply the configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f ingress-mtls.yaml
+</span></span></code></pre></div><h3 id="step-8-test-the-configuration">Step 8: Test the Configuration</h3>
+<p><strong>Without client certificate (should fail):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -k https://test.localdev.me
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Returns: 400 Bad Request - No required SSL certificate was sent</span>
+</span></span></code></pre></div><p><strong>With client certificate (should succeed):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -k -v https://test.localdev.me <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --key client.key --cert client.crt
+</span></span></code></pre></div><p>Expected output shows successful certificate verification:</p>
+<pre tabindex="0"><code>* SSL certificate verify ok.
+* Using client certificate:
+*   subject: CN=authorized-client, O=MyOrganization
+&gt; GET / HTTP/1.1
+&gt; Host: test.localdev.me
+&lt; HTTP/1.1 200 OK
+</code></pre><hr>
+<h2 id="nginx-mtls-annotations-reference">NGINX mTLS Annotations Reference</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Annotation</th>
+          <th>Purpose</th>
+          <th>Values</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/auth-tls-secret</code></td>
+          <td>References the CA secret for client verification</td>
+          <td><code>&lt;namespace&gt;/&lt;secret-name&gt;</code></td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/auth-tls-verify-client</code></td>
+          <td>Enables client certificate verification</td>
+          <td><code>on</code>, <code>off</code></td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/auth-tls-verify-depth</code></td>
+          <td>Sets verification chain depth</td>
+          <td>Integer (e.g., <code>1</code>, <code>2</code>)</td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream</code></td>
+          <td>Passes client cert to backend service</td>
+          <td><code>true</code>, <code>false</code></td>
+      </tr>
+      <tr>
+          <td><code>nginx.ingress.kubernetes.io/auth-tls-error-page</code></td>
+          <td>Custom error page for auth failures</td>
+          <td>URL</td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h2 id="validation-and-testing">Validation and Testing</h2>
+<h3 id="test-without-client-certificate">Test Without Client Certificate</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -v https://your-domain.com
+</span></span></code></pre></div><p><strong>Expected response:</strong></p>
+<pre tabindex="0"><code>&lt; HTTP/1.1 400 Bad Request
+&lt; Content-Type: text/html
+&lt; 
+No required SSL certificate was sent
+</code></pre><h3 id="test-with-client-certificate">Test With Client Certificate</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -v https://your-domain.com <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cacert ca.crt <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cert client.crt <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --key client.key
+</span></span></code></pre></div><p><strong>Expected response:</strong></p>
+<pre tabindex="0"><code>* SSL certificate verify ok.
+* Using client certificate:
+*   subject: CN=authorized-client, O=MyOrganization
+&gt; GET / HTTP/1.1
+&lt; HTTP/1.1 200 OK
+</code></pre><h3 id="browser-testing">Browser Testing</h3>
+<div class="mermaid">
+graph LR
+    A[User opens browser] --> B[HTTPS request initiated]
+    B --> C[Server presents certificate]
+    C --> D{Browser trusts CA?}
+    D -->|No| E[Show security warning]
+    D -->|Yes| F[Server requests client certificate]
+    F --> G{User selects certificate}
+    G -->|Valid cert| H[Access granted]
+    G -->|No cert / Invalid| I[400 Bad Request]
+</div>
+<ol>
+<li>Import <code>ca.crt</code> into your browser&rsquo;s trusted root certificates</li>
+<li>Import <code>client.p12</code> into your browser</li>
+<li>Navigate to <code>https://your-domain.com</code></li>
+<li>Browser prompts for certificate selection</li>
+</ol>
+<hr>
+<h2 id="production-considerations">Production Considerations</h2>
+<h3 id="certificate-management">Certificate Management</h3>
+<ul>
+<li>🔁 <strong>Rotate certificates regularly</strong> – Implement automated rotation before expiration</li>
+<li>📦 <strong>Use cert-manager</strong> – Integrate with <a href="https://cert-manager.io/">cert-manager</a> for automated certificate lifecycle</li>
+<li>🔐 <strong>Secure CA private key</strong> – Store in HSM or secure vault, never in version control</li>
+<li>📅 <strong>Monitor expiration</strong> – Set up alerts for certificates expiring within 30 days</li>
+</ul>
+<h3 id="security-best-practices">Security Best Practices</h3>
+<ul>
+<li>⚠️ <strong>Not for public-facing applications</strong> – mTLS requires all clients to have certificates</li>
+<li>🔒 <strong>Restrict namespace access</strong> – Limit RBAC permissions to the ingress namespace</li>
+<li>📋 <strong>Maintain certificate inventory</strong> – Track issued certificates and expiration dates</li>
+<li>🔄 <strong>Implement revocation</strong> – Use CRL or OCSP for compromised certificates</li>
+</ul>
+<h3 id="dns-and-networking">DNS and Networking</h3>
+<ul>
+<li>🌐 <strong>Configure DNS A records</strong> – Point your domain to the Ingress Controller&rsquo;s LoadBalancer IP</li>
+<li>🔍 <strong>Enable detailed logging</strong> – Log client certificate subjects for audit trails</li>
+<li>📊 <strong>Monitor failed authentications</strong> – Set up alerts for unusual 400 error rates</li>
+</ul>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="issue-400-bad-request--no-client-certificate">Issue: 400 Bad Request – No Client Certificate</h3>
+<p><strong>Symptoms:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -k https://your-domain.com
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Returns: 400 Bad Request</span>
+</span></span></code></pre></div><p><strong>Solutions:</strong></p>
+<ol>
+<li>Verify client certificate is being sent: <code>curl --cert client.crt --key client.key</code></li>
+<li>Check CA secret exists in the correct namespace</li>
+<li>Verify <code>auth-tls-verify-client: &quot;on&quot;</code> annotation is present</li>
+<li>Check NGINX controller logs: <code>kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx</code></li>
+</ol>
+<h3 id="issue-ssl-certificate-verify-failed">Issue: SSL Certificate Verify Failed</h3>
+<p><strong>Symptoms:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl: <span style="color:#f92672">(</span>60<span style="color:#f92672">)</span> SSL certificate problem: unable to get local issuer certificate
+</span></span></code></pre></div><p><strong>Solutions:</strong></p>
+<ol>
+<li>Import CA certificate: <code>curl --cacert ca.crt</code></li>
+<li>Verify server certificate chain is complete</li>
+<li>Check SAN matches your domain</li>
+</ol>
+<h3 id="issue-client-certificate-not-passed-to-backend">Issue: Client Certificate Not Passed to Backend</h3>
+<p><strong>Symptoms:</strong> Backend doesn&rsquo;t receive client certificate headers</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Enable <code>auth-tls-pass-certificate-to-upstream: &quot;true&quot;</code> annotation</li>
+<li>Verify backend reads <code>X-SSL-Client-Cert</code> header</li>
+<li>Check NGINX configuration for certificate forwarding</li>
+</ol>
+<hr>
+<h2 id="conclusion">Conclusion</h2>
+<p>Implementing <strong>per-ingress mTLS</strong> with NGINX Ingress Controller provides flexible, fine-grained security for your Kubernetes applications. This approach is ideal when you need:</p>
+<ul>
+<li>✅ <strong>Selective mTLS enforcement</strong> – Only specific services require client certificates</li>
+<li>✅ <strong>Mixed public/internal services</strong> – Some endpoints public, others protected</li>
+<li>✅ <strong>Gradual migration</strong> – Enable mTLS incrementally across your applications</li>
+</ul>
+<p>By requiring client certificates at the ingress boundary for selected services, you protect sensitive applications while maintaining accessibility for public-facing endpoints.</p>
+<hr>
+<p><strong>Found this guide helpful?</strong> Share your mTLS implementation experiences in the comments below.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="ingress" term="ingress" label="ingress" />
+                             
+                                <category scheme="nginx" term="nginx" label="nginx" />
+                             
+                                <category scheme="security" term="security" label="security" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="ingress" term="ingress" label="ingress" />
+                             
+                                <category scheme="nginx" term="nginx" label="nginx" />
+                             
+                                <category scheme="mtls" term="mtls" label="mtls" />
+                             
+                                <category scheme="security" term="security" label="security" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -7711,8 +8570,8 @@ xfGRpW09Qu
             <title type="html"><![CDATA[OKD OpenShift 4: Service Serving Certificate]]></title>
             <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
