@@ -252,21 +252,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <hr>
 <h2 id="understanding-mtls-tls-vs-mutual-tls">Understanding mTLS: TLS vs Mutual TLS</h2>
 <p>Standard TLS only authenticates the <strong>server</strong> to the client. mTLS extends this by requiring <strong>both parties</strong> to authenticate each other:</p>
-<div class="mermaid">
-sequenceDiagram
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">sequenceDiagram
     participant Client
     participant Traefik Ingress
     participant Backend
 
-    Client->>Traefik Ingress: TLS ClientHello
-    Traefik Ingress->>Client: Server Certificate + Client Cert Request
-    Client->>Traefik Ingress: Client Certificate
-    Traefik Ingress->>Traefik Ingress: Verify Client Cert against CA
-    Traefik Ingress->>Client: TLS Handshake Complete
-    Client->>Traefik Ingress: Encrypted Request
-    Traefik Ingress->>Backend: Forward Request
-</div>
-<h3 id="comparison-tls-vs-mtls">Comparison: TLS vs mTLS</h3>
+    Client-&gt;&gt;Traefik Ingress: TLS ClientHello
+    Traefik Ingress-&gt;&gt;Client: Server Certificate + Client Cert Request
+    Client-&gt;&gt;Traefik Ingress: Client Certificate
+    Traefik Ingress-&gt;&gt;Traefik Ingress: Verify Client Cert against CA
+    Traefik Ingress-&gt;&gt;Client: TLS Handshake Complete
+    Client-&gt;&gt;Traefik Ingress: Encrypted Request
+    Traefik Ingress-&gt;&gt;Backend: Forward Request
+</code></pre><h3 id="comparison-tls-vs-mtls">Comparison: TLS vs mTLS</h3>
 <table>
   <thead>
       <tr>
@@ -307,17 +305,15 @@ sequenceDiagram
 <li>🎯 <strong>Per-ingress control</strong> – Enable mTLS selectively per route</li>
 <li>🔒 <strong>Native integration</strong> – No ConfigMap patches or deployment modifications required</li>
 </ul>
-<div class="mermaid">
-graph TB
-    A[Ingress Resource] -->|Annotation| B[TLSOption Reference]
-    B --> C[TLSOption CRD]
-    C --> D[CA Secret]
-    C --> E[Client Auth Policy]
-    E --> F{Client Cert Valid?}
-    F -->|Yes| G[Backend Service]
-    F -->|No| H[400 Bad Request]
-</div>
-<hr>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TB
+    A[Ingress Resource] --&gt;|Annotation| B[TLSOption Reference]
+    B --&gt; C[TLSOption CRD]
+    C --&gt; D[CA Secret]
+    C --&gt; E[Client Auth Policy]
+    E --&gt; F{Client Cert Valid?}
+    F --&gt;|Yes| G[Backend Service]
+    F --&gt;|No| H[400 Bad Request]
+</code></pre><hr>
 <h2 id="per-ingress-mtls-configuration">Per-Ingress mTLS Configuration</h2>
 <p>This approach enables mTLS on <strong>specific ingress resources</strong>, giving you fine-grained control over which services require client certificate authentication.</p>
 <h3 id="step-1-deploy-traefik-ingress-controller">Step 1: Deploy Traefik Ingress Controller</h3>
@@ -567,18 +563,16 @@ tls: failed to verify client certificate: x509: certificate signed by unknown au
 <pre tabindex="0"><code>SSL handshake has read 2543 bytes and written 4321 bytes
 Verification: OK
 </code></pre><h3 id="browser-testing">Browser Testing</h3>
-<div class="mermaid">
-graph LR
-    A[User opens browser] --> B[HTTPS request initiated]
-    B --> C[Server presents certificate]
-    C --> D{Browser trusts CA?}
-    D -->|No| E[Show security warning]
-    D -->|Yes| F[Server requests client certificate]
-    F --> G{User selects certificate}
-    G -->|Valid cert| H[Access granted]
-    G -->|No cert / Invalid| I[400 Bad Request]
-</div>
-<ol>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph LR
+    A[User opens browser] --&gt; B[HTTPS request initiated]
+    B --&gt; C[Server presents certificate]
+    C --&gt; D{Browser trusts CA?}
+    D --&gt;|No| E[Show security warning]
+    D --&gt;|Yes| F[Server requests client certificate]
+    F --&gt; G{User selects certificate}
+    G --&gt;|Valid cert| H[Access granted]
+    G --&gt;|No cert / Invalid| I[400 Bad Request]
+</code></pre><ol>
 <li><strong>Import CA certificate</strong> (<code>cacert.pem</code>) into your browser&rsquo;s trusted root certificates</li>
 <li><strong>Import client certificate</strong> (<code>client.p12</code>) into your browser</li>
 <li><strong>Navigate to</strong> <code>https://secure-app.example.com</code></li>
@@ -586,18 +580,16 @@ graph LR
 </ol>
 <hr>
 <h2 id="architecture-flow">Architecture Flow</h2>
-<div class="mermaid">
-graph TB
-    A[Client] -->|Request + Client Cert| B[Traefik Ingress]
-    B -->|Check: Has router.tls.options?| C{Annotation Present?}
-    C -->|Yes| D[Load TLSOption CRD]
-    C -->|No| E[Forward Without Verification]
-    D --> F[Verify Client Cert against CA Secret]
-    F -->|Valid| G[Backend Service A]
-    F -->|Invalid| H[400 Bad Request]
-    E --> I[Backend Service B]
-</div>
-<hr>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TB
+    A[Client] --&gt;|Request + Client Cert| B[Traefik Ingress]
+    B --&gt;|Check: Has router.tls.options?| C{Annotation Present?}
+    C --&gt;|Yes| D[Load TLSOption CRD]
+    C --&gt;|No| E[Forward Without Verification]
+    D --&gt; F[Verify Client Cert against CA Secret]
+    F --&gt;|Valid| G[Backend Service A]
+    F --&gt;|Invalid| H[400 Bad Request]
+    E --&gt; I[Backend Service B]
+</code></pre><hr>
 <h2 id="multiple-tlsoptions-for-different-security-levels">Multiple TLSOptions for Different Security Levels</h2>
 <p>You can create multiple <code>TLSOption</code> resources for different security requirements:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Strict mTLS for internal APIs</span>
@@ -1092,5 +1084,33 @@ zoomables.length && mediumZoom(zoomables, {
     background: 'rgba(0, 0, 0, 0.8)'
   }
 );
-</script></body>
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    
+    const mermaidBlocks = document.querySelectorAll('pre code.language-mermaid');
+    if (mermaidBlocks.length > 0) {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        flowchart: {
+          useMaxWidth: true
+        }
+      });
+      
+      mermaidBlocks.forEach((block, index) => {
+        const graphDefinition = block.textContent;
+        const div = document.createElement('div');
+        div.className = 'mermaid';
+        div.innerHTML = graphDefinition;
+        block.parentNode.parentNode.replaceChild(div, block.parentNode);
+      });
+      
+      mermaid.init();
+    }
+  });
+</script>
+
+</body>
 </html>
