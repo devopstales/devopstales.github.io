@@ -1,0 +1,1643 @@
+
+
+<!DOCTYPE html>
+<html class="no-js" lang="en"  data-mode="auto" >
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<script defer language="javascript" type="text/javascript"  src="https://devopstales.github.io/js/copy-code.js"></script>
+	
+<script type="application/ld+json">
+{
+    "@context" : "http://schema.org",
+    "@type" : "BlogPosting",
+    "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "https://devopstales.github.io/kubernetes/k8s-dmz-bgp-external-haproxy/"
+    },
+    "articleSection" : "kubernetes",
+    "name" : "Kubernetes DMZ Ingress with HAProxy and BGP: External Mode Without Cilium External Workload",
+    "image": "https://devopstales.github.io/img/k8ssec.png",
+    "headline" : "Kubernetes DMZ Ingress with HAProxy and BGP: External Mode Without Cilium External Workload",
+    "description" : "Learn how to deploy HAProxy Ingress Controller on AlmaLinux in a DMZ network outside your Kubernetes cluster—without Cilium’s deprecated external workload mode. This guide covers BGP peering with BIRD, Cilium’s Pod CIDR export, firewalld configuration, and production-ready setup for secure ingress traffic isolation.\n",
+    "inLanguage" : "en-US",
+    "author" : {
+        "@type": "Person",
+        "name": "Páldi Balázs"
+    },
+    "creator" : "Páldi Balázs",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Páldi Balázs",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https:\/\/devopstales.github.io\/%!s(\u003cnil\u003e)"
+        }
+    },
+    "accountablePerson" : "Páldi Balázs",
+    "copyrightHolder" : "Páldi Balázs",
+    "copyrightYear" : "2026",
+    "datePublished": "2026-02-26T12:00:00Z",
+    "dateModified" : "2026-02-26T12:00:00Z",
+    "url" : "https://devopstales.github.io/kubernetes/k8s-dmz-bgp-external-haproxy/",
+    "wordCount" : "3183",
+    "timeRequired" : "PT15M",
+    "keywords" : [ "kubernetes ingress", "haproxy external mode", "cilium bgp", "dmz network", "kubernetes security", "bpf dataplane" ]
+    
+}
+</script>
+
+<meta name="msvalidate.01" content="4E830BF9C048B3A327492699A61E741E" />
+<meta name="yandex-verification" content="96d0b6ba6c7aa697" />
+
+	<title>Kubernetes DMZ Ingress with HAProxy and BGP: External Mode Without Cilium External Workload - DevOpsTales - Kubernetes, Cloud &amp; Infrastructure Guides</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/style.css">
+	<link rel="stylesheet" href="https://devopstales.github.io/css/coffeebox.css"><link rel="stylesheet" href="https://devopstales.github.io/css/cookie.css"><link rel="stylesheet" href="https://devopstales.github.io/css/breadcrumbs.css">
+	<link rel="icon" href="https://devopstales.github.io/favicon.ico" sizes="any">
+	<link rel="icon" href="https://devopstales.github.io/apple-touch-icon.png" type="image/png">
+	<link rel="apple-touch-icon" href="https://devopstales.github.io/apple-touch-icon.png">
+	
+		
+
+    
+
+<script>
+  (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-N7RLHCX');
+</script>
+
+
+
+
+
+
+	
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@_devopstales" />
+    <meta name="twitter:creator" content="@_devopstales" />
+    <meta name="twitter:image" content="https://devopstales.github.io/img/k8ssec.png">
+    <meta name="twitter:image:src" content="https://devopstales.github.io/img/k8ssec.png">
+
+    <meta property="og:type" content="article" />
+    <meta property="og:image" content="https://devopstales.github.io/img/k8ssec.png">
+    <meta property="og:image:alt" content="DevOpsTales - Kubernetes, Cloud &amp; Infrastructure Guides">
+</head>
+<body class="body">
+    
+
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N7RLHCX"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+
+
+	
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="https://devopstales.github.io/" title="DevOpsTales" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">DevOpsTales</div>
+					<div class="logo__tagline">Kubernetes, Cloud &amp; Infrastructure Guides</div>
+				</div>
+		</a>
+	</div>
+		
+<nav class="menu">
+  <ul class="menu__list">
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/">home</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/devops/">DevOps</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/linux/">Linux</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/windows/">Windows</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/virtualization/">Virtualization</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/kubernetes/">Kubernetes</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/cloud/">cloud</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/sso/">sso</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/monitoring/">monitoring</a>
+          
+        </li>
+        <li class="menu__item">
+          <a class="menu__link" href="https://devopstales.github.io/mikrotik/">mikrotik</a>
+          
+        </li>
+  </ul>
+</nav>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<nav class="breadcrumbs" aria-label="Breadcrumb">
+	<ul>
+		<li class="breadcrumbs__item">
+			<a href="https://devopstales.github.io/" class="breadcrumbs__link" itemprop="url">
+				<span itemprop="name">Home</span></a>
+		</li><li class="breadcrumbs__item">
+				<a href="https://devopstales.github.io/kubernetes/" class="breadcrumbs__link" itemprop="url">
+					<span itemprop="name">Kubernetes</span></a>
+			</li><li class="breadcrumbs__item breadcrumbs__item--current">
+			<span class="breadcrumbs__link breadcrumbs__link--current" itemprop="name">Kubernetes DMZ Ingress with HAProxy and BGP: External Mode Without Cilium External Workload</span>
+		</li></ul>
+</nav>
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Kubernetes DMZ Ingress with HAProxy and BGP: External Mode Without Cilium External Workload</h1>
+			<div class="post__meta meta">
+<div class="meta__item-datetime meta__item">
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0a14 14 0 1 1 0 28 1 1 0 0 1 0-28m0 3a3 3 0 1 0 0 22 3 3 0 0 0 0-22m1 4h-2v8.4l6.8 4.4L22 18l-6-3.8z"/></svg><time class="meta__text" datetime="2026-02-26T00:00:00Z">February 26, 2026</time></div><div class="meta__item-categories meta__item"><svg class="meta__icon icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2 1 2h8v11H0V2z"/></svg><span class="meta__text"><a class="meta__link" href="https://devopstales.github.io/categories/kubernetes/" rel="category">Kubernetes</a>
+	</span>
+</div><span class="meta">
+	<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="meta__icon">
+		<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+	</svg>
+	<span class="meta__text">15 min read</span>
+</span>
+</div>
+		</header>
+		
+	<figure class="post__thumbnail thumbnail">
+		
+		<img class="thumbnail__image" src="https://devopstales.github.io/img/k8ssec.png" alt="Kubernetes DMZ Ingress with HAProxy and BGP: External Mode Without Cilium External Workload">
+		
+	</figure>
+<div class="post__toc toc">
+	<div class="toc__title">Page content</div>
+	<div class="toc__menu">
+		<nav id="TableOfContents">
+  <ul>
+    <li><a href="#why-the-change-cilium-external-workload-deprecation">Why the Change? Cilium External Workload Deprecation</a>
+      <ul>
+        <li><a href="#architecture-overview">Architecture Overview</a></li>
+      </ul>
+    </li>
+    <li><a href="#network-design">Network Design</a></li>
+    <li><a href="#part-1-configure-cilium-bgp-control-plane">Part 1: Configure Cilium BGP Control Plane</a>
+      <ul>
+        <li><a href="#enable-bgp-in-cilium">Enable BGP in Cilium</a></li>
+        <li><a href="#create-bgp-cluster-configuration">Create BGP Cluster Configuration</a></li>
+        <li><a href="#create-bgp-peering-policy">Create BGP Peering Policy</a></li>
+        <li><a href="#verify-pod-cidr-export">Verify Pod CIDR Export</a></li>
+      </ul>
+    </li>
+    <li><a href="#part-2-configure-haproxy-dmz-node">Part 2: Configure HAProxy DMZ Node</a>
+      <ul>
+        <li><a href="#system-requirements">System Requirements</a></li>
+        <li><a href="#network-configuration">Network Configuration</a></li>
+        <li><a href="#install-and-configure-bird">Install and Configure BIRD</a></li>
+        <li><a href="#install-haproxy">Install HAProxy</a></li>
+        <li><a href="#install-haproxy-kubernetes-ingress-controller">Install HAProxy Kubernetes Ingress Controller</a></li>
+        <li><a href="#configure-kubernetes-access">Configure Kubernetes Access</a></li>
+        <li><a href="#create-systemd-service">Create Systemd Service</a></li>
+      </ul>
+    </li>
+    <li><a href="#part-3-firewall-and-security-configuration">Part 3: Firewall and Security Configuration</a>
+      <ul>
+        <li><a href="#haproxy-node-firewall">HAProxy Node Firewall</a></li>
+        <li><a href="#kubernetes-worker-firewall">Kubernetes Worker Firewall</a></li>
+      </ul>
+    </li>
+    <li><a href="#part-4-deploy-test-application">Part 4: Deploy Test Application</a></li>
+    <li><a href="#part-5-testing-and-verification">Part 5: Testing and Verification</a>
+      <ul>
+        <li><a href="#test-bgp-connectivity">Test BGP Connectivity</a></li>
+        <li><a href="#test-ingress-access">Test Ingress Access</a></li>
+        <li><a href="#test-high-availability">Test High Availability</a></li>
+        <li><a href="#monitor-bgp-sessions">Monitor BGP Sessions</a></li>
+      </ul>
+    </li>
+    <li><a href="#troubleshooting">Troubleshooting</a>
+      <ul>
+        <li><a href="#bgp-session-not-establishing">BGP Session Not Establishing</a></li>
+        <li><a href="#routes-not-appearing">Routes Not Appearing</a></li>
+        <li><a href="#haproxy-not-receiving-traffic">HAProxy Not Receiving Traffic</a></li>
+      </ul>
+    </li>
+    <li><a href="#conclusion">Conclusion</a></li>
+  </ul>
+</nav>
+	</div>
+</div><div class="content post__content clearfix">
+			<p>Learn how to deploy HAProxy Ingress Controller on AlmaLinux in a DMZ network outside your Kubernetes cluster—without Cilium&rsquo;s deprecated external workload mode. This guide covers BGP peering with BIRD, Cilium&rsquo;s Pod CIDR export, firewalld configuration, and production-ready setup for secure ingress traffic isolation.</p>
+
+
+<H3>Parts of the K8S Security Lab series</H3>
+<H5>Container Runetime Security</H5>
+<ul>
+     <li>Part1: <a href="../../kubernetes/firecracker-cri-o/">How to deploy CRI-O with Firecracker?</a></li>
+     <li>Part2: <a href="../../kubernetes/gvisor-cri-o/">How to deploy CRI-O with gVisor?</a></li>
+     <li>Part3: <a href="../../kubernetes/firecracker-containerd/">How to deploy containerd with Firecracker?</a></li>
+     <li>Part4: <a href="../../kubernetes/gvisor-containerd/">How to deploy containerd with gVisor?</a></li>
+     <li>Part5: <a href="../../kubernetes/kata-container-containerd/">How to deploy containerd with kata containers?</a></li>
+</ul>
+<H5>Advanced Kernel Security</H5>
+<ul>
+<!-- selinux, secomp, namespace, -->
+     <li>Part1: <a href="../../kubernetes/k8s-secomp/">Hardening Kubernetes with seccomp</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-user-namespace/">Linux user namespace management wit CRI-O in Kubernetes</a></li>
+     <!-- selinux
+         https://docs.rke2.io/security/selinux
+         https://dev.to/carminezacc/does-kubernetes-support-selinux-3oop
+         https://suraj.io/post/single-node-k8s-fedora-selinux/
+         https://lisowski0925.medium.com/restricting-root-using-selinux-to-limit-access-to-container-engine-socket-with-selinux-in-fcf1b188d6df
+
+         https://jaosorior.dev/2019/selinux-as-a-resource-in-kubernetes/
+
+         https://stackoverflow.com/questions/51000791/how-to-mount-hostpath-volume-in-kubernetes-with-selinux
+         https://kubernetes.io/blog/2023/04/18/kubernetes-1-27-efficient-selinux-relabeling-beta/
+
+         https://github.com/JAORMX/selinux-k8s/tree/master
+         https://github.com/containers/udica
+     -->
+     <!-- secomp operator -->
+     <li>Part3: <a href="../../kubernetes/k8s-seccomp/">Hardening Kubernetes with seccomp</a></li>
+</ul>
+<H5>Network Security</H5>
+<ul>
+     <li>Part1: <a href="../../kubernetes/rke2-calico/">RKE2 Install With Calico</a></li>
+     <li>Part2: <a href="../../kubernetes/rke2-cilium/">RKE2 Install With Cilium</a></li>
+     <li>Part3: <a href="../../kubernetes/cni-genie/">CNI-Genie: network separation with multiple CNI</a></li>
+     <li>Part3: <a href="../../kubernetes/multus-nmstate/">Configurre network wit nmstate operator</a></li>
+<!-- Network policy -->
+     <li>Part3: <a href="../../kubernetes/k8s-networkpolicy/">Kubernetes Network Policy</a></li>
+<!-- Ingress -->
+     <li>Part4: <a href="../../kubernetes/k8s-dmz-vxlan/">Kubernetes with external Ingress Controller with vxlan</a></li>
+     <li>Part4: <a href="../../kubernetes/k8s-dmz-bgp/">Kubernetes with external Ingress Controller with bgp</a></li>
+     <li>Part4: <a href="../../kubernetes/k8s-central-oauth/">Central authentication with oauth2-proxy</a></li>
+     <li>Part5: <a href="../../kubernetes/k8s-pomerium-ingress-controller/">Secure your applications with Pomerium Ingress Controller</a></li>
+     </a></li>
+<!-- IDS waf -->
+     <li>Part6: <a href="../../kubernetes/k8s-crowdsec-ids/">CrowdSec Intrusion Detection System (IDS) for Kubernetes</a></li>
+     <!-- nginx ingress controller modsecurity -->
+     <li>Part7: <a href="../../kubernetes/k8s-falco/">Kubernetes audit logs and Falco</a></li>
+</ul>
+<H5>Secure Kubernetes Install</H5>
+<ul>
+     <li>Part1: <a href="../../kubernetes/k8s-security/">Best Practices to keeping Kubernetes Clusters Secure</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-secure-install/">Kubernetes Secure Install</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-cisa-install">Kubernetes Hardening Guide with CIS 1.6 Benchmark</a></li>
+     <li>Part4: <a href="../../kubernetes/k8s-cert/">Kubernetes Certificate Rotation</a></li>
+</ul>
+<H5>User Security</H5>
+<ul>
+     <li>Part1: <a href="../../kubernetes/k8s-rbac-gen/">How to create kubeconfig?</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-user-accounts/">How to create Users in Kubernetes the right way?</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-pinniped/">Kubernetes Single Sign-on with Pinniped OpenID Connect</a></li>
+     <li>Part4: <a href="../../kubernetes/k8s-kuberos/">Kubectl authentication with Kuberos</a> <b>Depricated !!</b></li>
+     <li>Part5: <a href="../../kubernetes/k8s-gangway/">Kubernetes authentication with Keycloak and gangway</a> <b>Depricated !!</b></li>
+     <li>Part6: <a href="../../kubernetes/kube-openid-connect-1.0/">kube-openid-connect 1.0</a> <b>Depricated !!</b></li>
+</ul>
+<H5>Image Security</H5>
+<!-- ## Image Scan -->
+     <li>Part1: <a href="../../kubernetes/image-security-admission-controller/">Image security Admission Controller</a></li>
+     <li>Part2: <a href="../../kubernetes/image-security-admission-controller-v2/">Image security Admission Controller V2</a></li>
+     <li>Part3: <a href="../../kubernetes/image-security-admission-controller-v3/">Image security Admission Controller V3</a></li>
+<!-- ### trivy-operator -->
+     <li>Part4: <a href="../../kubernetes/continuous-image-security/">Continuous Image security</a></li>
+     <li>Part5: <a href="../../kubernetes/trivy-operator-1.0/">trivy-operator 1.0</a></li>
+     <li>Part6: <a href="../../kubernetes/trivy-operator-2.1/">trivy-operator 2.1: Trivy-operator is now an Admisssion controller too!!!</a></li>
+     <li>Part7: <a href="../../kubernetes/trivy-operator-2.2/">trivy-operator 2.2: Patch release for Admisssion controller</a></li>
+     <li>Part8: <a href="../../kubernetes/trivy-operator-2.3/">trivy-operator 2.3: Patch release for Admisssion controller</a></li>
+     <li>Part8: <a href="../../kubernetes/trivy-operator-2.4/">trivy-operator 2.4: Patch release for Admisssion controller</a></li>
+     <li>Part8: <a href="../../kubernetes/trivy-operator-2.5/">trivy-operator 2.5: Patch release for Admisssion controller</a></li>
+<!-- ## Image Signature Verification -->
+     <!-- CRI-O Image verification -->
+     <li>Part9_ <a href="../../kubernetes/k8s-connaisseur/">Image Signature Verification with Connaisseur</a></li>
+     <li>Part10: <a href="../../kubernetes/k8s-connaisseur-v2/">Image Signature Verification with Connaisseur 2.0</a></li>
+     <li>Part11: <a href="../../kubernetes/k8s-kyverno-cosign/">Image Signature Verification with Kyverno</a></li>
+     <!-- Image Encription
+       https://itnext.io/securing-kubernetes-workloads-a-practical-approach-to-signed-and-encrypted-container-images-ff6e98b65bcd 
+     -->
+<!-- # Image registry security -->
+     <li>Part12: <a href="../../kubernetes/k8s-imagepullsecret-patcher/">How to use imagePullSecrets cluster-wide??</a></li>
+     <li>Part13: <a href="../../kubernetes/kyverno-image-mirror/">Automatically change registry in pod definition</a></li>
+<!-- # Image Update -->
+     <!-- keel -->
+     <li>Part14: <a href="../../kubernetes/argocd-image-updater/">ArgoCD auto image updater</a></li>
+<ul>
+</ul>
+<H5>Pod Security</H5>
+<ul>
+<!--# Admission Controllers -->
+     <li>Part1: <a href="../../kubernetes/admission-controllers/">Using Admission Controllers</a></li>
+<!-- ## Pod Security Policy and Pod Security Admission -->
+     <li>Part2: <a href="../../kubernetes/rke2-pod-security-policy/">RKE2 Pod Security Policy</a></li>
+     <li>Part3: <a href="../../kubernetes/k8s-ps/">Kubernetes Pod Security Admission</a></li>
+     <!-- RKE2 Pod Security Admission - https://docs.rke2.io/security/pod_security_standards -->
+     <li>Part4: <a href="../../kubernetes/k8s-migrate-from-psp/">Kubernetes: How to migrate Pod Security Policy to Pod Security Admission?</a></li>
+<!-- ## Kyverno -->
+     <li>Part5: <a href="../../kubernetes/k8s-pod-security-standards-using-kyverno/">Pod Security Standards using Kyverno</a></li>
+     <li>Part6: <a href="../../kubernetes/kubernetes-policy/">Kubernetes Cluster Policy with Kyverno</a></li>
+</ul>
+<H5>Secret Security</H5>
+<ul>
+<!-- # Secrets -->
+     <li>Part1: <a href="../../kubernetes/k8s-vault/">Kubernetes and Vault integration</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-vault-v2/">Kubernetes External Vault integration</a></li>
+     <li>Part3: <a href="../../kubernetes/argocd-kubeseal/">ArgoCD and kubeseal to encript secrets</a></li>
+     <li>Part4: <a href="../../kubernetes/gitops-flux2-kubeseal/">Flux2 and kubeseal to encrypt secrets</a></li>
+     <li>Part5: <a href="../../kubernetes/gitops-flux2-sops/">Flux2 and Mozilla SOPS to encrypt secrets</a></li>
+
+</ul>
+<H5>Monitoring and Observability</H5>
+<ul>
+<!-- monitoring, logging, observation -->
+     <li>Part6: <a href="../../kubernetes/k8s-prometheus-stack/">K8S Logging And Monitoring</a></li>
+     <li>Part7: <a href="../../kubernetes/helm3-loki/">Install Grafana Loki with Helm3</a></li>
+</ul>
+<H5>Backup</H5>
+<ul>
+<!-- # Backup -->
+     <li>Part1: <a href="../../kubernetes/k8s-backup/">Backup your Kubernetes Cluster</a></li>
+     <li>Part2: <a href="../../kubernetes/k8s-git-backup/">How to Backup Kubernetes to git?</a></li>
+
+<!-- https://github.com/banzaicloud/dast-operator -->
+<!-- kyverno logs and monitoring -->
+<!-- CIS Exporter https://github.com/ibrokethecloud/kube-bench-metrics -->
+<!-- # Image Update -->
+<!-- sysdig falco -->
+<!-- Image auto update:
+https://keel.sh
+https://blog.weareopensource.me/kell-automate-rancher-workloads-update/
+flux
+https://github.com/weaveworks/kured
+-->
+<!-- resource kvota -->
+</ul>
+
+
+
+<blockquote>
+<p><strong>Update for 2026:</strong> Cilium has deprecated its external workload mode, requiring a new approach for placing HAProxy Ingress Controllers outside the Kubernetes cluster. This guide shows how to build a secure DMZ architecture using Cilium&rsquo;s BGP Pod CIDR export with standard BGP routing—no external workload mode required. All examples use AlmaLinux for the HAProxy DMZ node.</p></blockquote>
+<h2 id="why-the-change-cilium-external-workload-deprecation">Why the Change? Cilium External Workload Deprecation</h2>
+<p>Cilium&rsquo;s external workload mode allowed running Cilium agents on nodes outside the Kubernetes cluster. However, this feature has been deprecated in favor of simpler, more maintainable approaches.</p>
+<p>The good news: <strong>You don&rsquo;t need it anymore.</strong> With Cilium&rsquo;s BGP control plane and Pod CIDR export, you can achieve the same DMZ architecture using standard BGP routing.</p>
+<h3 id="architecture-overview">Architecture Overview</h3>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TB
+    subgraph &#34;Internet&#34;
+        USERS[Users]
+    end
+    
+    subgraph &#34;DMZ Network 192.168.56.0/24&#34;
+        HAPROXY[HAProxy External Node&lt;br/&gt;192.168.56.15]
+    end
+    
+    subgraph &#34;Internal K8s Network 192.168.10.0/24&#34;
+        CP[Control Plane&lt;br/&gt;192.168.10.10-12]
+        W1[Worker 1&lt;br/&gt;192.168.10.21&lt;br/&gt;Pod CIDR: 10.244.1.0/24]
+        W2[Worker 2&lt;br/&gt;192.168.10.22&lt;br/&gt;Pod CIDR: 10.244.2.0/24]
+        W3[Worker 3&lt;br/&gt;192.168.10.23&lt;br/&gt;Pod CIDR: 10.244.3.0/24]
+    end
+    
+    USERS --&gt;|HTTPS 443| HAPROXY
+    HAPROXY --&gt;|BGP 3179| W1
+    HAPROXY --&gt;|BGP 3179| W2
+    HAPROXY --&gt;|BGP 3179| W3
+    HAPROXY --&gt;|HTTP/HTTPS| W1
+    HAPROXY --&gt;|HTTP/HTTPS| W2
+    HAPROXY --&gt;|HTTP/HTTPS| W3
+    
+    style HAPROXY fill:#f9f,stroke:#333
+    style CP fill:#bbf,stroke:#333
+    style W1 fill:#bbf,stroke:#333
+    style W2 fill:#bbf,stroke:#333
+    style W3 fill:#bbf,stroke:#333
+</code></pre><p><strong>Key differences from the old approach:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Old (External Workload)</th>
+          <th>New (BGP Only)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Cilium agent on HAProxy node</td>
+          <td>No Cilium on HAProxy node</td>
+      </tr>
+      <tr>
+          <td>Node in same network as K8s</td>
+          <td>HAProxy in separate DMZ network</td>
+      </tr>
+      <tr>
+          <td>VXLAN/Geneve overlay</td>
+          <td>Pure BGP routing</td>
+      </tr>
+      <tr>
+          <td>Complex setup</td>
+          <td>Simpler, standard BGP</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="network-design">Network Design</h2>
+<p>We&rsquo;ll create three network segments:</p>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph LR
+    subgraph &#34;DMZ Zone&#34;
+        A[HAProxy&lt;br/&gt;eth0: 192.168.56.15/24]
+    end
+    
+    subgraph &#34;Internal Zone&#34;
+        B[K8s Control Plane&lt;br/&gt;eth0: 192.168.10.10-12/24]
+        C[K8s Workers&lt;br/&gt;eth0: 192.168.10.21-23/24]
+    end
+    
+    subgraph &#34;Management Zone&#34;
+        D[Admin Network&lt;br/&gt;192.168.100.0/24]
+    end
+    
+    A -.-&gt;|BGP Peering&lt;br/&gt;Port 3179| C
+    D -.-&gt;|SSH/Kubernetes API| B
+    
+    style A fill:#f96
+    style B fill:#9f9
+    style C fill:#9f9
+    style D fill:#ff9
+</code></pre><p><strong>Network Segments:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Network</th>
+          <th>CIDR</th>
+          <th>Purpose</th>
+          <th>Access</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>DMZ</td>
+          <td>192.168.56.0/24</td>
+          <td>HAProxy external interface</td>
+          <td>Internet-facing</td>
+      </tr>
+      <tr>
+          <td>Internal</td>
+          <td>192.168.10.0/24</td>
+          <td>Kubernetes nodes</td>
+          <td>DMZ only, no direct internet</td>
+      </tr>
+      <tr>
+          <td>Pod Network</td>
+          <td>10.244.0.0/16</td>
+          <td>Pod CIDRs</td>
+          <td>Routed via BGP</td>
+      </tr>
+      <tr>
+          <td>Management</td>
+          <td>192.168.100.0/24</td>
+          <td>Admin access</td>
+          <td>Jump host only</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="part-1-configure-cilium-bgp-control-plane">Part 1: Configure Cilium BGP Control Plane</h2>
+<h3 id="enable-bgp-in-cilium">Enable BGP in Cilium</h3>
+<p>First, enable the BGP control plane in your existing Cilium installation:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check current Cilium status</span>
+</span></span><span style="display:flex;"><span>cilium status
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create Helm values file for BGP</span>
+</span></span><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt; EOF &gt; cilium-bgp-values.yaml
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">bgpControlPlane:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  enabled: true
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Ensure BPF dataplane is enabled (default in Cilium 1.14+)
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">enableBpfMasquerade: true
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">routingMode: native
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Upgrade Cilium</span>
+</span></span><span style="display:flex;"><span>helm upgrade cilium cilium/cilium <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace kube-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -f cilium-bgp-values.yaml <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --wait
+</span></span></code></pre></div><p>Verify BGP CRDs are available:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl api-resources | grep -i ciliumbgp
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># ciliumbgppeeringpolicies    bgpp    cilium.io/v2alpha1    false    CiliumBGPPeeringPolicy</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># ciliumbgpclusterconfigs     bgpcc   cilium.io/v2alpha1    false    CiliumBGPClusterConfiguration</span>
+</span></span></code></pre></div><h3 id="create-bgp-cluster-configuration">Create BGP Cluster Configuration</h3>
+<p>Create <code>cilium-bgp-config.yaml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">cilium.io/v2alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">CiliumBGPClusterConfiguration</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cluster-bgp-config</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">localASN</span>: <span style="color:#ae81ff">65001</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">bgpPort</span>: <span style="color:#ae81ff">3179</span>  <span style="color:#75715e"># Non-standard port (avoid privilege issues)</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">loadBalancerIPs</span>: []
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">peerConfigs</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">peerASN</span>: <span style="color:#ae81ff">65001</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">peerAddress</span>: <span style="color:#ae81ff">192.168.56.15</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">peerPort</span>: <span style="color:#ae81ff">3179</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">interface</span>: <span style="color:#ae81ff">eth0</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">eBGPMultihopTTL</span>: <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">connectRetryTimeSeconds</span>: <span style="color:#ae81ff">120</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">holdTimeSeconds</span>: <span style="color:#ae81ff">90</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">keepAliveTimeSeconds</span>: <span style="color:#ae81ff">30</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">gracefulRestart</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">restartTimeSeconds</span>: <span style="color:#ae81ff">120</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">addressPools</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">pod-cidr-pool</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">blocks</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#ae81ff">10.244.0.0</span><span style="color:#ae81ff">/16</span>
+</span></span></code></pre></div><h3 id="create-bgp-peering-policy">Create BGP Peering Policy</h3>
+<p>Create <code>cilium-bgp-policy.yaml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">cilium.io/v2alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">CiliumBGPPeeringPolicy</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">bgp-peering-policy</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">nodeSelector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">node-role.kubernetes.io/worker</span>: <span style="color:#e6db74">&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">virtualRouters</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">localASN</span>: <span style="color:#ae81ff">65001</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">exportPodCIDR</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">exportAddresses</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">type</span>: <span style="color:#e6db74">&#34;podCIDR&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">neighbors</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">peerAddress</span>: <span style="color:#e6db74">&#39;192.168.56.15/32&#39;</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">peerASN</span>: <span style="color:#ae81ff">65001</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">peerPort</span>: <span style="color:#ae81ff">3179</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">holdTime</span>: <span style="color:#ae81ff">90s</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">keepAliveInterval</span>: <span style="color:#ae81ff">30s</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">gracefulRestart</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">restartTime</span>: <span style="color:#ae81ff">120s</span>
+</span></span></code></pre></div><p>Apply the configurations:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f cilium-bgp-config.yaml
+</span></span><span style="display:flex;"><span>kubectl apply -f cilium-bgp-policy.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify BGP sessions</span>
+</span></span><span style="display:flex;"><span>cilium bgp peers
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Node    Local AS   Peer AS   Peer Address     Session State   Uptime   Family          Received   Advertised</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w1      65001      65001     192.168.56.15    established     2m       ipv4/unicast    0          1</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w2      65001      65001     192.168.56.15    established     2m       ipv4/unicast    0          1</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w3      65001      65001     192.168.56.15    established     2m       ipv4/unicast    0          1</span>
+</span></span></code></pre></div><h3 id="verify-pod-cidr-export">Verify Pod CIDR Export</h3>
+<p>Check that worker nodes are advertising their Pod CIDRs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Get Pod CIDRs for each node</span>
+</span></span><span style="display:flex;"><span>kubectl get nodes -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{range .items[*]}{.metadata.name}{&#34;\t&#34;}{.spec.podCIDR}{&#34;\n&#34;}{end}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Example output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w1    10.244.1.0/24</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w2    10.244.2.0/24</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w3    10.244.3.0/24</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Cilium BGP advertisements</span>
+</span></span><span style="display:flex;"><span>cilium bgp advertised-routes -n kube-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Should show Pod CIDRs being advertised to 192.168.56.15</span>
+</span></span></code></pre></div><h2 id="part-2-configure-haproxy-dmz-node">Part 2: Configure HAProxy DMZ Node</h2>
+<h3 id="system-requirements">System Requirements</h3>
+<p>This guide uses <strong>AlmaLinux 9</strong> for the HAProxy DMZ node. The configuration also works on RHEL 9, Rocky Linux 9, and other RHEL-compatible distributions.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Verify OS version</span>
+</span></span><span style="display:flex;"><span>cat /etc/redhat-release
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># AlmaLinux release 9.x (Turquoise Kodkod)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Update system</span>
+</span></span><span style="display:flex;"><span>sudo dnf update -y
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install required tools</span>
+</span></span><span style="display:flex;"><span>sudo dnf install -y vim wget curl net-tools telnet
+</span></span></code></pre></div><h3 id="network-configuration">Network Configuration</h3>
+<p>The HAProxy node needs two network interfaces. On AlmaLinux 9, use NetworkManager:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check network interfaces</span>
+</span></span><span style="display:flex;"><span>ip addr show
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Configure primary interface (DMZ - eth0)</span>
+</span></span><span style="display:flex;"><span>sudo nmcli connection modify eth0 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ipv4.addresses 192.168.56.15/24 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ipv4.gateway 192.168.56.1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ipv4.dns <span style="color:#e6db74">&#34;8.8.8.8 1.1.1.1&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ipv4.method manual <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  connection.autoconnect yes
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Add route to Pod network (will be managed by BIRD)</span>
+</span></span><span style="display:flex;"><span>sudo nmcli connection modify eth0 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  +ipv4.routes <span style="color:#e6db74">&#34;10.244.0.0/16 192.168.56.1&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Configure secondary interface (Internal - eth1, optional)</span>
+</span></span><span style="display:flex;"><span>sudo nmcli connection add <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  type ethernet <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  con-name eth1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ifname eth1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ipv4.addresses 192.168.10.100/24 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ipv4.method manual <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ipv4.never-default yes <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  connection.autoconnect yes
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Apply changes</span>
+</span></span><span style="display:flex;"><span>sudo nmcli connection up eth0
+</span></span><span style="display:flex;"><span>sudo nmcli connection up eth1
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify configuration</span>
+</span></span><span style="display:flex;"><span>ip addr show
+</span></span><span style="display:flex;"><span>ip route show
+</span></span></code></pre></div><h3 id="install-and-configure-bird">Install and Configure BIRD</h3>
+<p>BIRD will establish BGP peering with all Kubernetes workers:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install EPEL repository (required for BIRD)</span>
+</span></span><span style="display:flex;"><span>sudo dnf install -y epel-release
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install BIRD</span>
+</span></span><span style="display:flex;"><span>sudo dnf install -y bird
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Backup default config</span>
+</span></span><span style="display:flex;"><span>sudo cp /etc/bird/bird.conf /etc/bird/bird.conf.backup
+</span></span></code></pre></div><p>Create <code>/etc/bird/bird.conf</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt; &#39;EOF&#39; | sudo tee /etc/bird/bird.conf
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># BIRD BGP Configuration for HAProxy DMZ Node
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Router ID should be unique in your network
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">router id 192.168.56.15;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Logging
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">log syslog { debug };
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">log &#34;/var/log/bird.log&#34; all;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># BGP Graceful Restart
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">graceful restart wait time 300;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># BGP Peerings with Kubernetes Workers
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">protocol bgp w1 {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  local 192.168.56.15 as 65001;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  neighbor 192.168.10.21 port 3179 as 65001;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  # Import Pod CIDRs from K8s
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  import all;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  # Don&#39;t export anything to K8s (we only need routes)
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  export none;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  # Multi-hop required since peers are on different subnet
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  multihop;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  # Graceful restart for failover
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  graceful restart;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  # Hold time and keepalive
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  hold time 90;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  keepalive time 30;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">protocol bgp w2 {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  local 192.168.56.15 as 65001;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  neighbor 192.168.10.22 port 3179 as 65001;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  import all;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  export none;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  multihop;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  graceful restart;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  hold time 90;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  keepalive time 30;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">protocol bgp w3 {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  local 192.168.56.15 as 65001;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  neighbor 192.168.10.23 port 3179 as 65001;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  import all;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  export none;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  multihop;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  graceful restart;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  hold time 90;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  keepalive time 30;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Kernel Routing Table Integration
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">protocol kernel {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  scan time 10;        # Scan kernel routes every 10 seconds
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  import all;          # Import kernel routes
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  export all;          # Export BIRD routes to kernel
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  persist;             # Keep routes after BIRD restart
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  learn;               # Learn routes from kernel
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  merge paths on;      # Enable ECMP for load balancing
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Device Discovery
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">protocol device {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  scan time 5;         # Scan interfaces every 5 seconds
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Route Filters (Optional but Recommended)
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># ============================================
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Only accept Pod CIDR routes from K8s
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">filter k8s_routes {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  if net ~ [ 10.244.0.0/16+ ] then accept;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  else reject;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Apply filter to BGP imports
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># protocol bgp w1 { ... import filter k8s_routes; ... }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span></code></pre></div><p>Start and verify BIRD:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Enable and start BIRD</span>
+</span></span><span style="display:flex;"><span>sudo systemctl enable bird
+</span></span><span style="display:flex;"><span>sudo systemctl start bird
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check BIRD status</span>
+</span></span><span style="display:flex;"><span>sudo systemctl status bird
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify BGP sessions</span>
+</span></span><span style="display:flex;"><span>sudo birdc show protocols
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># name     proto    table    state  since       info</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w1       BGP      master   up     00:05:23    Established</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w2       BGP      master   up     00:05:25    Established</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># w3       BGP      master   up     00:05:24    Established</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># kernel1  Kernel   master   up     00:05:20</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># device1  Device   master   up     00:05:20</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check learned routes</span>
+</span></span><span style="display:flex;"><span>sudo birdc show route
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 10.244.1.0/24      via 192.168.10.21 on eth0 [w1 00:05:25] * (100) [i]</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 10.244.2.0/24      via 192.168.10.22 on eth0 [w2 00:05:27] * (100) [i]</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 10.244.3.0/24      via 192.168.10.23 on eth0 [w3 00:05:26] * (100) [i]</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify kernel routing table</span>
+</span></span><span style="display:flex;"><span>ip route | grep 10.244
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 10.244.1.0/24 via 192.168.10.21 dev eth0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 10.244.2.0/24 via 192.168.10.22 dev eth0</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 10.244.3.0/24 via 192.168.10.23 dev eth0</span>
+</span></span></code></pre></div><h3 id="install-haproxy">Install HAProxy</h3>
+<p>Install HAProxy version compatible with the Ingress Controller:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install EPEL repository (if not already installed)</span>
+</span></span><span style="display:flex;"><span>sudo dnf install -y epel-release
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install HAProxy from base repositories (AlmaLinux 9 has HAProxy 2.4+)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check available version</span>
+</span></span><span style="display:flex;"><span>dnf info haproxy
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># For HAProxy 2.8+, enable CRB repository and use external repo</span>
+</span></span><span style="display:flex;"><span>sudo dnf config-manager --set-enabled crb
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Add HAProxy repository for version 2.8</span>
+</span></span><span style="display:flex;"><span>curl https://haproxy.debian.net/bernat.debian.org.gpg | <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  sudo gpg --dearmor -o /etc/pki/rpm-gpg/RPM-GPG-KEY-haproxy
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>cat <span style="color:#e6db74">&lt;&lt; EOF | sudo tee /etc/yum.repos.d/haproxy.repo
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">[haproxy]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">name=HAProxy Repository
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">baseurl=http://haproxy.debian.net/bookworm-backports-2.8/
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">enabled=1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">gpgcheck=1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-haproxy
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install HAProxy 2.8 (compatible with Ingress Controller 1.11+)</span>
+</span></span><span style="display:flex;"><span>sudo dnf install -y haproxy
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Stop and disable system HAProxy service</span>
+</span></span><span style="display:flex;"><span>sudo systemctl stop haproxy
+</span></span><span style="display:flex;"><span>sudo systemctl disable haproxy
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow HAProxy to bind to privileged ports</span>
+</span></span><span style="display:flex;"><span>sudo setcap cap_net_bind_service<span style="color:#f92672">=</span>+ep /usr/sbin/haproxy
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify installation</span>
+</span></span><span style="display:flex;"><span>haproxy -v
+</span></span></code></pre></div><blockquote>
+<p><strong>Note:</strong> If you prefer to use the HAProxy version from AlmaLinux base repos (2.4+), you can skip the external repo and use <code>sudo dnf install -y haproxy</code>. Just ensure it&rsquo;s compatible with your Ingress Controller version.</p></blockquote>
+<h3 id="install-haproxy-kubernetes-ingress-controller">Install HAProxy Kubernetes Ingress Controller</h3>
+<p>Download and install the ingress controller binary:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Download latest release</span>
+</span></span><span style="display:flex;"><span>INGRESS_VERSION<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;1.11.3&#34;</span>
+</span></span><span style="display:flex;"><span>wget https://github.com/haproxytech/kubernetes-ingress/releases/download/v<span style="color:#e6db74">${</span>INGRESS_VERSION<span style="color:#e6db74">}</span>/haproxy-ingress-controller_<span style="color:#e6db74">${</span>INGRESS_VERSION<span style="color:#e6db74">}</span>_Linux_x86_64.tar.gz
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Extract and install</span>
+</span></span><span style="display:flex;"><span>tar -xzvf haproxy-ingress-controller_<span style="color:#e6db74">${</span>INGRESS_VERSION<span style="color:#e6db74">}</span>_Linux_x86_64.tar.gz
+</span></span><span style="display:flex;"><span>sudo cp ./haproxy-ingress-controller /usr/local/bin/
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify installation</span>
+</span></span><span style="display:flex;"><span>haproxy-ingress-controller --version
+</span></span></code></pre></div><h3 id="configure-kubernetes-access">Configure Kubernetes Access</h3>
+<p>Copy kubeconfig from control plane:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># On control plane node</span>
+</span></span><span style="display:flex;"><span>sudo scp /etc/kubernetes/admin.conf haproxy-dmz:/root/.kube/config
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># On HAProxy node</span>
+</span></span><span style="display:flex;"><span>sudo mkdir -p /root/.kube
+</span></span><span style="display:flex;"><span>sudo chown root:root /root/.kube/config
+</span></span><span style="display:flex;"><span>chmod <span style="color:#ae81ff">600</span> /root/.kube/config
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test connectivity</span>
+</span></span><span style="display:flex;"><span>kubectl cluster-info
+</span></span><span style="display:flex;"><span>kubectl get nodes
+</span></span></code></pre></div><p>Create the ConfigMap for HAProxy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl create configmap haproxy-kubernetes-ingress <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace default <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --dry-run<span style="color:#f92672">=</span>client -o yaml | kubectl apply -f -
+</span></span></code></pre></div><h3 id="create-systemd-service">Create Systemd Service</h3>
+<p>Create <code>/etc/systemd/system/haproxy-ingress.service</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ini" data-lang="ini"><span style="display:flex;"><span><span style="color:#66d9ef">[Unit]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">Description</span><span style="color:#f92672">=</span><span style="color:#e6db74">HAProxy Kubernetes Ingress Controller</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">Documentation</span><span style="color:#f92672">=</span><span style="color:#e6db74">https://www.haproxy.com/</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">Requires</span><span style="color:#f92672">=</span><span style="color:#e6db74">network-online.target</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">After</span><span style="color:#f92672">=</span><span style="color:#e6db74">network-online.target bird.service</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">Wants</span><span style="color:#f92672">=</span><span style="color:#e6db74">bird.service</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[Service]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">Type</span><span style="color:#f92672">=</span><span style="color:#e6db74">simple</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">User</span><span style="color:#f92672">=</span><span style="color:#e6db74">root</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">Group</span><span style="color:#f92672">=</span><span style="color:#e6db74">root</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">ExecStart</span><span style="color:#f92672">=</span><span style="color:#e6db74">/usr/local/bin/haproxy-ingress-controller \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --external \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --default-ssl-certificate=ingress-system/default-cert \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --configmap=default/haproxy-kubernetes-ingress \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --program=/usr/sbin/haproxy \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --disable-ipv6 \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --ipv4-bind-address=0.0.0.0 \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --http-bind-port=80 \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --https-bind-port=443 \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --ingress.class=ingress-public \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --kubeconfig=/root/.kube/config \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --watch-gateway=false \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  --update-status=false</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">ExecReload</span><span style="color:#f92672">=</span><span style="color:#e6db74">/bin/kill --signal HUP $MAINPID</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">KillMode</span><span style="color:#f92672">=</span><span style="color:#e6db74">process</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">KillSignal</span><span style="color:#f92672">=</span><span style="color:#e6db74">SIGTERM</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">Restart</span><span style="color:#f92672">=</span><span style="color:#e6db74">on-failure</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">RestartSec</span><span style="color:#f92672">=</span><span style="color:#e6db74">5</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">LimitNOFILE</span><span style="color:#f92672">=</span><span style="color:#e6db74">65536</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Security hardening</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">NoNewPrivileges</span><span style="color:#f92672">=</span><span style="color:#e6db74">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">ProtectSystem</span><span style="color:#f92672">=</span><span style="color:#e6db74">strict</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">ProtectHome</span><span style="color:#f92672">=</span><span style="color:#e6db74">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">ReadWritePaths</span><span style="color:#f92672">=</span><span style="color:#e6db74">/var/log /var/lib/haproxy</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">[Install]</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">WantedBy</span><span style="color:#f92672">=</span><span style="color:#e6db74">multi-user.target</span>
+</span></span></code></pre></div><p>Enable and start the service:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo systemctl daemon-reload
+</span></span><span style="display:flex;"><span>sudo systemctl enable haproxy-ingress
+</span></span><span style="display:flex;"><span>sudo systemctl start haproxy-ingress
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check status</span>
+</span></span><span style="display:flex;"><span>sudo systemctl status haproxy-ingress
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># View logs</span>
+</span></span><span style="display:flex;"><span>journalctl -u haproxy-ingress -f
+</span></span></code></pre></div><h2 id="part-3-firewall-and-security-configuration">Part 3: Firewall and Security Configuration</h2>
+<h3 id="haproxy-node-firewall">HAProxy Node Firewall</h3>
+<p>Configure firewalld on the HAProxy node (AlmaLinux default firewall):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Enable and start firewalld (should be running by default)</span>
+</span></span><span style="display:flex;"><span>sudo systemctl enable firewalld
+</span></span><span style="display:flex;"><span>sudo systemctl start firewalld
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Set default zone to drop</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --set-default-zone<span style="color:#f92672">=</span>drop
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow SSH from management network only</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;192.168.100.0/24&#34; service name=&#34;ssh&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow HTTP/HTTPS from internet</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-service<span style="color:#f92672">=</span>http
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-service<span style="color:#f92672">=</span>https
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow BGP from K8s workers only</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;192.168.10.21/32&#34; port port=&#34;3179&#34; protocol=&#34;tcp&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;192.168.10.22/32&#34; port port=&#34;3179&#34; protocol=&#34;tcp&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;192.168.10.23/32&#34; port port=&#34;3179&#34; protocol=&#34;tcp&#34; accept
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74"># Allow established and related connections
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">sudo firewall-cmd --permanent --add-rich-rule=&#39;</span>rule protocol value<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;tcp&#34;</span> accept<span style="color:#960050;background-color:#1e0010">&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Reload firewalld to apply changes</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --reload
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify configuration</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --list-all
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --list-rich-rules
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># public (active)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   target: DROP</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   icmp-block-inversion: no</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   interfaces: eth0 eth1</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   sources:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   services: http https</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   ports:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   protocols:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   forward: no</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   masquerade: no</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   forward-ports:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   source-ports:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   icmp-blocks:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#   rich rules:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#       rule family=&#34;ipv4&#34; source address=&#34;192.168.100.0/24&#34; service name=&#34;ssh&#34; accept</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#       rule family=&#34;ipv4&#34; source address=&#34;192.168.10.21/32&#34; port port=&#34;3179&#34; protocol=&#34;tcp&#34; accept</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#       rule family=&#34;ipv4&#34; source address=&#34;192.168.10.22/32&#34; port port=&#34;3179&#34; protocol=&#34;tcp&#34; accept</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#       rule family=&#34;ipv4&#34; source address=&#34;192.168.10.23/32&#34; port port=&#34;3179&#34; protocol=&#34;tcp&#34; accept</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#       rule protocol value=&#34;tcp&#34; accept</span>
+</span></span></code></pre></div><h3 id="kubernetes-worker-firewall">Kubernetes Worker Firewall</h3>
+<p>On each Kubernetes worker node (assuming AlmaLinux/Rocky/RHEL):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Enable and start firewalld</span>
+</span></span><span style="display:flex;"><span>sudo systemctl enable firewalld
+</span></span><span style="display:flex;"><span>sudo systemctl start firewalld
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Set default zone to drop</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --set-default-zone<span style="color:#f92672">=</span>drop
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow SSH from management network only</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;192.168.100.0/24&#34; service name=&#34;ssh&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow BGP from HAProxy only</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;192.168.56.15/32&#34; port port=&#34;3179&#34; protocol=&#34;tcp&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow Kubernetes API from internal network</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;192.168.10.0/24&#34; port port=&#34;6443&#34; protocol=&#34;tcp&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow Cilium/CNI traffic (Pod network)</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule family=&#34;ipv4&#34; source address=&#34;10.244.0.0/16&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Allow established and related connections</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule protocol value=&#34;tcp&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Reload firewalld to apply changes</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --reload
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify configuration</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --list-all
+</span></span></code></pre></div><h2 id="part-4-deploy-test-application">Part 4: Deploy Test Application</h2>
+<p>Create <code>demo-app.yaml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">IngressClass</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ingressclass.kubernetes.io/is-default-class</span>: <span style="color:#e6db74">&#34;false&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ingress-public</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">controller</span>: <span style="color:#ae81ff">haproxy.org/ingress-controller/ingress-public</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">jmalloc/echo-server:latest</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">requests</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;64Mi&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;50m&#34;</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">limits</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;100m&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">affinity</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">podAntiAffinity</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">preferredDuringSchedulingIgnoredDuringExecution</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">weight</span>: <span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">podAffinityTerm</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">labelSelector</span>:
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">app</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">topologyKey</span>: <span style="color:#ae81ff">kubernetes.io/hostname</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">http</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">port</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">echo-server-ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">haproxy.org/balance-algorithm</span>: <span style="color:#ae81ff">roundrobin</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">haproxy.org/ssl-redirect</span>: <span style="color:#e6db74">&#34;true&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">ingress-public</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">host</span>: <span style="color:#e6db74">&#34;echo.example.com&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">echo-server</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</span></span></code></pre></div><p>Deploy the application:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f demo-app.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify deployment</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -l app<span style="color:#f92672">=</span>echo-server
+</span></span><span style="display:flex;"><span>kubectl get svc echo-server
+</span></span><span style="display:flex;"><span>kubectl get ingress echo-server-ingress
+</span></span></code></pre></div><h2 id="part-5-testing-and-verification">Part 5: Testing and Verification</h2>
+<h3 id="test-bgp-connectivity">Test BGP Connectivity</h3>
+<p>From HAProxy node:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check BGP sessions</span>
+</span></span><span style="display:flex;"><span>sudo birdc show protocols
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify routes</span>
+</span></span><span style="display:flex;"><span>sudo birdc show route
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test connectivity to Pod network</span>
+</span></span><span style="display:flex;"><span>ping -c <span style="color:#ae81ff">3</span> 10.244.1.10  <span style="color:#75715e"># Replace with actual pod IP</span>
+</span></span></code></pre></div><h3 id="test-ingress-access">Test Ingress Access</h3>
+<p>From external network:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add hosts entry for testing</span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;192.168.56.15 echo.example.com&#34;</span> | sudo tee -a /etc/hosts
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test HTTP access</span>
+</span></span><span style="display:flex;"><span>curl -I http://echo.example.com
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test HTTPS access (with SSL redirect)</span>
+</span></span><span style="display:flex;"><span>curl -I https://echo.example.com
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test with verbose output</span>
+</span></span><span style="display:flex;"><span>curl -v http://echo.example.com
+</span></span></code></pre></div><h3 id="test-high-availability">Test High Availability</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check which worker is handling traffic</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -l app<span style="color:#f92672">=</span>echo-server -o wide
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Simulate worker failure</span>
+</span></span><span style="display:flex;"><span>kubectl cordon w1
+</span></span><span style="display:flex;"><span>kubectl drain w1 --ignore-daemonsets --delete-emptydir-data
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify traffic shifts to remaining workers</span>
+</span></span><span style="display:flex;"><span>curl http://echo.example.com
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Restore worker</span>
+</span></span><span style="display:flex;"><span>kubectl uncordon w1
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify BGP session re-establishes</span>
+</span></span><span style="display:flex;"><span>sudo birdc show protocols
+</span></span></code></pre></div><h3 id="monitor-bgp-sessions">Monitor BGP Sessions</h3>
+<p>Create a monitoring script <code>/usr/local/bin/check-bgp.sh</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e">#!/bin/bash
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check BGP session status</span>
+</span></span><span style="display:flex;"><span>STATUS<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>sudo birdc show protocols | grep -E <span style="color:#e6db74">&#34;^w[0-9]&#34;</span> | awk <span style="color:#e6db74">&#39;{print $4}&#39;</span><span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>FAILED<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>echo <span style="color:#e6db74">&#34;</span>$STATUS<span style="color:#e6db74">&#34;</span> | grep -v <span style="color:#e6db74">&#34;up&#34;</span> | wc -l<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> <span style="color:#f92672">[</span> $FAILED -gt <span style="color:#ae81ff">0</span> <span style="color:#f92672">]</span>; <span style="color:#66d9ef">then</span>
+</span></span><span style="display:flex;"><span>    echo <span style="color:#e6db74">&#34;CRITICAL: </span>$FAILED<span style="color:#e6db74"> BGP session(s) down&#34;</span>
+</span></span><span style="display:flex;"><span>    exit <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">elif</span> <span style="color:#f92672">[</span> $FAILED -eq <span style="color:#ae81ff">0</span> <span style="color:#f92672">]</span>; <span style="color:#66d9ef">then</span>
+</span></span><span style="display:flex;"><span>    echo <span style="color:#e6db74">&#34;OK: All BGP sessions established&#34;</span>
+</span></span><span style="display:flex;"><span>    exit <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">else</span>
+</span></span><span style="display:flex;"><span>    echo <span style="color:#e6db74">&#34;WARNING: Some BGP sessions unstable&#34;</span>
+</span></span><span style="display:flex;"><span>    exit <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">fi</span>
+</span></span></code></pre></div><h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="bgp-session-not-establishing">BGP Session Not Establishing</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># On HAProxy node (AlmaLinux)</span>
+</span></span><span style="display:flex;"><span>sudo birdc show protocols all
+</span></span><span style="display:flex;"><span>sudo tail -f /var/log/bird.log
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check firewalld rules</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --list-rich-rules | grep <span style="color:#ae81ff">3179</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Temporarily allow all for testing</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --permanent --add-rich-rule<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;rule protocol value=&#34;tcp&#34; accept&#39;</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --reload
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># On Kubernetes worker</span>
+</span></span><span style="display:flex;"><span>cilium bgp peers
+</span></span><span style="display:flex;"><span>kubectl logs -n kube-system -l k8s-app<span style="color:#f92672">=</span>cilium | grep -i bgp
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check firewall rules on worker</span>
+</span></span><span style="display:flex;"><span>sudo firewall-cmd --list-rich-rules | grep <span style="color:#ae81ff">3179</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify network connectivity</span>
+</span></span><span style="display:flex;"><span>telnet 192.168.10.21 <span style="color:#ae81ff">3179</span>
+</span></span></code></pre></div><h3 id="routes-not-appearing">Routes Not Appearing</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check if Pod CIDRs are exported</span>
+</span></span><span style="display:flex;"><span>cilium bgp advertised-routes -n kube-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify BIRD is importing</span>
+</span></span><span style="display:flex;"><span>sudo birdc show route all
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check kernel routing table</span>
+</span></span><span style="display:flex;"><span>ip route show table all
+</span></span></code></pre></div><h3 id="haproxy-not-receiving-traffic">HAProxy Not Receiving Traffic</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check ingress controller logs</span>
+</span></span><span style="display:flex;"><span>journalctl -u haproxy-ingress -f
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify HAProxy configuration</span>
+</span></span><span style="display:flex;"><span>sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check ingress resource</span>
+</span></span><span style="display:flex;"><span>kubectl describe ingress echo-server-ingress
+</span></span><span style="display:flex;"><span>kubectl get endpoints echo-server
+</span></span></code></pre></div><h2 id="conclusion">Conclusion</h2>
+<p>This architecture provides a secure, production-ready ingress solution:</p>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TB
+    subgraph &#34;Benefits&#34;
+        A[✅ DMZ Isolation]
+        B[✅ No Cilium on HAProxy]
+        C[✅ Standard BGP Routing]
+        D[✅ Easy to Maintain]
+        E[✅ High Availability]
+    end
+    
+    subgraph &#34;Security Zones&#34;
+        F[Internet]
+        G[DMZ: HAProxy]
+        H[Internal: K8s]
+    end
+    
+    F --&gt;|Only 80/443| G
+    G --&gt;|BGP 3179 + HTTP| H
+    
+    style A fill:#9f9
+    style B fill:#9f9
+    style C fill:#9f9
+    style D fill:#9f9
+    style E fill:#9f9
+    style G fill:#f96
+    style H fill:#9f9
+</code></pre><p><strong>Key advantages over the deprecated external workload mode:</strong></p>
+<ol>
+<li><strong>Simpler architecture</strong> - No Cilium agent on HAProxy node</li>
+<li><strong>Better isolation</strong> - True DMZ network separation</li>
+<li><strong>Standard protocols</strong> - Pure BGP, no vendor-specific extensions</li>
+<li><strong>Easier troubleshooting</strong> - Standard BGP tools (birdc, show commands)</li>
+<li><strong>Flexible deployment</strong> - HAProxy can be anywhere with BGP connectivity</li>
+</ol>
+<p>The trade-off is slightly more complex BGP configuration, but the security and maintainability benefits are worth it for production environments.</p>
+		</div>
+		<footer class="post__footer">
+			
+<div class="post__tags tags clearfix">
+	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M4 0h8s2 0 4 2l15 15s2 2 0 4L21 31s-2 2-4 0L2 16s-2-2-2-4V3s0-3 4-3m3 10a3 3 0 0 0 0-6 3 3 0 0 0 0 6"/></svg>
+	<ul class="tags__list">
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/kubernetes/" rel="tag">Kubernetes</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/haproxy/" rel="tag">HAProxy</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/cilium/" rel="tag">Cilium</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/bgp/" rel="tag">BGP</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/dmz/" rel="tag">DMZ</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/ingress-controller/" rel="tag">Ingress Controller</a>
+		</li>
+		<li class="tags__item">
+			<a class="tags__link btn" href="https://devopstales.github.io/tags/network-security/" rel="tag">Network Security</a>
+		</li>
+	</ul>
+</div>
+		</footer>
+	</article>
+</main>
+
+
+
+
+			</div>
+			<aside class="sidebar"><div class="widget-search widget">
+	<form class="widget-search__form" role="search" method="get" action="https://google.com/search">
+		<input class="widget-search__field" type="search" placeholder="Search…" value="" name="q" aria-label="Search…">
+		<input class="widget-search__submit" type="submit" value="Search">
+		<input type="hidden" name="sitesearch" value="/">
+	</form>
+</div>
+
+
+<div class="widget-recent widget">
+
+    <h4 class="widget__title">Blog Series</h4>
+
+    <div class="panel-body">
+        <ul class="nav nav-pills nav-stacked">
+            
+            <li><a href="https://devopstales.github.io/series/cluster-mesh" class="text-uppercase">cluster-mesh (5)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/container-runtimes" class="text-uppercase">container runtimes (20)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k3s" class="text-uppercase">k3s (7)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-authentication" class="text-uppercase">k8s-authentication (9)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-gitops" class="text-uppercase">k8s-gitops (7)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-lessons" class="text-uppercase">k8s-lessons (13)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-network" class="text-uppercase">k8s-network (31)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-operators" class="text-uppercase">k8s-operators (10)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/k8s-security" class="text-uppercase">k8s-security (64)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/kubernetes" class="text-uppercase">kubernetes (31)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/mikrotik" class="text-uppercase">mikrotik (5)</a>
+            </li>
+            
+            <li><a href="https://devopstales.github.io/series/virtualization" class="text-uppercase">virtualization (3)</a>
+            </li>
+            
+        </ul>
+    </div>
+</div>
+
+
+<div class="widget-social widget">
+	<h4 class="widget-social__title widget__title">Social</h4>
+	<div class="widget-social__content widget__content">
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="GitHub" rel="noopener noreferrer" href="https://github.com/devopstales" target="_blank">
+				<svg class="widget-social__link-icon icon icon-github" width="24" height="24" viewBox="0 0 384 374"><path d="m192 0c-106.1 0-192 85.8-192 191.7 0 84.7 55 156.6 131.3 181.9 9.6 1.8 13.1-4.2 13.1-9.2 0-4.6-.2-16.6-.3-32.6-53.4 11.6-64.7-25.7-64.7-25.7-8.7-22.1-21.3-28-21.3-28-17.4-11.9 1.3-11.6 1.3-11.6 19.3 1.4 29.4 19.8 29.4 19.8 17.1 29.3 44.9 20.8 55.9 15.9 1.7-12.4 6.7-20.8 12.2-25.6-42.6-4.8-87.5-21.3-87.5-94.8 0-20.9 7.5-38 19.8-51.4-2-4.9-8.6-24.3 1.9-50.7 0 0 16.1-5.2 52.8 19.7 15.3-4.2 31.7-6.4 48.1-6.5 16.3.1 32.7 2.2 48.1 6.5 36.7-24.8 52.8-19.7 52.8-19.7 10.5 26.4 3.9 45.9 1.9 50.7 12.3 13.4 19.7 30.5 19.7 51.4 0 73.7-44.9 89.9-87.7 94.6 6.9 5.9 13 17.6 13 35.5 0 25.6-.2 46.3-.2 52.6 0 5.1 3.5 11.1 13.2 9.2 76.2-25.5 131.2-97.3 131.2-182 0-105.9-86-191.7-192-191.7z"/></svg>
+				<span>GitHub</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="DockerHub" rel="noopener noreferrer" href="https://hub.docker.com/u/devopstales" target="_blank">
+				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.82 17.275c-.684 0-1.304-.56-1.304-1.24s.56-1.243 1.305-1.243c.748 0 1.31.56 1.31 1.242s-.622 1.24-1.305 1.24zm16.012-6.763c-.135-.992-.75-1.8-1.56-2.42l-.315-.25-.254.31c-.494.56-.69 1.553-.63 2.295.06.562.24 1.12.554 1.554-.254.13-.568.25-.81.377-.57.187-1.124.25-1.68.25H.097l-.06.37c-.12 1.182.06 2.42.562 3.54l.244.435v.06c1.5 2.483 4.17 3.6 7.078 3.6 5.594 0 10.182-2.42 12.357-7.633 1.425.062 2.864-.31 3.54-1.676l.18-.31-.3-.187c-.81-.494-1.92-.56-2.85-.31l-.018.002zm-8.008-.992h-2.428v2.42h2.43V9.518l-.002.003zm0-3.043h-2.428v2.42h2.43V6.48l-.002-.003zm0-3.104h-2.428v2.42h2.43v-2.42h-.002zm2.97 6.147H13.38v2.42h2.42V9.518l-.007.003zm-8.998 0H4.383v2.42h2.422V9.518l-.01.003zm3.03 0h-2.4v2.42H9.84V9.518l-.015.003zm-6.03 0H1.4v2.42h2.428V9.518l-.03.003zm6.03-3.043h-2.4v2.42H9.84V6.48l-.015-.003zm-3.045 0H4.387v2.42H6.8V6.48l-.016-.003z"/></svg>
+				<span>DockerHub</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="ArtifactHub" rel="noopener noreferrer" href="https://artifacthub.io/packages/search?user=devopstales" target="_blank">
+				<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="24px" height="24px" viewBox="0 0 24 24" version="1.1">
+<g id="surface1">
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 6.554688 5.816406 C 6.527344 5.789062 6.496094 5.761719 6.464844 5.730469 C 5.859375 5.148438 5.390625 4.476562 5.109375 3.683594 C 5.03125 3.460938 4.96875 3.234375 4.980469 2.992188 C 4.980469 2.96875 4.980469 2.949219 4.984375 2.925781 C 5.003906 2.617188 5.210938 2.460938 5.515625 2.53125 C 5.609375 2.558594 5.703125 2.59375 5.789062 2.636719 C 6.121094 2.804688 6.390625 3.050781 6.636719 3.316406 C 7.078125 3.785156 7.429688 4.328125 7.679688 4.921875 C 7.683594 4.9375 7.691406 4.949219 7.699219 4.964844 C 7.703125 4.96875 7.710938 4.972656 7.726562 4.988281 C 8.90625 4.28125 10.242188 3.871094 11.613281 3.796875 C 11.605469 3.753906 11.601562 3.722656 11.59375 3.691406 C 11.453125 3.109375 11.410156 2.511719 11.464844 1.914062 C 11.488281 1.558594 11.5625 1.207031 11.679688 0.871094 C 11.734375 0.695312 11.824219 0.527344 11.941406 0.382812 C 11.984375 0.332031 12.039062 0.285156 12.09375 0.246094 C 12.207031 0.164062 12.363281 0.164062 12.480469 0.246094 C 12.597656 0.324219 12.695312 0.4375 12.757812 0.566406 C 12.878906 0.789062 12.964844 1.027344 13.011719 1.273438 C 13.125 1.792969 13.160156 2.328125 13.113281 2.855469 C 13.09375 3.179688 13.035156 3.5 12.945312 3.8125 C 13.289062 3.875 13.628906 3.925781 13.960938 4.003906 C 14.292969 4.082031 14.621094 4.175781 14.941406 4.292969 C 15.265625 4.410156 15.582031 4.546875 15.890625 4.703125 C 16.195312 4.855469 16.484375 5.035156 16.789062 5.207031 C 16.800781 5.1875 16.8125 5.164062 16.824219 5.136719 C 17.140625 4.261719 17.6875 3.484375 18.402344 2.890625 C 18.570312 2.75 18.761719 2.636719 18.972656 2.5625 C 19.027344 2.542969 19.085938 2.527344 19.148438 2.519531 C 19.449219 2.488281 19.574219 2.675781 19.597656 2.902344 C 19.613281 3.066406 19.601562 3.238281 19.558594 3.398438 C 19.449219 3.816406 19.277344 4.21875 19.042969 4.582031 C 18.71875 5.109375 18.332031 5.585938 17.839844 5.96875 C 17.824219 5.980469 17.8125 5.992188 17.789062 6.015625 C 18.269531 6.457031 18.695312 6.957031 19.0625 7.496094 C 19.039062 7.503906 19.011719 7.507812 18.984375 7.511719 C 18.476562 7.511719 17.964844 7.511719 17.457031 7.515625 C 17.398438 7.511719 17.339844 7.480469 17.304688 7.433594 C 16.195312 6.21875 14.699219 5.429688 13.074219 5.199219 C 12.589844 5.128906 12.105469 5.109375 11.621094 5.140625 C 10.171875 5.230469 8.789062 5.765625 7.65625 6.667969 C 7.367188 6.898438 7.09375 7.152344 6.84375 7.429688 C 6.796875 7.484375 6.730469 7.515625 6.65625 7.515625 C 6.171875 7.511719 5.6875 7.511719 5.199219 7.511719 L 5.097656 7.511719 C 5.125 7.398438 5.425781 6.988281 5.761719 6.621094 C 6.015625 6.347656 6.28125 6.089844 6.554688 5.816406 Z M 6.554688 5.816406 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 18.9375 16.699219 C 18.597656 17.171875 18.214844 17.609375 17.785156 18.003906 C 17.820312 18.03125 17.847656 18.054688 17.875 18.078125 C 18.617188 18.683594 19.175781 19.484375 19.492188 20.390625 C 19.578125 20.609375 19.613281 20.84375 19.597656 21.082031 C 19.59375 21.140625 19.582031 21.199219 19.5625 21.257812 C 19.511719 21.425781 19.34375 21.53125 19.171875 21.5 C 19.058594 21.484375 18.949219 21.453125 18.847656 21.402344 C 18.691406 21.324219 18.542969 21.234375 18.40625 21.125 C 17.6875 20.53125 17.140625 19.757812 16.824219 18.882812 C 16.816406 18.859375 16.804688 18.832031 16.789062 18.792969 C 16.40625 19.046875 16.003906 19.269531 15.589844 19.464844 C 15.175781 19.652344 14.746094 19.808594 14.308594 19.929688 C 13.863281 20.050781 13.410156 20.136719 12.949219 20.191406 C 12.957031 20.230469 12.960938 20.261719 12.972656 20.292969 C 13.117188 20.863281 13.164062 21.457031 13.113281 22.042969 C 13.09375 22.410156 13.023438 22.773438 12.902344 23.121094 C 12.84375 23.265625 12.777344 23.40625 12.703125 23.542969 C 12.671875 23.59375 12.632812 23.640625 12.589844 23.683594 C 12.398438 23.882812 12.171875 23.882812 11.984375 23.679688 C 11.910156 23.597656 11.847656 23.507812 11.796875 23.410156 C 11.648438 23.132812 11.574219 22.832031 11.519531 22.523438 C 11.449219 22.105469 11.425781 21.679688 11.453125 21.253906 C 11.46875 20.945312 11.515625 20.636719 11.589844 20.332031 C 11.597656 20.308594 11.605469 20.28125 11.609375 20.257812 C 11.609375 20.25 11.605469 20.242188 11.601562 20.222656 C 10.226562 20.144531 8.894531 19.730469 7.714844 19.019531 C 7.695312 19.066406 7.679688 19.101562 7.660156 19.136719 C 7.332031 19.910156 6.824219 20.589844 6.179688 21.125 C 6.007812 21.273438 5.8125 21.386719 5.601562 21.460938 C 5.5 21.5 5.394531 21.511719 5.289062 21.496094 C 5.167969 21.472656 5.070312 21.390625 5.027344 21.277344 C 4.960938 21.113281 4.972656 20.945312 4.996094 20.773438 C 5.03125 20.539062 5.101562 20.308594 5.203125 20.089844 C 5.496094 19.40625 5.929688 18.789062 6.472656 18.277344 C 6.496094 18.257812 6.519531 18.234375 6.539062 18.214844 C 6.546875 18.207031 6.554688 18.195312 6.558594 18.183594 C 6.046875 17.738281 5.585938 17.234375 5.191406 16.679688 C 5.238281 16.675781 5.269531 16.671875 5.300781 16.671875 C 5.808594 16.671875 6.3125 16.671875 6.816406 16.667969 C 6.882812 16.667969 6.949219 16.695312 6.996094 16.746094 C 7.542969 17.3125 8.183594 17.78125 8.886719 18.132812 C 9.628906 18.515625 10.4375 18.757812 11.269531 18.84375 C 13.53125 19.0625 15.480469 18.378906 17.109375 16.785156 C 17.183594 16.707031 17.289062 16.664062 17.394531 16.667969 C 17.867188 16.675781 18.335938 16.671875 18.808594 16.671875 L 18.929688 16.671875 Z M 18.9375 16.699219 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 16.835938 9.492188 C 16.96875 9.492188 17.097656 9.5 17.226562 9.488281 C 17.367188 9.476562 17.472656 9.527344 17.578125 9.625 C 18.183594 10.183594 18.792969 10.734375 19.402344 11.289062 C 19.433594 11.316406 19.464844 11.34375 19.503906 11.378906 C 19.542969 11.34375 19.574219 11.316406 19.609375 11.289062 C 20.238281 10.714844 20.863281 10.144531 21.492188 9.570312 C 21.546875 9.515625 21.617188 9.488281 21.695312 9.492188 C 21.847656 9.496094 22.003906 9.492188 22.167969 9.492188 L 22.167969 14.550781 C 22.082031 14.574219 20.972656 14.578125 20.839844 14.554688 L 20.839844 11.992188 L 20.8125 11.980469 C 20.382812 12.375 19.949219 12.769531 19.507812 13.171875 C 19.0625 12.773438 18.625 12.378906 18.1875 11.984375 L 18.164062 11.992188 C 18.164062 12.207031 18.164062 12.421875 18.164062 12.636719 C 18.164062 12.847656 18.164062 13.058594 18.164062 13.273438 L 18.164062 14.5625 L 16.847656 14.5625 C 16.820312 14.476562 16.808594 9.777344 16.835938 9.492188 Z M 16.835938 9.492188 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 4.6875 9.5 L 5.996094 9.5 C 6.023438 9.582031 6.027344 14.441406 6 14.5625 L 4.691406 14.5625 C 4.683594 14.242188 4.6875 13.921875 4.6875 13.601562 C 4.6875 13.28125 4.6875 12.964844 4.6875 12.640625 L 3.066406 12.640625 L 3.066406 14.546875 C 2.964844 14.574219 1.847656 14.578125 1.738281 14.550781 L 1.738281 9.5 L 3.058594 9.5 L 3.058594 11.285156 C 3.152344 11.3125 4.542969 11.316406 4.683594 11.289062 C 4.6875 11.148438 4.6875 11 4.6875 10.855469 C 4.6875 10.703125 4.6875 10.550781 4.6875 10.398438 C 4.6875 10.25 4.6875 10.101562 4.6875 9.957031 C 4.6875 9.808594 4.6875 9.660156 4.6875 9.5 Z M 4.6875 9.5 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 7.5625 14.5625 L 7.5625 9.511719 C 7.640625 9.488281 10.519531 9.476562 10.707031 9.503906 L 10.707031 10.578125 C 10.664062 10.582031 10.621094 10.589844 10.578125 10.589844 C 10.0625 10.589844 9.550781 10.589844 9.039062 10.589844 L 8.898438 10.589844 L 8.898438 11.425781 L 10.496094 11.425781 L 10.496094 12.539062 L 8.910156 12.539062 C 8.886719 12.632812 8.878906 13.296875 8.898438 13.480469 C 8.941406 13.484375 8.984375 13.488281 9.027344 13.488281 C 9.539062 13.492188 10.050781 13.492188 10.5625 13.492188 L 10.707031 13.492188 L 10.707031 14.5625 Z M 7.5625 14.5625 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 12.207031 14.5625 C 12.179688 14.429688 12.1875 9.589844 12.210938 9.5 L 13.515625 9.5 L 13.515625 13.230469 C 13.570312 13.234375 13.613281 13.238281 13.660156 13.238281 C 14.175781 13.238281 14.691406 13.238281 15.207031 13.238281 C 15.25 13.238281 15.296875 13.238281 15.347656 13.238281 L 15.347656 14.5625 Z M 12.207031 14.5625 "/>
+</g>
+</svg>
+
+				<span>ArtifactHub</span>
+			</a>
+		</div>
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="OperatorHub" rel="noopener noreferrer" href='https://operatorhub.io/?category=Security&provider=["devopstales"]' target="_blank">
+				<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="24px" height="24px" viewBox="0 0 24 24" version="1.1">
+<g id="surface1">
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 11.960938 0.390625 C 5.585938 0.390625 0.414062 5.5625 0.414062 11.941406 C 0.414062 18.320312 5.585938 23.488281 11.960938 23.488281 C 18.339844 23.488281 23.511719 18.320312 23.511719 11.941406 C 23.507812 5.5625 18.339844 0.394531 11.960938 0.390625 Z M 18.710938 10.945312 L 11.015625 21.132812 C 10.890625 21.300781 10.769531 21.546875 10.546875 21.425781 C 10.324219 21.300781 10.464844 21.050781 10.546875 20.84375 C 11.140625 18.671875 11.703125 16.523438 12.320312 14.363281 C 12.476562 13.855469 12.320312 13.742188 11.855469 13.753906 L 6.113281 13.753906 L 5.175781 13.707031 L 14.566406 1.75 C 14.773438 2.164062 14.566406 2.398438 14.484375 2.644531 C 13.628906 4.984375 12.789062 7.339844 11.898438 9.667969 C 11.675781 10.257812 11.773438 10.394531 12.390625 10.394531 L 18.433594 10.394531 C 18.597656 10.394531 18.816406 10.3125 18.914062 10.492188 C 19.011719 10.671875 18.804688 10.808594 18.710938 10.945312 Z M 18.710938 10.945312 "/>
+</g>
+</svg>
+
+				<span>OperatorHub.io</span>
+			</a>
+		</div>
+		
+		<div class="widget-social__item widget__item">
+			<a class="widget-social__link widget__link btn" title="helm-charts" rel="noopener noreferrer" href="https://devopstales.github.io/helm-charts/" target="_blank">
+					<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="24px" height="24px" viewBox="0 0 24 24" version="1.1">
+<g id="surface1">
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 6.554688 5.816406 C 6.527344 5.789062 6.496094 5.761719 6.464844 5.730469 C 5.859375 5.148438 5.390625 4.476562 5.109375 3.683594 C 5.03125 3.460938 4.96875 3.234375 4.980469 2.992188 C 4.980469 2.96875 4.980469 2.949219 4.984375 2.925781 C 5.003906 2.617188 5.210938 2.460938 5.515625 2.53125 C 5.609375 2.558594 5.703125 2.59375 5.789062 2.636719 C 6.121094 2.804688 6.390625 3.050781 6.636719 3.316406 C 7.078125 3.785156 7.429688 4.328125 7.679688 4.921875 C 7.683594 4.9375 7.691406 4.949219 7.699219 4.964844 C 7.703125 4.96875 7.710938 4.972656 7.726562 4.988281 C 8.90625 4.28125 10.242188 3.871094 11.613281 3.796875 C 11.605469 3.753906 11.601562 3.722656 11.59375 3.691406 C 11.453125 3.109375 11.410156 2.511719 11.464844 1.914062 C 11.488281 1.558594 11.5625 1.207031 11.679688 0.871094 C 11.734375 0.695312 11.824219 0.527344 11.941406 0.382812 C 11.984375 0.332031 12.039062 0.285156 12.09375 0.246094 C 12.207031 0.164062 12.363281 0.164062 12.480469 0.246094 C 12.597656 0.324219 12.695312 0.4375 12.757812 0.566406 C 12.878906 0.789062 12.964844 1.027344 13.011719 1.273438 C 13.125 1.792969 13.160156 2.328125 13.113281 2.855469 C 13.09375 3.179688 13.035156 3.5 12.945312 3.8125 C 13.289062 3.875 13.628906 3.925781 13.960938 4.003906 C 14.292969 4.082031 14.621094 4.175781 14.941406 4.292969 C 15.265625 4.410156 15.582031 4.546875 15.890625 4.703125 C 16.195312 4.855469 16.484375 5.035156 16.789062 5.207031 C 16.800781 5.1875 16.8125 5.164062 16.824219 5.136719 C 17.140625 4.261719 17.6875 3.484375 18.402344 2.890625 C 18.570312 2.75 18.761719 2.636719 18.972656 2.5625 C 19.027344 2.542969 19.085938 2.527344 19.148438 2.519531 C 19.449219 2.488281 19.574219 2.675781 19.597656 2.902344 C 19.613281 3.066406 19.601562 3.238281 19.558594 3.398438 C 19.449219 3.816406 19.277344 4.21875 19.042969 4.582031 C 18.71875 5.109375 18.332031 5.585938 17.839844 5.96875 C 17.824219 5.980469 17.8125 5.992188 17.789062 6.015625 C 18.269531 6.457031 18.695312 6.957031 19.0625 7.496094 C 19.039062 7.503906 19.011719 7.507812 18.984375 7.511719 C 18.476562 7.511719 17.964844 7.511719 17.457031 7.515625 C 17.398438 7.511719 17.339844 7.480469 17.304688 7.433594 C 16.195312 6.21875 14.699219 5.429688 13.074219 5.199219 C 12.589844 5.128906 12.105469 5.109375 11.621094 5.140625 C 10.171875 5.230469 8.789062 5.765625 7.65625 6.667969 C 7.367188 6.898438 7.09375 7.152344 6.84375 7.429688 C 6.796875 7.484375 6.730469 7.515625 6.65625 7.515625 C 6.171875 7.511719 5.6875 7.511719 5.199219 7.511719 L 5.097656 7.511719 C 5.125 7.398438 5.425781 6.988281 5.761719 6.621094 C 6.015625 6.347656 6.28125 6.089844 6.554688 5.816406 Z M 6.554688 5.816406 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 18.9375 16.699219 C 18.597656 17.171875 18.214844 17.609375 17.785156 18.003906 C 17.820312 18.03125 17.847656 18.054688 17.875 18.078125 C 18.617188 18.683594 19.175781 19.484375 19.492188 20.390625 C 19.578125 20.609375 19.613281 20.84375 19.597656 21.082031 C 19.59375 21.140625 19.582031 21.199219 19.5625 21.257812 C 19.511719 21.425781 19.34375 21.53125 19.171875 21.5 C 19.058594 21.484375 18.949219 21.453125 18.847656 21.402344 C 18.691406 21.324219 18.542969 21.234375 18.40625 21.125 C 17.6875 20.53125 17.140625 19.757812 16.824219 18.882812 C 16.816406 18.859375 16.804688 18.832031 16.789062 18.792969 C 16.40625 19.046875 16.003906 19.269531 15.589844 19.464844 C 15.175781 19.652344 14.746094 19.808594 14.308594 19.929688 C 13.863281 20.050781 13.410156 20.136719 12.949219 20.191406 C 12.957031 20.230469 12.960938 20.261719 12.972656 20.292969 C 13.117188 20.863281 13.164062 21.457031 13.113281 22.042969 C 13.09375 22.410156 13.023438 22.773438 12.902344 23.121094 C 12.84375 23.265625 12.777344 23.40625 12.703125 23.542969 C 12.671875 23.59375 12.632812 23.640625 12.589844 23.683594 C 12.398438 23.882812 12.171875 23.882812 11.984375 23.679688 C 11.910156 23.597656 11.847656 23.507812 11.796875 23.410156 C 11.648438 23.132812 11.574219 22.832031 11.519531 22.523438 C 11.449219 22.105469 11.425781 21.679688 11.453125 21.253906 C 11.46875 20.945312 11.515625 20.636719 11.589844 20.332031 C 11.597656 20.308594 11.605469 20.28125 11.609375 20.257812 C 11.609375 20.25 11.605469 20.242188 11.601562 20.222656 C 10.226562 20.144531 8.894531 19.730469 7.714844 19.019531 C 7.695312 19.066406 7.679688 19.101562 7.660156 19.136719 C 7.332031 19.910156 6.824219 20.589844 6.179688 21.125 C 6.007812 21.273438 5.8125 21.386719 5.601562 21.460938 C 5.5 21.5 5.394531 21.511719 5.289062 21.496094 C 5.167969 21.472656 5.070312 21.390625 5.027344 21.277344 C 4.960938 21.113281 4.972656 20.945312 4.996094 20.773438 C 5.03125 20.539062 5.101562 20.308594 5.203125 20.089844 C 5.496094 19.40625 5.929688 18.789062 6.472656 18.277344 C 6.496094 18.257812 6.519531 18.234375 6.539062 18.214844 C 6.546875 18.207031 6.554688 18.195312 6.558594 18.183594 C 6.046875 17.738281 5.585938 17.234375 5.191406 16.679688 C 5.238281 16.675781 5.269531 16.671875 5.300781 16.671875 C 5.808594 16.671875 6.3125 16.671875 6.816406 16.667969 C 6.882812 16.667969 6.949219 16.695312 6.996094 16.746094 C 7.542969 17.3125 8.183594 17.78125 8.886719 18.132812 C 9.628906 18.515625 10.4375 18.757812 11.269531 18.84375 C 13.53125 19.0625 15.480469 18.378906 17.109375 16.785156 C 17.183594 16.707031 17.289062 16.664062 17.394531 16.667969 C 17.867188 16.675781 18.335938 16.671875 18.808594 16.671875 L 18.929688 16.671875 Z M 18.9375 16.699219 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 16.835938 9.492188 C 16.96875 9.492188 17.097656 9.5 17.226562 9.488281 C 17.367188 9.476562 17.472656 9.527344 17.578125 9.625 C 18.183594 10.183594 18.792969 10.734375 19.402344 11.289062 C 19.433594 11.316406 19.464844 11.34375 19.503906 11.378906 C 19.542969 11.34375 19.574219 11.316406 19.609375 11.289062 C 20.238281 10.714844 20.863281 10.144531 21.492188 9.570312 C 21.546875 9.515625 21.617188 9.488281 21.695312 9.492188 C 21.847656 9.496094 22.003906 9.492188 22.167969 9.492188 L 22.167969 14.550781 C 22.082031 14.574219 20.972656 14.578125 20.839844 14.554688 L 20.839844 11.992188 L 20.8125 11.980469 C 20.382812 12.375 19.949219 12.769531 19.507812 13.171875 C 19.0625 12.773438 18.625 12.378906 18.1875 11.984375 L 18.164062 11.992188 C 18.164062 12.207031 18.164062 12.421875 18.164062 12.636719 C 18.164062 12.847656 18.164062 13.058594 18.164062 13.273438 L 18.164062 14.5625 L 16.847656 14.5625 C 16.820312 14.476562 16.808594 9.777344 16.835938 9.492188 Z M 16.835938 9.492188 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 4.6875 9.5 L 5.996094 9.5 C 6.023438 9.582031 6.027344 14.441406 6 14.5625 L 4.691406 14.5625 C 4.683594 14.242188 4.6875 13.921875 4.6875 13.601562 C 4.6875 13.28125 4.6875 12.964844 4.6875 12.640625 L 3.066406 12.640625 L 3.066406 14.546875 C 2.964844 14.574219 1.847656 14.578125 1.738281 14.550781 L 1.738281 9.5 L 3.058594 9.5 L 3.058594 11.285156 C 3.152344 11.3125 4.542969 11.316406 4.683594 11.289062 C 4.6875 11.148438 4.6875 11 4.6875 10.855469 C 4.6875 10.703125 4.6875 10.550781 4.6875 10.398438 C 4.6875 10.25 4.6875 10.101562 4.6875 9.957031 C 4.6875 9.808594 4.6875 9.660156 4.6875 9.5 Z M 4.6875 9.5 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 7.5625 14.5625 L 7.5625 9.511719 C 7.640625 9.488281 10.519531 9.476562 10.707031 9.503906 L 10.707031 10.578125 C 10.664062 10.582031 10.621094 10.589844 10.578125 10.589844 C 10.0625 10.589844 9.550781 10.589844 9.039062 10.589844 L 8.898438 10.589844 L 8.898438 11.425781 L 10.496094 11.425781 L 10.496094 12.539062 L 8.910156 12.539062 C 8.886719 12.632812 8.878906 13.296875 8.898438 13.480469 C 8.941406 13.484375 8.984375 13.488281 9.027344 13.488281 C 9.539062 13.492188 10.050781 13.492188 10.5625 13.492188 L 10.707031 13.492188 L 10.707031 14.5625 Z M 7.5625 14.5625 "/>
+<path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 12.207031 14.5625 C 12.179688 14.429688 12.1875 9.589844 12.210938 9.5 L 13.515625 9.5 L 13.515625 13.230469 C 13.570312 13.234375 13.613281 13.238281 13.660156 13.238281 C 14.175781 13.238281 14.691406 13.238281 15.207031 13.238281 C 15.25 13.238281 15.296875 13.238281 15.347656 13.238281 L 15.347656 14.5625 Z M 12.207031 14.5625 "/>
+</g>
+</svg>
+
+				<span>helm-charts</span>
+			</a>
+		</div>
+		
+	</div>
+</div>
+<div class="widget-recent widget">
+	<h4 class="widget__title">Recent Posts</h4>
+	<div class="widget__content">
+		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-swap-etcd-stability/">Kubernetes Swap and etcd Stability: Preventing Control Plane Hangs</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/k8s-dmz-bgp-external-haproxy/">Kubernetes DMZ Ingress with HAProxy and BGP: External Mode Without Cilium External Workload</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/mtls-traefik-ingress/">Implementing Mutual TLS (mTLS) with Traefik Ingress Controller: Per-Ingress Configuration</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/mtls-nginx-ingress/">Implementing Mutual TLS (mTLS) with NGINX Ingress Controller: Per-Ingress Configuration</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/nginx-to-traefic-ingress-migration/">Migrating from NGINX Ingress Controller to Traefik: A Step-by-Step Guide</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/nginx-to-haproxy-ingress-migration/">Migrating from NGINX Ingress Controller to HAProxy: A Step-by-Step Guide</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/kubernetes-resource-visibility/">Why Kubernetes Pods See Host Resources (And How to Fix It)</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/cluster-api/">Kubernetes Cluster API: a step by stap guide</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/kubernetes/automatic-k8s-certificate-renewal/">Automatic Kubernetes Certificate Renewal</a></li>
+			<li class="widget__item"><a class="widget__link" href="https://devopstales.github.io/cloud/aks-azure-key-vault-known-issues-and-resolutions/">Known Issues of Azure Key Vault AKS integration and resolutions</a></li>
+		</ul>
+	</div>
+</div>
+<div class="widget-taglist widget">
+    <h4 class="widget__title">Tags</h4>
+    <div class="widget__content">
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/2fa/" title="2FA">2FA</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/active-directory/" title="Active Directory">Active Directory</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/admission-controller/" title="Admission Controller">Admission Controller</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aks/" title="AKS">AKS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/alerta/" title="Alerta">Alerta</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/almalinux/" title="AlmaLinux">AlmaLinux</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible/" title="Ansible">Ansible</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ansible-tower/" title="Ansible Tower">Ansible Tower</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/aws/" title="AWS">AWS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/awx/" title="AWX">AWX</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/azure/" title="Azure">Azure</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/backup/" title="Backup">Backup</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/bgp/" title="BGP">BGP</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/calico/" title="Calico">Calico</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centos/" title="CentOS">CentOS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/centreon/" title="Centreon">Centreon</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ceph/" title="Ceph">Ceph</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/certificate-authority/" title="Certificate Authority">Certificate Authority</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/chef/" title="Chef">Chef</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cilium/" title="Cilium">Cilium</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cloud-sql/" title="Cloud Sql">Cloud Sql</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster/" title="Cluster">Cluster</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cluster-mesh/" title="Cluster-Mesh">Cluster-Mesh</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cni-genie/" title="CNI-Genie">CNI-Genie</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/container-runtimes/" title="Container Runtimes">Container Runtimes</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/containerd/" title="Containerd">Containerd</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/control-plane/" title="Control Plane">Control Plane</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/coredns/" title="CoreDNS">CoreDNS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cosign/" title="Cosign">Cosign</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/cri-o/" title="CRI-O">CRI-O</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/debian/" title="Debian">Debian</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/devops/" title="Devops">Devops</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dmz/" title="DMZ">DMZ</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/dns/" title="DNS">DNS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker/" title="Docker">Docker</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/docker-compose/" title="Docker Compose">Docker Compose</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ebpf/" title="Ebpf">Ebpf</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ecr/" title="ECR">ECR</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/eks/" title="EKS">EKS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/elasticsearch/" title="Elasticsearch">Elasticsearch</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/etcd/" title="Etcd">Etcd</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/falco/" title="Falco">Falco</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora/" title="Fedora">Fedora</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/fedora-coreos/" title="Fedora CoreOS">Fedora CoreOS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/firecracker/" title="Firecracker">Firecracker</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/flannel/" title="Flannel">Flannel</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/foreman/" title="Foreman">Foreman</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gcp/" title="GCP">GCP</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/github/" title="GitHub">GitHub</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab/" title="Gitlab">Gitlab</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitlab-runner/" title="Gitlab-Runner">Gitlab-Runner</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gitops/" title="Gitops">Gitops</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gke/" title="GKE">GKE</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gns3/" title="GNS3">GNS3</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/google-cloud-platform/" title="Google Cloud Platform">Google Cloud Platform</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/grafana/" title="Grafana">Grafana</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/graylog/" title="Graylog">Graylog</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/group-policy-/" title="Group Policy ">Group Policy </a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/gvisor/" title="Gvisor">Gvisor</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ha/" title="HA">HA</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/haproxy/" title="HAproxy">HAproxy</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/harbor/" title="Harbor">Harbor</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hashicorp-vault/" title="HashiCorp Vault">HashiCorp Vault</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm/" title="Helm">Helm</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm-controller/" title="Helm-Controller">Helm-Controller</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm2/" title="Helm2">Helm2</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/helm3/" title="Helm3">Helm3</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/hp/" title="HP">HP</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/httpd/" title="Httpd">Httpd</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/icinga/" title="Icinga">Icinga</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ilo/" title="ILO">ILO</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/influxdb/" title="Influxdb">Influxdb</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ingress/" title="Ingress">Ingress</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ingress-controller/" title="Ingress Controller">Ingress Controller</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipmitool/" title="Ipmitool">Ipmitool</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ipsec/" title="Ipsec">Ipsec</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/jitsi/" title="Jitsi">Jitsi</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k0s/" title="K0S">K0S</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k3s/" title="K3S">K3S</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/k8s/" title="K8s">K8s</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kafka/" title="Kafka">Kafka</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kata-container/" title="Kata-Container">Kata-Container</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/katello/" title="Katello">Katello</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keepassxc/" title="Keepassxc">Keepassxc</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/keycloak/" title="Keycloak">Keycloak</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-apiserver/" title="Kube-Apiserver">Kube-Apiserver</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-openid-connect/" title="Kube-Openid-Connect">Kube-Openid-Connect</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-proxy/" title="Kube-Proxy">Kube-Proxy</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kube-vip/" title="Kube-Vip">Kube-Vip</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubedash/" title="Kubedash">Kubedash</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kubernetes/" title="Kubernetes">Kubernetes</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/kyverno/" title="Kyverno">Kyverno</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/linkerd/" title="Linkerd">Linkerd</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loadbalancer/" title="LoadBalancer">LoadBalancer</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/logging/" title="Logging">Logging</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/loki/" title="Loki">Loki</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mattermost/" title="Mattermost">Mattermost</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/metallb/" title="MetalLB">MetalLB</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/microk8s/" title="Microk8s">Microk8s</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mikrotik/" title="Mikrotik">Mikrotik</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mtls/" title="Mtls">Mtls</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/multus/" title="Multus">Multus</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mutating-webhook/" title="Mutating Webhook">Mutating Webhook</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/mysql/" title="Mysql">Mysql</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/naemon/" title="Naemon">Naemon</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nagios/" title="Nagios">Nagios</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nerdctl/" title="Nerdctl">Nerdctl</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/network-security/" title="Network Security">Network Security</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nextcloud/" title="Nextcloud">Nextcloud</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nexus-oss/" title="Nexus OSS">Nexus OSS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nginx/" title="Nginx">Nginx</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nmstate/" title="Nmstate">Nmstate</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/nosql/" title="NoSQL">NoSQL</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/notary/" title="Notary">Notary</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oauth2/" title="Oauth2">Oauth2</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/oidc/" title="Oidc">Oidc</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openid/" title="OpenID">OpenID</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openproject/" title="Openproject">Openproject</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift/" title="Openshift">Openshift</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-3.11/" title="Openshift 3.11">Openshift 3.11</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openshift-4/" title="Openshift 4">Openshift 4</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/openvpn/" title="OpenVPN">OpenVPN</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/operator/" title="Operator">Operator</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/opnsense/" title="Opnsense">Opnsense</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pfsense/" title="Pfsense">Pfsense</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/postgresql/" title="Postgresql">Postgresql</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/powershell/" title="PowerShell">PowerShell</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/privacyidea/" title="Privacyidea">Privacyidea</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/prometheus/" title="Prometheus">Prometheus</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxmox/" title="Proxmox">Proxmox</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/proxy/" title="Proxy">Proxy</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/pxe/" title="PXE">PXE</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/radius/" title="RADIUS">RADIUS</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rancher/" title="Rancher">Rancher</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rbac/" title="RBAC">RBAC</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/redmine/" title="Redmine">Redmine</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/registry/" title="Registry">Registry</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/resource-limits/" title="Resource Limits">Resource Limits</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rke2/" title="Rke2">Rke2</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/routeros/" title="Routeros">Routeros</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rsyslog/" title="Rsyslog">Rsyslog</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/rundeck/" title="Rundeck">Rundeck</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/s3/" title="S3">S3</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/seccomp/" title="Seccomp">Seccomp</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/secuity/" title="Secuity">Secuity</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/security/" title="Security">Security</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/siem/" title="SIEM">SIEM</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/skupper/" title="Skupper">Skupper</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sonarqube/" title="Sonarqube">Sonarqube</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/spacewalk/" title="Spacewalk">Spacewalk</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/squid/" title="Squid">Squid</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/sso/" title="Sso">Sso</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/submariner/" title="Submariner">Submariner</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/supermicro/" title="Supermicro">Supermicro</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/swap/" title="Swap">Swap</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/tekton/" title="Tekton">Tekton</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/telegraf/" title="Telegraf">Telegraf</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/terraform/" title="Terraform">Terraform</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/traefik/" title="Traefik">Traefik</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/trivy-operator/" title="Trivy-Operator">Trivy-Operator</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/ubuntu/" title="Ubuntu">Ubuntu</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi/" title="Unifi">Unifi</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/unifi-controller/" title="Unifi Controller">Unifi Controller</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vagrant/" title="Vagrant">Vagrant</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/veeam-backup/" title="Veeam Backup">Veeam Backup</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vmware/" title="Vmware">Vmware</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/volume-expansion/" title="Volume Expansion">Volume Expansion</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vsphere/" title="VSphere">VSphere</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/vxlan/" title="Vxlan">Vxlan</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wazuh/" title="Wazuh">Wazuh</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/wildfly/" title="Wildfly">Wildfly</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/windows/" title="Windows">Windows</a>
+            <a class="widget-taglist__link widget__link btn" href="https://devopstales.github.io/tags/zfs/" title="ZFS">ZFS</a>
+    </div>
+</div>
+</aside>
+		</div>
+		<footer class="footer">
+        <script data-name="BMC-Widget" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"
+             data-id="devopstales" data-description="Support me on Buy me a coffee!"
+             data-message="Thank you for visiting. You can now buy me a coffee!"
+             data-color="#FF813F" data-position="right" data-x_margin="18" data-y_margin="48">
+        </script>
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2026 DevOpsTales.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/mansoorbarri/roadster/" rel="nofollow noopener" target="_blank">Roadster</a> theme.</span>
+		</div>
+	</div>
+</footer>
+
+	</div>
+<script async defer src="https://devopstales.github.io/js/menu.js"></script>
+<div class="cookie-container" style="justify-content: space-between;">
+  <div class="cookie-consent-text">
+    This website makes use of third-party cookies.
+     <a href="https://devopstales.github.io/privacy-policy/">Learn More</a>
+  </div>
+  <div class="cookie-consent-button">
+    <button class="cookie-btn">
+      Okay
+    </button>
+  </div>
+</div>
+<script src="https://devopstales.github.io/js/cookie.js"></script>
+
+
+<script src="https://devopstales.github.io/js/medium-zoom.js"></script>
+<script>
+
+var zoomables = document.querySelectorAll('.zoomable > img, img.zoomable');
+zoomables.length && mediumZoom(zoomables, {
+    margin: 0,  
+    scrollOffset: 40,  
+    container: null,  
+    template: null,  
+    background: 'rgba(0, 0, 0, 0.8)'
+  }
+);
+</script>
+</body>
+</html>
