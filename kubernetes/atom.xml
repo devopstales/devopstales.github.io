@@ -9,7 +9,7 @@
             <link href="https://devopstales.github.io/kubernetes/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/kubernetes/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/kubernetes/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-03-02T14:31:52+00:00</updated>
+    <updated>2026-03-03T15:06:54+00:00</updated>
     
     
     
@@ -292,6 +292,638 @@
                                 <category scheme="lens" term="lens" label="Lens" />
                              
                                 <category scheme="octant" term="octant" label="Octant" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Migrating to FluxCD Operator with UI]]></title>
+            <link href="https://devopstales.github.io/kubernetes/fluxcd-operator-migration-gitlab/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/kubernetes/fluxcd-operator-migration-gitlab/</id>
+            
+            
+            <published>2026-03-02T00:00:00+00:00</published>
+            <updated>2026-03-02T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Step-by-step guide to migrate an existing FluxCD installation to FluxCD Operator with web UI enabled, using GitLab as the Git source.</blockquote><p>FluxCD Operator brings a simplified management experience and a native web UI for monitoring your GitOps workflows. This guide walks you through migrating an existing FluxCD installation to the Operator pattern with UI enabled, while maintaining GitLab as your Git source.</p>
+<h2 id="what-is-fluxcd-operator">What is FluxCD Operator?</h2>
+<p>FluxCD Operator is a new way to manage Flux instances on Kubernetes. Instead of installing Flux components directly, you deploy a <strong>FluxInstance</strong> custom resource that manages the entire Flux stack.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>┌─────────────────────────────────────────────────────────┐
+</span></span><span style="display:flex;"><span>│              FluxCD Operator                            │
+</span></span><span style="display:flex;"><span>│  ┌─────────────────────────────────────────────────┐    │
+</span></span><span style="display:flex;"><span>│  │           FluxInstance CR                       │    │
+</span></span><span style="display:flex;"><span>│  │  - Manages Flux components                      │    │
+</span></span><span style="display:flex;"><span>│  │  - Handles upgrades automatically               │    │
+</span></span><span style="display:flex;"><span>│  │  - Provides web UI <span style="color:#f92672">(</span>Flux Web UI<span style="color:#f92672">)</span>                │    │
+</span></span><span style="display:flex;"><span>│  └─────────────────────────────────────────────────┘    │
+</span></span><span style="display:flex;"><span>│         │              │              │                 │
+</span></span><span style="display:flex;"><span>│         ▼              ▼              ▼                 │
+</span></span><span style="display:flex;"><span>│  ┌──────────┐  ┌──────────┐  ┌──────────┐               │
+</span></span><span style="display:flex;"><span>│  │  Source  │  │ Kustomize│  │  Helm    │               │
+</span></span><span style="display:flex;"><span>│  │Controller│  │Controller│  │Controller│               │
+</span></span><span style="display:flex;"><span>│  └──────────┘  └──────────┘  └──────────┘               │
+</span></span><span style="display:flex;"><span>└─────────────────────────────────────────────────────────┘
+</span></span><span style="display:flex;"><span>         │
+</span></span><span style="display:flex;"><span>         ▼
+</span></span><span style="display:flex;"><span>┌─────────────────┐
+</span></span><span style="display:flex;"><span>│    GitLab       │
+</span></span><span style="display:flex;"><span>│  <span style="color:#f92672">(</span>Git Source<span style="color:#f92672">)</span>   │
+</span></span><span style="display:flex;"><span>└─────────────────┘
+</span></span></code></pre></div><h3 id="benefits-of-migrating">Benefits of Migrating</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Traditional Flux</th>
+          <th>Flux Operator</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Installation</strong></td>
+          <td>Flux CLI (<code>flux install</code>)</td>
+          <td>Kubernetes manifests / Helm</td>
+      </tr>
+      <tr>
+          <td><strong>Upgrades</strong></td>
+          <td>Manual (<code>flux upgrade</code>)</td>
+          <td>Automatic via CR updates</td>
+      </tr>
+      <tr>
+          <td><strong>Configuration</strong></td>
+          <td>CLI flags / bootstrap</td>
+          <td>Declarative (FluxInstance CR)</td>
+      </tr>
+      <tr>
+          <td><strong>Web UI</strong></td>
+          <td>Third-party (Weave GitOps)</td>
+          <td>Native Flux Web UI</td>
+      </tr>
+      <tr>
+          <td><strong>Multi-tenancy</strong></td>
+          <td>Complex</td>
+          <td>Built-in support</td>
+      </tr>
+      <tr>
+          <td><strong>Observability</strong></td>
+          <td>Manual setup</td>
+          <td>Integrated dashboards</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="prerequisites">Prerequisites</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>Version</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Kubernetes</strong></td>
+          <td>1.25+</td>
+          <td>Tested on 1.28, 1.29</td>
+      </tr>
+      <tr>
+          <td><strong>Existing Flux</strong></td>
+          <td>v2.0+</td>
+          <td>v1.x requires additional migration steps</td>
+      </tr>
+      <tr>
+          <td><strong>GitLab</strong></td>
+          <td>15.0+</td>
+          <td>Self-managed or GitLab.com</td>
+      </tr>
+      <tr>
+          <td><strong>kubectl</strong></td>
+          <td>Latest</td>
+          <td>Configured with cluster access</td>
+      </tr>
+      <tr>
+          <td><strong>flux CLI</strong></td>
+          <td>v2.2+</td>
+          <td>For verification and troubleshooting</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="verify-current-flux-installation">Verify Current Flux Installation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check Flux components</span>
+</span></span><span style="display:flex;"><span>flux check --pre
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># List existing Flux resources</span>
+</span></span><span style="display:flex;"><span>kubectl get GitRepository -A
+</span></span><span style="display:flex;"><span>kubectl get Kustomization -A
+</span></span><span style="display:flex;"><span>kubectl get HelmRelease -A
+</span></span><span style="display:flex;"><span>kubectl get HelmRepository -A
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Flux version</span>
+</span></span><span style="display:flex;"><span>flux --version
+</span></span></code></pre></div><h2 id="step-1-backup-existing-flux-configuration">Step 1: Backup Existing Flux Configuration</h2>
+<p>Before making any changes, export all existing Flux resources:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create backup directory</span>
+</span></span><span style="display:flex;"><span>mkdir -p ~/flux-backup/<span style="color:#66d9ef">$(</span>date +%Y%m%d-%H%M%S<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>BACKUP_DIR<span style="color:#f92672">=</span>~/flux-backup/<span style="color:#66d9ef">$(</span>date +%Y%m%d-%H%M%S<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Export all Flux resources</span>
+</span></span><span style="display:flex;"><span>kubectl get GitRepository -A -o yaml &gt; $BACKUP_DIR/gitrepositories.yaml
+</span></span><span style="display:flex;"><span>kubectl get Kustomization -A -o yaml &gt; $BACKUP_DIR/kustomizations.yaml
+</span></span><span style="display:flex;"><span>kubectl get HelmRelease -A -o yaml &gt; $BACKUP_DIR/helmreleases.yaml
+</span></span><span style="display:flex;"><span>kubectl get HelmRepository -A -o yaml &gt; $BACKUP_DIR/helmrepositories.yaml
+</span></span><span style="display:flex;"><span>kubectl get ImageRepository -A -o yaml &gt; $BACKUP_DIR/imagerepositories.yaml
+</span></span><span style="display:flex;"><span>kubectl get ImagePolicy -A -o yaml &gt; $BACKUP_DIR/imagepolicies.yaml
+</span></span><span style="display:flex;"><span>kubectl get ImageUpdateAutomation -A -o yaml &gt; $BACKUP_DIR/imageupdateautomations.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Export Flux secrets (GitLab credentials)</span>
+</span></span><span style="display:flex;"><span>kubectl get secret -n flux-system -o yaml &gt; $BACKUP_DIR/flux-secrets.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Export existing flux-system namespace</span>
+</span></span><span style="display:flex;"><span>kubectl get namespace flux-system -o yaml &gt; $BACKUP_DIR/namespace.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;Backup completed: </span>$BACKUP_DIR<span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><h3 id="export-gitlab-webhook-configuration">Export GitLab Webhook Configuration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Get existing webhook secrets</span>
+</span></span><span style="display:flex;"><span>kubectl get secret -n flux-system webhook-secret -o yaml &gt; $BACKUP_DIR/webhook-secret.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Document existing webhook URLs</span>
+</span></span><span style="display:flex;"><span>kubectl get GitRepository -A -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{range .items[*]}{.metadata.name}: {.spec.url}{&#34;\n&#34;}{end}&#39;</span> &gt; $BACKUP_DIR/git-urls.txt
+</span></span></code></pre></div><h2 id="step-2-install-fluxcd-operator">Step 2: Install FluxCD Operator</h2>
+<h3 id="add-flux-operator-helm-repository">Add Flux Operator Helm Repository</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm repo add flux-operator https://controlplaneio.github.io/flux-operator/
+</span></span><span style="display:flex;"><span>helm repo update
+</span></span></code></pre></div><h3 id="create-operator-namespace">Create Operator Namespace</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl create namespace flux-operator --dry-run<span style="color:#f92672">=</span>client -o yaml | kubectl apply -f -
+</span></span></code></pre></div><h3 id="install-flux-operator">Install Flux Operator</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm install flux-operator flux-operator/flux-operator <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace flux-operator <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --wait
+</span></span></code></pre></div><h3 id="verify-operator-installation">Verify Operator Installation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check operator pods</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n flux-operator
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME                              READY   STATUS    RESTARTS   AGE</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># flux-operator-xxxxxxxxxx-xxxxx    1/1     Running   0          2m</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check operator deployment</span>
+</span></span><span style="display:flex;"><span>kubectl get deployment -n flux-operator
+</span></span></code></pre></div><h2 id="step-3-create-fluxinstance-with-ui-enabled">Step 3: Create FluxInstance with UI Enabled</h2>
+<h3 id="generate-fluxinstance-manifest">Generate FluxInstance Manifest</h3>
+<p>Create <code>flux-instance.yaml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">fluxcd.controlplane.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">FluxInstance</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flux</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">flux-system</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Distribution settings</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">distribution</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">version</span>: <span style="color:#e6db74">&#34;2.2.x&#34;</span>  <span style="color:#75715e"># Specify Flux version</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">registry</span>: <span style="color:#e6db74">&#34;ghcr.io/fluxcd&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">artifact</span>: <span style="color:#e6db74">&#34;flux-manifests&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Enable components</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">components</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">source-controller</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">kustomize-controller</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">helm-controller</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">notification-controller</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Enable web UI</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ui</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Cluster configuration</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">cluster</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#e6db74">&#34;kubernetes&#34;</span>  <span style="color:#75715e"># or &#34;openshift&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">domain</span>: <span style="color:#e6db74">&#34;cluster.local&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Sync configuration (will be configured after migration)</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">sync</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>  <span style="color:#75715e"># We&#39;ll enable after migration</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Resource policies</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">policies</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">allowCrossNamespaceRef</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">allowIngress</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Observability</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">observability</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metrics</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">tracing</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">false</span>
+</span></span></code></pre></div><h3 id="apply-fluxinstance">Apply FluxInstance</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f flux-instance.yaml
+</span></span></code></pre></div><h3 id="monitor-installation-progress">Monitor Installation Progress</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Watch FluxInstance status</span>
+</span></span><span style="display:flex;"><span>kubectl get fluxinstance flux -n flux-system -w
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check when components are ready</span>
+</span></span><span style="display:flex;"><span>kubectl wait --for<span style="color:#f92672">=</span>condition<span style="color:#f92672">=</span>Ready fluxinstance/flux -n flux-system --timeout<span style="color:#f92672">=</span>5m
+</span></span></code></pre></div><h2 id="step-4-migrate-gitlab-credentials">Step 4: Migrate GitLab Credentials</h2>
+<h3 id="option-a-reuse-existing-secrets">Option A: Reuse Existing Secrets</h3>
+<p>If your existing secrets are compatible:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Label existing secrets for Flux Operator</span>
+</span></span><span style="display:flex;"><span>kubectl label secret -n flux-system --all <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  app.kubernetes.io/part-of<span style="color:#f92672">=</span>flux <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  app.kubernetes.io/managed-by<span style="color:#f92672">=</span>flux-operator
+</span></span></code></pre></div><h3 id="option-b-create-new-gitlab-secret">Option B: Create New GitLab Secret</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create GitLab deploy token secret</span>
+</span></span><span style="display:flex;"><span>kubectl create secret generic flux-gitlab-deploy-token <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --from-literal<span style="color:#f92672">=</span>username<span style="color:#f92672">=</span>flux-deploy <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --from-literal<span style="color:#f92672">=</span>password<span style="color:#f92672">=</span>&lt;YOUR_GITLAB_DEPLOY_TOKEN&gt; <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace flux-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --dry-run<span style="color:#f92672">=</span>client -o yaml | kubectl apply -f -
+</span></span></code></pre></div><h3 id="generate-gitlab-deploy-token">Generate GitLab Deploy Token</h3>
+<ol>
+<li>Navigate to <strong>GitLab Project</strong> → <strong>Settings</strong> → <strong>Deploy Tokens</strong></li>
+<li>Click <strong>Add deploy token</strong></li>
+<li>Configure:
+<ul>
+<li><strong>Name</strong>: <code>flux-deploy</code></li>
+<li><strong>Username</strong>: <code>flux-deploy</code> (auto-generated)</li>
+<li><strong>Expiration date</strong>: Optional (set for security)</li>
+<li><strong>Scopes</strong>:
+<ul>
+<li>✅ <code>read_repository</code></li>
+<li>✅ <code>write_repository</code> (for image updates)</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<h2 id="step-5-migrate-gitrepository-resources">Step 5: Migrate GitRepository Resources</h2>
+<h3 id="update-gitrepository-specifications">Update GitRepository Specifications</h3>
+<p>The Flux Operator uses the same GitRepository CRD, but you may need to update secret references:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">source.toolkit.fluxcd.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">GitRepository</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gitlab-repo</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">flux-system</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">interval</span>: <span style="color:#ae81ff">1m</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">url</span>: <span style="color:#ae81ff">https://gitlab.com/your-group/your-repo.git</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ref</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">branch</span>: <span style="color:#ae81ff">main</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">secretRef</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flux-gitlab-deploy-token </span> <span style="color:#75715e"># Updated secret name</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">timeout</span>: <span style="color:#ae81ff">60s</span>
+</span></span></code></pre></div><h3 id="apply-updated-gitrepository">Apply Updated GitRepository</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Remove existing GitRepository (don&#39;t delete the CRD)</span>
+</span></span><span style="display:flex;"><span>kubectl delete GitRepository -A --all --wait
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Apply updated GitRepository</span>
+</span></span><span style="display:flex;"><span>kubectl apply -f $BACKUP_DIR/gitrepositories.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Or create new one</span>
+</span></span><span style="display:flex;"><span>kubectl apply -f gitrepository.yaml
+</span></span></code></pre></div><h3 id="verify-git-source-connection">Verify Git Source Connection</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check GitRepository status</span>
+</span></span><span style="display:flex;"><span>kubectl get GitRepository -A
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Should show READY status</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME          URL                                        READY   STATUS</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># gitlab-repo   https://gitlab.com/.../repo.git           True    Fetched revision: abc123</span>
+</span></span></code></pre></div><h2 id="step-6-migrate-kustomization-and-helmrelease">Step 6: Migrate Kustomization and HelmRelease</h2>
+<h3 id="apply-existing-resources">Apply Existing Resources</h3>
+<p>Most Kustomization and HelmRelease resources should work without modification:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Apply Kustomizations</span>
+</span></span><span style="display:flex;"><span>kubectl apply -f $BACKUP_DIR/kustomizations.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Apply HelmReleases</span>
+</span></span><span style="display:flex;"><span>kubectl apply -f $BACKUP_DIR/helmreleases.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Apply HelmRepositories</span>
+</span></span><span style="display:flex;"><span>kubectl apply -f $BACKUP_DIR/helmrepositories.yaml
+</span></span></code></pre></div><h3 id="update-dependencies-if-needed">Update Dependencies if Needed</h3>
+<p>If you have cross-namespace references, ensure they&rsquo;re allowed:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># In FluxInstance spec</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">policies</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">allowCrossNamespaceRef</span>: <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><h3 id="verify-reconciliation">Verify Reconciliation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check Kustomization status</span>
+</span></span><span style="display:flex;"><span>kubectl get Kustomization -A
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check HelmRelease status</span>
+</span></span><span style="display:flex;"><span>kubectl get HelmRelease -A
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Watch for reconciliation</span>
+</span></span><span style="display:flex;"><span>flux get kustomizations
+</span></span><span style="display:flex;"><span>flux get helmreleases
+</span></span></code></pre></div><h2 id="step-7-configure-gitlab-webhooks">Step 7: Configure GitLab Webhooks</h2>
+<h3 id="create-webhook-secret">Create Webhook Secret</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl create secret generic webhook-secret <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --from-literal<span style="color:#f92672">=</span>token<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>openssl rand -hex 16<span style="color:#66d9ef">)</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace flux-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --dry-run<span style="color:#f92672">=</span>client -o yaml | kubectl apply -f -
+</span></span></code></pre></div><h3 id="get-webhook-secret-value">Get Webhook Secret Value</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>WEBHOOK_TOKEN<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>kubectl get secret webhook-secret -n flux-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -o jsonpath<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{.data.token}&#39;</span> | base64 -d<span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;Webhook Token: </span>$WEBHOOK_TOKEN<span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><h3 id="configure-gitlab-webhook">Configure GitLab Webhook</h3>
+<ol>
+<li>Navigate to <strong>GitLab Project</strong> → <strong>Settings</strong> → <strong>Webhooks</strong></li>
+<li>Add new webhook:
+<ul>
+<li><strong>URL</strong>: <code>https://&lt;YOUR-FLUX-UI-DOMAIN&gt;/hook/receiver</code></li>
+<li><strong>Secret Token</strong>: <code>$WEBHOOK_TOKEN</code></li>
+<li><strong>Trigger</strong>:
+<ul>
+<li>✅ Push events</li>
+<li>✅ Tag push events</li>
+</ul>
+</li>
+<li><strong>Enable SSL verification</strong>: Based on your setup</li>
+</ul>
+</li>
+</ol>
+<h3 id="alternative-use-flux-receiver">Alternative: Use Flux Receiver</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">notification.toolkit.fluxcd.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Receiver</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gitlab-receiver</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">flux-system</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">generic</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">secretRef</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">webhook-secret</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">events</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;push&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">source.toolkit.fluxcd.io/v1</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">GitRepository</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gitlab-repo</span>
+</span></span></code></pre></div><h2 id="step-8-access-flux-web-ui">Step 8: Access Flux Web UI</h2>
+<h3 id="expose-the-ui">Expose the UI</h3>
+<h4 id="option-a-ingress">Option A: Ingress</h4>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flux-ui</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">flux-system</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/auth-type</span>: <span style="color:#ae81ff">basic</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/auth-secret</span>: <span style="color:#ae81ff">flux-ui-auth</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">nginx.ingress.kubernetes.io/auth-realm</span>: <span style="color:#e6db74">&#34;Authentication Required&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">host</span>: <span style="color:#ae81ff">flux.yourdomain.com</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flux-ui</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">number</span>: <span style="color:#ae81ff">80</span>
+</span></span></code></pre></div><h4 id="option-b-port-forward-testing">Option B: Port Forward (Testing)</h4>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl port-forward svc/flux-ui -n flux-system 8080:80
+</span></span></code></pre></div><p>Then access: <code>http://localhost:8080</code></p>
+<h3 id="create-basic-auth-for-ingress">Create Basic Auth (for Ingress)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create htpasswd file</span>
+</span></span><span style="display:flex;"><span>htpasswd -c auth admin
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Enter password when prompted</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create secret</span>
+</span></span><span style="display:flex;"><span>kubectl create secret generic flux-ui-auth <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --from-file<span style="color:#f92672">=</span>auth <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace flux-system
+</span></span></code></pre></div><h3 id="ui-features">UI Features</h3>
+<p>Once logged in, you can:</p>
+<ul>
+<li><strong>View cluster state</strong> - All Flux resources and their status</li>
+<li><strong>Monitor reconciliation</strong> - Real-time sync status</li>
+<li><strong>View logs</strong> - Controller logs for debugging</li>
+<li><strong>Resource details</strong> - Click into any resource for details</li>
+<li><strong>Health status</strong> - Overall cluster GitOps health</li>
+</ul>
+<div class="mermaid">
+
+graph TB
+    A[User] --> B[Flux UI Dashboard]
+    B --> C[GitRepositories]
+    B --> D[Kustomizations]
+    B --> E[HelmReleases]
+    B --> F[Events & Logs]
+    
+    C --> G[GitLab Status]
+    D --> H[Sync Status]
+    E --> I[Deploy Status]
+    F --> J[Error Details]
+    
+    style B fill:#4a90d9
+    style G fill:#28a745
+    style H fill:#28a745
+    style I fill:#28a745
+
+</div>
+
+<h2 id="step-9-verify-migration">Step 9: Verify Migration</h2>
+<h3 id="run-flux-checks">Run Flux Checks</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check overall Flux health</span>
+</span></span><span style="display:flex;"><span>flux check
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check source controller</span>
+</span></span><span style="display:flex;"><span>flux get sources git
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check kustomizations</span>
+</span></span><span style="display:flex;"><span>flux get kustomizations
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check helm releases</span>
+</span></span><span style="display:flex;"><span>flux get helmreleases
+</span></span></code></pre></div><h3 id="verify-ui-access">Verify UI Access</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check UI service</span>
+</span></span><span style="display:flex;"><span>kubectl get svc -n flux-system | grep flux-ui
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check UI pods</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n flux-system | grep ui
+</span></span></code></pre></div><h3 id="test-gitops-flow">Test GitOps Flow</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Make a change in GitLab</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Commit a small change to your GitOps repo</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Wait for reconciliation</span>
+</span></span><span style="display:flex;"><span>kubectl get GitRepository gitlab-repo -n flux-system -w
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify Kustomization picks up the change</span>
+</span></span><span style="display:flex;"><span>kubectl get Kustomization -n flux-system -w
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify application updates</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n your-app-namespace -w
+</span></span></code></pre></div><h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="issue-fluxinstance-not-ready">Issue: FluxInstance Not Ready</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check FluxInstance events</span>
+</span></span><span style="display:flex;"><span>kubectl describe fluxinstance flux -n flux-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check operator logs</span>
+</span></span><span style="display:flex;"><span>kubectl logs -n flux-operator -l app<span style="color:#f92672">=</span>flux-operator
+</span></span></code></pre></div><h3 id="issue-gitrepository-not-fetching">Issue: GitRepository Not Fetching</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check GitRepository status</span>
+</span></span><span style="display:flex;"><span>kubectl describe GitRepository gitlab-repo -n flux-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Common issues:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - Invalid credentials: Check secret</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - Wrong URL: Verify GitLab URL</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - Network issues: Check egress rules</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test Git connection manually</span>
+</span></span><span style="display:flex;"><span>kubectl run git-test --image<span style="color:#f92672">=</span>alpine/git -it --rm -- <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  git ls-remote https://gitlab.com/your-group/your-repo.git
+</span></span></code></pre></div><h3 id="issue-ui-not-accessible">Issue: UI Not Accessible</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check UI service</span>
+</span></span><span style="display:flex;"><span>kubectl get svc flux-ui -n flux-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check UI deployment</span>
+</span></span><span style="display:flex;"><span>kubectl get deployment flux-ui -n flux-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check UI logs</span>
+</span></span><span style="display:flex;"><span>kubectl logs -l app<span style="color:#f92672">=</span>flux-ui -n flux-system
+</span></span></code></pre></div><h3 id="issue-helmreleases-not-reconciling">Issue: HelmReleases Not Reconciling</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check HelmRelease status</span>
+</span></span><span style="display:flex;"><span>kubectl describe HelmRelease &lt;name&gt; -n &lt;namespace&gt;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check helm-controller logs</span>
+</span></span><span style="display:flex;"><span>kubectl logs -n flux-system -l app<span style="color:#f92672">=</span>helm-controller
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Common issues:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - Chart repository unreachable</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - Values validation errors</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - Dependency resolution failures</span>
+</span></span></code></pre></div><h2 id="post-migration-tasks">Post-Migration Tasks</h2>
+<h3 id="1-remove-old-flux-installation">1. Remove Old Flux Installation</h3>
+<p>Once verified, clean up the old Flux installation:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># DO NOT run this until you&#39;ve verified everything works!</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># flux uninstall --silent</span>
+</span></span></code></pre></div><h3 id="2-set-up-monitoring">2. Set Up Monitoring</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Create ServiceMonitor for Prometheus</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">monitoring.coreos.com/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ServiceMonitor</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">flux</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">flux-system</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">flux</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">endpoints</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">http-prom</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">interval</span>: <span style="color:#ae81ff">30s</span>
+</span></span></code></pre></div><h3 id="3-configure-alerts">3. Configure Alerts</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">notification.toolkit.fluxcd.io/v1beta3</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Alert</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#66d9ef">on</span>-<span style="color:#ae81ff">call-webapp</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">flux-system</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">providerRef</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#ae81ff">slack</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">eventSeverity</span>: <span style="color:#ae81ff">error</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">eventSources</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">GitRepository</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;*&#39;</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Kustomization</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;*&#39;</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">kind</span>: <span style="color:#ae81ff">HelmRelease</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;*&#39;</span>
+</span></span></code></pre></div><h3 id="4-document-the-new-setup">4. Document the New Setup</h3>
+<p>Update your runbooks with:</p>
+<ul>
+<li>Flux Operator management commands</li>
+<li>UI access instructions</li>
+<li>Backup procedures for FluxInstance CR</li>
+<li>Upgrade process (update FluxInstance version)</li>
+</ul>
+<h2 id="rollback-procedure">Rollback Procedure</h2>
+<p>If you need to rollback to traditional Flux:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># 1. Delete FluxInstance</span>
+</span></span><span style="display:flex;"><span>kubectl delete fluxinstance flux -n flux-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 2. Wait for components to terminate</span>
+</span></span><span style="display:flex;"><span>kubectl wait --for<span style="color:#f92672">=</span>delete fluxinstance/flux -n flux-system --timeout<span style="color:#f92672">=</span>5m
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 3. Reinstall Flux using CLI</span>
+</span></span><span style="display:flex;"><span>flux install --components<span style="color:#f92672">=</span>source-controller,kustomize-controller,helm-controller,notification-controller
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 4. Restore resources from backup</span>
+</span></span><span style="display:flex;"><span>kubectl apply -f $BACKUP_DIR/gitrepositories.yaml
+</span></span><span style="display:flex;"><span>kubectl apply -f $BACKUP_DIR/kustomizations.yaml
+</span></span><span style="display:flex;"><span>kubectl apply -f $BACKUP_DIR/helmreleases.yaml
+</span></span></code></pre></div><h2 id="conclusion">Conclusion</h2>
+<p>Migrating to FluxCD Operator with UI provides:</p>
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>✅ Declarative Flux management via FluxInstance CR</li>
+<li>✅ Native web UI for monitoring and troubleshooting</li>
+<li>✅ Automatic upgrades and version management</li>
+<li>✅ Better observability with integrated metrics</li>
+<li>✅ Simplified multi-tenancy support</li>
+</ul>
+<p><strong>Considerations:</strong></p>
+<ul>
+<li>📋 Requires additional namespace (flux-operator)</li>
+<li>📋 UI needs separate exposure configuration</li>
+<li>📋 Learning curve for FluxInstance CR</li>
+</ul>
+<p>The migration process preserves your existing GitLab integration while adding the benefits of the Operator pattern and web UI. Start with a non-production cluster to validate the process before migrating production environments.</p>
+<hr>
+<p><em>For more information, see the official <a href="https://fluxcd.io/flux/operator/">Flux Operator documentation</a> and <a href="https://fluxcd.io/flux/installation/ui/">Flux Web UI documentation</a>.</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="gitops" term="gitops" label="GitOps" />
+                             
+                                <category scheme="devops" term="devops" label="DevOps" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="fluxcd" term="fluxcd" label="fluxcd" />
+                             
+                                <category scheme="gitops" term="gitops" label="gitops" />
+                             
+                                <category scheme="kubernetes-automation" term="kubernetes-automation" label="kubernetes-automation" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="fluxcd" term="fluxcd" label="FluxCD" />
+                             
+                                <category scheme="gitops" term="gitops" label="GitOps" />
+                             
+                                <category scheme="gitlab" term="gitlab" label="GitLab" />
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="flux-operator" term="flux-operator" label="Flux Operator" />
+                             
+                                <category scheme="flux-ui" term="flux-ui" label="Flux UI" />
                             
                         
                     
@@ -10261,8 +10893,8 @@ xfGRpW09Qu
             <title type="html"><![CDATA[OKD OpenShift 4: Service Serving Certificate]]></title>
             <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
