@@ -9,12 +9,787 @@
             <link href="https://devopstales.github.io/virtualization/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/virtualization/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/virtualization/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-03-03T15:06:54+00:00</updated>
+    <updated>2026-03-06T12:55:46+00:00</updated>
     
     
     
     
         <id>https://devopstales.github.io/virtualization/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Ceph Debugging on Proxmox: Essential Commands and Troubleshooting]]></title>
+            <link href="https://devopstales.github.io/virtualization/proxmox-ceph-debugging/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/virtualization/proxmox-ceph-debugging/</id>
+            
+            
+            <published>2026-03-04T00:00:00+00:00</published>
+            <updated>2026-03-04T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>When running Ceph on Proxmox, issues can arise at any layer of the storage stack. Knowing the right commands to diagnose and resolve problems is essential for maintaining a healthy cluster. This guide covers the most useful Ceph commands for debugging and troubleshooting on Proxmox.</p>
+<h2 id="cluster-health-and-status">Cluster Health and Status</h2>
+<p>The first step in any troubleshooting session is to check the overall cluster health.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph -s
+</span></span></code></pre></div><p>This shows a summary including health status, OSD/MON/MGR counts, I/O rates, and placement group states. For more detailed health information:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph health detail
+</span></span></code></pre></div><p>To check disk usage across pools:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph df
+</span></span></code></pre></div><h2 id="osd-diagnostics">OSD Diagnostics</h2>
+<p>OSDs (Object Storage Daemons) are often the source of issues. Start by viewing the hierarchical layout:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd tree
+</span></span></code></pre></div><p>Check the up/in status of all OSDs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd status
+</span></span></code></pre></div><p>For detailed usage information including space and performance weight:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd df
+</span></span></code></pre></div><p>List all storage pools:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd pool ls
+</span></span></code></pre></div><p>Get per-pool statistics for performance monitoring:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd pool stats
+</span></span></code></pre></div><h3 id="osd-maintenance-operations">OSD Maintenance Operations</h3>
+<p>When performing maintenance on an OSD, mark it out first:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd out osd.3
+</span></span></code></pre></div><p>After maintenance, bring it back into the cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd in osd.3
+</span></span></code></pre></div><p>To manually adjust an OSD&rsquo;s relative data weight:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd crush reweight osd.2 0.8
+</span></span></code></pre></div><h2 id="monitor-and-manager-status">Monitor and Manager Status</h2>
+<p>For troubleshooting monitor quorum issues:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph quorum_status
+</span></span></code></pre></div><p>Check the manager daemon status and enabled modules:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph mgr dump
+</span></span></code></pre></div><h2 id="placement-groups-pgs">Placement Groups (PGs)</h2>
+<p>Placement groups are fundamental to Ceph&rsquo;s data distribution. Check their state:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph pg stat
+</span></span></code></pre></div><p>For detailed information about all placement groups:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph pg dump
+</span></span></code></pre></div><p>List PGs belonging to a specific pool:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph pg ls-by-pool &lt;POOL-NAME&gt;
+</span></span></code></pre></div><h2 id="rbd-pool-and-image-management">RBD Pool and Image Management</h2>
+<p>List RBD images in a pool:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rbd ls -p vm-storage
+</span></span></code></pre></div><p>Show details of a specific block image:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rbd info -p vm-storage vm-100-disk-0
+</span></span></code></pre></div><p>List all snapshots for a given image:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rbd snap ls vm-100-disk-0
+</span></span></code></pre></div><p>Resize an image (expand only):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rbd resize vm-100-disk-0 --size <span style="color:#ae81ff">20480</span>
+</span></span></code></pre></div><h2 id="performance-testing-and-maintenance">Performance Testing and Maintenance</h2>
+<p>Benchmark all OSDs to identify performance bottlenecks:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph tell osd.* bench
+</span></span></code></pre></div><p>Manually trigger a scrub on an OSD for data consistency checks:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd scrub osd.0
+</span></span></code></pre></div><p>Check if automatic balancing is active:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph balancer status
+</span></span></code></pre></div><p>Enable optional manager modules:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph mgr module enable dashboard
+</span></span></code></pre></div><h2 id="authentication-and-keyring-management">Authentication and Keyring Management</h2>
+<p>List all Ceph authentication keys:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph auth list
+</span></span></code></pre></div><p>Get a specific client&rsquo;s authentication key:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph auth get client.admin
+</span></span></code></pre></div><p>Remove a client key:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph auth del client.radosgw.pve1
+</span></span></code></pre></div><h2 id="cleanup-and-decommissioning">Cleanup and Decommissioning</h2>
+<p>Completely remove an OSD from the cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph osd purge osd.3 --yes-i-really-mean-it
+</span></span></code></pre></div><p>Remove a monitor that has been physically removed or decommissioned:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph mon remove mon.pve3
+</span></span></code></pre></div><h2 id="proxmox-specific-commands">Proxmox-Specific Commands</h2>
+<p>Proxmox provides wrapper commands that integrate with its configuration system:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>pveceph status
+</span></span><span style="display:flex;"><span>pveceph pool ls
+</span></span><span style="display:flex;"><span>pveceph osd create /dev/sdb
+</span></span><span style="display:flex;"><span>pveceph install --version quincy
+</span></span></code></pre></div><p>These commands help maintain UI synchronization and work with Proxmox&rsquo;s configuration files.</p>
+<h2 id="ceph-dashboard-installation">Ceph Dashboard Installation</h2>
+<p>The Ceph dashboard provides a web-based interface for monitoring and managing your cluster.</p>
+<h3 id="install-dashboard-package">Install Dashboard Package</h3>
+<p>Run on <strong>all manager nodes</strong>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>apt install ceph-mgr-dashboard -y
+</span></span></code></pre></div><h3 id="enable-dashboard-module">Enable Dashboard Module</h3>
+<p>Run on <strong>any manager node</strong>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph mgr module enable dashboard
+</span></span><span style="display:flex;"><span>ceph mgr module ls | grep dashboard  <span style="color:#75715e"># Verify</span>
+</span></span></code></pre></div><h3 id="ssl-configuration">SSL Configuration</h3>
+<p>For a quick homelab setup, disable SSL:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph config set mgr mgr/dashboard/ssl false
+</span></span><span style="display:flex;"><span>ceph mgr module disable dashboard
+</span></span><span style="display:flex;"><span>ceph mgr module enable dashboard
+</span></span></code></pre></div><p>For production, use manual SSL setup:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Generate self-signed certificate</span>
+</span></span><span style="display:flex;"><span>openssl req -newkey rsa:2048 -nodes -x509 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -keyout /root/dashboard-key.pem <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -out /root/dashboard-crt.pem <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -sha512 -days <span style="color:#ae81ff">3650</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -subj <span style="color:#e6db74">&#34;/CN=IT/O=ceph-mgr-dashboard&#34;</span> -utf8
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install certificates</span>
+</span></span><span style="display:flex;"><span>ceph config-key set mgr/dashboard/key -i /root/dashboard-key.pem
+</span></span><span style="display:flex;"><span>ceph config-key set mgr/dashboard/crt -i /root/dashboard-crt.pem
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Enable SSL and restart</span>
+</span></span><span style="display:flex;"><span>ceph config set mgr mgr/dashboard/ssl true
+</span></span><span style="display:flex;"><span>ceph mgr module disable dashboard
+</span></span><span style="display:flex;"><span>ceph mgr module enable dashboard
+</span></span></code></pre></div><h3 id="create-admin-user">Create Admin User</h3>
+<p>For homelab environments, disable password policies:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph dashboard set-pwd-policy-check-complexity-enabled false
+</span></span><span style="display:flex;"><span>ceph dashboard set-pwd-policy-enabled false
+</span></span></code></pre></div><p>Create the admin user:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;admin&#34;</span> &gt; ./password
+</span></span><span style="display:flex;"><span>ceph dashboard ac-user-create admin -i ./password administrator --force
+</span></span></code></pre></div><h3 id="access-the-dashboard">Access the Dashboard</h3>
+<p>Get the dashboard URL:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph mgr services
+</span></span></code></pre></div><table>
+  <thead>
+      <tr>
+          <th>Protocol</th>
+          <th>Port</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>HTTP</td>
+          <td>8080</td>
+      </tr>
+      <tr>
+          <td>HTTPS</td>
+          <td>8443</td>
+      </tr>
+  </tbody>
+</table>
+<p>Access via <code>https://&lt;proxmox-node&gt;:8443/#/dashboard</code> with username <code>admin</code> and your configured password.</p>
+<blockquote>
+<p><strong>Note:</strong> The dashboard runs on the node with the active <code>ceph-mgr</code>. The URL may change on failover.</p></blockquote>
+<h2 id="quick-troubleshooting-workflow">Quick Troubleshooting Workflow</h2>
+<p>When issues arise, follow this systematic approach:</p>
+<ol>
+<li><strong>Check cluster health</strong> - Start with <code>ceph -s</code> or <code>ceph health detail</code></li>
+<li><strong>Identify problematic OSDs</strong> - Use <code>ceph osd tree</code> and <code>ceph osd status</code></li>
+<li><strong>Check disk usage</strong> - Run <code>ceph df</code> and <code>ceph osd df</code></li>
+<li><strong>Review PG states</strong> - Execute <code>ceph pg stat</code> to find stuck placement groups</li>
+<li><strong>Perform maintenance</strong> - Use <code>ceph osd out</code> before work, then <code>ceph osd in</code> after</li>
+<li><strong>Benchmark performance</strong> - Run <code>ceph tell osd.* bench</code> to identify slow OSDs</li>
+</ol>
+<h2 id="common-issues-and-solutions">Common Issues and Solutions</h2>
+<h3 id="osd-marked-out-unexpectedly">OSD Marked Out Unexpectedly</h3>
+<p>If an OSD is marked out without intervention, check the logs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>journalctl -u ceph-osd@osd.0 -f
+</span></span></code></pre></div><h3 id="placement-groups-stuck">Placement Groups Stuck</h3>
+<p>PGs stuck in <code>degraded</code> or <code>undersized</code> state often indicate OSD failures. Use <code>ceph pg dump</code> to identify affected groups and their OSDs.</p>
+<h3 id="monitor-quorum-loss">Monitor Quorum Loss</h3>
+<p>If monitors lose quorum, check network connectivity between nodes and verify monitor health with <code>ceph quorum_status</code>.</p>
+<h3 id="slow-performance">Slow Performance</h3>
+<p>Use <code>ceph osd df</code> to identify imbalanced OSDs and <code>ceph tell osd.* bench</code> to benchmark individual daemons. Consider enabling the balancer module for automatic rebalancing.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Mastering these Ceph commands will significantly reduce troubleshooting time on your Proxmox cluster. The key is to start with high-level health checks and progressively drill down to specific components. Regular monitoring and understanding normal cluster behavior will help you quickly identify when something deviates from the expected state.</p>
+<p>For ongoing monitoring, consider enabling the Ceph dashboard for a visual overview of cluster health, performance metrics, and management capabilities. However, command-line tools remain essential for deep debugging and automation scenarios.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="ceph" term="ceph" label="Ceph" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="ceph" term="ceph" label="Ceph" />
+                             
+                                <category scheme="debugging" term="debugging" label="Debugging" />
+                             
+                                <category scheme="troubleshooting" term="troubleshooting" label="Troubleshooting" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Run Linux VM on macOS with Lima and Colima]]></title>
+            <link href="https://devopstales.github.io/virtualization/lima-linux-vm-macos/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/virtualization/lima-podman-macos/?utm_source=atom_feed" rel="related" type="text/html" title="Run Podman on macOS with Lima" />
+                <link href="https://devopstales.github.io/kubernetes/docker-desktop-alternatives/?utm_source=atom_feed" rel="related" type="text/html" title="Free Docker Desktop Alternative For Mac And Windows" />
+            
+                <id>https://devopstales.github.io/virtualization/lima-linux-vm-macos/</id>
+            
+            
+            <published>2026-03-04T00:00:00+00:00</published>
+            <updated>2026-03-04T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Running Linux virtual machines on macOS has become essential for developers working with containers, Kubernetes, and cloud-native technologies. Lima (Linux on macOS) and Colima (Containers on Lima) provide an elegant solution for running Linux workloads on Mac with minimal overhead and maximum compatibility.</p>
+<p><img src="/img/include/lima-colima-macos.avif" alt="Lima and Colima on macOS"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="what-is-lima">What is Lima?</h2>
+<p>Lima is a project that launches Linux virtual machines on macOS with automatic file sharing and port forwarding. It provides a lightweight alternative to traditional VM solutions, optimized specifically for container workloads and development environments.</p>
+<h2 id="what-is-colima">What is Colima?</h2>
+<p>Colima (Containers on Lima) builds on top of Lima to provide container runtimes on macOS with minimal setup. It leverages Lima&rsquo;s lightweight VMs to enable running containers natively on macOS, supporting Docker, Containerd, and Incus runtimes with optional Kubernetes integration.</p>
+<h2 id="key-features">Key Features</h2>
+<h3 id="lima-features">Lima Features</h3>
+<ul>
+<li><strong>Lightweight VMs</strong>: Minimal resource overhead compared to traditional virtualization</li>
+<li><strong>Automatic File Sharing</strong>: Seamless access between macOS and Linux VM</li>
+<li><strong>Port Forwarding</strong>: Automatic forwarding of ports from VM to host</li>
+<li><strong>Multiple Instances</strong>: Run multiple Linux VMs simultaneously</li>
+<li><strong>Apple Silicon Support</strong>: Native support for M1/M2/M3 chips</li>
+</ul>
+<h3 id="colima-features">Colima Features</h3>
+<ul>
+<li><strong>Multiple Container Runtimes</strong>: Docker, Containerd, or Incus</li>
+<li><strong>Kubernetes Ready</strong>: Enable K8s with a simple <code>--kubernetes</code> flag</li>
+<li><strong>GPU Acceleration</strong>: Support for AI/ML workloads on Apple Silicon (macOS 13+)</li>
+<li><strong>Simple CLI</strong>: Sensible defaults with easy customization</li>
+<li><strong>Cross-platform</strong>: Works on Intel and Apple Silicon macOS, plus Linux</li>
+</ul>
+<h2 id="installation">Installation</h2>
+<h3 id="install-lima">Install Lima</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Using Homebrew</span>
+</span></span><span style="display:flex;"><span>brew install lima
+</span></span></code></pre></div><h3 id="install-colima">Install Colima</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Using Homebrew</span>
+</span></span><span style="display:flex;"><span>brew install colima
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Using MacPorts</span>
+</span></span><span style="display:flex;"><span>sudo port install colima
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Using Nix</span>
+</span></span><span style="display:flex;"><span>nix-env -iA nixpkgs.colima
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Using Mise</span>
+</span></span><span style="display:flex;"><span>mise use -g colima@latest
+</span></span></code></pre></div><h2 id="getting-started">Getting Started</h2>
+<h3 id="basic-setup">Basic Setup</h3>
+<p>Start Colima with default settings:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>colima start
+</span></span></code></pre></div><p>This creates a VM with sensible defaults:</p>
+<ul>
+<li>2 CPUs</li>
+<li>2GiB memory</li>
+<li>100GiB storage</li>
+</ul>
+<h3 id="docker-runtime">Docker Runtime</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start Colima with Docker</span>
+</span></span><span style="display:flex;"><span>colima start
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Use Docker normally</span>
+</span></span><span style="display:flex;"><span>docker run hello-world
+</span></span><span style="display:flex;"><span>docker ps
+</span></span></code></pre></div><h3 id="containerd-runtime">Containerd Runtime</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start with Containerd</span>
+</span></span><span style="display:flex;"><span>colima start --runtime containerd
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Use nerdctl</span>
+</span></span><span style="display:flex;"><span>nerdctl run hello-world
+</span></span><span style="display:flex;"><span>nerdctl ps
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Optional: Install nerdctl alias</span>
+</span></span><span style="display:flex;"><span>nerdctl install
+</span></span></code></pre></div><h3 id="kubernetes-cluster">Kubernetes Cluster</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start with Kubernetes</span>
+</span></span><span style="display:flex;"><span>colima start --kubernetes
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Use kubectl</span>
+</span></span><span style="display:flex;"><span>kubectl run caddy --image<span style="color:#f92672">=</span>caddy
+</span></span><span style="display:flex;"><span>kubectl get pods
+</span></span></code></pre></div><h3 id="incus-runtime">Incus Runtime</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start with Incus</span>
+</span></span><span style="display:flex;"><span>colima start --runtime incus
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Launch containers</span>
+</span></span><span style="display:flex;"><span>incus launch images:alpine/edge
+</span></span><span style="display:flex;"><span>incus list
+</span></span></code></pre></div><h2 id="vm-customization">VM Customization</h2>
+<h3 id="resource-allocation">Resource Allocation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create VM with custom resources</span>
+</span></span><span style="display:flex;"><span>colima start --cpu <span style="color:#ae81ff">4</span> --memory <span style="color:#ae81ff">8</span> --disk <span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Modify existing VM</span>
+</span></span><span style="display:flex;"><span>colima stop
+</span></span><span style="display:flex;"><span>colima start --cpu <span style="color:#ae81ff">4</span> --memory <span style="color:#ae81ff">8</span>
+</span></span></code></pre></div><h3 id="advanced-configuration">Advanced Configuration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Edit configuration file</span>
+</span></span><span style="display:flex;"><span>colima start --edit
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Enable Rosetta 2 emulation (Apple Silicon, macOS 13+)</span>
+</span></span><span style="display:flex;"><span>colima start --vm-type<span style="color:#f92672">=</span>vz --vz-rosetta
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Use different VM type</span>
+</span></span><span style="display:flex;"><span>colima start --vm-type<span style="color:#f92672">=</span>vz
+</span></span></code></pre></div><h2 id="ai-and-gpu-acceleration">AI and GPU Acceleration</h2>
+<p>For AI workloads on Apple Silicon (macOS 13+):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install krunkit for GPU acceleration</span>
+</span></span><span style="display:flex;"><span>brew tap slp/krunkit
+</span></span><span style="display:flex;"><span>brew install krunkit
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Start with GPU support</span>
+</span></span><span style="display:flex;"><span>colima start --runtime docker --vm-type krunkit
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Run AI models</span>
+</span></span><span style="display:flex;"><span>colima model run gemma3
+</span></span><span style="display:flex;"><span>colima model run llama3.2
+</span></span></code></pre></div><h2 id="configuration-file">Configuration File</h2>
+<p>Create a persistent configuration file at <code>~/.colima/default.yaml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">cpu</span>: <span style="color:#ae81ff">4</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">memory</span>: <span style="color:#ae81ff">8</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">disk</span>: <span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">runtime</span>: <span style="color:#ae81ff">docker</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kubernetes</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">enabled</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">autoActivate</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">sshConfig</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">portForward</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">volumeMounts</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">location</span>: <span style="color:#ae81ff">~/Projects</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">writable</span>: <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><h2 id="benefits-for-developers">Benefits for Developers</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Benefit</th>
+          <th>Description</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Minimal Setup</strong></td>
+          <td>Get container runtimes running with a single command</td>
+      </tr>
+      <tr>
+          <td><strong>Native Docker CLI</strong></td>
+          <td>Use standard Docker commands without extra configuration</td>
+      </tr>
+      <tr>
+          <td><strong>Multiple Runtimes</strong></td>
+          <td>Switch between Docker, Containerd, or Incus based on needs</td>
+      </tr>
+      <tr>
+          <td><strong>Resource Efficient</strong></td>
+          <td>Sensible defaults with easy customization</td>
+      </tr>
+      <tr>
+          <td><strong>AI/ML Support</strong></td>
+          <td>GPU-accelerated containers for AI workloads on Apple Silicon</td>
+      </tr>
+      <tr>
+          <td><strong>Well Integrated</strong></td>
+          <td>Automatic port forwarding and volume mounts work seamlessly</td>
+      </tr>
+      <tr>
+          <td><strong>Open Source</strong></td>
+          <td>MIT licensed with active community support</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="common-commands">Common Commands</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># View status</span>
+</span></span><span style="display:flex;"><span>colima status
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Stop VM</span>
+</span></span><span style="display:flex;"><span>colima stop
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Delete VM</span>
+</span></span><span style="display:flex;"><span>colima delete
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># View logs</span>
+</span></span><span style="display:flex;"><span>colima logs
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># SSH into VM</span>
+</span></span><span style="display:flex;"><span>colima ssh
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Update Colima</span>
+</span></span><span style="display:flex;"><span>colima update
+</span></span></code></pre></div><h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="check-vm-status">Check VM Status</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>colima status
+</span></span><span style="display:flex;"><span>lima list
+</span></span></code></pre></div><h3 id="reset-everything">Reset Everything</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>colima delete
+</span></span><span style="display:flex;"><span>colima start
+</span></span></code></pre></div><h3 id="view-detailed-logs">View Detailed Logs</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>colima logs --follow
+</span></span></code></pre></div><h2 id="comparison-with-alternatives">Comparison with Alternatives</h2>
+<h3 id="vs-docker-desktop">vs. Docker Desktop</h3>
+<ul>
+<li><strong>Lighter weight</strong>: Less resource consumption</li>
+<li><strong>Open source</strong>: Fully open source (MIT license)</li>
+<li><strong>Flexible</strong>: Multiple runtime support out of the box</li>
+<li><strong>Native</strong>: Better integration with macOS virtualization framework</li>
+</ul>
+<h3 id="vs-multipass">vs. Multipass</h3>
+<ul>
+<li><strong>Container-focused</strong>: Optimized for container workloads</li>
+<li><strong>Simpler setup</strong>: Fewer configuration steps</li>
+<li><strong>Better macOS integration</strong>: Automatic port forwarding and file sharing</li>
+</ul>
+<h2 id="conclusion">Conclusion</h2>
+<p>Lima and Colima provide an excellent solution for running Linux VMs and container workloads on macOS. With minimal setup, multiple runtime support, and efficient resource usage, they&rsquo;re ideal for developers needing Linux environments on Mac hardware. Whether you&rsquo;re working with Docker, Kubernetes, or AI models, Colima offers a streamlined experience that integrates seamlessly with your existing workflows.</p>
+<p>The combination of Lima&rsquo;s lightweight virtualization and Colima&rsquo;s container runtime management makes this stack a compelling alternative to traditional solutions like Docker Desktop, especially for developers working on Apple Silicon Macs.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="virtualization" term="virtualization" label="Virtualization" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="lima" term="lima" label="Lima" />
+                             
+                                <category scheme="colima" term="colima" label="Colima" />
+                             
+                                <category scheme="macos" term="macos" label="macOS" />
+                             
+                                <category scheme="linux-vm" term="linux-vm" label="Linux VM" />
+                             
+                                <category scheme="containers" term="containers" label="Containers" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Run Podman on macOS with Lima]]></title>
+            <link href="https://devopstales.github.io/virtualization/lima-podman-macos/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/virtualization/lima-linux-vm-macos/?utm_source=atom_feed" rel="related" type="text/html" title="Run Linux VM on macOS with Lima and Colima" />
+                <link href="https://devopstales.github.io/kubernetes/containers-vs-pods/?utm_source=atom_feed" rel="related" type="text/html" title="Containers vs. Pods - Deepdyve" />
+                <link href="https://devopstales.github.io/kubernetes/container-runtimes/?utm_source=atom_feed" rel="related" type="text/html" title="Containers and Container runtimes for Beginners" />
+                <link href="https://devopstales.github.io/kubernetes/docker-desktop-alternatives/?utm_source=atom_feed" rel="related" type="text/html" title="Free Docker Desktop Alternative For Mac And Windows" />
+            
+                <id>https://devopstales.github.io/virtualization/lima-podman-macos/</id>
+            
+            
+            <published>2026-03-04T00:00:00+00:00</published>
+            <updated>2026-03-04T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Running Podman on macOS through Lima provides a lightweight, Docker-compatible container runtime without the overhead of Docker Desktop. This setup is ideal for developers who want a rootless, daemonless container experience on Mac with minimal resource consumption.</p>
+<p><img src="/img/include/lima-podman-macos.avif" alt="Podman on Lima macOS"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="what-is-podman">What is Podman?</h2>
+<p>Podman (Pod Manager) is a daemonless, rootless container engine for developing, managing, and running OCI containers. Unlike Docker, Podman doesn&rsquo;t require a running daemon, making it more secure and lightweight. It&rsquo;s fully compatible with Docker CLI commands and supports Kubernetes-native workflows.</p>
+<h2 id="why-podman-on-lima">Why Podman on Lima?</h2>
+<p>Running Podman inside a Lima VM on macOS offers several advantages:</p>
+<ul>
+<li><strong>Rootless by default</strong>: No need for elevated privileges</li>
+<li><strong>Daemonless architecture</strong>: Containers run as regular processes</li>
+<li><strong>Docker-compatible</strong>: Use familiar <code>docker</code> commands with <code>podman</code></li>
+<li><strong>Lightweight</strong>: Less resource overhead than Docker Desktop</li>
+<li><strong>Kubernetes-native</strong>: Built-in support for pods and Kubernetes YAML</li>
+</ul>
+<h2 id="installation">Installation</h2>
+<h3 id="install-lima">Install Lima</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Using Homebrew</span>
+</span></span><span style="display:flex;"><span>brew install lima
+</span></span></code></pre></div><h3 id="install-podman">Install Podman</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install Podman CLI on macOS (for client-side tools)</span>
+</span></span><span style="display:flex;"><span>brew install podman
+</span></span></code></pre></div><h2 id="quick-setup-with-colima">Quick Setup with Colima</h2>
+<p>The easiest way to run Podman with Lima is through Colima, which supports Podman as a runtime.</p>
+<h3 id="start-colima-with-podman">Start Colima with Podman</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start Colima with Podman runtime</span>
+</span></span><span style="display:flex;"><span>colima start --runtime podman
+</span></span></code></pre></div><p>This creates a Lima VM with Podman pre-configured and ready to use.</p>
+<h3 id="verify-installation">Verify Installation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check Podman version</span>
+</span></span><span style="display:flex;"><span>podman --version
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># List containers</span>
+</span></span><span style="display:flex;"><span>podman ps
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Run a test container</span>
+</span></span><span style="display:flex;"><span>podman run hello-world
+</span></span></code></pre></div><h2 id="manual-lima-configuration">Manual Lima Configuration</h2>
+<p>For more control, create a custom Lima VM configuration with Podman.</p>
+<h3 id="create-custom-lima-instance">Create Custom Lima Instance</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create a new Lima instance configuration</span>
+</span></span><span style="display:flex;"><span>limactl create podman
+</span></span></code></pre></div><p>This opens an editor with the default configuration. Modify it to include Podman setup:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Lima configuration for Podman</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">images</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">location</span>: <span style="color:#e6db74">&#34;https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">arch</span>: <span style="color:#e6db74">&#34;x86_64&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">cpus</span>: <span style="color:#ae81ff">4</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;4GiB&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">disk</span>: <span style="color:#e6db74">&#34;50GiB&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">provision</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">mode</span>: <span style="color:#ae81ff">system</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">script</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      #!/bin/bash
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      # Install Podman
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      apt-get update
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      apt-get install -y podman podman-docker</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">mode</span>: <span style="color:#ae81ff">user</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">script</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      #!/bin/bash
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      # Configure Podman socket for Docker compatibility
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      mkdir -p ~/.docker
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      echo &#39;{&#34;credHelpers&#34;: {}, &#34;credsStore&#34;: &#34;desktop&#34;}&#39; &gt; ~/.docker/config.json</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">portForwards</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">guestPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">mounts</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">location</span>: <span style="color:#e6db74">&#34;~/Projects&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">mountPoint</span>: <span style="color:#e6db74">&#34;/home/ubuntu/Projects&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">writable</span>: <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><h3 id="start-the-instance">Start the Instance</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start the Lima VM</span>
+</span></span><span style="display:flex;"><span>limactl start podman
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># SSH into the VM</span>
+</span></span><span style="display:flex;"><span>lima podman ssh
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Or run commands directly</span>
+</span></span><span style="display:flex;"><span>lima podman run hello-world
+</span></span></code></pre></div><h2 id="docker-compatibility">Docker Compatibility</h2>
+<p>Podman provides Docker CLI compatibility out of the box. You can use Docker commands directly:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create an alias for Docker compatibility</span>
+</span></span><span style="display:flex;"><span>alias docker<span style="color:#f92672">=</span>podman
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Or use podman-docker wrapper</span>
+</span></span><span style="display:flex;"><span>podman-docker run -d -p 8080:80 nginx
+</span></span></code></pre></div><h3 id="configure-docker-socket">Configure Docker Socket</h3>
+<p>For tools that expect the Docker socket:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Inside the Lima VM</span>
+</span></span><span style="display:flex;"><span>sudo systemctl enable --now podman.socket
+</span></span><span style="display:flex;"><span>sudo ln -s /run/podman/podman.sock /var/run/docker.sock
+</span></span></code></pre></div><h2 id="common-podman-commands">Common Podman Commands</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># List running containers</span>
+</span></span><span style="display:flex;"><span>podman ps
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># List all containers (including stopped)</span>
+</span></span><span style="display:flex;"><span>podman ps -a
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># List images</span>
+</span></span><span style="display:flex;"><span>podman images
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Run a container</span>
+</span></span><span style="display:flex;"><span>podman run -d -p 8080:80 nginx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Build an image</span>
+</span></span><span style="display:flex;"><span>podman build -t myapp .
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create a pod</span>
+</span></span><span style="display:flex;"><span>podman pod create -n mypod
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Run container in a pod</span>
+</span></span><span style="display:flex;"><span>podman run --pod mypod -d nginx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Generate Kubernetes YAML</span>
+</span></span><span style="display:flex;"><span>podman generate kube mypod &gt; pod.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Play Kubernetes YAML</span>
+</span></span><span style="display:flex;"><span>podman play kube pod.yaml
+</span></span></code></pre></div><h2 id="podman-machine-alternative">Podman Machine (Alternative)</h2>
+<p>Podman also offers its own machine management:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Initialize Podman machine</span>
+</span></span><span style="display:flex;"><span>podman machine init
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Start Podman machine</span>
+</span></span><span style="display:flex;"><span>podman machine start
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># List machines</span>
+</span></span><span style="display:flex;"><span>podman machine list
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># SSH into machine</span>
+</span></span><span style="display:flex;"><span>podman machine ssh
+</span></span></code></pre></div><h2 id="volume-mounts-and-file-sharing">Volume Mounts and File Sharing</h2>
+<p>Lima automatically shares files between macOS and the VM. Configure mounts in your Lima config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">mounts</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">location</span>: <span style="color:#e6db74">&#34;~/Projects&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">mountPoint</span>: <span style="color:#e6db74">&#34;/home/ubuntu/Projects&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">writable</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">location</span>: <span style="color:#e6db74">&#34;/tmp&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">mountPoint</span>: <span style="color:#e6db74">&#34;/tmp&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">writable</span>: <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><p>Then use volumes in Podman:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>podman run -v ~/Projects:/app -d myapp
+</span></span></code></pre></div><h2 id="networking">Networking</h2>
+<h3 id="port-forwarding">Port Forwarding</h3>
+<p>Lima handles port forwarding automatically. Configure in your Lima config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">portForwards</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">guestPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">guestPortRange</span>: [<span style="color:#ae81ff">3000</span>, <span style="color:#ae81ff">3010</span>]
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">hostPortRange</span>: [<span style="color:#ae81ff">3000</span>, <span style="color:#ae81ff">3010</span>]
+</span></span></code></pre></div><h3 id="access-containers-from-host">Access Containers from Host</h3>
+<p>Containers running in the Lima VM are accessible from macOS through the forwarded ports:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Run container with port mapping</span>
+</span></span><span style="display:flex;"><span>podman run -d -p 8080:80 nginx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Access from macOS</span>
+</span></span><span style="display:flex;"><span>curl http://localhost:8080
+</span></span></code></pre></div><h2 id="kubernetes-integration">Kubernetes Integration</h2>
+<p>Podman has native Kubernetes support:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create a pod with multiple containers</span>
+</span></span><span style="display:flex;"><span>podman pod create -n webapp
+</span></span><span style="display:flex;"><span>podman run --pod webapp -d nginx
+</span></span><span style="display:flex;"><span>podman run --pod webapp -d redis
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Generate Kubernetes manifest</span>
+</span></span><span style="display:flex;"><span>podman generate kube webapp &gt; webapp.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Deploy to Kubernetes cluster</span>
+</span></span><span style="display:flex;"><span>kubectl apply -f webapp.yaml
+</span></span></code></pre></div><h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="check-lima-vm-status">Check Lima VM Status</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>limactl list
+</span></span><span style="display:flex;"><span>lima status podman
+</span></span></code></pre></div><h3 id="view-logs">View Logs</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>limactl logs podman
+</span></span></code></pre></div><h3 id="restart-podman-service">Restart Podman Service</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Inside the Lima VM</span>
+</span></span><span style="display:flex;"><span>sudo systemctl restart podman.socket
+</span></span></code></pre></div><h3 id="reset-everything">Reset Everything</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Delete Lima instance</span>
+</span></span><span style="display:flex;"><span>limactl delete podman
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Recreate</span>
+</span></span><span style="display:flex;"><span>limactl create podman
+</span></span><span style="display:flex;"><span>limactl start podman
+</span></span></code></pre></div><h3 id="connection-issues">Connection Issues</h3>
+<p>If Podman commands fail to connect:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check socket exists</span>
+</span></span><span style="display:flex;"><span>ls -la /run/podman/podman.sock
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify socket is active</span>
+</span></span><span style="display:flex;"><span>systemctl status podman.socket
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check permissions</span>
+</span></span><span style="display:flex;"><span>ls -la /var/run/docker.sock
+</span></span></code></pre></div><h2 id="benefits-over-docker-desktop">Benefits Over Docker Desktop</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Podman on Lima</th>
+          <th>Docker Desktop</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Daemon</strong></td>
+          <td>Daemonless</td>
+          <td>Requires daemon</td>
+      </tr>
+      <tr>
+          <td><strong>Root Access</strong></td>
+          <td>Rootless by default</td>
+          <td>Requires elevated privileges</td>
+      </tr>
+      <tr>
+          <td><strong>Resource Usage</strong></td>
+          <td>Lightweight</td>
+          <td>Higher overhead</td>
+      </tr>
+      <tr>
+          <td><strong>Kubernetes</strong></td>
+          <td>Native pod support</td>
+          <td>Requires K8s enablement</td>
+      </tr>
+      <tr>
+          <td><strong>License</strong></td>
+          <td>Apache 2.0</td>
+          <td>Proprietary (free tier limited)</td>
+      </tr>
+      <tr>
+          <td><strong>Pods</strong></td>
+          <td>First-class citizen</td>
+          <td>Limited support</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="common-use-cases">Common Use Cases</h2>
+<h3 id="development-environment">Development Environment</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start database and app in a pod</span>
+</span></span><span style="display:flex;"><span>podman pod create -n dev
+</span></span><span style="display:flex;"><span>podman run --pod dev -d postgres:15
+</span></span><span style="display:flex;"><span>podman run --pod dev -d redis:7
+</span></span><span style="display:flex;"><span>podman run --pod dev -p 3000:3000 -d myapp
+</span></span></code></pre></div><h3 id="cicd-testing">CI/CD Testing</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Build and test in isolated environment</span>
+</span></span><span style="display:flex;"><span>podman build -t test-image .
+</span></span><span style="display:flex;"><span>podman run --rm test-image npm test
+</span></span></code></pre></div><h3 id="kubernetes-development">Kubernetes Development</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Develop locally with Kubernetes semantics</span>
+</span></span><span style="display:flex;"><span>podman play kube deployment.yaml
+</span></span><span style="display:flex;"><span>podman generate kube mypod &gt; local-test.yaml
+</span></span></code></pre></div><h2 id="conclusion">Conclusion</h2>
+<p>Running Podman on macOS through Lima provides a lightweight, secure alternative to Docker Desktop. With rootless containers, daemonless architecture, and native Kubernetes support, this setup is ideal for developers who want full container capabilities without the overhead. Whether you&rsquo;re developing microservices, testing Kubernetes manifests, or running CI/CD pipelines, Podman on Lima delivers a production-like container experience on macOS.</p>
+<p>The combination of Lima&rsquo;s efficient virtualization and Podman&rsquo;s Kubernetes-native approach makes this stack particularly well-suited for cloud-native development workflows on Mac hardware.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="virtualization" term="virtualization" label="Virtualization" />
+                             
+                                <category scheme="containers" term="containers" label="Containers" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="lima" term="lima" label="Lima" />
+                             
+                                <category scheme="podman" term="podman" label="Podman" />
+                             
+                                <category scheme="macos" term="macos" label="macOS" />
+                             
+                                <category scheme="linux-vm" term="linux-vm" label="Linux VM" />
+                             
+                                <category scheme="containers" term="containers" label="Containers" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -36,26 +811,26 @@
             <content type="html"><![CDATA[<p>In this pos I will show you how you can backup to AWS S3 with Veeam Backup.</p>
 <h3 id="the-issue">The Issue</h3>
 <p>I already created the repository under &lsquo;backup infrastructure&quot; &gt; &ldquo;backup repositories&rsquo; however I can&rsquo;t select it as a storage location when creating a new backup job.</p>
-<p><img src="/img/include/veeam-201.png" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-201.avif" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Choose &lsquo;Object storage&rsquo;</p>
-<p><img src="/img/include/veeam-202.png" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-202.avif" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Choose &lsquo;Amazon S3&rsquo;</p>
-<p><img src="/img/include/veeam-203.png" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-203.avif" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Fill in the name and description and click &lsquo;Next&rsquo;</p>
-<p><img src="/img/include/veeam-204.png" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-204.avif" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Configure the region and the bucket.</p>
-<p><img src="/img/include/veeam-205.png" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-205.avif" alt="veem-s3"  loading="lazy" decoding="async" class="zoomable" /></p>
 <h3 id="the-solution">The Solution</h3>
 <p>Veeam uses object storage as a &ldquo;Capacity Tier&rdquo; of Scale-Out Backup Repository. So you will have to create a Scale Out Backup Repository.</p>
 <p>Go &lsquo;Backup Infrastructure &gt; Add a Scale Out Backup Repository&rsquo;.</p>
-<p><img src="/img/include/veeam-101.png" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
-<p><img src="/img/include/veeam-102.png" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-101.avif" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-102.avif" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>In its settings point Veeam to a local repository of any type.</p>
-<p><img src="/img/include/veeam-103.png" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-103.avif" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Also point to your Capacity Tier account for archivals to an AWS S3 Bucket.</p>
-<p><img src="/img/include/veeam-104.png" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-104.avif" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Here you can select to copy the bacup after creation or move backups to S3 after some time.</p>
-<p><img src="/img/include/veeam-105.png" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-105.avif" alt="Scale-out repository"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Point your backup job to that Scale-Out Backup repository.</p>
 <p>Veeam will perform local backup first, and than, according to Scale-Out Backup Repository&rsquo;s Capacity Tier settings, will automatically offload backups to the cloud tier.</p>]]></content>
             
@@ -119,14 +894,14 @@
 <blockquote>
 <p>Unable to add extent {Repository-Name} because it serves as the target for one or more job types which are not supported by a scale-out backup repository.</p></blockquote>
 <p>Selecting &lsquo;Show jobs&rsquo; shows:</p>
-<p><img src="/img/include/veeam-001.png" alt="Show jobs"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-001.avif" alt="Show jobs"  loading="lazy" decoding="async" class="zoomable" /></p>
 <h3 id="the-solution">The Solution</h3>
 <p>Veeam Backup create a &ldquo;Job&rdquo; to vackup its internal database in case you you wanted to reinstall or migrate Veeam to another server. It gets created automatically, to the default repository.
 To Fix: Simply create a new repository just for the Configuration-Backup-Job. I typically name the repository &lsquo;Config-Backup-Repository&rsquo; to avoid confusion in the future.</p>
-<p><img src="/img/include/veeam-002.png" alt="Repoosirory List"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-002.avif" alt="Repoosirory List"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>Now simply change the job to use the new repository, this is NOT done where all the other jobs are configured!
 Select &lsquo;Options &gt; Configuration Backup &gt; Change the Repository&rsquo;  (I manually run it, by clicking Backup-Now) at this point, just to make sure all is well.</p>
-<p><img src="/img/include/veeam-003.png" alt="Change Job"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/veeam-003.avif" alt="Change Job"  loading="lazy" decoding="async" class="zoomable" /></p>
 <p>You should now be able to create your Scale Out Backup Repository without an error.</p>]]></content>
             
                  
