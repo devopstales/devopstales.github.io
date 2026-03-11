@@ -9,12 +9,319 @@
             <link href="https://devopstales.github.io/devops/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/devops/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/devops/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-03-06T12:55:46+00:00</updated>
+    <updated>2026-03-11T14:37:00+00:00</updated>
     
     
     
     
         <id>https://devopstales.github.io/devops/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GitLab Installation Guide]]></title>
+            <link href="https://devopstales.github.io/devops/gitlab-install/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/devops/gitlab-install/</id>
+            
+            
+            <published>2026-03-09T00:00:00+00:00</published>
+            <updated>2026-03-09T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Complete GitLab CE installation guide with PostgreSQL, Nginx reverse proxy, and best practices (GitLab 18.8).</blockquote><p>Install GitLab CE with custom PostgreSQL and Nginx proxy.</p>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>AlmaLinux/Rocky Linux 9 or Ubuntu 22.04+</li>
+<li>Minimum 4GB RAM (8GB recommended)</li>
+<li>2+ CPU cores</li>
+<li>PostgreSQL 15+ (included or external)</li>
+</ul>
+<h3 id="system-time-synchronization">System Time Synchronization</h3>
+<p>Modern Linux distributions use <code>chrony</code> instead of <code>ntpd</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># AlmaLinux/Rocky Linux 9</span>
+</span></span><span style="display:flex;"><span>dnf install -y chrony
+</span></span><span style="display:flex;"><span>systemctl enable --now chronyd
+</span></span><span style="display:flex;"><span>timedatectl set-timezone Europe/Budapest
+</span></span><span style="display:flex;"><span>chronyc sources -v
+</span></span></code></pre></div><h3 id="install-postgresql">Install PostgreSQL</h3>
+<p>GitLab 18.8 requires PostgreSQL 15+. You can use the bundled PostgreSQL or install externally.</p>
+<h4 id="external-postgresql-installation-recommended-for-production">External PostgreSQL Installation (Recommended for Production)</h4>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install PostgreSQL 15</span>
+</span></span><span style="display:flex;"><span>dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+</span></span><span style="display:flex;"><span>dnf install -y postgresql15 postgresql15-server postgresql15-contrib
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Initialize and start PostgreSQL</span>
+</span></span><span style="display:flex;"><span>postgresql-15-setup --initdb
+</span></span><span style="display:flex;"><span>systemctl enable --now postgresql-15
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create databases and users</span>
+</span></span><span style="display:flex;"><span>su - postgres
+</span></span><span style="display:flex;"><span>psql -c <span style="color:#e6db74">&#34;CREATE DATABASE gitlabhq_production OWNER gitlab ENCODING &#39;UTF8&#39;;&#34;</span>
+</span></span><span style="display:flex;"><span>psql -c <span style="color:#e6db74">&#34;CREATE DATABASE gitlab_ci_production OWNER gitlab ENCODING &#39;UTF8&#39;;&#34;</span>
+</span></span><span style="display:flex;"><span>psql -c <span style="color:#e6db74">&#34;CREATE USER gitlab WITH PASSWORD &#39;SecurePassword123!&#39;;&#34;</span>
+</span></span><span style="display:flex;"><span>psql -c <span style="color:#e6db74">&#34;GRANT ALL PRIVILEGES ON DATABASE gitlabhq_production TO gitlab;&#34;</span>
+</span></span><span style="display:flex;"><span>psql -c <span style="color:#e6db74">&#34;GRANT ALL PRIVILEGES ON DATABASE gitlab_ci_production TO gitlab;&#34;</span>
+</span></span><span style="display:flex;"><span>psql -c <span style="color:#e6db74">&#34;\\q&#34;</span>
+</span></span><span style="display:flex;"><span>exit
+</span></span></code></pre></div><h3 id="install-nginx">Install Nginx</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>dnf install -y nginx
+</span></span><span style="display:flex;"><span>mkdir -p /var/log/gitlab/nginx/
+</span></span><span style="display:flex;"><span>mkdir -p /etc/nginx/conf.d/
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>cat &gt; /etc/nginx/conf.d/gitlab.conf <span style="color:#e6db74">&lt;&lt; &#39;EOF&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">upstream gitlab-workhorse {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    server unix:/var/opt/gitlab/gitlab-workhorse/socket;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">server {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    listen *:80;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    server_name gitlab.devopstales.intra;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    server_tokens off;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    root /opt/gitlab/embedded/service/gitlab-rails/public;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    client_max_body_size 256m;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    real_ip_header X-Forwarded-For;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    access_log /var/log/gitlab/nginx/gitlab_access.log;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    error_log  /var/log/gitlab/nginx/gitlab_error.log;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    location / {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_read_timeout    300;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_connect_timeout 300;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_redirect        off;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_buffering       off;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_set_header    Host                $http_host;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_set_header    X-Real-IP           $remote_addr;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_set_header    X-Forwarded-Proto   $scheme;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_pass http://gitlab-workhorse;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_request_buffering off;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        proxy_http_version 1.1;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    location ~ ^/(assets)/ {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        root /opt/gitlab/embedded/service/gitlab-rails/public;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        gzip_static on;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        expires max;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        add_header Cache-Control public;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    error_page 502 /502.html;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">}
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test and reload Nginx</span>
+</span></span><span style="display:flex;"><span>nginx -t
+</span></span><span style="display:flex;"><span>systemctl enable --now nginx
+</span></span><span style="display:flex;"><span>systemctl reload nginx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Add nginx user to gitlab-www group</span>
+</span></span><span style="display:flex;"><span>usermod -aG gitlab-www nginx
+</span></span></code></pre></div><h3 id="install-gitlab">Install GitLab</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add GitLab repository</span>
+</span></span><span style="display:flex;"><span>curl -sS https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.rpm.sh | sudo bash
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install GitLab CE (specify version if needed)</span>
+</span></span><span style="display:flex;"><span>dnf install -y gitlab-ce
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Stop bundled PostgreSQL if using external</span>
+</span></span><span style="display:flex;"><span>systemctl stop postgresql-15
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create symlinks for PostgreSQL client tools (if needed)</span>
+</span></span><span style="display:flex;"><span>cd /opt/gitlab/embedded/bin
+</span></span><span style="display:flex;"><span>mv psql psql_moved 2&gt;/dev/null <span style="color:#f92672">||</span> true
+</span></span><span style="display:flex;"><span>mv pg_dump pg_dump_moved 2&gt;/dev/null <span style="color:#f92672">||</span> true
+</span></span><span style="display:flex;"><span>ln -s /usr/bin/pg_dump /usr/bin/psql /opt/gitlab/embedded/bin/ 2&gt;/dev/null <span style="color:#f92672">||</span> true
+</span></span><span style="display:flex;"><span>cd -
+</span></span></code></pre></div><p>Configure GitLab:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ruby" data-lang="ruby"><span style="display:flex;"><span>nano <span style="color:#e6db74">/etc/</span>gitlab<span style="color:#f92672">/</span>gitlab<span style="color:#f92672">.</span>rb
+</span></span><span style="display:flex;"><span><span style="color:#f92672">---</span>
+</span></span><span style="display:flex;"><span>external_url <span style="color:#e6db74">&#39;http://gitlab.devopstales.intra&#39;</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;time_zone&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;Europe/Budapest&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># External PostgreSQL configuration</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_adapter&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;postgresql&#34;</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_encoding&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;unicode&#34;</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_database&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;gitlabhq_production&#34;</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_pool&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_username&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;gitlab&#34;</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_password&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;SecurePassword123!&#34;</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_host&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;127.0.0.1&#39;</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;db_port&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">5432</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Redis (use bundled)</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;redis_socket&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/var/opt/gitlab/redis/redis.socket&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Unicorn/Puma configuration</span>
+</span></span><span style="display:flex;"><span>puma<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;worker_processes&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>puma<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;min_threads&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>puma<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;max_threads&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">16</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># User settings</span>
+</span></span><span style="display:flex;"><span>user<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;username&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;git&#34;</span>
+</span></span><span style="display:flex;"><span>user<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;group&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;git&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Disable bundled PostgreSQL</span>
+</span></span><span style="display:flex;"><span>postgresql<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;enable&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Nginx settings</span>
+</span></span><span style="display:flex;"><span>nginx<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;enable&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span>
+</span></span><span style="display:flex;"><span>web_server<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;external_users&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#f92672">[</span><span style="color:#e6db74">&#39;nginx&#39;</span><span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Security settings</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;rate_limit_requests_per_period&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>
+</span></span><span style="display:flex;"><span>gitlab_rails<span style="color:#f92672">[</span><span style="color:#e6db74">&#39;rate_limit_period&#39;</span><span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+</span></span></code></pre></div><p>Apply configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gitlab-ctl reconfigure
+</span></span><span style="display:flex;"><span>gitlab-ctl restart
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check status</span>
+</span></span><span style="display:flex;"><span>gitlab-ctl status
+</span></span></code></pre></div><h3 id="post-installation">Post-Installation</h3>
+<ol>
+<li><strong>Access GitLab</strong>: Open <a href="http://gitlab.devopstales.intra">http://gitlab.devopstales.intra</a> in your browser</li>
+<li><strong>Set root password</strong>: The initial root password is stored at <code>/etc/gitlab/initial_root_password</code></li>
+<li><strong>Configure backups</strong>: Add backup schedule to crontab</li>
+<li><strong>Set up monitoring</strong>: Configure Prometheus/Grafana for GitLab metrics</li>
+</ol>
+<h3 id="backup-configuration">Backup Configuration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create backup cron job</span>
+</span></span><span style="display:flex;"><span>cat &gt;&gt; /etc/crontab <span style="color:#e6db74">&lt;&lt; EOF
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">0 2 * * * root /opt/gitlab/bin/gitlab-backup create CRON=1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Configure backup retention</span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;gitlab_rails[&#39;backup_keep_time&#39;] = 604800&#34;</span> &gt;&gt; /etc/gitlab/gitlab.rb
+</span></span><span style="display:flex;"><span>gitlab-ctl reconfigure
+</span></span></code></pre></div>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="devops" term="devops" label="devops" />
+                             
+                                <category scheme="gitlab" term="gitlab" label="GitLab" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GitHub Actions: Basics]]></title>
+            <link href="https://devopstales.github.io/devops/github-actions-basics/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/devops/github-self-hosted-runners-on-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Github Self-Hosted Runners on Kubernetes with Actions Runner Controller" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-artifacts/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: artifacts management" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-docker-bild-k8s/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Kubernetes" />
+                <link href="https://devopstales.github.io/devops/gitlab-ci-docker-bild/?utm_source=atom_feed" rel="related" type="text/html" title="GitLab CI: How to Build Docker Images in Docker" />
+                <link href="https://devopstales.github.io/devops/introduction-to-gitlab-ci-cd/?utm_source=atom_feed" rel="related" type="text/html" title="Introduction to GitLab CI/CD" />
+            
+                <id>https://devopstales.github.io/devops/github-actions-basics/</id>
+            
+            
+            <published>2026-03-07T00:00:00+00:00</published>
+            <updated>2026-03-07T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<blockquote>Learn GitHub Actions fundamentals - workflows, jobs, actions, and artifact sharing with modern best practices.</blockquote><p>In this post I will show you how you can use GitHub Actions for CI/CD and pass artifacts between jobs.</p>
+<h3 id="what-is-github-actions">What is GitHub Actions?</h3>
+<p>GitHub Actions is a continuous integration and continuous delivery (CI/CD) platform that allows you to automate your build, test, and deployment pipeline with GitHub.</p>
+<p>You can configure a GitHub Actions <strong>workflow</strong> to be triggered when an <strong>event</strong> occurs in your repository, such as a pull request being opened or an issue being created. Your workflow contains one or more <strong>jobs</strong> which can run in sequential order or in parallel. Each job will run inside its own virtual machine <strong>runner</strong>, or inside a container, and has one or more <strong>steps</strong> that either run a script that you define or run an <strong>action</strong>, which is a reusable extension that can simplify your workflow. You can find the available action in the <a href="https://github.com/marketplace?type=actions">GitHub marketplace</a></p>
+<h3 id="create-an-example-workflow">Create an Example Workflow</h3>
+<p>GitHub Actions uses YAML syntax to define the workflow. Each workflow is stored as a separate YAML file in your code repository, in a directory named <code>.github/workflows</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#ae81ff">mkdir .github/workflows</span>
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">nano .github/workflows/cicd.yaml</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">name</span>: <span style="color:#ae81ff">learn-github-actions</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Trigger</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">on</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">push</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">branches</span>: [ <span style="color:#ae81ff">main, master ]</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">pull_request</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">branches</span>: [ <span style="color:#ae81ff">main ]</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">jobs</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Job definition. You can create multiple jobs</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">build</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#39;Build&#39;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">ubuntu-24.04</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">steps</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;Checkout code&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/checkout@v4</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/setup-node@v4</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">with</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">node-version</span>: <span style="color:#e6db74">&#39;20&#39;</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">cache</span>: <span style="color:#e6db74">&#39;npm&#39;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">run</span>: <span style="color:#ae81ff">npm ci</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">run</span>: <span style="color:#ae81ff">npm install -g bats</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">run</span>: <span style="color:#ae81ff">bats -v</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># Share between jobs</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/upload-artifact@v4</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">with</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">build-data</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">path</span>: <span style="color:#ae81ff">dist/</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">retention-days</span>: <span style="color:#ae81ff">5</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">deploy-dev</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">name</span>: <span style="color:#e6db74">&#34;Deploy To Dev&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Add job called build as dependency</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">needs</span>: <span style="color:#ae81ff">build</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">ubuntu-24.04</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">environment</span>: <span style="color:#ae81ff">development</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">steps</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Download from previous job</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/download-artifact@v4</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">with</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">build-data</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">path</span>: <span style="color:#ae81ff">dist/</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Deploy</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">echo &#34;Deploying to development environment&#34;</span>
+</span></span></code></pre></div><p>If you created the file, you need to commit and push to the GitHub repository. Then it will run automatically each time someone pushes a change to the repository. When your <strong>workflow</strong> is <strong>triggered</strong>, a <strong>workflow run</strong> is created that executes the workflow. After a workflow run has started, you can see a visualization graph of the run&rsquo;s progress and view each step&rsquo;s activity on GitHub. To find this click <strong>Actions</strong> in the repository.</p>
+<p><img src="/img/include/github-actions-basics01.avif" alt="GitHub Actions"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/github-actions-basics02.avif" alt="GitHub Actions"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/github-actions-basics03.avif" alt="GitHub Actions"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/github-actions-basics04.avif" alt="GitHub Actions"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><img src="/img/include/github-actions-basics05.avif" alt="GitHub Actions"  loading="lazy" decoding="async" class="zoomable" /></p>
+<hr>
+<ul>
+<li><a href="https://docs.github.com/en/actions/learn-github-actions/understanding-github-actions">https://docs.github.com/en/actions/learn-github-actions/understanding-github-actions</a></li>
+<li><a href="https://github.com/actions">https://github.com/actions</a></li>
+</ul>]]></content>
+            
+                 
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="devops" term="devops" label="devops" />
+                             
+                                <category scheme="github" term="github" label="GitHub" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>

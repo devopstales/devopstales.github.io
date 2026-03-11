@@ -9,12 +9,489 @@
             <link href="https://devopstales.github.io/virtualization/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/virtualization/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/virtualization/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-03-06T12:55:46+00:00</updated>
+    <updated>2026-03-11T14:37:00+00:00</updated>
     
     
     
     
         <id>https://devopstales.github.io/virtualization/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to Install ESXi Nested Inside Proxmox VE]]></title>
+            <link href="https://devopstales.github.io/virtualization/install-vmware-in-proxmox/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/virtualization/veeam-cant-create-job-to-s3/?utm_source=atom_feed" rel="related" type="text/html" title="veeam backup: I can not create a backup job to my AWS S3 repository" />
+                <link href="https://devopstales.github.io/virtualization/veeam-cant-add-repo/?utm_source=atom_feed" rel="related" type="text/html" title="veeam backup: Cant Add Repository to a Scale Out Backup Repository?" />
+                <link href="https://devopstales.github.io/kubernetes/k8s-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Kubernetes In-Tree vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/kubernetes/openshift-vmware/?utm_source=atom_feed" rel="related" type="text/html" title="Configure Openshift In-Tree vSphere Cloud Provider" />
+                <link href="https://devopstales.github.io/kubernetes/openshift-restrict-access/?utm_source=atom_feed" rel="related" type="text/html" title="Restrict access to OpenShift routes by IP address" />
+            
+                <id>https://devopstales.github.io/virtualization/install-vmware-in-proxmox/</id>
+            
+            
+            <published>2026-03-08T00:00:00+00:00</published>
+            <updated>2026-03-08T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Running VMware ESXi nested inside Proxmox VE is perfect for testing vSphere features, learning VMware technologies, or building a homelab. This updated guide for 2026 covers Proxmox VE 8.x and VMware ESXi 8.0 U3 with the correct virtual hardware configuration.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li><strong>Proxmox VE 8.x</strong> host with Intel VT-x/AMD-V virtualization support</li>
+<li><strong>ESXi 8.0 U3</strong> ISO (download from <a href="https://customerconnect.vmware.com/">VMware Customer Connect</a>)</li>
+<li>Minimum <strong>16GB RAM</strong> (32GB+ recommended for running nested VMs)</li>
+<li><strong>SSD storage</strong> for better performance</li>
+<li>Sufficient CPU cores (8+ recommended)</li>
+</ul>
+<h2 id="enable-nested-virtualization-on-proxmox-host">Enable Nested Virtualization on Proxmox Host</h2>
+<h3 id="check-current-status">Check Current Status</h3>
+<p>First, verify if nested virtualization is enabled:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># For Intel CPUs</span>
+</span></span><span style="display:flex;"><span>cat /sys/module/kvm_intel/parameters/nested
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># For AMD CPUs</span>
+</span></span><span style="display:flex;"><span>cat /sys/module/kvm_amd/parameters/nested
+</span></span></code></pre></div><p>If the output is <code>N</code> or <code>0</code>, nested virtualization is disabled.</p>
+<h3 id="enable-nested-virtualization">Enable Nested Virtualization</h3>
+<p><strong>For Intel CPUs:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;options kvm-intel nested=Y&#34;</span> &gt; /etc/modprobe.d/kvm-intel.conf
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;options kvm-intel enable_shadow_vmcs=Y&#34;</span> &gt;&gt; /etc/modprobe.d/kvm-intel.conf
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;options kvm-intel enable_apicv=Y&#34;</span> &gt;&gt; /etc/modprobe.d/kvm-intel.conf
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;options kvm-intel unrestrict_guest=Y&#34;</span> &gt;&gt; /etc/modprobe.d/kvm-intel.conf
+</span></span></code></pre></div><p><strong>For AMD CPUs:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;options kvm-amd nested=1&#34;</span> &gt; /etc/modprobe.d/kvm-amd.conf
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;options kvm-amd avic=1&#34;</span> &gt;&gt; /etc/modprobe.d/kvm-amd.conf
+</span></span></code></pre></div><h3 id="reload-kvm-module">Reload KVM Module</h3>
+<p>Stop all VMs and reload the KVM module:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># For Intel</span>
+</span></span><span style="display:flex;"><span>modprobe -r kvm_intel
+</span></span><span style="display:flex;"><span>modprobe -r kvm
+</span></span><span style="display:flex;"><span>modprobe kvm
+</span></span><span style="display:flex;"><span>modprobe kvm_intel
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># For AMD</span>
+</span></span><span style="display:flex;"><span>modprobe -r kvm_amd
+</span></span><span style="display:flex;"><span>modprobe -r kvm
+</span></span><span style="display:flex;"><span>modprobe kvm
+</span></span><span style="display:flex;"><span>modprobe kvm_amd
+</span></span></code></pre></div><h3 id="verify-configuration">Verify Configuration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Should return &#39;Y&#39; or &#39;1&#39;</span>
+</span></span><span style="display:flex;"><span>cat /sys/module/kvm_intel/parameters/nested
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check CPU flags in VMs</span>
+</span></span><span style="display:flex;"><span>grep -E <span style="color:#e6db74">&#39;vmx|svm&#39;</span> /proc/cpuinfo
+</span></span></code></pre></div><h2 id="create-the-esxi-virtual-machine">Create the ESXi Virtual Machine</h2>
+<h3 id="download-esxi-iso">Download ESXi ISO</h3>
+<p>Download ESXi 8.0 U3 from VMware and upload it to your Proxmox storage:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Upload via SCP or use the Proxmox web UI</span>
+</span></span><span style="display:flex;"><span>scp VMware-VMvisor-Installer-8.0U3-*.iso root@proxmox:/var/lib/vz/template/iso/
+</span></span></code></pre></div><h3 id="vm-configuration-options">VM Configuration Options</h3>
+<p>Create a new VM through the Proxmox web UI with these <strong>critical settings</strong>:</p>
+<h4 id="general-settings">General Settings</h4>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Name</strong></td>
+          <td>esxi-nested-01</td>
+      </tr>
+      <tr>
+          <td><strong>Guest OS</strong></td>
+          <td>Linux</td>
+      </tr>
+      <tr>
+          <td><strong>Version</strong></td>
+          <td>6.x - 2.6 Kernel</td>
+      </tr>
+  </tbody>
+</table>
+<h4 id="system-tab">System Tab</h4>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>BIOS</strong></td>
+          <td>OVMF (UEFI)</td>
+          <td>Required for ESXi 8.x</td>
+      </tr>
+      <tr>
+          <td><strong>QEMU Agent</strong></td>
+          <td>Checked</td>
+          <td>Enable for better integration</td>
+      </tr>
+      <tr>
+          <td><strong>SCSI Controller</strong></td>
+          <td>VMware PVSCSI</td>
+          <td>Best compatibility</td>
+      </tr>
+      <tr>
+          <td><strong>Machine</strong></td>
+          <td>q35</td>
+          <td>Required for ESXi 8.x</td>
+      </tr>
+  </tbody>
+</table>
+<h4 id="cpu-tab">CPU Tab</h4>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Cores</strong></td>
+          <td>4-8</td>
+          <td>Minimum 4, 8+ recommended</td>
+      </tr>
+      <tr>
+          <td><strong>Sockets</strong></td>
+          <td>1-2</td>
+          <td>Match your licensing needs</td>
+      </tr>
+      <tr>
+          <td><strong>Type</strong></td>
+          <td>host</td>
+          <td>Passthrough CPU features</td>
+      </tr>
+      <tr>
+          <td><strong>NUMA</strong></td>
+          <td>Checked</td>
+          <td>If your hardware supports it</td>
+      </tr>
+  </tbody>
+</table>
+<h4 id="memory-tab">Memory Tab</h4>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Memory</strong></td>
+          <td>16384 MB</td>
+          <td>Minimum for ESXi, 32GB+ for nested VMs</td>
+      </tr>
+      <tr>
+          <td><strong>Ballooning</strong></td>
+          <td>Unchecked</td>
+          <td>Disable for ESXi</td>
+      </tr>
+      <tr>
+          <td><strong>Hugepages</strong></td>
+          <td>Optional</td>
+          <td>Can improve performance</td>
+      </tr>
+  </tbody>
+</table>
+<h4 id="hard-disk-tab">Hard Disk Tab</h4>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Bus/Device</strong></td>
+          <td>SATA</td>
+          <td>Critical for ESXi to see the disk</td>
+      </tr>
+      <tr>
+          <td><strong>SSD Emulation</strong></td>
+          <td>Checked</td>
+          <td>If using SSD storage</td>
+      </tr>
+      <tr>
+          <td><strong>Discard</strong></td>
+          <td>Checked</td>
+          <td>Enable TRIM support</td>
+      </tr>
+      <tr>
+          <td><strong>Size</strong></td>
+          <td>128GB+</td>
+          <td>Minimum 64GB, 128GB+ recommended</td>
+      </tr>
+  </tbody>
+</table>
+<h4 id="network-tab">Network Tab</h4>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Model</strong></td>
+          <td>VMware vmxnet3</td>
+          <td>Best performance and compatibility</td>
+      </tr>
+      <tr>
+          <td><strong>Bridge</strong></td>
+          <td>vmbr0</td>
+          <td>Or your preferred bridge</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="advanced-vm-configuration-via-cli">Advanced: VM Configuration via CLI</h3>
+<p>For fine-tuned control, create the VM via command line:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>qm create <span style="color:#ae81ff">100</span> --name esxi-nested-01 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --memory <span style="color:#ae81ff">16384</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --balloon <span style="color:#ae81ff">0</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cpu host <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cores <span style="color:#ae81ff">4</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --sockets <span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --numa <span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --bios ovmf <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --machine q35 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --scsihw pvscsi <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --sata0 local:iso/VMware-VMvisor-Installer-8.0U3-*.iso,media<span style="color:#f92672">=</span>cdrom <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --sata1 local-lvm:128,ssd<span style="color:#f92672">=</span>1,discard<span style="color:#f92672">=</span>on <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --boot order<span style="color:#f92672">=</span>sata0;sata1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --net0 virtio,bridge<span style="color:#f92672">=</span>vmbr0,mtu<span style="color:#f92672">=</span><span style="color:#ae81ff">1500</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --agent enabled<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --ostype l26
+</span></span></code></pre></div><h3 id="required-vm-configuration-changes">Required VM Configuration Changes</h3>
+<p>After creating the VM, edit <code>/etc/pve/qemu-server/100.conf</code> and add:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Enable nested virtualization</span>
+</span></span><span style="display:flex;"><span>args: -cpu host,+vmx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Or for AMD:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># args: -cpu host,+svm</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Hide KVM hypervisor signature (optional, can help with ESXi detection)</span>
+</span></span><span style="display:flex;"><span>hidden: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># CPU flags for better compatibility</span>
+</span></span><span style="display:flex;"><span>cpu: host,flags<span style="color:#f92672">=</span>+vmx
+</span></span></code></pre></div><h2 id="install-esxi">Install ESXi</h2>
+<h3 id="boot-the-installer">Boot the Installer</h3>
+<ol>
+<li>Start the VM and open the console</li>
+<li>ESXi installer should boot automatically</li>
+<li>Press Enter to continue through the welcome screen</li>
+</ol>
+<h3 id="installation-steps">Installation Steps</h3>
+<ol>
+<li><strong>Accept EULA</strong>: Press F11</li>
+<li><strong>Select Disk</strong>: Choose the SATA disk you configured</li>
+<li><strong>Keyboard Layout</strong>: Select your preferred layout (usually US Default)</li>
+<li><strong>Root Password</strong>: Set a strong root password</li>
+<li><strong>Confirm Installation</strong>: Press F11 to begin</li>
+</ol>
+<h3 id="post-installation">Post-Installation</h3>
+<p>After installation completes:</p>
+<ol>
+<li>Remove the ISO from the CD-ROM</li>
+<li>Reboot the VM</li>
+<li>ESXi will boot and obtain an IP via DHCP</li>
+<li>Note the IP address from the console</li>
+</ol>
+<h2 id="configure-esxi">Configure ESXi</h2>
+<h3 id="initial-network-configuration">Initial Network Configuration</h3>
+<p>Press F2 to access the Direct Console User Interface (DCUI):</p>
+<ol>
+<li><strong>Configure Management Network</strong></li>
+<li><strong>IP Configuration</strong>: Set static IP or keep DHCP</li>
+<li><strong>DNS Configuration</strong>: Set hostname and DNS servers</li>
+<li><strong>Troubleshooting Options</strong>: Enable SSH for remote management</li>
+</ol>
+<h3 id="access-vsphere-client">Access vSphere Client</h3>
+<p>From your workstation, navigate to <code>https://&lt;esxi-ip&gt;/ui/</code> and log in with root credentials.</p>
+<h3 id="install-vmware-tools-optional">Install VMware Tools (Optional)</h3>
+<p>For better integration, you can install VMware Tools in nested VMs, but note that QEMU Guest Agent may work better for Proxmox-managed operations.</p>
+<h2 id="performance-optimization">Performance Optimization</h2>
+<h3 id="proxmox-host-tuning">Proxmox Host Tuning</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Enable IOMMU for Intel (in /etc/default/grub)</span>
+</span></span><span style="display:flex;"><span>GRUB_CMDLINE_LINUX_DEFAULT<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;quiet intel_iommu=on iommu=pt&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Enable IOMMU for AMD (in /etc/default/grub)</span>
+</span></span><span style="display:flex;"><span>GRUB_CMDLINE_LINUX_DEFAULT<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;quiet amd_iommu=on&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Update GRUB and reboot</span>
+</span></span><span style="display:flex;"><span>update-grub
+</span></span><span style="display:flex;"><span>reboot
+</span></span></code></pre></div><h3 id="esxi-vm-tuning">ESXi VM Tuning</h3>
+<p>Add these to the VM configuration for better performance:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>qm set <span style="color:#ae81ff">100</span> --args <span style="color:#e6db74">&#39;-cpu host,+vmx,+vpid,+vapic,+tsc-adjust&#39;</span>
+</span></span><span style="display:flex;"><span>qm set <span style="color:#ae81ff">100</span> --machine q35
+</span></span><span style="display:flex;"><span>qm set <span style="color:#ae81ff">100</span> --cpu cputype<span style="color:#f92672">=</span>host
+</span></span></code></pre></div><h3 id="storage-optimization">Storage Optimization</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># For SSD storage, enable discard</span>
+</span></span><span style="display:flex;"><span>qm set <span style="color:#ae81ff">100</span> --sata1 local-lvm:vm-100-disk-1,ssd<span style="color:#f92672">=</span>1,discard<span style="color:#f92672">=</span>on
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Use VirtIO SCSI with discard for better performance</span>
+</span></span><span style="display:flex;"><span>qm set <span style="color:#ae81ff">100</span> --scsihw virtio-scsi-pci
+</span></span><span style="display:flex;"><span>qm set <span style="color:#ae81ff">100</span> --scsi0 local-lvm:vm-100-disk-1,ssd<span style="color:#f92672">=</span>1,discard<span style="color:#f92672">=</span>on,iothread<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</span></span></code></pre></div><h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="esxi-installer-doesnt-see-disk">ESXi Installer Doesn&rsquo;t See Disk</h3>
+<p><strong>Problem</strong>: The ESXi installer reports &ldquo;No disks found&rdquo;</p>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Ensure you&rsquo;re using SATA controller for the disk (not SCSI or VirtIO)</li>
+<li>Set SCSI controller to VMware PVSCSI</li>
+<li>Use q35 machine type</li>
+</ul>
+<h3 id="esxi-boots-to-purple-screen">ESXi Boots to Purple Screen</h3>
+<p><strong>Problem</strong>: PSOD (Purple Screen of Death) on boot</p>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Ensure nested virtualization is enabled on the Proxmox host</li>
+<li>Add <code>+vmx</code> or <code>+svm</code> CPU flags to the VM config</li>
+<li>Increase memory allocation (minimum 8GB for ESXi 8.x)</li>
+</ul>
+<h3 id="network-connectivity-issues">Network Connectivity Issues</h3>
+<p><strong>Problem</strong>: ESXi management network not working</p>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Use vmxnet3 network adapter</li>
+<li>Ensure the Proxmox bridge is properly configured</li>
+<li>Check VLAN settings if using VLANs</li>
+</ul>
+<h3 id="poor-performance">Poor Performance</h3>
+<p><strong>Problem</strong>: Nested VMs run slowly</p>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Enable hardware passthrough if available</li>
+<li>Use SSD storage</li>
+<li>Increase CPU and memory allocation</li>
+<li>Enable hugepages on Proxmox host</li>
+</ul>
+<h2 id="running-nested-vms">Running Nested VMs</h2>
+<p>Once ESXi is installed and configured:</p>
+<ol>
+<li><strong>Create Port Groups</strong>: Set up virtual switches and port groups</li>
+<li><strong>Upload ISOs</strong>: Upload guest OS ISOs to ESXi datastore</li>
+<li><strong>Create VMs</strong>: Create nested VMs through the vSphere Client</li>
+<li><strong>Install VMware Tools</strong>: For better performance in nested VMs</li>
+</ol>
+<h3 id="example-creating-a-vm-via-esxi-cli">Example: Creating a VM via ESXi CLI</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># SSH to ESXi and list datastores</span>
+</span></span><span style="display:flex;"><span>esxcli storage filesystem list
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create VM registration</span>
+</span></span><span style="display:flex;"><span>vim-cmd solo/registervm /vmfs/volumes/datastore1/vmname/vmname.vmx
+</span></span></code></pre></div><h2 id="backup-and-snapshots">Backup and Snapshots</h2>
+<h3 id="proxmox-level">Proxmox Level</h3>
+<p>You can backup the entire ESXi VM using Proxmox Backup Server or vzdump:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create backup</span>
+</span></span><span style="display:flex;"><span>vzdump <span style="color:#ae81ff">100</span> --storage backup-storage --mode snapshot
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create snapshot</span>
+</span></span><span style="display:flex;"><span>qm snapshot <span style="color:#ae81ff">100</span> pre-upgrade
+</span></span></code></pre></div><h3 id="esxi-level">ESXi Level</h3>
+<p>Use vSphere&rsquo;s built-in snapshot functionality for nested VMs, but be aware of the performance implications of nested snapshots.</p>
+<h2 id="security-considerations">Security Considerations</h2>
+<ol>
+<li><strong>Network Isolation</strong>: Place ESXi management on a separate VLAN</li>
+<li><strong>Firewall Rules</strong>: Restrict access to ESXi management interface</li>
+<li><strong>SSH Access</strong>: Disable SSH when not in use</li>
+<li><strong>Lockdown Mode</strong>: Enable ESXi lockdown mode for production</li>
+<li><strong>Regular Updates</strong>: Keep both Proxmox and ESXi updated</li>
+</ol>
+<h2 id="resource-requirements-summary">Resource Requirements Summary</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>Minimum</th>
+          <th>Recommended</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Proxmox RAM</strong></td>
+          <td>32GB</td>
+          <td>64GB+</td>
+      </tr>
+      <tr>
+          <td><strong>ESXi RAM</strong></td>
+          <td>8GB</td>
+          <td>16-32GB</td>
+      </tr>
+      <tr>
+          <td><strong>CPU Cores</strong></td>
+          <td>4</td>
+          <td>8+</td>
+      </tr>
+      <tr>
+          <td><strong>Storage</strong></td>
+          <td>64GB SSD</td>
+          <td>256GB+ NVMe</td>
+      </tr>
+      <tr>
+          <td><strong>Network</strong></td>
+          <td>1GbE</td>
+          <td>10GbE</td>
+      </tr>
+  </tbody>
+</table>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="virtualization" term="virtualization" label="Virtualization" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="virtualization" term="virtualization" label="virtualization" />
+                             
+                                <category scheme="homelab" term="homelab" label="homelab" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="vmware" term="vmware" label="vmware" />
+                             
+                                <category scheme="esxi" term="esxi" label="esxi" />
+                             
+                                <category scheme="vsphere" term="vsphere" label="vSphere" />
+                             
+                                <category scheme="nested-virtualization" term="nested-virtualization" label="nested-virtualization" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>
