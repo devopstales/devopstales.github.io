@@ -9,11 +9,1253 @@
             <link href="https://devopstales.github.io/windows/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/windows/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/windows/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-03-11T14:47:06+00:00</updated>
+    <updated>2026-03-16T12:28:42+00:00</updated>
     
     
     
     
         <id>https://devopstales.github.io/windows/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to Configure Windows RADIUS and UniFi Controller]]></title>
+            <link href="https://devopstales.github.io/windows/windows-server-radius/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/windows/windows-server-radius/</id>
+            
+            
+            <published>2026-03-12T00:00:00+00:00</published>
+            <updated>2026-03-12T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Implementing 802.1X wireless authentication with Windows NPS (Network Policy Server) and UniFi access points provides enterprise-grade security for your wireless network. This updated guide for 2026 covers Windows Server 2022/2025 and the latest UniFi Controller.</p>
+<h2 id="architecture-overview">Architecture Overview</h2>
+<pre tabindex="0"><code>┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Client    │◄──►│   UniFi     │◄──►│  Windows    │◄──►│   Active    │
+│  (Supplicant)│    │     AP      │    │    NPS      │    │  Directory  │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+     802.1X              RADIUS            LDAP/AD
+    EAPOL               UDP 1812
+</code></pre><h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li><strong>Windows Server 2022/2025</strong> (Domain Controller or Member Server)</li>
+<li><strong>Active Directory Domain</strong> with user accounts</li>
+<li><strong>UniFi Controller</strong> (self-hosted or cloud key)</li>
+<li><strong>UniFi Access Points</strong> with latest firmware</li>
+<li><strong>Network connectivity</strong> between APs and NPS server</li>
+</ul>
+<h2 id="install-the-nps-server-role">Install the NPS Server Role</h2>
+<h3 id="using-server-manager">Using Server Manager</h3>
+<ol>
+<li>Open <strong>Server Manager</strong> → <strong>Manage</strong> → <strong>Add Roles and Features</strong></li>
+<li>Click <strong>Next</strong> through the Before You Begin screen</li>
+<li>Select <strong>Role-based or feature-based installation</strong></li>
+<li>Select your server from the pool</li>
+<li>Check <strong>Network Policy and Access Services</strong></li>
+</ol>
+<p><img src="/img/include/radius001.avif" alt="Add Roles Wizard"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ol start="6">
+<li>Click <strong>Add Features</strong> when prompted</li>
+<li>Click <strong>Next</strong> through the Features screen</li>
+</ol>
+<p><img src="/img/include/radius002.avif" alt="NPS Role"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ol start="8">
+<li>On the <strong>Network Policy and Access Services</strong> screen, click <strong>Next</strong></li>
+<li>Ensure <strong>Network Policy Server</strong> is checked under Role Services</li>
+</ol>
+<p><img src="/img/include/radius003.avif" alt="NPS Role Services"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ol start="10">
+<li>Click <strong>Next</strong> and then <strong>Install</strong></li>
+</ol>
+<p><img src="/img/include/radius004.avif" alt="Install NPS"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="using-powershell">Using PowerShell</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span><span style="color:#75715e"># Install NPS role</span>
+</span></span><span style="display:flex;"><span>Install-WindowsFeature NPAS -IncludeManagementTools
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify installation</span>
+</span></span><span style="display:flex;"><span>Get-WindowsFeature NPAS
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Register NPS in Active Directory (if not done automatically)</span>
+</span></span><span style="display:flex;"><span>Register-Server -Server <span style="color:#e6db74">&#34;localhost&#34;</span>
+</span></span></code></pre></div><h2 id="configure-firewall-rules">Configure Firewall Rules</h2>
+<h3 id="using-windows-defender-firewall">Using Windows Defender Firewall</h3>
+<p>Open <strong>Windows Defender Firewall with Advanced Security</strong> and create inbound rules:</p>
+<ol>
+<li><strong>New Rule</strong> → <strong>Port</strong> → <strong>Next</strong></li>
+<li>Select <strong>TCP</strong> and enter port <strong>1812</strong></li>
+<li>Select <strong>Allow the connection</strong></li>
+<li>Apply to appropriate profiles (Domain recommended)</li>
+<li>Name: &ldquo;RADIUS Authentication (TCP)&rdquo;</li>
+</ol>
+<p><img src="/img/include/radius019.avif" alt="Firewall Rule 1"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/radius020.avif" alt="Firewall Rule 2"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Repeat for:</p>
+<ul>
+<li><strong>UDP 1812</strong> (RADIUS Authentication)</li>
+<li><strong>UDP 1813</strong> (RADIUS Accounting)</li>
+<li><strong>TCP 1813</strong> (RADIUS Accounting - optional)</li>
+</ul>
+<p><img src="/img/include/radius021.avif" alt="Firewall Rule 3"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/radius022.avif" alt="Firewall Rule 4"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="using-powershell-1">Using PowerShell</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span><span style="color:#75715e"># Create firewall rules</span>
+</span></span><span style="display:flex;"><span>New-NetFirewallRule -DisplayName <span style="color:#e6db74">&#34;RADIUS Authentication UDP&#34;</span> `
+</span></span><span style="display:flex;"><span>  -Direction Inbound -Protocol UDP -LocalPort <span style="color:#ae81ff">1812</span> -Action Allow
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>New-NetFirewallRule -DisplayName <span style="color:#e6db74">&#34;RADIUS Accounting UDP&#34;</span> `
+</span></span><span style="display:flex;"><span>  -Direction Inbound -Protocol UDP -LocalPort <span style="color:#ae81ff">1813</span> -Action Allow
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>New-NetFirewallRule -DisplayName <span style="color:#e6db74">&#34;RADIUS Authentication TCP&#34;</span> `
+</span></span><span style="display:flex;"><span>  -Direction Inbound -Protocol TCP -LocalPort <span style="color:#ae81ff">1812</span> -Action Allow
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>New-NetFirewallRule -DisplayName <span style="color:#e6db74">&#34;RADIUS Accounting TCP&#34;</span> `
+</span></span><span style="display:flex;"><span>  -Direction Inbound -Protocol TCP -LocalPort <span style="color:#ae81ff">1813</span> -Action Allow
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify rules</span>
+</span></span><span style="display:flex;"><span>Get-NetFirewallRule | Where-Object {$_.DisplayName <span style="color:#f92672">-like</span> <span style="color:#e6db74">&#34;*RADIUS*&#34;</span>}
+</span></span></code></pre></div><h2 id="configure-nps-server">Configure NPS Server</h2>
+<h3 id="launch-nps-console">Launch NPS Console</h3>
+<p>Open <strong>Network Policy Server</strong> from Server Manager or run:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span>nps.msc
+</span></span></code></pre></div><h3 id="register-nps-in-active-directory">Register NPS in Active Directory</h3>
+<p>If not already done:</p>
+<ol>
+<li>Right-click <strong>NPS (Local)</strong> in the left pane</li>
+<li>Select <strong>Register server in Active Directory</strong></li>
+<li>Click <strong>OK</strong> to confirm</li>
+</ol>
+<p><img src="/img/include/radius005.avif" alt="Register NPS"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="configure-8021x-wireless-network">Configure 802.1X Wireless Network</h3>
+<ol>
+<li>In the NPS console, click <strong>NPS (Local)</strong></li>
+<li>Select <strong>RADIUS Clients and Servers</strong> → <strong>RADIUS Clients</strong></li>
+<li>Right-click <strong>RADIUS Clients</strong> → <strong>New</strong></li>
+</ol>
+<p><img src="/img/include/radius012.avif" alt="RADIUS Clients"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="add-unifi-access-points-as-radius-clients">Add UniFi Access Points as RADIUS Clients</h3>
+<p>For each UniFi AP (or use a network range):</p>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Friendly name</strong></td>
+          <td>AP-Floor1-01 (descriptive name)</td>
+      </tr>
+      <tr>
+          <td><strong>Manufacturer</strong></td>
+          <td>UniFi (or Any)</td>
+      </tr>
+      <tr>
+          <td><strong>Address (IP or DNS)</strong></td>
+          <td>192.168.1.10 (AP IP address)</td>
+      </tr>
+      <tr>
+          <td><strong>Shared secret</strong></td>
+          <td>[Generate a strong secret]</td>
+      </tr>
+      <tr>
+          <td><strong>Confirm shared secret</strong></td>
+          <td>[Same secret]</td>
+      </tr>
+  </tbody>
+</table>
+<p><img src="/img/include/radius013.avif" alt="Add RADIUS Client"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/radius014.avif" alt="RADIUS Client Config"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p><strong>Best Practices:</strong></p>
+<ul>
+<li>Use a unique shared secret per AP or AP group</li>
+<li>Minimum 22 characters with mixed case, numbers, and symbols</li>
+<li>Store secrets securely (password manager)</li>
+</ul>
+<h3 id="configure-network-policies">Configure Network Policies</h3>
+<ol>
+<li>Right-click <strong>Network Policies</strong> → <strong>New</strong></li>
+<li>Select <strong>RADIUS server for 802.1X Wireless or Wired Connections</strong></li>
+</ol>
+<p><img src="/img/include/radius015.avif" alt="New Policy Wizard"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h4 id="policy-configuration">Policy Configuration</h4>
+<p><strong>Specify 802.1X Switch or Wireless Access Point:</strong></p>
+<ul>
+<li>Select your APs from the list or add new ones</li>
+</ul>
+<p><strong>Specify RADIUS Client:</strong></p>
+<ul>
+<li>Select the RADIUS clients you configured</li>
+</ul>
+<p><strong>Configure Authentication Methods:</strong></p>
+<p><img src="/img/include/radius016.avif" alt="Authentication Methods"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Recommended settings for 2026:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Method</th>
+          <th>Setting</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Microsoft: Protected EAP (PEAP)</strong></td>
+          <td>Enabled</td>
+      </tr>
+      <tr>
+          <td><strong>Microsoft: Smart Card or other certificate</strong></td>
+          <td>Enabled</td>
+      </tr>
+      <tr>
+          <td><strong>EAP Types</strong></td>
+          <td>EAP-TLS (recommended) or PEAP-MSCHAPv2</td>
+      </tr>
+  </tbody>
+</table>
+<p><strong>For PEAP-MSCHAPv2:</strong></p>
+<ul>
+<li>Uncheck &ldquo;Enable Fast Reconnect&rdquo;</li>
+<li>Click &ldquo;Configure&rdquo; and ensure server certificate is selected</li>
+<li>Uncheck &ldquo;Enable Identity Privacy&rdquo; unless required</li>
+</ul>
+<p><strong>For EAP-TLS (Recommended):</strong></p>
+<ul>
+<li>Select your CA certificate</li>
+<li>Enable &ldquo;Use Windows Hello for Business&rdquo; if applicable</li>
+</ul>
+<h4 id="configure-constraints">Configure Constraints</h4>
+<p><img src="/img/include/radius017.avif" alt="Policy Constraints"  loading="lazy" decoding="async" class="zoomable" /></p>
+<table>
+  <thead>
+      <tr>
+          <th>Constraint</th>
+          <th>Recommended Setting</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Authentication Methods</strong></td>
+          <td>PEAP or EAP-TLS</td>
+      </tr>
+      <tr>
+          <td><strong>Idle Timeout</strong></td>
+          <td>30 minutes</td>
+      </tr>
+      <tr>
+          <td><strong>Session Timeout</strong></td>
+          <td>8 hours</td>
+      </tr>
+      <tr>
+          <td><strong>Called Station ID</strong></td>
+          <td>Restrict to specific SSIDs if needed</td>
+      </tr>
+      <tr>
+          <td><strong>NAS Port Type</strong></td>
+          <td>Wireless - IEEE 802.11</td>
+      </tr>
+  </tbody>
+</table>
+<h4 id="configure-settings">Configure Settings</h4>
+<p><img src="/img/include/radius018.avif" alt="Policy Settings"  loading="lazy" decoding="async" class="zoomable" /></p>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Configuration</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Standard</strong></td>
+          <td>Log requests, discard if unable</td>
+      </tr>
+      <tr>
+          <td><strong>RADIUS Attributes</strong></td>
+          <td>Add vendor-specific attributes as needed</td>
+      </tr>
+      <tr>
+          <td><strong>RADIUS Authentication</strong></td>
+          <td>Ignore NAS-Port-Type if needed</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="configure-unifi-controller">Configure UniFi Controller</h2>
+<h3 id="access-unifi-network-application">Access UniFi Network Application</h3>
+<p>Navigate to your UniFi Controller (<code>https://controller.unifi.local/</code>) and log in.</p>
+<h3 id="create-wireless-network">Create Wireless Network</h3>
+<ol>
+<li>Go to <strong>Settings</strong> → <strong>WiFi</strong></li>
+<li>Click <strong>Create New WiFi Network</strong></li>
+</ol>
+<p><img src="/img/include/radius026.avif" alt="UniFi WiFi Settings"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="configure-ssid">Configure SSID</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Name (SSID)</strong></td>
+          <td>Enterprise-WiFi</td>
+      </tr>
+      <tr>
+          <td><strong>Security</strong></td>
+          <td>WPA Enterprise</td>
+      </tr>
+      <tr>
+          <td><strong>Authentication</strong></td>
+          <td>RADIUS</td>
+      </tr>
+      <tr>
+          <td><strong>Enable Security Settings</strong></td>
+          <td>Yes</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="create-radius-profile">Create RADIUS Profile</h3>
+<ol>
+<li>Click <strong>Create New RADIUS Profile</strong></li>
+<li>Configure the following:</li>
+</ol>
+<p><img src="/img/include/radius027.avif" alt="RADIUS Profile"  loading="lazy" decoding="async" class="zoomable" /></p>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Profile Name</strong></td>
+          <td>Corporate-NPS</td>
+      </tr>
+      <tr>
+          <td><strong>Authentication Server</strong></td>
+          <td>192.168.1.50 (NPS server IP)</td>
+      </tr>
+      <tr>
+          <td><strong>Authentication Port</strong></td>
+          <td>1812</td>
+      </tr>
+      <tr>
+          <td><strong>Authentication Secret</strong></td>
+          <td>[Your shared secret]</td>
+      </tr>
+      <tr>
+          <td><strong>Accounting Server</strong></td>
+          <td>192.168.1.50</td>
+      </tr>
+      <tr>
+          <td><strong>Accounting Port</strong></td>
+          <td>1813</td>
+      </tr>
+      <tr>
+          <td><strong>Accounting Secret</strong></td>
+          <td>[Your shared secret]</td>
+      </tr>
+  </tbody>
+</table>
+<p><img src="/img/include/radius028.avif" alt="RADIUS Settings"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="advanced-security-settings">Advanced Security Settings</h3>
+<p>For enhanced security in 2026:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Recommended</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>PMF (Protected Management Frames)</strong></td>
+          <td>Required</td>
+      </tr>
+      <tr>
+          <td><strong>WPA3 Transition Mode</strong></td>
+          <td>Enabled (if clients support)</td>
+      </tr>
+      <tr>
+          <td><strong>Minimum Data Rate Control</strong></td>
+          <td>Disable legacy rates (1, 2, 5.5, 11 Mbps)</td>
+      </tr>
+      <tr>
+          <td><strong>Fast Roaming</strong></td>
+          <td>Enabled (802.11r)</td>
+      </tr>
+      <tr>
+          <td><strong>UAPSD</strong></td>
+          <td>Enabled for voice optimization</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="apply-configuration">Apply Configuration</h3>
+<ol>
+<li>Review settings</li>
+<li>Click <strong>Apply Changes</strong></li>
+<li>Wait for APs to provision (may take 2-5 minutes)</li>
+</ol>
+<h2 id="test-wireless-authentication">Test Wireless Authentication</h2>
+<h3 id="windows-client">Windows Client</h3>
+<ol>
+<li>Connect to the Enterprise-WiFi network</li>
+<li>Enter domain credentials when prompted</li>
+<li>Verify connection succeeds</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span><span style="color:#75715e"># View wireless profiles</span>
+</span></span><span style="display:flex;"><span>netsh wlan show profiles
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># View detailed profile info</span>
+</span></span><span style="display:flex;"><span>netsh wlan show profile name=<span style="color:#e6db74">&#34;Enterprise-WiFi&#34;</span> key=clear
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test authentication</span>
+</span></span><span style="display:flex;"><span>netsh wlan connect name=<span style="color:#e6db74">&#34;Enterprise-WiFi&#34;</span>
+</span></span></code></pre></div><h3 id="view-nps-logs">View NPS Logs</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span><span style="color:#75715e"># View NPS logs</span>
+</span></span><span style="display:flex;"><span>Get-EventLog -LogName <span style="color:#e6db74">&#34;Security&#34;</span> -Source <span style="color:#e6db74">&#34;IAS&#34;</span> -Newest <span style="color:#ae81ff">50</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Or use Event Viewer:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Event Viewer → Windows Logs → Security → Filter by Source: IAS</span>
+</span></span></code></pre></div><h3 id="unifi-controller-logs">UniFi Controller Logs</h3>
+<p>In UniFi Controller:</p>
+<ol>
+<li>Go to <strong>Insights</strong> or <strong>Logs</strong></li>
+<li>Filter for authentication events</li>
+<li>Verify RADIUS authentication success</li>
+</ol>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="common-issues">Common Issues</h3>
+<h4 id="the-network-password-needs-to-be-entered-again">&ldquo;The network password needs to be entered again&rdquo;</h4>
+<p><strong>Cause:</strong> Incorrect shared secret or RADIUS server unreachable</p>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Verify shared secret matches on both NPS and UniFi</li>
+<li>Check firewall rules allow UDP 1812/1813</li>
+<li>Test connectivity: <code>Test-NetConnection &lt;NPS-IP&gt; -Port 1812</code></li>
+</ul>
+<h4 id="cant-connect-to-this-network">&ldquo;Can&rsquo;t connect to this network&rdquo;</h4>
+<p><strong>Cause:</strong> Certificate issues or EAP type mismatch</p>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Verify NPS server has valid certificate</li>
+<li>Check EAP types match between NPS and client</li>
+<li>For PEAP, ensure server certificate is trusted</li>
+</ul>
+<h4 id="authentication-succeeds-but-no-network-access">Authentication succeeds but no network access</h4>
+<p><strong>Cause:</strong> VLAN configuration or authorization issues</p>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Check NPS network policy allows the user group</li>
+<li>Verify VLAN assignment in UniFi</li>
+<li>Check switch port configuration</li>
+</ul>
+<h3 id="nps-diagnostic-commands">NPS Diagnostic Commands</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span><span style="color:#75715e"># Check NPS service status</span>
+</span></span><span style="display:flex;"><span>Get-Service IAS
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Restart NPS service</span>
+</span></span><span style="display:flex;"><span>Restart-Service IAS
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># View NPS configuration</span>
+</span></span><span style="display:flex;"><span>Get-NpsConfiguration
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test RADIUS client connectivity</span>
+</span></span><span style="display:flex;"><span>Test-NetConnection -ComputerName &lt;NPS-IP&gt; -Port <span style="color:#ae81ff">1812</span>
+</span></span></code></pre></div><h3 id="unifi-diagnostic-commands">UniFi Diagnostic Commands</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># SSH to UniFi AP</span>
+</span></span><span style="display:flex;"><span>ssh admin@&lt;ap-ip&gt;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># View RADIUS statistics</span>
+</span></span><span style="display:flex;"><span>cat /proc/sys/net/ipv4/conf/all/accept_redirects
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check AP logs</span>
+</span></span><span style="display:flex;"><span>tail -f /var/log/messages | grep -i radius
+</span></span></code></pre></div><h2 id="security-best-practices-for-2026">Security Best Practices for 2026</h2>
+<h3 id="certificate-based-authentication-eap-tls">Certificate-Based Authentication (EAP-TLS)</h3>
+<p>Migrate from password-based (PEAP-MSCHAPv2) to certificate-based authentication:</p>
+<ol>
+<li>Deploy certificates to all devices via Intune or Group Policy</li>
+<li>Configure NPS to require EAP-TLS</li>
+<li>Disable password-based methods</li>
+</ol>
+<h3 id="nps-hardening">NPS Hardening</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span><span style="color:#75715e"># Enable NPS logging</span>
+</span></span><span style="display:flex;"><span>Set-ItemProperty -Path <span style="color:#e6db74">&#34;HKLM:\SYSTEM\CurrentControlSet\Services\RemoteAccess\Parameters\LogFileDirectories&#34;</span> `
+</span></span><span style="display:flex;"><span>  -Name <span style="color:#e6db74">&#34;LogFiles&#34;</span> -Value <span style="color:#e6db74">&#34;C:\Windows\System32\LogFiles\NPS&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Configure account lockout policy</span>
+</span></span><span style="display:flex;"><span>net accounts /lockoutthreshold<span style="color:#960050;background-color:#1e0010">:</span><span style="color:#ae81ff">5</span> /lockoutduration<span style="color:#960050;background-color:#1e0010">:</span><span style="color:#ae81ff">30</span>
+</span></span></code></pre></div><h3 id="network-segmentation">Network Segmentation</h3>
+<ul>
+<li>Place wireless clients on separate VLAN</li>
+<li>Implement network access control (NAC)</li>
+<li>Use firewall rules to restrict wireless client access</li>
+</ul>
+<h3 id="monitoring-and-alerting">Monitoring and Alerting</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-powershell" data-lang="powershell"><span style="display:flex;"><span><span style="color:#75715e"># Create scheduled task to monitor failed authentications</span>
+</span></span><span style="display:flex;"><span>$action = New-ScheduledTaskAction -Execute <span style="color:#e6db74">&#34;PowerShell.exe&#34;</span> `
+</span></span><span style="display:flex;"><span>  -Argument <span style="color:#e6db74">&#34;-Command Get-EventLog -LogName Security -Source IAS -EntryType FailureAudit -Newest 10&#34;</span>
+</span></span><span style="display:flex;"><span>$trigger = New-ScheduledTaskTrigger -Daily -At 8am
+</span></span><span style="display:flex;"><span>Register-ScheduledTask -TaskName <span style="color:#e6db74">&#34;NPS-Failure-Monitor&#34;</span> -Action $action -Trigger $trigger
+</span></span></code></pre></div><h2 id="windows-server-2025-enhancements">Windows Server 2025 Enhancements</h2>
+<p>Windows Server 2025 introduces:</p>
+<ul>
+<li><strong>Enhanced NPS logging</strong> with more detailed authentication data</li>
+<li><strong>Improved certificate validation</strong> for EAP-TLS</li>
+<li><strong>Better integration with Azure AD</strong> for hybrid scenarios</li>
+<li><strong>TLS 1.3 support</strong> for RADIUS over TLS (RadSec)</li>
+</ul>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="Windows" />
+                             
+                                <category scheme="networking" term="networking" label="Networking" />
+                             
+                                <category scheme="security" term="security" label="Security" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="active-directory" term="active-directory" label="active-directory" />
+                             
+                                <category scheme="network-security" term="network-security" label="network-security" />
+                             
+                                <category scheme="unifi" term="unifi" label="unifi" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                             
+                                <category scheme="active-directory" term="active-directory" label="Active Directory" />
+                             
+                                <category scheme="radius" term="radius" label="RADIUS" />
+                             
+                                <category scheme="nps" term="nps" label="NPS" />
+                             
+                                <category scheme="unifi" term="unifi" label="UniFi" />
+                             
+                                <category scheme="802.1x" term="802.1x" label="802.1X" />
+                             
+                                <category scheme="wpa-enterprise" term="wpa-enterprise" label="WPA-Enterprise" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Move Windows Certificate Authority to another server]]></title>
+            <link href="https://devopstales.github.io/windows/move-certificate-authority-to-anoter-server/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/windows/move-certificate-authority-to-anoter-server/</id>
+            
+            
+            <published>2024-10-22T00:00:00+00:00</published>
+            <updated>2024-10-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show how to move Windows Certificate Authority role to another Server.</p>
+<h3 id="backup-the-current-root-ca">Backup the current Root CA</h3>
+<p>Open the Certification Authority manager.</p>
+<p><img src="/img/include/move-root-ca01.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Right click the name of the CA and select <code>All Tasks &gt; Back up CA</code>.</p>
+<p><img src="/img/include/move-root-ca02.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>The <code>Certification Authority Backup Wizard</code> opens. Click <code>Next</code>.</p>
+<p>Select both <code>Private key and CA certificate</code> and <code>Certificate database and certificate database log</code> options. Click <code>Browse</code> and select a backup location then click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca03.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Enter a <code>Password</code> to gain access to the private key and click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca04.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="backup-the-ca-registry-key">Backup the CA registry key</h3>
+<p>Now run the <code>regedit</code> command to export the registry key.</p>
+<p>Navigate to <code>HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration</code>, right click the <code>Root CA name</code> and select <code>Export</code>.</p>
+<p><img src="/img/include/move-root-ca05.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Select the path to store the file, specify the <code>File name</code> and click <code>Save</code>.</p>
+<p><img src="/img/include/move-root-ca06.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="remove-the-ca-role">Remove the CA role</h3>
+<p>The CA role must be removed from the server to dismiss.
+From the <code>Server Manager</code> select <code>Manage &gt; Remove Roles and Features</code> option and Click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca07.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Choose <code>Select a server from the server pool</code> and click <code>Next</code>. Untick the <code>Certification Authority</code> role and <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca08.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Click <code>Remove Features</code>.</p>
+<p>The <code>Certification Authority</code> role has been removed from the current server. Click <code>Next</code>.
+Select <code>Restart the destination server automatically if required</code> and click <code>Remove</code>.</p>
+<h3 id="install-the-ca-role-on-the-new-server">Install the CA role on the new server</h3>
+<p>In the new server, open the <code>Server Manager</code> and click <code>Add roles and features</code>.</p>
+<p><img src="/img/include/move-root-ca10.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Select <code>Role-based or feature-based installation</code> option and click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca11.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Choose <code>Select a server from the server pool</code>, select the server and click <code>Next</code>. Then select the <code>Active Directory Certificate Services</code> role and Click <code>Add Features</code> when prompted. Then click Next to install the role.</p>
+<p><img src="/img/include/move-root-ca12.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Click <code>Next</code> to install selected services.</p>
+<p><img src="/img/include/move-root-ca14.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Accept default role services and click <code>Next</code>. Select <code>Restart the destination server automatically if required</code> and click <code>Install</code>.</p>
+<p>When the installation process starts, you can click <code>Close</code>.</p>
+<h3 id="configure-the-new-ca">Configure the new CA</h3>
+<p>When the installation procedure completes, from the <code>Server Manager</code> click the yellow exclamation mark and click on the link <code>Configure Active Directory Certificate Services on the destination server</code>.</p>
+<p><img src="/img/include/move-root-ca15.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Make sure to use an account with<code>Enterprise Administrator</code> permissions. Click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca16.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Select the two role services and click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca17.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Select <code>Enterprise CA</code> as CA type and click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca18.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Select <code>Use existing private key</code> and choose <code>Select a certificate and use its associated private key</code>. Click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca19.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Click <code>Import</code>. Click <code>Browse</code> and select the certificate exported from the old CA and enter the <code>Password</code>. Click <code>OK</code>.</p>
+<p>Select the imported certificate and click <code>Next</code>. Leave default locations and click <code>Next</code>.</p>
+<p>Click <code>Close</code> when the configuration completes successfully.</p>
+<h3 id="import-the-registry-key">Import the registry key</h3>
+<p>Last step is the import of the registry key previously exported from the old CA.</p>
+<p>Before importing the registry key we need to <code>change the name server</code> with the new one. Right click the registry key file (ca_config.reg in the example) and select <code>Edit</code>.</p>
+<p><img src="/img/include/move-root-ca20.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Locate the <code>CAServerName</code> entry and change the name with the current server name and save the file.</p>
+<p>Now open the Command Prompt and stop the ca service with the command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>net stop certsvc
+</span></span></code></pre></div><p>Double click on the registry file to import the settings. Click <code>Yes</code> to confirm the import.</p>
+<p><img src="/img/include/move-root-ca21.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Click <code>OK</code> when values have been added successfully.</p>
+<h3 id="restore-the-database">Restore the database</h3>
+<p>Open the <code>Certification Authority manager</code> and right click the CA name and select<code> All Taks &gt; Restore CA</code>.</p>
+<p><img src="/img/include/move-root-ca22.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>The <code>Certification Authority Restore Wizard</code> opens. Click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca23.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Select both <code>Private key and CA certificate</code> and <code>Certificate database and certificate database log</code> options. Click <code>Browse</code> and select the location where the database is located then click <code>Next</code>.</p>
+<p><img src="/img/include/move-root-ca24.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Enter the <code>Password</code> to gain access to the private key and click <code>Next</code> then click <code>Finish</code> to restore the database.</p>
+<p>Click <code>Yes</code> on the pop-up window to start Active Directory Certificate Services.</p>
+<h3 id="what-about-certificate-templates-do-i-need-to-move-them">What About Certificate Templates? Do I need to Move Them?</h3>
+<p><code>No</code>! Certificate templates are actually stored in <code>Active Directory</code>, NOT in/on the actual Certificate Services server, (that’s why sometimes they take a while to appear after you create them!)</p>
+<p><img src="/img/include/move-root-ca25.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                             
+                                <category scheme="active-directory" term="active-directory" label="Active Directory" />
+                             
+                                <category scheme="certificate-authority" term="certificate-authority" label="Certificate Authority" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[How to: Configure Firefox to use Windows Certificate Store via GPO]]></title>
+            <link href="https://devopstales.github.io/windows/configure-firefox-to-use-windows-certificate-store-via-gpo/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/linux/pfsense-suidproxy/?utm_source=atom_feed" rel="related" type="text/html" title="Configure squid transparent proxy on pfsense" />
+                <link href="https://devopstales.github.io/linux/pfsense-ipsec-mss-clamping/?utm_source=atom_feed" rel="related" type="text/html" title="pfsense: IPSec SSH connectivity issue" />
+                <link href="https://devopstales.github.io/mikrotik/ros-pppoe-server/?utm_source=atom_feed" rel="related" type="text/html" title="MikroTik - RouterOS: PPPOE Server" />
+                <link href="https://devopstales.github.io/cloud/aws-s2s-vpn/?utm_source=atom_feed" rel="related" type="text/html" title="AWS - pfsense: Site-to-site VPN using static routes" />
+                <link href="https://devopstales.github.io/linux/pfsense-ha-ipsec/?utm_source=atom_feed" rel="related" type="text/html" title="HA IPSec VPN with BGP Dynamic Routing between two pfSense Appliances" />
+            
+                <id>https://devopstales.github.io/windows/configure-firefox-to-use-windows-certificate-store-via-gpo/</id>
+            
+            
+            <published>2022-11-16T00:00:00+00:00</published>
+            <updated>2022-11-16T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>I ran into an issue when I enabled HTTPS Inspection on our transparent proxy and Firefox had a certificate error for everyone.</p>
+<h3 id="distribute-ca-certificate-with-gpo">Distribute CA Certificate with GPO</h3>
+<p>You need to place the certificate file to the shared network folder and all users must have a read access to it. Then start the <strong>Group Policy Management console (gpmc.msc).</strong> Select an OU then right click and select <strong>Create a GPO in this domain and Link it here…</strong></p>
+<p><img src="/img/include/ssl-gpo001.avif" alt="create gpo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>In the GPO Editor, go to the section <strong>Computer Configuration -&gt; Policies -&gt; Windows Settings -&gt; Security Settings -&gt; Public Key Policies -&gt; Trusted Root Certification Authorities.</strong></p>
+<p>Right-click in the right part of the GPO editor window and select Import.</p>
+<p><img src="/img/include/ssl-gpo002.avif" alt="import cert to gpo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>Specify the path to the imported certificate file, which you have placed in the shared folder.</p>
+<p>In the corresponding step of the wizard (Place all certificates in the following store), do specify that it has to be placed in the <strong>Trusted Root Certification Authorities.</strong></p>
+<p><img src="/img/include/ssl-gpo003.avif" alt="import cert to gpo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>The certificate distribution policy created. Let’s test the group policy settings  by running <code>gpupdate /force</code> on the client.  Verify that your certificate has appeared in the list of trusted certificates. In the Internet Explorer settings (<strong>Internet Options -&gt; Content -&gt; Certificates -&gt; Trusted Root Certification Authorities</strong>).</p>
+<h3 id="configure-firefox-to-use-windows-certificate-store-via-gpo">Configure Firefox to use Windows Certificate Store via GPO</h3>
+<p>The previous GPO did not solved all my problem, but by default Firefox does not look at the Windows Certificate Store. So I looked around on the inter nat. Since Firefox 49 there is some support for Windows CA certificates and support for Active Directory provided enterprise root certificates since Firefox 52. It is also supported in macOS to read from the Keychain since version 63.</p>
+<p>Since Firefox 68 this feature is enabled by default in the ESR (enterprise) version, but not in the (standard) rapid release.</p>
+<p>When Firefox opens, it runs any .js scripts in the following location:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>C:<span style="color:#ae81ff">\P</span>rogram Files <span style="color:#f92672">(</span>x86<span style="color:#f92672">)</span><span style="color:#ae81ff">\M</span>ozilla Firefox<span style="color:#ae81ff">\D</span>efaults<span style="color:#ae81ff">\P</span>ref<span style="color:#ae81ff">\ </span>- <span style="color:#ae81ff">64</span> Bit Machine 
+</span></span><span style="display:flex;"><span>C:<span style="color:#ae81ff">\P</span>rogram Files<span style="color:#ae81ff">\M</span>ozilla Firefox<span style="color:#ae81ff">\D</span>efaults<span style="color:#ae81ff">\P</span>ref<span style="color:#ae81ff">\ </span>- <span style="color:#ae81ff">32</span> Bit Machine
+</span></span></code></pre></div><p>You will need to create a file called <code>Enableroot.js</code> (or similar) with the following contents:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-js" data-lang="js"><span style="display:flex;"><span><span style="color:#75715e">/* Allows Firefox reading Windows certificates */</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">pref</span>(<span style="color:#a6e22e">security</span>.<span style="color:#a6e22e">enterprise_roots</span>.<span style="color:#a6e22e">enabled</span>, <span style="color:#66d9ef">true</span>);
+</span></span></code></pre></div><p>First place the js in the same shared folder then create a new GPO. I had already created a GPO to deploy a CA cert across our domain, so I just edited this one.</p>
+<p>Edit GPO, and navigate to: <strong>Computer Config -&gt; Preferences -&gt; Windows Settings -&gt; Files</strong></p>
+<p>Right click, select New then File.</p>
+<ul>
+<li>Set the Action to Create.</li>
+<li>In Source File type the UNC path to the shared <code>Enableroot.js</code> mentioned before.</li>
+<li>In Destination file you want one of the following: <code>C:\Program Files (x86)\Mozilla Firefox\Defaults\Pref\enableroot.js</code></li>
+</ul>
+<blockquote>
+<p>If you have both 32 and 64 bit machines you can make a copy of this with the festination file path <code>C:\Program Files\Mozilla Firefox\Defaults\Pref\enableroot.js</code></p></blockquote>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="Windows" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="pfsense" term="pfsense" label="pfsense" />
+                             
+                                <category scheme="squid" term="squid" label="squid" />
+                             
+                                <category scheme="proxy" term="proxy" label="proxy" />
+                             
+                                <category scheme="active-directory" term="active-directory" label="Active Directory" />
+                             
+                                <category scheme="group-policy" term="group-policy" label="Group Policy " />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Ubuntu 22.04 - Microsoft Active Directory Group Policy]]></title>
+            <link href="https://devopstales.github.io/windows/ubuntu-22.04-ad-join/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/windows/ubuntu-22.04-ad-join/</id>
+            
+            
+            <published>2022-07-05T00:00:00+00:00</published>
+            <updated>2022-07-05T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this Post I will show you the new Active Directory  Group Policy integration in Ubuntu 22.04.</p>
+<h3 id="environment">Environment</h3>
+<ul>
+<li>AD Server:
+<ul>
+<li>Domain Server: Windows Server 20119</li>
+<li>Domain Name: devopstales.intra</li>
+<li>Hostname: dc01.devopstales.intra</li>
+<li>NetBIOS Name: DC01</li>
+<li>Realm: DEVOPSTALES.INTRA</li>
+</ul>
+</li>
+</ul>
+<h3 id="join-the-ubuntu-2204-to-active-directory">Join the Ubuntu 22.04 to Active Directory</h3>
+<p>First install some required packages.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo apt install sssd-ad sssd-tools realmd adcli adsys -y
+</span></span></code></pre></div><p>Change the DNS and NTP server to the Active Directory Domain Controller</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo vi /etc/netplan/01-netcfg.yaml 
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>    nameservers:
+</span></span><span style="display:flex;"><span>        addresses: <span style="color:#f92672">[</span>192.168.100.100<span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>sudo netplan apply
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo vi /etc/ntp.conf
+</span></span><span style="display:flex;"><span>...
+</span></span><span style="display:flex;"><span>server 192.168.100.100 iburst
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>sudo systemctl restart ntp
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>ntpq -p
+</span></span></code></pre></div><p>Test Active Directory Domain Connection</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>realm discover dc01.devopstales.intra
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>devopstales.intra
+</span></span><span style="display:flex;"><span>  type: kerberos
+</span></span><span style="display:flex;"><span>  realm-name: DEVOPSTALES.INTRA
+</span></span><span style="display:flex;"><span>  domain-name: devopstales.intra
+</span></span><span style="display:flex;"><span>  configured: no
+</span></span><span style="display:flex;"><span>  server-software: active-directory
+</span></span><span style="display:flex;"><span>  client-software: sssd
+</span></span><span style="display:flex;"><span>  required-package: sssd-tools
+</span></span><span style="display:flex;"><span>  required-package: sssd
+</span></span><span style="display:flex;"><span>  required-package: libnss-sss
+</span></span><span style="display:flex;"><span>  required-package: libpam-sss
+</span></span><span style="display:flex;"><span>  required-package: adcli
+</span></span><span style="display:flex;"><span>  required-package: samba-common-bin
+</span></span></code></pre></div><p>Join to the Active Directory Domain</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo realm join dc01.devopstales.intra
+</span></span><span style="display:flex;"><span>Password <span style="color:#66d9ef">for</span> Administrator:
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>id developer-user@devopstales.intra
+</span></span><span style="display:flex;"><span>uid<span style="color:#f92672">=</span>1259201103<span style="color:#f92672">(</span>developer-user@devopstales.intra<span style="color:#f92672">)</span> gid<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users@devopstales.intra<span style="color:#f92672">)</span> groups<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users@devopstales.intra<span style="color:#f92672">)</span>,1259200512<span style="color:#f92672">(</span>domain admins@devopstales.intra<span style="color:#f92672">)</span>,1259200572<span style="color:#f92672">(</span>denied rodc password replication group@devopstales.intra<span style="color:#f92672">)</span>
+</span></span></code></pre></div><p>If you want to cut down the domain name from the username:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo vi /etc/sssd/sssd.conf
+</span></span><span style="display:flex;"><span> use_fully_qualified_names <span style="color:#f92672">=</span> False
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>systemctl restart sssd
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>id Administrator
+</span></span><span style="display:flex;"><span>uid<span style="color:#f92672">=</span>1259200500<span style="color:#f92672">(</span>administrator<span style="color:#f92672">)</span> gid<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users<span style="color:#f92672">)</span> groups<span style="color:#f92672">=</span>1259200513<span style="color:#f92672">(</span>domain users<span style="color:#f92672">)</span>,1259200572<span style="color:#f92672">(</span>denied rodc password replication group<span style="color:#f92672">)</span>,1259200512<span style="color:#f92672">(</span>domain admins<span style="color:#f92672">)</span>,1259200518<span style="color:#f92672">(</span>schema admins<span style="color:#f92672">)</span>,1259200520<span style="color:#f92672">(</span>group policy creator owners<span style="color:#f92672">)</span>,1259200519<span style="color:#f92672">(</span>enterprise admins<span style="color:#f92672">)</span>
+</span></span></code></pre></div><p>Enable home folder creation for domain users:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo pam-auth-update --enable mkdir
+</span></span></code></pre></div><p>Now you can login wit and AD user to the Ubuntu:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>exit
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Ubuntu 22.04 LTS dlp.srv.world ttyS0
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>ubuntu-client login: developer-user@devopstales.intra
+</span></span><span style="display:flex;"><span>Password:
+</span></span><span style="display:flex;"><span>Welcome to Ubuntu 22.04 LTS <span style="color:#f92672">(</span>GNU/Linux 5.15.0-25-generic x86_64<span style="color:#f92672">)</span>
+</span></span></code></pre></div><h3 id="manage-linux-gpo-from-windows-ad">Manage Linux GPO from Windows AD</h3>
+<p>To manage Linux clients from AD Group Policy we need to install the custom Group Policies to the AD Domain Controller <code>sysvol</code> folder.</p>
+<p>Firs we generate the custom Group Policy files:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sudo adsysctl policy admx all
+</span></span></code></pre></div><p>On AD Domain Controller copy these files to:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>.admx C:<span style="color:#ae81ff">\W</span>indows<span style="color:#ae81ff">\S</span>YSVOL<span style="color:#ae81ff">\d</span>omain<span style="color:#ae81ff">\P</span>olicies<span style="color:#ae81ff">\P</span>olicyDefinitions<span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>.adml C:<span style="color:#ae81ff">\W</span>indows<span style="color:#ae81ff">\S</span>YSVOL<span style="color:#ae81ff">\d</span>omain<span style="color:#ae81ff">\P</span>olicies<span style="color:#ae81ff">\P</span>olicyDefinitions<span style="color:#ae81ff">\e</span>n-US<span style="color:#ae81ff">\
+</span></span></span></code></pre></div><h3 id="create-gpo-for-sudo">Create GPO for sudo</h3>
+<p>On the Windows Active Directory Domain Controller open  <code>Group Policy Management Console</code></p>
+<p>Create a new GPO and right click <code>Edit</code></p>
+<p>Go to <code>Computer Configuration &gt; Policies &gt; Administrative Templates &gt; Ubuntu &gt; Client Management &gt; Privilege Authorization</code>. Then Select <code>Client Administrators</code> Select <code>Enable</code> and add the usernames.</p>
+<p>Now force sync the GPOs on the Ubuntu client:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>adsysctl policy update -av
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>adsysctl policy applied --details
+</span></span></code></pre></div><p>Now you can sudo with the selected user.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="linux" term="linux" label="Linux" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="active-directory" term="active-directory" label="active-directory" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Subject Alternative Name in Active Dyrectory LDAPS Cerificate]]></title>
+            <link href="https://devopstales.github.io/windows/msad-ldaps-subject-alternative-mame/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/windows/msad-ldaps-subject-alternative-mame/</id>
+            
+            
+            <published>2021-07-22T00:00:00+00:00</published>
+            <updated>2021-07-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can configure custom Subject Alternative Name in Active Directory LDAPS certificate.</p>
+<h3 id="open-mmc">Open mmc</h3>
+<ul>
+<li><code>windows + r</code></li>
+<li>run <code>mmc</code></li>
+</ul>
+<p><img src="/img/include/ldapssan1.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Click <code>File / Add/Remove Snap-in..</code> or <code>ctrl + m</code></li>
+</ul>
+<p><img src="/img/include/ldapssan2.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan3.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Add certificates</li>
+</ul>
+<p><img src="/img/include/ldapssan4.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan5.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Add a nother certificates for service</li>
+</ul>
+<p><img src="/img/include/ldapssan6.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan5.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan7.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Add Certificate Authoraty</li>
+</ul>
+<p><img src="/img/include/ldapssan8.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan5.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="clone-template">Clone Template</h3>
+<ul>
+<li>Right click on <code>Certificate Authoraty / CA NAME / Certificate Template</code> and select <code>Manage</code></li>
+</ul>
+<p><img src="/img/include/ldapssan10.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Select <code>Domain Controller Template</code></li>
+<li>Right Click and <code>Duplicate template</code></li>
+</ul>
+<p><img src="/img/include/ldapssan11.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan12.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan22.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Then click <code>OK</code> and close the <code>Certificate Teplate Console</code></li>
+</ul>
+<h3 id="add-template-to-certificate-template-list">Add template to Certificate Template list</h3>
+<ul>
+<li>At <code>Certificate Authoraty / Domain Controller / Certificate Template</code></li>
+</ul>
+<p><img src="/img/include/ldapssan9.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Rght click on <code>Certificate Template</code> and select <code>New / Certificate Template to Issue</code> Add the new Template</li>
+</ul>
+<p><img src="/img/include/ldapssan13.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="generate-certificate">Generate Certificate</h3>
+<ul>
+<li>Right click on <code>Certificates (Local Computer) / Personal / Certificate</code> and select <code>All Tasks / Request New Certificate</code></li>
+</ul>
+<p><img src="/img/include/ldapssan16.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan17.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan18.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan19.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" />
+<img src="/img/include/ldapssan20.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>enroll</li>
+</ul>
+<p><img src="/img/include/ldapssan21.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h4 id="change-certificate">Change Certificate</h4>
+<ul>
+<li>To activate the new certificate you need to restart the Domain Controller</li>
+</ul>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                             
+                                <category scheme="active-directory" term="active-directory" label="Active Directory" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Active Directory Configure secure LDAPS]]></title>
+            <link href="https://devopstales.github.io/windows/msad-ldaps/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/windows/msad-ldaps/</id>
+            
+            
+            <published>2021-06-22T00:00:00+00:00</published>
+            <updated>2021-06-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In this post I will show you how you can configure LDAPS in Active Directory.</p>
+<h3 id="install-certificate-authority">Install Certificate Authority</h3>
+<ul>
+<li>
+<p>On your Windows Server Machine, click on Start -&gt; Server Manager -&gt; Add Roles and Features.
+<img src="/img/include/adldaps1.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>After selecting Add Roles and Features and Click on Next.
+<img src="/img/include/adldaps2.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose Role-based or feature-based installation option and Click on Next button.
+<img src="/img/include/adldaps3.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose Select a server from the server pool option &amp; Select ldap server from the server pool and click on Next button.
+<img src="/img/include/adldaps4.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose Active Directory Certificate Services option from the list of roles and click on Next button.
+<img src="/img/include/adldaps5.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose nothing from the list of features and click on Next button.</p>
+</li>
+<li>
+<p>In Active Directory Certificate Services (AD CS) choose nothing and Click on Next button.
+<img src="/img/include/adldaps6.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Mark Certification Authority from the list of roles and Click on Next button.
+<img src="/img/include/adldaps7.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Click on Install button to confirm installation.</p>
+</li>
+<li>
+<p>Now, click on Configure Active Directory Certificate Services on Destination Server option and click on Close button.
+<img src="/img/include/adldaps8.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>We can use the currently logged on user to configure role services since it belongs to the local Administrators group. Click on Next button.</p>
+</li>
+<li>
+<p>Mark Certification Authority from the list of roles and Click on Next button.
+<img src="/img/include/adldaps9.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose Enterprise CA option and Click on Next.
+<img src="/img/include/adldaps10.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose Root CA option and Click on Next button.
+<img src="/img/include/adldaps11.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose Create a new private key option and Click on Next button.
+<img src="/img/include/adldaps12.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Choose SHA256 as the hash algorithm and Click on Next. UPDATE : Recommended to select the most recent hashing algorithm.
+<img src="/img/include/adldaps13.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Click on Next button.
+<img src="/img/include/adldaps14.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Specify the validity of the certificate choosing Default 5 years and Click on Next button.
+<img src="/img/include/adldaps15.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Select the default database location and Click on Next.
+<img src="/img/include/adldaps16.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+<li>
+<p>Click on Configure button to confirm.</p>
+</li>
+<li>
+<p>Once the configuration succeeded and click on Close button.
+<img src="/img/include/adldaps17.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+</li>
+</ul>
+<h3 id="configuring-secure-ldap">Configuring secure LDAP:</h3>
+<ul>
+<li>At restart the Domain Controller Will generate a new Certificate fos self.</li>
+</ul>
+<h3 id="test-ldaps">Test LDAPS</h3>
+<ul>
+<li>windows + R</li>
+<li>Run: ldp</li>
+</ul>
+<p><img src="/img/include/adldaps18.avif" alt="Example image"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ul>
+<li>Select connect menu in top right</li>
+<li>Add the name of the serfer for server</li>
+<li>port: 636</li>
+<li>selset SSL</li>
+<li>click OK</li>
+</ul>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                             
+                                <category scheme="active-directory" term="active-directory" label="Active Directory" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Migrate BIND to Windows DNS]]></title>
+            <link href="https://devopstales.github.io/windows/migrate-bind-to-windows-dns/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/windows/migrate-bind-to-windows-dns/</id>
+            
+            
+            <published>2019-06-04T00:00:00+00:00</published>
+            <updated>2019-06-04T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Migrate dns Zones from bind to Windows DNS Server</p>
+<h3 id="linux">Linux</h3>
+<pre tabindex="0"><code>nano /etc/bind/zones.active
+allow-transfer { 192.168.0.8; };
+</code></pre><h3 id="windows">Windows</h3>
+<pre tabindex="0"><code>Add-DnsServerSecondaryZone -Name &#34;devopstales.intra&#34; -ZoneFile &#34;devopstales.intra.dns&#34; -MasterServers 192.168.0.60
+ConvertTo-DnsServerPrimaryZone -Name &#34;devopstales.intra&#34; -PassThru -Verbose -ZoneFile &#34;devopstales.intra.dns&#34; -Force
+Set-DnsServerPrimaryZone -Name &#34;devopstales.intra&#34; –Notify Notifyservers –notifyservers &#34;192.168.0.5&#34; -SecondaryServers &#34;192.168.0.5&#34; –SecureSecondaries TransferToSecureServers
+</code></pre>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                             
+                                <category scheme="dns" term="dns" label="DNS" />
+                             
+                                <category scheme="powershell" term="powershell" label="PowerShell" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Override a single external hostname with internal DNS-entry]]></title>
+            <link href="https://devopstales.github.io/windows/override-a-single-external-hostname-with-internal-dns-entry/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/windows/override-a-single-external-hostname-with-internal-dns-entry/</id>
+            
+            
+            <published>2019-06-04T00:00:00+00:00</published>
+            <updated>2019-06-04T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Override a single external hostname with internal DNS-entry</p>
+<h3 id="problem">Problem:</h3>
+<p>Company.com has an exernal dns-record for service.company.com which should be resolved to an inernal IP by internal clients.</p>
+<p>Let’s say that service.company.com resolves to 1.1.1.1 by the external DNS but when computers are connecting to this URL from inside the company network the internal DNS servers at ad.company.com needs to resolve service.company.com to 172.16.51.25.</p>
+<p>Adding an entry to the hosts-file on each client computer to override service.company.com will not work when clients connect on exteral networks like from home or a coffeeshop.</p>
+<h3 id="solution">Solution:</h3>
+<p>The solution is to add a new Forward Lookup Zone named service.company.com and add a new Host-record, enter the internal IP-address but leave the Name blank.</p>
+<p>On a DNS server running Windows Server 2012 this is of course achieved by using PowerShell!</p>
+<p>First off, create a new DNS Forward Lookup Zone using PowerShell:</p>
+<pre tabindex="0"><code>Add-DnsServerPrimaryZone -Name service.company.com -ReplicationScope Forest
+
+#Then add a host record to the zone:
+
+Add-DnsServerResourceRecordA -IPv4Address 172.16.51.25 -ZoneName service.company.com -Name service.company.com
+</code></pre><p>By specifying service.company.com as both ZoneName and Name a record with the name “(same as parent folder)” will be created.</p>
+<p>This will only override DNS queries for the FQDN service.company.com and will not affect other records in company.com</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="windows" term="windows" label="windows" />
+                             
+                                <category scheme="dns" term="dns" label="DNS" />
+                             
+                                <category scheme="powershell" term="powershell" label="PowerShell" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
 </feed>
