@@ -8,7 +8,7 @@
             <link href="https://devopstales.github.io/virtualization/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/virtualization/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/virtualization/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-03-23T10:36:48+00:00</updated>
+    <updated>2026-03-25T07:34:06+00:00</updated>
     
     
         <author>
@@ -16,6 +16,939 @@
             </author>
     
         <id>https://devopstales.github.io/virtualization/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Proxmox Datacenter Manager: Complete Guide]]></title>
+            <link href="https://devopstales.github.io/virtualization/proxmox-datacenter-manager/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/linux/proxmox-haproxy-lb/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox: Behind HAproxy Load Balancer" />
+                <link href="https://devopstales.github.io/linux/proxmox-custom-certificate/?utm_source=atom_feed" rel="related" type="text/html" title="Proxmox: Set custom certificate" />
+                <link href="https://devopstales.github.io/virtualization/proxmox-pci-passthrough/?utm_source=atom_feed" rel="related" type="text/html" title="Enable Proxmox PCIe Passthrough" />
+            
+                <id>https://devopstales.github.io/virtualization/proxmox-datacenter-manager/</id>
+            
+            
+            <published>2026-03-25T00:00:00+00:00</published>
+            <updated>2026-03-25T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Proxmox Datacenter Manager (PDM) is a centralized management platform for overseeing multiple Proxmox VE clusters and Proxmox Backup Server instances from a single interface. This guide covers installation, configuration, and best practices for managing your virtualization infrastructure at scale.</p>
+<h2 id="what-is-proxmox-datacenter-manager">What is Proxmox Datacenter Manager?</h2>
+<p>Proxmox Datacenter Manager is a <strong>centralized management platform</strong> that provides:</p>
+<ul>
+<li><strong>Multi-cluster management</strong> - Control multiple Proxmox VE clusters from one interface</li>
+<li><strong>Unified monitoring</strong> - Centralized dashboards for all your infrastructure</li>
+<li><strong>Backup management</strong> - Integrate Proxmox Backup Server instances</li>
+<li><strong>Role-based access control</strong> - Granular permissions across clusters</li>
+<li><strong>Audit logging</strong> - Track all administrative actions</li>
+<li><strong>Disaster recovery</strong> - Centralized backup and restore operations</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>┌─────────────────────────────────────────────────────────┐
+</span></span><span style="display:flex;"><span>│          Proxmox Datacenter Manager <span style="color:#f92672">(</span>PDM<span style="color:#f92672">)</span>               │
+</span></span><span style="display:flex;"><span>│                    Web Interface                        │
+</span></span><span style="display:flex;"><span>└────────────┬──────────────────────┬─────────────────────┘
+</span></span><span style="display:flex;"><span>             │                      │
+</span></span><span style="display:flex;"><span>    ┌────────┴────────┐    ┌────────┴────────┐
+</span></span><span style="display:flex;"><span>    │  Cluster A      │    │  Cluster B      │
+</span></span><span style="display:flex;"><span>    │  Proxmox VE     │    │  Proxmox VE     │
+</span></span><span style="display:flex;"><span>    │  - Node <span style="color:#ae81ff">1</span>       │    │  - Node <span style="color:#ae81ff">4</span>       │
+</span></span><span style="display:flex;"><span>    │  - Node <span style="color:#ae81ff">2</span>       │    │  - Node <span style="color:#ae81ff">5</span>       │
+</span></span><span style="display:flex;"><span>    │  - Node <span style="color:#ae81ff">3</span>       │    │  - Node <span style="color:#ae81ff">6</span>       │
+</span></span><span style="display:flex;"><span>    └────────┬────────┘    └────────┬────────┘
+</span></span><span style="display:flex;"><span>             │                      │
+</span></span><span style="display:flex;"><span>    ┌────────┴──────────────────────┴────────┐
+</span></span><span style="display:flex;"><span>    │      Proxmox Backup Server             │
+</span></span><span style="display:flex;"><span>    │      - Centralized Backups             │
+</span></span><span style="display:flex;"><span>    │      - Deduplication                   │
+</span></span><span style="display:flex;"><span>    │      - Encryption                      │
+</span></span><span style="display:flex;"><span>    └────────────────────────────────────────┘
+</span></span></code></pre></div><h2 id="why-use-pdm-in-practice">Why Use PDM in Practice?</h2>
+<p>After extended production use, PDM proves valuable for specific scenarios:</p>
+<h3 id="-what-pdm-excels-at">✅ What PDM Excels At</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Use Case</th>
+          <th>Real-World Benefit</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Cross-cluster VM migration</strong></td>
+          <td>Move workloads between totally separate clusters without manual export/import</td>
+      </tr>
+      <tr>
+          <td><strong>Update visibility</strong></td>
+          <td>See all available updates across all nodes and clusters in one dashboard</td>
+      </tr>
+      <tr>
+          <td><strong>Unified task/log view</strong></td>
+          <td>Review logs and tasks across all nodes with filtering by date, type, user, status</td>
+      </tr>
+      <tr>
+          <td><strong>Capacity overview</strong></td>
+          <td>Identify clusters approaching storage limits or underutilized hardware instantly</td>
+      </tr>
+      <tr>
+          <td><strong>Lifecycle management</strong></td>
+          <td>Track package details before updating, plan capacity and growth over time</td>
+      </tr>
+      <tr>
+          <td><strong>Consistency enforcement</strong></td>
+          <td>Prevent configuration drift and naming convention variations across clusters</td>
+      </tr>
+  </tbody>
+</table>
+<p><img src="/img/include/pdm-update-visibility.webp" alt="Update Visibility"  loading="lazy" decoding="async" class="zoomable" />
+<em>Update visibility across all nodes - see what needs patching at a glance</em></p>
+<p><img src="/img/include/pdm-update-details.webp" alt="Update Details"  loading="lazy" decoding="async" class="zoomable" />
+<em>Drill down into specific package update details before applying</em></p>
+<h3 id="the-mindset-shift">The Mindset Shift</h3>
+<p>PDM changes how you manage Proxmox infrastructure:</p>
+<p><strong>Before PDM (Bottom-Up):</strong></p>
+<ul>
+<li>Log into each cluster&rsquo;s web UI individually</li>
+<li>Check updates node by node</li>
+<li>Manual tracking of which VMs run where</li>
+<li>Inconsistent cleanup habits across clusters</li>
+<li>Hard to spot stale VMs or uneven resource usage</li>
+</ul>
+<p><strong>After PDM (Top-Down):</strong></p>
+<ul>
+<li>Single pane of glass for entire environment</li>
+<li>Cluster-centric management (like VMware vSphere)</li>
+<li>See your entire Proxmox estate holistically</li>
+<li>Easy identification of optimization opportunities</li>
+<li>Consistent workflow as you add nodes/clusters</li>
+</ul>
+<p><img src="/img/include/pdm-cluster-overview.webp" alt="Cluster Overview"  loading="lazy" decoding="async" class="zoomable" />
+<em>Holistic cluster overview - identify optimization opportunities at a glance</em></p>
+<h3 id="when-pdm-is-worth-it">When PDM Is Worth It</h3>
+<p><strong>Deploy PDM if you:</strong></p>
+<ul>
+<li>Run <strong>multiple Proxmox clusters</strong> (2+ clusters)</li>
+<li>Have <strong>standalone Proxmox VE servers</strong> alongside clusters</li>
+<li>Manage infrastructure that&rsquo;s <strong>permanent</strong> (not temporary test setups)</li>
+<li>Care about <strong>consistency and efficiency</strong> across your environment</li>
+<li>Plan to <strong>grow your lab gradually</strong> over time</li>
+</ul>
+<p><strong>PDM has limited value if:</strong></p>
+<ul>
+<li>You have a <strong>single node</strong> or small static cluster</li>
+<li>Your environment <strong>doesn&rsquo;t change much</strong></li>
+<li>You only need basic VM power operations</li>
+</ul>
+<p><img src="/img/include/pdm-resources-view.webp" alt="Resources View"  loading="lazy" decoding="async" class="zoomable" />
+<em>Resource capacity view - track storage, workloads, and utilization across clusters</em></p>
+<p><img src="/img/include/pdm-vm-resources.webp" alt="VM Resources"  loading="lazy" decoding="async" class="zoomable" />
+<em>VM and container management view - see all workloads in one place</em></p>
+<h3 id="real-world-scenario-cross-cluster-migration">Real-World Scenario: Cross-Cluster Migration</h3>
+<p>One of PDM&rsquo;s most valuable features is <strong>seamless VM migration between clusters</strong>:</p>
+<pre tabindex="0"><code>Before PDM:
+1. Export VM from Cluster A (qm dump)
+2. Transfer image to Cluster B (scp/rsync)
+3. Import VM on Cluster B (qm import)
+4. Manually recreate network/storage config
+5. Update DNS/documentation
+
+With PDM:
+1. Select VM in PDM interface
+2. Click Migrate → Choose target cluster
+3. PDM handles the rest
+</code></pre><p><img src="/img/include/pdm-migration-wizard.webp" alt="Migration Wizard"  loading="lazy" decoding="async" class="zoomable" />
+<em>Cross-cluster migration wizard - select source and target seamlessly</em></p>
+<p>This capability alone justifies PDM for multi-cluster environments, enabling:</p>
+<ul>
+<li><strong>Load balancing</strong> across clusters during peak usage</li>
+<li><strong>Hardware maintenance</strong> without downtime</li>
+<li><strong>Disaster recovery</strong> by moving workloads to healthy clusters</li>
+<li><strong>Resource optimization</strong> by consolidating underutilized clusters</li>
+</ul>
+<h2 id="prerequisites">Prerequisites</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>Requirement</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>PDM Server</strong></td>
+          <td>Dedicated VM or physical server</td>
+      </tr>
+      <tr>
+          <td><strong>CPU</strong></td>
+          <td>2+ cores (4+ recommended)</td>
+      </tr>
+      <tr>
+          <td><strong>RAM</strong></td>
+          <td>4GB minimum (8GB+ recommended)</td>
+      </tr>
+      <tr>
+          <td><strong>Storage</strong></td>
+          <td>50GB+ SSD</td>
+      </tr>
+      <tr>
+          <td><strong>Network</strong></td>
+          <td>Static IP, connectivity to all clusters</td>
+      </tr>
+      <tr>
+          <td><strong>Proxmox VE</strong></td>
+          <td>Version 7.4+ (8.x recommended)</td>
+      </tr>
+      <tr>
+          <td><strong>Proxmox Backup Server</strong></td>
+          <td>Version 2.x+ (optional)</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="installation">Installation</h2>
+<h3 id="method-1-install-on-debian-12-bookworm">Method 1: Install on Debian 12 (Bookworm)</h3>
+<p>PDM can be installed on a fresh Debian 12 system:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add Proxmox repository</span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;deb http://download.proxmox.com/debian/pdm bookworm pdm-no-subscription&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  &gt; /etc/apt/sources.list.d/pdm.list
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Import repository key</span>
+</span></span><span style="display:flex;"><span>wget -q https://enterprise.proxmox.com/debian/proxmox-release-bookworm.gpg <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Update package lists</span>
+</span></span><span style="display:flex;"><span>apt update
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install Proxmox Datacenter Manager</span>
+</span></span><span style="display:flex;"><span>apt install proxmox-datacenter-manager
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># The installer will prompt for:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - FQDN (e.g., pdm.mydomain.intra)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - IP address</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - Gateway</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># - DNS server</span>
+</span></span></code></pre></div><h3 id="method-2-install-on-proxmox-ve">Method 2: Install on Proxmox VE</h3>
+<p>You can install PDM on an existing Proxmox VE node (not recommended for production):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add repository (if not already present)</span>
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;deb http://download.proxmox.com/debian/pdm bookworm pdm-no-subscription&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  &gt; /etc/apt/sources.list.d/pdm.list
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Update and install</span>
+</span></span><span style="display:flex;"><span>apt update
+</span></span><span style="display:flex;"><span>apt install proxmox-datacenter-manager
+</span></span></code></pre></div><h3 id="method-3-deploy-as-vm-recommended">Method 3: Deploy as VM (Recommended)</h3>
+<p>Download the PDM ISO and create a VM:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Download PDM ISO</span>
+</span></span><span style="display:flex;"><span>wget https://downloads.proxmox.com/iso/proxmox-datacenter-manager_1.0-1.iso <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -O /var/lib/vz/template/iso/pdm.iso
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create VM via CLI</span>
+</span></span><span style="display:flex;"><span>qm create <span style="color:#ae81ff">100</span> --name pdm <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --memory <span style="color:#ae81ff">4096</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cores <span style="color:#ae81ff">2</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --bios ovmf <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --scsihw virtio-scsi-pci <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --virtio0 local-lvm:32 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --ide2 local:iso/pdm.iso,media<span style="color:#f92672">=</span>cdrom <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --boot order<span style="color:#f92672">=</span>ide2 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --net0 virtio,bridge<span style="color:#f92672">=</span>vmbr0 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --agent enabled<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Start VM and install via console</span>
+</span></span><span style="display:flex;"><span>qm start <span style="color:#ae81ff">100</span>
+</span></span></code></pre></div><h2 id="initial-configuration">Initial Configuration</h2>
+<h3 id="access-the-web-interface">Access the Web Interface</h3>
+<p>After installation, access PDM at:</p>
+<pre tabindex="0"><code>https://&lt;pdm-ip&gt;:8006/
+</code></pre><p>Default credentials:</p>
+<ul>
+<li><strong>Username:</strong> root@pam</li>
+<li><strong>Password:</strong> Set during installation</li>
+</ul>
+<h3 id="add-proxmox-ve-cluster">Add Proxmox VE Cluster</h3>
+<ol>
+<li>Navigate to <strong>Datacenter</strong> → <strong>Clusters</strong> → <strong>Add</strong></li>
+<li>Select <strong>Proxmox VE Cluster</strong></li>
+<li>Enter cluster details:</li>
+</ol>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Name</strong></td>
+          <td>Production-Cluster</td>
+      </tr>
+      <tr>
+          <td><strong>API Endpoint</strong></td>
+          <td><a href="https://pve1.mydomain.intra:8006/api2/json">https://pve1.mydomain.intra:8006/api2/json</a></td>
+      </tr>
+      <tr>
+          <td><strong>Username</strong></td>
+          <td>root@pam (or PAM user with API access)</td>
+      </tr>
+      <tr>
+          <td><strong>Password</strong></td>
+          <td>[Your password]</td>
+      </tr>
+      <tr>
+          <td><strong>Fingerprint</strong></td>
+          <td>Auto-detected (verify manually)</td>
+      </tr>
+  </tbody>
+</table>
+<p><img src="/img/include/pdm_add_cluster.webp" alt="Add Cluster"  loading="lazy" decoding="async" class="zoomable" /></p>
+<ol start="4">
+<li>Click <strong>Add</strong> to connect</li>
+</ol>
+<h3 id="add-proxmox-backup-server">Add Proxmox Backup Server</h3>
+<ol>
+<li>Navigate to <strong>Datacenter</strong> → <strong>Backup Servers</strong> → <strong>Add</strong></li>
+<li>Select <strong>Proxmox Backup Server</strong></li>
+<li>Enter backup server details:</li>
+</ol>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Name</strong></td>
+          <td>PBS-Main</td>
+      </tr>
+      <tr>
+          <td><strong>API Endpoint</strong></td>
+          <td><a href="https://pbs.mydomain.intra:8007/api2/json">https://pbs.mydomain.intra:8007/api2/json</a></td>
+      </tr>
+      <tr>
+          <td><strong>Username</strong></td>
+          <td>root@pam</td>
+      </tr>
+      <tr>
+          <td><strong>Password</strong></td>
+          <td>[Your password]</td>
+      </tr>
+      <tr>
+          <td><strong>Datastore</strong></td>
+          <td>backup-store</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="user-management">User Management</h2>
+<h3 id="create-users">Create Users</h3>
+<ol>
+<li>Navigate to <strong>Datacenter</strong> → <strong>Users</strong> → <strong>Add</strong></li>
+<li>Create user with authentication method:</li>
+</ol>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Username</strong></td>
+          <td>admin</td>
+      </tr>
+      <tr>
+          <td><strong>Realm</strong></td>
+          <td>Linux PAM (pam) or Proxmox VE authentication</td>
+      </tr>
+      <tr>
+          <td><strong>Password</strong></td>
+          <td>[Strong password]</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="create-roles">Create Roles</h3>
+<p>PDM includes predefined roles, but you can create custom ones:</p>
+<ol>
+<li>Navigate to <strong>Datacenter</strong> → <strong>Roles</strong> → <strong>Add</strong></li>
+<li>Define role with specific privileges:</li>
+</ol>
+<table>
+  <thead>
+      <tr>
+          <th>Role</th>
+          <th>Privileges</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>PDMAdmin</strong></td>
+          <td>Datacenter.Admin, Datacenter.Audit</td>
+      </tr>
+      <tr>
+          <td><strong>ClusterOperator</strong></td>
+          <td>Cluster.Console, Cluster.Monitor, VM.PowerManagement</td>
+      </tr>
+      <tr>
+          <td><strong>BackupOperator</strong></td>
+          <td>Backup.Audit, Backup.Modify</td>
+      </tr>
+      <tr>
+          <td><strong>ReadOnly</strong></td>
+          <td>Datacenter.View, Cluster.View</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="assign-permissions">Assign Permissions</h3>
+<ol>
+<li>Navigate to the resource (Cluster, VM, Storage, etc.)</li>
+<li>Click <strong>Permissions</strong> → <strong>Add</strong></li>
+<li>Select user/group and role</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># CLI: Assign role to user</span>
+</span></span><span style="display:flex;"><span>pdmctl acl modify --path /clusters/production <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --user admin@pam <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --role ClusterOperator
+</span></span></code></pre></div><h2 id="monitoring-and-dashboards">Monitoring and Dashboards</h2>
+<h3 id="resource-overview">Resource Overview</h3>
+<p>PDM provides centralized dashboards:</p>
+<ul>
+<li><strong>Cluster Health</strong> - Node status, resource utilization</li>
+<li><strong>VM/CT Overview</strong> - Running instances, resource allocation</li>
+<li><strong>Storage Status</strong> - Capacity, I/O performance</li>
+<li><strong>Network Metrics</strong> - Traffic, errors, packet loss</li>
+</ul>
+<h3 id="create-custom-dashboards">Create Custom Dashboards</h3>
+<ol>
+<li>Navigate to <strong>Dashboard</strong> → <strong>Create Dashboard</strong></li>
+<li>Add widgets:
+<ul>
+<li>CPU/Memory usage charts</li>
+<li>Storage capacity gauges</li>
+<li>Network traffic graphs</li>
+<li>VM status tables</li>
+</ul>
+</li>
+</ol>
+<h3 id="configure-alerts">Configure Alerts</h3>
+<ol>
+<li>Navigate to <strong>Monitoring</strong> → <strong>Alert Rules</strong> → <strong>Add</strong></li>
+<li>Define alert conditions:</li>
+</ol>
+<table>
+  <thead>
+      <tr>
+          <th>Alert</th>
+          <th>Condition</th>
+          <th>Severity</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>High CPU</td>
+          <td>CPU &gt; 90% for 5min</td>
+          <td>Warning</td>
+      </tr>
+      <tr>
+          <td>Critical CPU</td>
+          <td>CPU &gt; 95% for 10min</td>
+          <td>Critical</td>
+      </tr>
+      <tr>
+          <td>Low Storage</td>
+          <td>Storage &lt; 10% free</td>
+          <td>Warning</td>
+      </tr>
+      <tr>
+          <td>Node Offline</td>
+          <td>Node status = offline</td>
+          <td>Critical</td>
+      </tr>
+      <tr>
+          <td>Backup Failed</td>
+          <td>Last backup status = failed</td>
+          <td>Warning</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="alert-notifications">Alert Notifications</h3>
+<p>Configure notification targets:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Email notification</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">smtp_host</span>: <span style="color:#ae81ff">smtp.mydomain.intra</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">smtp_port</span>: <span style="color:#ae81ff">587</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">smtp_user</span>: <span style="color:#ae81ff">pdm@mydomain.intra</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">smtp_from</span>: <span style="color:#ae81ff">pdm-alerts@mydomain.intra</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">recipients</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#ae81ff">admin@mydomain.intra</span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#ae81ff">ops-team@mydomain.intra</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Webhook (Slack, Teams, etc.)</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">webhook_url</span>: <span style="color:#ae81ff">https://hooks.slack.com/services/XXX/YYY/ZZZ</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">webhook_template</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    &#34;text&#34;: &#34;PDM Alert: {{alert_name}} - {{severity}}&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    &#34;attachments&#34;: [{
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      &#34;color&#34;: &#34;{{color}}&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      &#34;fields&#34;: [{
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;title&#34;: &#34;Resource&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;value&#34;: &#34;{{resource_path}}&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;short&#34;: true
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      }]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    }]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  }</span>
+</span></span></code></pre></div><h2 id="backup-management">Backup Management</h2>
+<h3 id="centralized-backup-schedules">Centralized Backup Schedules</h3>
+<ol>
+<li>Navigate to <strong>Backup</strong> → <strong>Schedules</strong> → <strong>Add</strong></li>
+<li>Configure backup job:</li>
+</ol>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Cluster</strong></td>
+          <td>Production-Cluster</td>
+      </tr>
+      <tr>
+          <td><strong>VMs</strong></td>
+          <td>Select VMs or use tag filter</td>
+      </tr>
+      <tr>
+          <td><strong>Backup Server</strong></td>
+          <td>PBS-Main</td>
+      </tr>
+      <tr>
+          <td><strong>Datastore</strong></td>
+          <td>vm-backups</td>
+      </tr>
+      <tr>
+          <td><strong>Schedule</strong></td>
+          <td>Daily at 02:00</td>
+      </tr>
+      <tr>
+          <td><strong>Retention</strong></td>
+          <td>7 daily, 4 weekly, 12 monthly</td>
+      </tr>
+      <tr>
+          <td><strong>Compression</strong></td>
+          <td>ZSTD (fast)</td>
+      </tr>
+      <tr>
+          <td><strong>Encryption</strong></td>
+          <td>Enabled (AES-256)</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="backup-verification">Backup Verification</h3>
+<p>Configure automatic backup verification:</p>
+<ol>
+<li>Navigate to <strong>Backup</strong> → <strong>Verification</strong> → <strong>Add</strong></li>
+<li>Schedule verification jobs to test backup integrity</li>
+</ol>
+<h3 id="restore-operations">Restore Operations</h3>
+<p>Restore VMs from PDM interface:</p>
+<ol>
+<li>Navigate to <strong>Backup</strong> → <strong>Snapshots</strong></li>
+<li>Select backup to restore</li>
+<li>Choose restore options:
+<ul>
+<li>Restore to original location</li>
+<li>Restore to different cluster</li>
+<li>Restore as new VM</li>
+</ul>
+</li>
+</ol>
+<h2 id="multi-cluster-operations">Multi-Cluster Operations</h2>
+<h3 id="vm-migration-between-clusters">VM Migration Between Clusters</h3>
+<p>Migrate VMs across clusters:</p>
+<ol>
+<li>Navigate to <strong>VMs</strong> → Select VM → <strong>Migrate</strong></li>
+<li>Choose target cluster</li>
+<li>Configure migration options:
+<ul>
+<li>Online migration (if storage shared)</li>
+<li>Offline migration (storage vMotion equivalent)</li>
+</ul>
+</li>
+</ol>
+<h3 id="bulk-operations">Bulk Operations</h3>
+<p>Perform operations across multiple VMs:</p>
+<ol>
+<li>Navigate to <strong>VMs</strong> → Select multiple VMs</li>
+<li>Right-click → <strong>Bulk Action</strong></li>
+<li>Available actions:
+<ul>
+<li>Start/Stop/Shutdown</li>
+<li>Migrate</li>
+<li>Backup now</li>
+<li>Create snapshot</li>
+</ul>
+</li>
+</ol>
+<h3 id="tags-and-grouping">Tags and Grouping</h3>
+<p>Organize resources with tags:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add tag to VM</span>
+</span></span><span style="display:flex;"><span>pdmctl set-tag --vm <span style="color:#ae81ff">100</span> --tag production
+</span></span><span style="display:flex;"><span>pdmctl set-tag --vm <span style="color:#ae81ff">100</span> --tag webserver
+</span></span><span style="display:flex;"><span>pdmctl set-tag --vm <span style="color:#ae81ff">100</span> --tag tier-1
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Filter by tag</span>
+</span></span><span style="display:flex;"><span>pdmctl list vms --tag production
+</span></span></code></pre></div><h2 id="advanced-configuration">Advanced Configuration</h2>
+<h3 id="high-availability-for-pdm">High Availability for PDM</h3>
+<p>Deploy PDM in HA configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># On secondary PDM node</span>
+</span></span><span style="display:flex;"><span>apt install proxmox-datacenter-manager-ha
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Configure cluster</span>
+</span></span><span style="display:flex;"><span>pdm-ha-join --primary &lt;primary-pdm-ip&gt; <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --token &lt;ha-token&gt;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify HA status</span>
+</span></span><span style="display:flex;"><span>pdm-ha status
+</span></span></code></pre></div><h3 id="api-access">API Access</h3>
+<p>Use PDM API for automation:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Get API token</span>
+</span></span><span style="display:flex;"><span>pdmctl api token create --user admin@pam <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --name automation-token <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --privsep false
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Use with curl</span>
+</span></span><span style="display:flex;"><span>curl -k -H <span style="color:#e6db74">&#34;Authorization: PDMAPIToken=admin@pam!automation-token:secret&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  https://pdm.mydomain.intra:8006/api2/json/cluster/resources
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Use with pdmctl</span>
+</span></span><span style="display:flex;"><span>export PDM_TOKEN<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;admin@pam!automation-token:secret&#34;</span>
+</span></span><span style="display:flex;"><span>pdmctl cluster list
+</span></span></code></pre></div><h3 id="terraform-integration">Terraform Integration</h3>
+<p>Manage PDM with Terraform:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-hcl" data-lang="hcl"><span style="display:flex;"><span><span style="color:#66d9ef">terraform</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">required_providers</span> {
+</span></span><span style="display:flex;"><span>    proxmox-datacenter-manager <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>      source  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;proxmox/pdm&#34;</span>
+</span></span><span style="display:flex;"><span>      version <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;0.5.0&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">provider</span> <span style="color:#e6db74">&#34;proxmox-datacenter-manager&#34;</span> {
+</span></span><span style="display:flex;"><span>  endpoint <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://pdm.mydomain.intra:8006/api2/json&#34;</span>
+</span></span><span style="display:flex;"><span>  username <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;root@pam&#34;</span>
+</span></span><span style="display:flex;"><span>  password <span style="color:#f92672">=</span> <span style="color:#66d9ef">var</span>.<span style="color:#66d9ef">pdm_password</span>
+</span></span><span style="display:flex;"><span>  insecure <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">resource</span> <span style="color:#e6db74">&#34;pdm_cluster&#34; &#34;production&#34;</span> {
+</span></span><span style="display:flex;"><span>  name       <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;Production-Cluster&#34;</span>
+</span></span><span style="display:flex;"><span>  api_url    <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://pve1.mydomain.intra:8006/api2/json&#34;</span>
+</span></span><span style="display:flex;"><span>  username   <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;root@pam&#34;</span>
+</span></span><span style="display:flex;"><span>  password   <span style="color:#f92672">=</span> <span style="color:#66d9ef">var</span>.<span style="color:#66d9ef">pve_password</span>
+</span></span><span style="display:flex;"><span>  fingerprint <span style="color:#f92672">=</span> <span style="color:#66d9ef">var</span>.<span style="color:#66d9ef">pve_fingerprint</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">resource</span> <span style="color:#e6db74">&#34;pdm_user&#34; &#34;admin&#34;</span> {
+</span></span><span style="display:flex;"><span>  username <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>  realm    <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;pam&#34;</span>
+</span></span><span style="display:flex;"><span>  password <span style="color:#f92672">=</span> <span style="color:#66d9ef">var</span>.<span style="color:#66d9ef">admin_password</span>
+</span></span><span style="display:flex;"><span>  roles    <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#34;PDMAdmin&#34;</span>]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h3 id="ansible-integration">Ansible Integration</h3>
+<p>Automate PDM configuration with Ansible:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Configure Proxmox Datacenter Manager</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">hosts</span>: <span style="color:#ae81ff">pdm</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tasks</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Add Proxmox VE Cluster</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">community.proxmox.proxmox_cluster_info</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">api_host</span>: <span style="color:#e6db74">&#34;{{ pdm_host }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">api_user</span>: <span style="color:#e6db74">&#34;{{ pdm_user }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">api_password</span>: <span style="color:#e6db74">&#34;{{ pdm_password }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">cluster_name</span>: <span style="color:#ae81ff">Production-Cluster</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">state</span>: <span style="color:#ae81ff">present</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Create User</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">community.proxmox.proxmox_user</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">api_host</span>: <span style="color:#e6db74">&#34;{{ pdm_host }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">api_user</span>: <span style="color:#e6db74">&#34;{{ pdm_user }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">api_password</span>: <span style="color:#e6db74">&#34;{{ pdm_password }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">userid</span>: <span style="color:#ae81ff">admin@pam</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">password</span>: <span style="color:#e6db74">&#34;{{ admin_password }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">state</span>: <span style="color:#ae81ff">present</span>
+</span></span></code></pre></div><h2 id="monitoring-integration">Monitoring Integration</h2>
+<h3 id="prometheus-metrics-export">Prometheus Metrics Export</h3>
+<p>PDM can export metrics to Prometheus:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Enable metrics endpoint</span>
+</span></span><span style="display:flex;"><span>pdmctl config set --key metrics.enabled --value true
+</span></span><span style="display:flex;"><span>pdmctl config set --key metrics.port --value <span style="color:#ae81ff">9500</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Scrape config for Prometheus</span>
+</span></span><span style="display:flex;"><span>scrape_configs:
+</span></span><span style="display:flex;"><span>  - job_name: <span style="color:#e6db74">&#39;pdm&#39;</span>
+</span></span><span style="display:flex;"><span>    static_configs:
+</span></span><span style="display:flex;"><span>      - targets: <span style="color:#f92672">[</span><span style="color:#e6db74">&#39;pdm.mydomain.intra:9500&#39;</span><span style="color:#f92672">]</span>
+</span></span></code></pre></div><h3 id="grafana-dashboards">Grafana Dashboards</h3>
+<p>Import PDM dashboards to Grafana:</p>
+<ol>
+<li>Download dashboard JSON from PDM</li>
+<li>Import to Grafana</li>
+<li>Configure Prometheus datasource</li>
+</ol>
+<h3 id="log-aggregation">Log Aggregation</h3>
+<p>Forward PDM logs to central logging:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Configure syslog forwarding</span>
+</span></span><span style="display:flex;"><span>nano /etc/rsyslog.d/pdm-forward.conf
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>*.* @logserver.mydomain.intra:514
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Restart rsyslog</span>
+</span></span><span style="display:flex;"><span>systemctl restart rsyslog
+</span></span></code></pre></div><h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="connection-issues">Connection Issues</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Test cluster connectivity</span>
+</span></span><span style="display:flex;"><span>pdmctl cluster test-connection --name Production-Cluster
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check API endpoint</span>
+</span></span><span style="display:flex;"><span>curl -k https://pve1.mydomain.intra:8006/api2/json/version
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify certificate fingerprint</span>
+</span></span><span style="display:flex;"><span>openssl s_client -connect pve1.mydomain.intra:8006 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -showcerts | openssl x509 -fingerprint -sha256
+</span></span></code></pre></div><h3 id="authentication-problems">Authentication Problems</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># List users</span>
+</span></span><span style="display:flex;"><span>pdmctl user list
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Reset user password</span>
+</span></span><span style="display:flex;"><span>pdmctl user password reset --user admin@pam
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check ACL permissions</span>
+</span></span><span style="display:flex;"><span>pdmctl acl list --path /clusters/production
+</span></span></code></pre></div><h3 id="performance-issues">Performance Issues</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check PDM resource usage</span>
+</span></span><span style="display:flex;"><span>pdmctl node stats
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Analyze database performance</span>
+</span></span><span style="display:flex;"><span>pdmctl db analyze
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Clear old audit logs</span>
+</span></span><span style="display:flex;"><span>pdmctl audit prune --older-than 90d
+</span></span></code></pre></div><h2 id="current-limitations">Current Limitations</h2>
+<p>Understanding PDM&rsquo;s limitations helps set proper expectations:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Limitation</th>
+          <th>Workaround</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>No detailed storage configuration</strong></td>
+          <td>Use native Proxmox node web UI for storage setup</td>
+      </tr>
+      <tr>
+          <td><strong>No network configuration</strong></td>
+          <td>Configure networks via Proxmox node web UI</td>
+      </tr>
+      <tr>
+          <td><strong>No advanced cluster-specific settings</strong></td>
+          <td>Access native Proxmox UI for wizards and advanced options</td>
+      </tr>
+      <tr>
+          <td><strong>Basic VM/container management</strong></td>
+          <td>Limited to power operations and basic views (no dedicated VM dashboard yet)</td>
+      </tr>
+      <tr>
+          <td><strong>Best for multi-node setups</strong></td>
+          <td>Limited value for single node or small static clusters</td>
+      </tr>
+  </tbody>
+</table>
+<p>PDM complements rather than replaces the Proxmox VE web UI—use PDM for centralized management and the native UI for detailed configuration.</p>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="security">Security</h3>
+<ol>
+<li><strong>Use TLS certificates</strong> - Replace self-signed certs with CA-signed</li>
+<li><strong>Enable 2FA</strong> - Require two-factor authentication for admin users</li>
+<li><strong>Network segmentation</strong> - Place PDM on management VLAN</li>
+<li><strong>Regular updates</strong> - Keep PDM updated with security patches</li>
+<li><strong>Audit logging</strong> - Review audit logs regularly</li>
+</ol>
+<h3 id="performance">Performance</h3>
+<ol>
+<li><strong>Dedicated resources</strong> - Don&rsquo;t oversubscribe PDM server</li>
+<li><strong>SSD storage</strong> - Use fast storage for PDM database</li>
+<li><strong>Connection pooling</strong> - Tune API connection limits</li>
+<li><strong>Prune old data</strong> - Regularly clean audit logs and metrics</li>
+</ol>
+<h3 id="operations">Operations</h3>
+<ol>
+<li><strong>Backup PDM</strong> - Regular backups of PDM configuration</li>
+<li><strong>Documentation</strong> - Maintain runbooks for common operations</li>
+<li><strong>Testing</strong> - Test disaster recovery procedures</li>
+<li><strong>Monitoring</strong> - Monitor PDM health itself</li>
+</ol>
+<h2 id="backup-pdm-configuration">Backup PDM Configuration</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Export PDM configuration</span>
+</span></span><span style="display:flex;"><span>pdmctl backup create --output /backup/pdm-config-<span style="color:#66d9ef">$(</span>date +%Y%m%d<span style="color:#66d9ef">)</span>.tar.gz
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Schedule automatic backups</span>
+</span></span><span style="display:flex;"><span>pdmctl backup schedule create <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --schedule <span style="color:#e6db74">&#34;0 2 * * *&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --retention <span style="color:#ae81ff">30</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --output /backup/pdm-config
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Restore from backup</span>
+</span></span><span style="display:flex;"><span>pdmctl backup restore --input /backup/pdm-config-20260325.tar.gz
+</span></span></code></pre></div><h2 id="migration-from-other-platforms">Migration from Other Platforms</h2>
+<h3 id="from-vmware-vcenter">From VMware vCenter</h3>
+<p>Key considerations when migrating from vCenter:</p>
+<table>
+  <thead>
+      <tr>
+          <th>vCenter Feature</th>
+          <th>PDM Equivalent</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>vCenter Server</td>
+          <td>PDM Instance</td>
+      </tr>
+      <tr>
+          <td>ESXi Hosts</td>
+          <td>Proxmox VE Nodes</td>
+      </tr>
+      <tr>
+          <td>vSphere Client</td>
+          <td>PDM Web UI</td>
+      </tr>
+      <tr>
+          <td>vMotion</td>
+          <td>PDM Migration</td>
+      </tr>
+      <tr>
+          <td>DRS</td>
+          <td>Manual or scripted balancing</td>
+      </tr>
+      <tr>
+          <td>HA</td>
+          <td>Proxmox HA</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="from-openstack">From OpenStack</h3>
+<table>
+  <thead>
+      <tr>
+          <th>OpenStack Feature</th>
+          <th>PDM Equivalent</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Nova</td>
+          <td>Proxmox VE</td>
+      </tr>
+      <tr>
+          <td>Neutron</td>
+          <td>Proxmox SDN / OVS</td>
+      </tr>
+      <tr>
+          <td>Cinder</td>
+          <td>Proxmox Storage</td>
+      </tr>
+      <tr>
+          <td>Horizon</td>
+          <td>PDM Web UI</td>
+      </tr>
+      <tr>
+          <td>Keystone</td>
+          <td>PDM Users/Roles</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="conclusion">Conclusion</h2>
+<p>Proxmox Datacenter Manager represents a <strong>mindset shift</strong> from bottom-up, node-by-node management to a <strong>top-down, cluster-centric workflow</strong>. Even as a 1.x release, PDM delivers tangible value for multi-cluster environments:</p>
+<p><strong>Key Strengths:</strong></p>
+<ul>
+<li>Cross-cluster VM migration without manual export/import</li>
+<li>Centralized update visibility across all nodes</li>
+<li>Unified task and log monitoring</li>
+<li>Capacity planning with holistic infrastructure view</li>
+<li>Consistency enforcement across clusters</li>
+</ul>
+<p><img src="/img/include/pdm-tasks-logs.webp" alt="Tasks and Logs Filtering"  loading="lazy" decoding="async" class="zoomable" />
+<em>Unified task and log view with filtering by date, type, user, and status</em></p>
+<p><strong>Best For:</strong></p>
+<ul>
+<li>Organizations running 2+ Proxmox clusters</li>
+<li>Environments with permanent infrastructure (not temporary test setups)</li>
+<li>Teams planning gradual infrastructure growth</li>
+<li>Administrators transitioning from VMware vSphere</li>
+</ul>
+<p><strong>Consider Waiting If:</strong></p>
+<ul>
+<li>You have a single node or static cluster</li>
+<li>Your environment rarely changes</li>
+<li>You need advanced storage/network configuration from a central UI</li>
+</ul>
+<p>For the right use case, PDM is the emerging standard tool for Proxmox environment management—reducing operational overhead while improving visibility and consistency across your virtualization infrastructure.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="virtualization" term="virtualization" label="Virtualization" />
+                             
+                                <category scheme="management" term="management" label="Management" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox-admin" term="proxmox-admin" label="proxmox-admin" />
+                             
+                                <category scheme="datacenter-management" term="datacenter-management" label="datacenter-management" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="pdm" term="pdm" label="PDM" />
+                             
+                                <category scheme="datacenter-manager" term="datacenter-manager" label="Datacenter Manager" />
+                             
+                                <category scheme="virtualization" term="virtualization" label="Virtualization" />
+                             
+                                <category scheme="management" term="management" label="Management" />
+                             
+                                <category scheme="monitoring" term="monitoring" label="Monitoring" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>
