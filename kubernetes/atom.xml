@@ -8,7 +8,8 @@
             <link href="https://devopstales.github.io/kubernetes/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/kubernetes/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/kubernetes/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-04-20T16:29:55+00:00</updated>
+            <link href="https://devopstales.github.io/kubernetes/llms.txt" rel="alternate" type="text/plain" title="llms" />
+    <updated>2026-08-06T09:22:53+00:00</updated>
     
     
         <author>
@@ -16,6 +17,1428 @@
             </author>
     
         <id>https://devopstales.github.io/kubernetes/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Bulletproof Kubernetes Backups: K8up, Self-Hosted REST Server, and Full Prometheus Observability]]></title>
+            <link href="https://devopstales.github.io/kubernetes/k8s-restic-k8up/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/k8s-group-scheduling/?utm_source=atom_feed" rel="related" type="text/html" title="Advanced Kubernetes Scheduling: Mastering the PodGroup Scheduling Policy" />
+                <link href="https://devopstales.github.io/ai/ai-for-devops/?utm_source=atom_feed" rel="related" type="text/html" title="AI for DevOps" />
+                <link href="https://devopstales.github.io/ai/future-of-devops-ai-world/?utm_source=atom_feed" rel="related" type="text/html" title="Future of DevOps in the AI World" />
+                <link href="https://devopstales.github.io/devops/github-actions-basics/?utm_source=atom_feed" rel="related" type="text/html" title="GitHub Actions: Basics" />
+                <link href="https://devopstales.github.io/kubernetes/openshift4-monitoringw-with-external-grafana/?utm_source=atom_feed" rel="related" type="text/html" title="Integrating OpenShift 4 with External Grafana" />
+            
+                <id>https://devopstales.github.io/kubernetes/k8s-restic-k8up/</id>
+            
+            
+            <published>2026-08-06T00:00:00+00:00</published>
+            <updated>2026-08-06T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Managing persistent storage backups in a dynamic cloud-native environment can scale out of control rapidly. While tools like <a href="https://restic.net">Restic</a> provide incredible speed, encryption, and deduplication, orchestrating backups container by container with custom shell scripts is fragile.</p>
+<p><strong>K8up</strong> elegantly solves this by transforming Restic into a native Kubernetes automation system. In this comprehensive guide, we will break down how K8up works, deploy a self-hosted Restic REST backend with a production-grade Web UI via Docker, and configure enterprise monitoring using Prometheus, Grafana, and Alertmanager.</p>
+<hr>
+<h2 id="1-what-is-k8up">1. What is K8up?</h2>
+<p><a href="https://k8up.io">K8up</a> is an open-source, CNCF Sandbox <strong>Kubernetes backup operator built entirely on top of Restic</strong>. It replaces localized snapshot infrastructure with Kubernetes Custom Resource Definitions (CRDs).</p>
+<p>Instead of configuring isolated jobs, developers submit YAML declarations for operations like <code>Schedule</code>, <code>Backup</code>, <code>Check</code>, and <code>Restore</code>. K8up intercepts these manifests, monitors the relevant namespaces, provisions temporary worker pods to mount targeting PersistentVolumeClaims (PVCs) as read-only, and directly pipelines data to your remote destination.</p>
+<hr>
+<h2 id="2-supported-storage-backends">2. Supported Storage Backends</h2>
+<p>Because K8up relies on Restic under the hood, it shares Restic&rsquo;s universal backend engine. Supported options include:</p>
+<ul>
+<li><strong>S3-Compatible Object Storage:</strong> AWS S3, MinIO, Wasabi, Google Cloud Storage, or Backblaze B2.</li>
+<li><strong>Network Encrypted Storage:</strong> SFTP (Secure File Transfer Protocol).</li>
+<li><strong>The Restic REST Protocol:</strong> A specialized, high-velocity append-only HTTP protocol engineered explicitly for processing high-frequency Restic client streams.</li>
+</ul>
+<p>We will use the <strong>REST protocol</strong> because it offers extreme performance advantages over SFTP and is vastly simpler to host than an enterprise object storage array.</p>
+<hr>
+<h2 id="3-deploy-a-simple-app">3. Deploy a simple app</h2>
+<p>We’re going to deploy a sample application written in Go using the deployment.yaml file shown below. This deployment doesn’t need neither a Service nor an Ingress:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">fortune-go</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">image</span>: <span style="color:#ae81ff">registry.gitlab.com/vshn/applications/fortune-go:latest</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">imagePullPolicy</span>: <span style="color:#ae81ff">Always</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">name</span>: <span style="color:#ae81ff">fortune-container</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">fortune-go</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">k8up.io/backupcommand</span>: <span style="color:#ae81ff">fortune</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">k8up.io/file-extension</span>: <span style="color:#ae81ff">.txt</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">fortune-go</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">strategy</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Recreate</span>
+</span></span></code></pre></div><p>Apply the deployment:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f deployment.yaml
+</span></span></code></pre></div><h2 id="4-deploying-the-restic-rest-server-via-docker">4. Deploying the Restic REST Server via Docker</h2>
+<p>Docker provides the absolute fastest implementation path for setting up a dedicated remote repository target.</p>
+<h3 id="the-docker-compose-core">The Docker Compose Core</h3>
+<p>Create a local working directory and drop the following code block inside a file named <code>docker-compose.yml</code>. This exposes the core REST service and maps local server paths for cold storage.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">services</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rest-server</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">restic/rest-server:latest</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">container_name</span>: <span style="color:#ae81ff">restic-backend</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">restart</span>: <span style="color:#ae81ff">unless-stopped</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;8000:8000&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">./backups:/data</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">environment</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># Isolation configuration: Ensures users can only access their specific explicitly assigned directories</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">OPTIONS=--private-repos --prometheus</span>
+</span></span></code></pre></div><h3 id="forcing-user-authentication-via-htpasswd">Forcing User Authentication via htpasswd</h3>
+<p>The core image intercepts authentication requests natively by verifying incoming Basic Auth details against a localized <code>.htpasswd</code> asset. Run these quick terminal entries before triggering the stack:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Provision storage layout</span>
+</span></span><span style="display:flex;"><span>mkdir -p ./backups
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Pull a temporary htpasswd generator to cleanly hash security strings</span>
+</span></span><span style="display:flex;"><span>docker run --rm -ti trantor/htpasswd -B -c ./backups/.htpasswd cluster-backup-user
+</span></span></code></pre></div><p><em>(Provide a strong, robust password when prompted to anchor this user account securely).</em></p>
+<p>Launch the backend instance immediately:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker compose up -d rest-server
+</span></span></code></pre></div><hr>
+<h2 id="5-deploying-a-web-ui-with-built-in-authentication">5. Deploying a Web UI with Built-In Authentication</h2>
+<p>The base REST server has no graphical state engine. To visualize repositories, audit snapshots, and observe raw disk footprint metrics visually, we will link it to <strong><a href="https://github.com">Backrest</a></strong>—a secure, multi-repo Web UI wrapper natively featuring built-in application-layer user authentication.</p>
+<p>Append the Backrest service directly to your existing <code>docker-compose.yml</code> payload:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span>  <span style="color:#f92672">backrest-ui</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">ghcr.io/garethgeorge/backrest:latest</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">container_name</span>: <span style="color:#ae81ff">restic-webui</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">restart</span>: <span style="color:#ae81ff">unless-stopped</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;8080:8080&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">./backups:/data</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">./backrest-config:/config</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">environment</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># Declares rigid instance credentials required for first-load browser access</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">BACKREST_AUTH_USER=admin</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">BACKREST_AUTH_PASS=YourComplexVisualPasswordHere!</span>
+</span></span></code></pre></div><p>Reload your container configurations:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker compose up -d
+</span></span></code></pre></div><p>You can now immediately route your desktop browser to <code>http://&lt;your-server-ip&gt;:8080</code> to interact with your data.</p>
+<hr>
+<h2 id="6-installing-and-configuring-k8up">6. Installing and Configuring K8up</h2>
+<p>Now that your visual target storage engine is operational, install the K8up engine on your target cluster.</p>
+<h3 id="helm-deployment">Helm Deployment</h3>
+<p>Map the official project charts and install the operator into an isolated administrative namespace:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>helm repo add k8up-io https://k8up.iohelm-charts
+</span></span><span style="display:flex;"><span>helm repo update
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>helm install k8up k8up-io/k8up <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace k8up-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set metrics.serviceMonitor.enabled<span style="color:#f92672">=</span>true <span style="color:#75715e"># Automatically exposes endpoints to Prometheus Operator</span>
+</span></span></code></pre></div><h3 id="storage-vault-mapping">Storage Vault Mapping</h3>
+<p>Create a secure credentials profile inside the target workspace containing the microservices you intend to protect (e.g., <code>production-services</code>):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">backup-vault-auth</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">production-services</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">stringData</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># The explicit symmetric key utilized to perform client-side encryption on your blocks</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">repo-password</span>: <span style="color:#ae81ff">SuperStrongEncryptionKey321!</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Basic Authentication configurations matching your Docker htpasswd container</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">username</span>: <span style="color:#ae81ff">cluster-backup-user</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">password</span>: <span style="color:#ae81ff">DockerHtpasswdPasswordCreatedEarlier</span>
+</span></span></code></pre></div><h3 id="automation-schedule">Automation Schedule</h3>
+<p>Apply a standard <code>Schedule</code> manifest to run automated snapshots every night at 3:00 AM:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">k8up.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Schedule</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">fortune-go-application-backup</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">production-services</span> <span style="color:#75715e"># Ensure this matches your deployment&#39;s namespace</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">rest</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># Reuses the Docker rest-server credentials established earlier</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">url</span>: <span style="color:#ae81ff">http://cluster-backup-user:DockerHtpasswdPasswordCreatedEarlier@your-server-ip:8000/k8s-production-repo</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">repoPasswordSecretRef</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">backup-vault-auth</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">key</span>: <span style="color:#ae81ff">repo-password</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">backup</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Triggers the backup every day at 3:15 AM</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">schedule</span>: <span style="color:#e6db74">&#34;15 3 * * *&#34;</span> 
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">failedJobsHistoryLimit</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">successfulJobsHistoryLimit</span>: <span style="color:#ae81ff">3</span>
+</span></span></code></pre></div><p><code>kubectl apply -f schedule.yaml</code> binds this configuration. K8up will handle volume parsing completely automatically moving forward.</p>
+<hr>
+<h2 id="7-configuring-prometheus-monitoring--grafana">7. Configuring Prometheus Monitoring &amp; Grafana</h2>
+<p>Unmonitored backups are effectively non-existent. K8up exposes real-time Prometheus time-series metrics (<code>k8up_jobs_total</code>, <code>k8up_backups_total</code>).</p>
+<p>If your monitoring solution utilizes the standard <a href="https://github.com">Kube-Prometheus-Stack</a> pattern, configure a <code>PodMonitor</code> object inside your operator namespace to capture operational states:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">monitoring.coreos.com/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PodMonitor</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">k8up-operator-monitor</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">k8up-system</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">release</span>: <span style="color:#ae81ff">prometheus</span> <span style="color:#75715e"># Changes based on your specific helm release name</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app.kubernetes.io/name</span>: <span style="color:#ae81ff">k8up</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">podMetricsEndpoints</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">metrics</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">interval</span>: <span style="color:#ae81ff">30s</span>
+</span></span></code></pre></div><h3 id="importing-the-grafana-dashboard">Importing the Grafana Dashboard</h3>
+<p>To observe success ratios and compression statistics without writing raw queries, import the pre-configured <a href="https://grafana.com">Official K8up Dashboard from Grafana Labs</a>:</p>
+<ol>
+<li>Log into your active Grafana panel dashboard interface.</li>
+<li>Choose <strong>Dashboards</strong> -&gt; <strong>New</strong> -&gt; <strong>Import</strong>.</li>
+<li>Provide the official Community Dashboard ID: <strong><code>24597</code></strong> (or <strong><code>20166</code></strong> depending on older schema variations).</li>
+<li>Map the dropdown connection to your underlying Prometheus data source and click <strong>Import</strong>.</li>
+</ol>
+<hr>
+<h2 id="8-creating-alerting-rules-for-failed-backups">8. Creating Alerting Rules for Failed Backups</h2>
+<p>To ensure immediate awareness if an incremental backup script terminates with error states, apply a native <code>PrometheusRule</code> layout. This configuration hooks straight into Alertmanager to route alerts to targets like Slack, PagerDuty, or Webhooks:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">monitoring.coreos.com/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PrometheusRule</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">k8up-backup-alerts</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">k8up-system</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">role</span>: <span style="color:#ae81ff">alert-rules</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">release</span>: <span style="color:#ae81ff">prometheus</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">groups</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">k8up.rules</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">alert</span>: <span style="color:#ae81ff">K8upBackupJobFailed</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">expr</span>: <span style="color:#ae81ff">k8up_jobs_total{condition=&#34;failed&#34;, type=&#34;backup&#34;} &gt; 0</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">for</span>: <span style="color:#ae81ff">2m</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">severity</span>: <span style="color:#ae81ff">critical</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">tier</span>: <span style="color:#ae81ff">platform</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">summary</span>: <span style="color:#e6db74">&#34;Kubernetes backup job failed in namespace {{ \$labels.namespace }}&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">description</span>: <span style="color:#e6db74">&#34;A scheduled K8up Restic execution failed to process completely. Inspect the operator logs immediately via &#39;kubectl logs -n k8up-system&#39; to prevent loss of target application context.&#34;</span>
+</span></span></code></pre></div><p>Apply via <code>kubectl apply -f alerts.yaml</code>. Your backup topology is now fully automated, visual, secure, and observable at scale.</p>
+]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="k8s-security" term="k8s-security" label="k8s-security" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="backup" term="backup" label="backup" />
+                             
+                                <category scheme="restic" term="restic" label="restic" />
+                             
+                                <category scheme="devops" term="devops" label="devops" />
+                             
+                                <category scheme="prometheus" term="prometheus" label="prometheus" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Advanced Kubernetes Scheduling: Mastering the PodGroup Scheduling Policy]]></title>
+            <link href="https://devopstales.github.io/kubernetes/k8s-group-scheduling/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/ai/ai-for-devops/?utm_source=atom_feed" rel="related" type="text/html" title="AI for DevOps" />
+                <link href="https://devopstales.github.io/ai/future-of-devops-ai-world/?utm_source=atom_feed" rel="related" type="text/html" title="Future of DevOps in the AI World" />
+                <link href="https://devopstales.github.io/devops/github-actions-basics/?utm_source=atom_feed" rel="related" type="text/html" title="GitHub Actions: Basics" />
+                <link href="https://devopstales.github.io/devops/github-self-hosted-runners-on-kubernetes/?utm_source=atom_feed" rel="related" type="text/html" title="Github Self-Hosted Runners on Kubernetes with Actions Runner Controller" />
+                <link href="https://devopstales.github.io/kubernetes/debug-couldnt-get-resource-list/?utm_source=atom_feed" rel="related" type="text/html" title="Troubleshooting Kubernetes: API error at resource listing" />
+            
+                <id>https://devopstales.github.io/kubernetes/k8s-group-scheduling/</id>
+            
+            
+            <published>2026-08-04T00:00:00+00:00</published>
+            <updated>2026-08-04T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>In a standard Kubernetes cluster, the default scheduler processes workloads using a <strong>one-by-one (sequential) paradigm</strong>. While this works perfectly for microservices, web apps, and independent API instances, it completely breaks down when running tightly coupled distributed workloads—such as AI/ML model training, Apache Spark jobs, or high-performance computing (HPC) simulations.</p>
+<p>If a large machine learning training task requires 10 worker pods to run concurrently, but your cluster only has space to schedule 8, the default scheduler will bind those 8 pods and leave the remaining 2 in a <code>Pending</code> state. The result? A <strong>deadlock</strong> where resources are completely wasted, blocking other workloads while the 8 active pods sit idling indefinitely waiting for their missing peers.</p>
+<p>The <strong>PodGroup Scheduling Policy</strong> (often implemented via <a href="https://kubernetes.io">Kubernetes Scheduling Plugins</a> like <a href="https://github.com">Kube-Batch</a> or <a href="https://volcano.sh">Volcano</a>) natively solves this problem by introducing <strong>Gang Scheduling</strong> into the ecosystem.</p>
+<hr>
+<h2 id="what-is-a-podgroup">What is a PodGroup?</h2>
+<p>A <strong>PodGroup</strong> is a Custom Resource Definition (CRD) that logically aggregates multiple pods into a single atomic scheduling unit.</p>
+<p>Instead of treating your application as an unlinked collection of isolated container runtimes, the scheduler treats the entire group as a unified entity. The group is defined by a critical metric called <code>minMember</code>—the absolute minimum number of pods that <em>must</em> be scheduled simultaneously for the overall workload to function properly.</p>
+<h3 id="the-gang-scheduling-mechanism">The Gang Scheduling Mechanism</h3>
+<ol>
+<li><strong>The All-or-Nothing Rule</strong>: If the cluster has enough resources to accommodate the <code>minMember</code> requirement, the entire group is bound to nodes simultaneously.</li>
+<li><strong>The Safe Rollback Rule</strong>: If the cluster lacks the capacity to meet the <code>minMember</code> target, <strong>none</strong> of the pods are scheduled. They sit tightly controlled in the scheduling queue together, leaving your cluster infrastructure wide open for shorter, independent microservices to slide in and run without getting squeezed into a resource deadlock.</li>
+</ol>
+<hr>
+<h2 id="architecture-how-podgroup-integration-operates">Architecture: How PodGroup Integration Operates</h2>
+<p>The PodGroup mechanics hook directly into the <strong>Permit</strong> and <strong>PreFilter</strong> extension points of the native Kubernetes <a href="https://kubernetes.io">Scheduling Framework Architecture</a>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>[ Pod Custom Manifest ] ──&gt; ( PreFilter Phase: Maps Pod to PodGroup )
+</span></span><span style="display:flex;"><span>                                       │
+</span></span><span style="display:flex;"><span>                                       ▼
+</span></span><span style="display:flex;"><span>[ Queue Sorting Phase ] ──&gt; ( Filter &amp; Score Nodes for Group Layout )
+</span></span><span style="display:flex;"><span>                                       │
+</span></span><span style="display:flex;"><span>                                       ▼
+</span></span><span style="display:flex;"><span>[ Permit Phase Check ]  ──&gt; Is Cluster Free Capacity &gt;= minMember?
+</span></span><span style="display:flex;"><span>                                ├──&gt; YES: Atomic Binding to Nodes (Run)
+</span></span><span style="display:flex;"><span>                                └──&gt; NO: Hold in Queue / Wait (No Leak)
+</span></span></code></pre></div><hr>
+<h2 id="step-by-step-implementation">Step-by-Step Implementation</h2>
+<p>To take advantage of this workflow, you must have an active batch scheduler running on your cluster (such as the CNCF Sandbox project <a href="https://volcano.sh">Volcano</a>), or the <a href="https://github.com">Scheduling Plugins Multi-Scheduling Operator</a>.</p>
+<h3 id="1-declaring-the-podgroup-crd">1. Declaring the PodGroup CRD</h3>
+<p>First, you configure the atomic boundary condition. In this scenario, we specify a training task that demands exactly <strong>3 concurrent pods</strong> to form an operational cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">scheduling.x-k8s.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">PodGroup</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">ml-training-group</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">data-science</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># The strict minimum threshold required to initiate execution</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">minMember</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Total time the group can wait in queue before timing out and failing cleanly</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">schedulingTimeoutSeconds</span>: <span style="color:#ae81ff">60</span>
+</span></span></code></pre></div><h3 id="2-linking-workloads-to-the-podgroup-policy">2. Linking Workloads to the PodGroup Policy</h3>
+<p>To associate pods with your newly established policy, you must inject two parameters into your Pod template specifications:</p>
+<ol>
+<li>The <code>scheduling.x-k8s.io/pod-group</code> label to link the pods to the group CRD.</li>
+<li>The <code>schedulerName</code> configuration to explicitly bypass the standard default scheduler.</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">distributed-ml-worker</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">data-science</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">ml-worker</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">ml-worker</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Critical Anchor: Binds this specific pod instance to your PodGroup resource</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">scheduling.x-k8s.io/pod-group</span>: <span style="color:#ae81ff">ml-training-group</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># Directs the workload away from default logic to the specialized engine</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">schedulerName</span>: <span style="color:#ae81ff">volcano</span> <span style="color:#75715e"># Or &#39;scheduler-plugins-scheduler&#39; depending on installation</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">training-engine</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">tensorflow/tensorflow:latest-gpu</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">requests</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">cpu</span>: <span style="color:#e6db74">&#34;2&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">memory</span>: <span style="color:#e6db74">&#34;4Gi&#34;</span>
+</span></span></code></pre></div><hr>
+<h2 id="core-enterprise-benefits">Core Enterprise Benefits</h2>
+<ul>
+<li><strong>Zero Resource Leaks / Hoarding</strong>: Prevents partial cluster allocations from locking up expensive resources (like enterprise GPUs) while waiting indefinitely for remaining instances to scale out.</li>
+<li><strong>Predictable Execution Timelines</strong>: Ensures distributed compute tasks (like Big Data map-reduce or parameter-server paradigms) begin computation immediately upon pod initialization, avoiding network sync timeouts.</li>
+<li><strong>Graceful Multi-Tenancy QoS</strong>: Enhances cluster efficiency when multi-tenant engineering teams share a fixed set of physical nodes, as massive jobs won&rsquo;t slowly suffocate smaller, high-priority system tasks piece-by-piece.</li>
+</ul>
+]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="kubernetes" />
+                             
+                                <category scheme="scheduling" term="scheduling" label="scheduling" />
+                             
+                                <category scheme="podgroup" term="podgroup" label="podgroup" />
+                             
+                                <category scheme="gang-scheduling" term="gang-scheduling" label="gang-scheduling" />
+                             
+                                <category scheme="devops" term="devops" label="devops" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Zero-Trust Ingress with Traefik + Authorino - Group-Based Authorization]]></title>
+            <link href="https://devopstales.github.io/kubernetes/traefik-authorino-ingress-authz/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/kubernetes/egress-gateway-comparison-guide/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Egress Gateway Solutions - Complete Comparison &amp; Recommendations" />
+                <link href="https://devopstales.github.io/kubernetes/squid-proxy-egress/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Egress Gateway with Squid Proxy" />
+                <link href="https://devopstales.github.io/kubernetes/custom-envoy-egress-proxy/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Egress Gateway with Custom Envoy Proxy" />
+                <link href="https://devopstales.github.io/kubernetes/monzo-egress-operator/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Egress Gateway with Monzo Egress Operator" />
+                <link href="https://devopstales.github.io/kubernetes/cilium-egress-gateway/?utm_source=atom_feed" rel="related" type="text/html" title="Kubernetes Egress Gateway Options with Cilium" />
+            
+                <id>https://devopstales.github.io/kubernetes/traefik-authorino-ingress-authz/</id>
+            
+            
+            <published>2026-04-22T00:00:00+00:00</published>
+            <updated>2026-04-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Implementing group-based authorization at the ingress level ensures that sensitive applications are only accessible to authorized user groups. This post covers implementing zero-trust ingress with <strong>Traefik + Authorino</strong> where different ingress routes are only visible to specific user groups.</p>
+
+
+<div class="series-overview">
+  <h3>Egress Gateway Series</h3>
+  <p>This series covers Kubernetes egress gateway solutions:</p>
+  <ul>
+    <li>Part 1: <a href="../../kubernetes/istio-ingress-egress-gateway/"><strong>Istio Ingress/Egress Gateway</strong></a> - Service mesh approach with mTLS and advanced traffic management</li>
+    <li>Part 2: <a href="../../kubernetes/cilium-egress-gateway/"><strong>Cilium Egress Gateway</strong></a> - eBPF-based networking with Hubble observability</li>
+    <li>Part 3: <a href="../../kubernetes/antrea-egress-gateway/"><strong>Antrea Egress Gateway</strong></a> - Open vSwitch CNI with ExternalNode support</li>
+    <li>Part 4: <a href="../../kubernetes/kube-ovn-egress-gateway/"><strong>Kube-OVN Egress Gateway</strong></a> - OVN-based CNI with Floating IP support</li>
+    <li>Part 5: <a href="../../kubernetes/monzo-egress-operator/"><strong>Monzo Egress Operator</strong></a> - AWS NAT Gateway automation via Kubernetes CRDs</li>
+    <li>Part 6: <a href="../../kubernetes/custom-envoy-egress-proxy/"><strong>Custom Envoy Proxy</strong></a> - Self-hosted L7 egress proxy with advanced routing</li>
+    <li>Part 7: <a href="../../kubernetes/squid-proxy-egress/"><strong>Squid Proxy on Kubernetes</strong></a> - Traditional HTTP proxy with caching and ACLs</li>
+    <li>Part 8: <a href="../../kubernetes/cloud-nat-egress-solutions/"><strong>Cloud NAT Solutions</strong></a> - AWS NAT Gateway, GCP Cloud NAT, Azure Firewall/NAT Gateway</li>
+    <li>Part 9: <a href="../../kubernetes/egress-gateway-comparison-guide/"><strong>Comparison & Recommendations</strong></a> - Decision matrix and use case guide</li>
+  </ul>
+  <p><em>✓ All parts complete!</em></p>
+</div>
+
+<style>
+.series-overview {
+  background: #f8f9fa;
+  border-left: 4px solid #4a90d9;
+  padding: 15px 20px;
+  margin: 30px 0;
+  border-radius: 0 8px 8px 0;
+}
+.series-overview h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.2em;
+}
+.series-overview ul {
+  margin-bottom: 0;
+}
+.series-overview li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.series-overview a {
+  color: #4a90d9;
+  text-decoration: none;
+}
+.series-overview a:hover {
+  text-decoration: underline;
+}
+</style>
+
+
+
+<h2 id="architecture-overview">Architecture Overview</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>┌─────────────────────────────────────────────────────────────────┐
+</span></span><span style="display:flex;"><span>│                        User Request                             │
+</span></span><span style="display:flex;"><span>│                    <span style="color:#f92672">(</span>with OIDC Token<span style="color:#f92672">)</span>                            │
+</span></span><span style="display:flex;"><span>└────────────────────────┬────────────────────────────────────────┘
+</span></span><span style="display:flex;"><span>                         │
+</span></span><span style="display:flex;"><span>                         ▼
+</span></span><span style="display:flex;"><span>┌─────────────────────────────────────────────────────────────────┐
+</span></span><span style="display:flex;"><span>│                    Traefik Ingress                              │
+</span></span><span style="display:flex;"><span>│  ┌─────────────────┐         ┌─────────────────┐               │
+</span></span><span style="display:flex;"><span>│  │  Ingress <span style="color:#ae81ff">1</span>      │         │  Ingress <span style="color:#ae81ff">2</span>      │               │
+</span></span><span style="display:flex;"><span>│  │  <span style="color:#f92672">(</span>admin-app<span style="color:#f92672">)</span>    │         │  <span style="color:#f92672">(</span>dev-app<span style="color:#f92672">)</span>      │               │
+</span></span><span style="display:flex;"><span>│  │                 │         │                 │               │
+</span></span><span style="display:flex;"><span>│  │  Group: admin   │         │  Group: dev     │               │
+</span></span><span style="display:flex;"><span>│  └────────┬────────┘         └────────┬────────┘               │
+</span></span><span style="display:flex;"><span>└───────────┼───────────────────────────┼────────────────────────┘
+</span></span><span style="display:flex;"><span>            │                           │
+</span></span><span style="display:flex;"><span>            ▼                           ▼
+</span></span><span style="display:flex;"><span>    ┌───────────────────────────────────────────────────┐
+</span></span><span style="display:flex;"><span>    │              Authorino <span style="color:#f92672">(</span>AuthZ<span style="color:#f92672">)</span>                    │
+</span></span><span style="display:flex;"><span>    │                                                   │
+</span></span><span style="display:flex;"><span>    │  ┌─────────────────┐     ┌─────────────────┐     │
+</span></span><span style="display:flex;"><span>    │  │  Policy <span style="color:#ae81ff">1</span>       │     │  Policy <span style="color:#ae81ff">2</span>       │     │
+</span></span><span style="display:flex;"><span>    │  │  group:admin    │     │  group:dev      │     │
+</span></span><span style="display:flex;"><span>    │  │  → Allow        │     │  → Allow        │     │
+</span></span><span style="display:flex;"><span>    │  └─────────────────┘     └─────────────────┘     │
+</span></span><span style="display:flex;"><span>    └───────────────────────────────────────────────────┘
+</span></span><span style="display:flex;"><span>                         │
+</span></span><span style="display:flex;"><span>                         ▼
+</span></span><span style="display:flex;"><span>            ┌────────────────────────┐
+</span></span><span style="display:flex;"><span>            │   OIDC Provider        │
+</span></span><span style="display:flex;"><span>            │   <span style="color:#f92672">(</span>Keycloak/Auth0<span style="color:#f92672">)</span>     │
+</span></span><span style="display:flex;"><span>            │   - User Groups        │
+</span></span><span style="display:flex;"><span>            │   - JWT Validation     │
+</span></span><span style="display:flex;"><span>            └────────────────────────┘
+</span></span></code></pre></div><h2 id="why-traefik--authorino">Why Traefik + Authorino?</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Traefik + Authorino</th>
+          <th>Alternatives</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>External AuthZ</strong></td>
+          <td>✅ Native support</td>
+          <td>⚠️ Custom middleware</td>
+      </tr>
+      <tr>
+          <td><strong>Group-Based AuthZ</strong></td>
+          <td>✅ Built-in</td>
+          <td>⚠️ Manual implementation</td>
+      </tr>
+      <tr>
+          <td><strong>OIDC Integration</strong></td>
+          <td>✅ Multiple providers</td>
+          <td>✅ Similar</td>
+      </tr>
+      <tr>
+          <td><strong>Performance</strong></td>
+          <td>✅ External service</td>
+          <td>⚠️ Inline processing</td>
+      </tr>
+      <tr>
+          <td><strong>Flexibility</strong></td>
+          <td>✅ Policy per route</td>
+          <td>⚠️ Global policies</td>
+      </tr>
+      <tr>
+          <td><strong>Kubernetes Native</strong></td>
+          <td>✅ CRD-based</td>
+          <td>⚠️ ConfigMap-based</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="prerequisites">Prerequisites</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>Version</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Kubernetes</strong></td>
+          <td>1.26+</td>
+          <td>Tested on 1.28, 1.29</td>
+      </tr>
+      <tr>
+          <td><strong>Traefik</strong></td>
+          <td>2.10+</td>
+          <td>With Middleware support</td>
+      </tr>
+      <tr>
+          <td><strong>Authorino</strong></td>
+          <td>0.18+</td>
+          <td>Authorization service</td>
+      </tr>
+      <tr>
+          <td><strong>OIDC Provider</strong></td>
+          <td>Any</td>
+          <td>Keycloak, Auth0, Okta</td>
+      </tr>
+      <tr>
+          <td><strong>cert-manager</strong></td>
+          <td>1.13+</td>
+          <td>For TLS certificates</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="step-1-install-traefik-ingress-controller">Step 1: Install Traefik Ingress Controller</h2>
+<h3 id="install-traefik-via-helm">Install Traefik via Helm</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add Traefik Helm repository</span>
+</span></span><span style="display:flex;"><span>helm repo add traefik https://traefik.github.io/charts
+</span></span><span style="display:flex;"><span>helm repo update
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install Traefik with external auth middleware enabled</span>
+</span></span><span style="display:flex;"><span>helm install traefik traefik/traefik <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace traefik-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ingressClass.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ingressClass.isDefaultClass<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesIngress.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesCRD.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set providers.kubernetesGateway.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ports.web.redirectTo.port<span style="color:#f92672">=</span>websecure <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set ports.websecure.http3.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --wait
+</span></span></code></pre></div><h3 id="verify-traefik-installation">Verify Traefik Installation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check Traefik pods</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n traefik-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME                      READY   STATUS</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># traefik-xxxxxxxxxx-xxxxx  1/1     Running</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Get Traefik dashboard URL</span>
+</span></span><span style="display:flex;"><span>kubectl get svc -n traefik-system traefik-dashboard
+</span></span></code></pre></div><h2 id="step-2-install-authorino">Step 2: Install Authorino</h2>
+<h3 id="install-authorino-via-helm">Install Authorino via Helm</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Add Authorino Helm repository</span>
+</span></span><span style="display:flex;"><span>helm repo add authorino https://kuadrant.github.io/authorino/helm-charts
+</span></span><span style="display:flex;"><span>helm repo update
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install Authorino</span>
+</span></span><span style="display:flex;"><span>helm install authorino authorino/authorino <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace authorino-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --create-namespace <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set config.authConfigLabelSelectors<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;security.kuadrant.io/protected-by=authorino&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set listener.watchingNamespaces<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;*&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --wait
+</span></span></code></pre></div><h3 id="verify-authorino-installation">Verify Authorino Installation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check Authorino pods</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n authorino-system
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME                        READY   STATUS</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># authorino-xxxxxxxxxx-xxxxx  1/1     Running</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Authorino service</span>
+</span></span><span style="display:flex;"><span>kubectl get svc -n authorino-system authorino-service
+</span></span></code></pre></div><h2 id="step-3-configure-oidc-provider">Step 3: Configure OIDC Provider</h2>
+<h3 id="keycloak-realm-setup">Keycloak Realm Setup</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create realm (via Keycloak admin or CLI)</span>
+</span></span><span style="display:flex;"><span>kcadm.sh create realms -s realm<span style="color:#f92672">=</span>production -s enabled<span style="color:#f92672">=</span>true
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create groups</span>
+</span></span><span style="display:flex;"><span>kcadm.sh create groups -r production -s name<span style="color:#f92672">=</span>admin
+</span></span><span style="display:flex;"><span>kcadm.sh create groups -r production -s name<span style="color:#f92672">=</span>dev
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create users and assign to groups</span>
+</span></span><span style="display:flex;"><span>kcadm.sh create users -r production -s username<span style="color:#f92672">=</span>admin1 -s enabled<span style="color:#f92672">=</span>true
+</span></span><span style="display:flex;"><span>kcadm.sh add-roles -r production --uusername admin1 --gname admin
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>kcadm.sh create users -r production -s username<span style="color:#f92672">=</span>dev1 -s enabled<span style="color:#f92672">=</span>true
+</span></span><span style="display:flex;"><span>kcadm.sh add-roles -r production --uusername dev1 --gname dev
+</span></span></code></pre></div><h3 id="create-oidc-client">Create OIDC Client</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Secret</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">oidc-client-secret</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">type</span>: <span style="color:#ae81ff">Opaque</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">stringData</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">client-id</span>: <span style="color:#e6db74">&#34;traefik-ingress&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">client-secret</span>: <span style="color:#e6db74">&#34;your-client-secret-here&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">jwks-url</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;</span>
+</span></span></code></pre></div><h2 id="step-4-create-authorino-authconfig">Step 4: Create Authorino AuthConfig</h2>
+<h3 id="admin-group-authorization-policy">Admin Group Authorization Policy</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">authorino.kuadrant.io/v1beta2</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AuthConfig</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin-ingress-authz</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">security.kuadrant.io/protected-by</span>: <span style="color:#ae81ff">authorino</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;admin.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authentication</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;oidc-jwt&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">jwt</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">jwksUrl</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">ttl</span>: <span style="color:#ae81ff">3600</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">secretRef</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">oidc-client-secret</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authorization</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;admin-group-check&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">patternMatching</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">patterns</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">any</span>:
+</span></span><span style="display:flex;"><span>              - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>              - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.realm_access.roles</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">response</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">successHeaders</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;x-authenticated-user&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.preferred_username</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;x-authenticated-groups&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span></code></pre></div><h3 id="developer-group-authorization-policy">Developer Group Authorization Policy</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">authorino.kuadrant.io/v1beta2</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AuthConfig</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dev-ingress-authz</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">security.kuadrant.io/protected-by</span>: <span style="color:#ae81ff">authorino</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;dev.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authentication</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;oidc-jwt&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">jwt</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">jwksUrl</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">ttl</span>: <span style="color:#ae81ff">3600</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">secretRef</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">name</span>: <span style="color:#ae81ff">oidc-client-secret</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authorization</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;dev-group-check&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">patternMatching</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">patterns</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">any</span>:
+</span></span><span style="display:flex;"><span>              - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;dev&#34;</span>
+</span></span><span style="display:flex;"><span>              - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.realm_access.roles</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;dev&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">response</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">successHeaders</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;x-authenticated-user&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.preferred_username</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;x-authenticated-groups&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span></code></pre></div><h3 id="apply-authconfig-resources">Apply AuthConfig Resources</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f admin-authz.yaml
+</span></span><span style="display:flex;"><span>kubectl apply -f dev-authz.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify AuthConfig status</span>
+</span></span><span style="display:flex;"><span>kubectl get authconfig -n default
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME                  READY   REASON</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># admin-ingress-authz   True    AuthorinoReady</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># dev-ingress-authz     True    AuthorinoReady</span>
+</span></span></code></pre></div><h2 id="step-5-create-traefik-middleware">Step 5: Create Traefik Middleware</h2>
+<h3 id="external-auth-middleware-for-admin">External Auth Middleware for Admin</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin-authz-middleware</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">forwardAuth</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">address</span>: <span style="color:#e6db74">&#34;http://authorino-service.authorino-system.svc.cluster.local:80&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">trustForwardHeader</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">authResponseHeaders</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;x-authenticated-user&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;x-authenticated-groups&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">authRequestHeaders</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;authorization&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;cookie&#34;</span>
+</span></span></code></pre></div><h3 id="external-auth-middleware-for-dev">External Auth Middleware for Dev</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dev-authz-middleware</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">forwardAuth</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">address</span>: <span style="color:#e6db74">&#34;http://authorino-service.authorino-system.svc.cluster.local:80&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">trustForwardHeader</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">authResponseHeaders</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;x-authenticated-user&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;x-authenticated-groups&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">authRequestHeaders</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;authorization&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;cookie&#34;</span>
+</span></span></code></pre></div><h3 id="apply-middleware-resources">Apply Middleware Resources</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f admin-middleware.yaml
+</span></span><span style="display:flex;"><span>kubectl apply -f dev-middleware.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify middleware</span>
+</span></span><span style="display:flex;"><span>kubectl get middleware -n default
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME                   AGE</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># admin-authz-middleware  5m</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># dev-authz-middleware    5m</span>
+</span></span></code></pre></div><h2 id="step-6-create-ingress-routes">Step 6: Create Ingress Routes</h2>
+<h3 id="admin-ingress-group-admin-only">Admin Ingress (Group: admin only)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin-app-ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.middlewares</span>: <span style="color:#e6db74">&#34;default-admin-authz-middleware@kubernetescrd&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.entrypoints</span>: <span style="color:#e6db74">&#34;websecure&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">traefik</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#e6db74">&#34;admin.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">admin-tls-secret</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">host</span>: <span style="color:#e6db74">&#34;admin.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">path</span>: <span style="color:#e6db74">&#34;/&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin-app</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">number</span>: <span style="color:#ae81ff">8080</span>
+</span></span></code></pre></div><h3 id="developer-ingress-group-dev-only">Developer Ingress (Group: dev only)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dev-app-ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.middlewares</span>: <span style="color:#e6db74">&#34;default-dev-authz-middleware@kubernetescrd&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">traefik.ingress.kubernetes.io/router.entrypoints</span>: <span style="color:#e6db74">&#34;websecure&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ingressClassName</span>: <span style="color:#ae81ff">traefik</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">tls</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#e6db74">&#34;dev.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">secretName</span>: <span style="color:#ae81ff">dev-tls-secret</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rules</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">host</span>: <span style="color:#e6db74">&#34;dev.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">path</span>: <span style="color:#e6db74">&#34;/&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">pathType</span>: <span style="color:#ae81ff">Prefix</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">backend</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">service</span>:
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dev-app</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">port</span>:
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">number</span>: <span style="color:#ae81ff">8080</span>
+</span></span></code></pre></div><h3 id="apply-ingress-resources">Apply Ingress Resources</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f admin-ingress.yaml
+</span></span><span style="display:flex;"><span>kubectl apply -f dev-ingress.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify ingress</span>
+</span></span><span style="display:flex;"><span>kubectl get ingress -n default
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected output:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># NAME               CLASS    HOSTS                  ADDRESS        PORTS     AGE</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># admin-app-ingress  traefik  admin.mydomain.intra   192.168.1.10   80, 443   5m</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># dev-app-ingress    traefik  dev.mydomain.intra     192.168.1.10   80, 443   5m</span>
+</span></span></code></pre></div><h2 id="step-7-deploy-test-applications">Step 7: Deploy Test Applications</h2>
+<h3 id="admin-application">Admin Application</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">admin-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">admin-app</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin-app</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:alpine</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">env</span>:
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">APP_NAME</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;Admin Application&#34;</span>
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">REQUIRED_GROUP</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">admin-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">admin-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+</span></span></code></pre></div><h3 id="developer-application">Developer Application</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dev-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">dev-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">labels</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">app</span>: <span style="color:#ae81ff">dev-app</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dev-app</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">image</span>: <span style="color:#ae81ff">nginx:alpine</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">env</span>:
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">APP_NAME</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;Developer Application&#34;</span>
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">REQUIRED_GROUP</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;dev&#34;</span>
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Service</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">dev-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">app</span>: <span style="color:#ae81ff">dev-app</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">port</span>: <span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">targetPort</span>: <span style="color:#ae81ff">80</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">type</span>: <span style="color:#ae81ff">ClusterIP</span>
+</span></span></code></pre></div><h3 id="apply-test-applications">Apply Test Applications</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>kubectl apply -f admin-app.yaml
+</span></span><span style="display:flex;"><span>kubectl apply -f dev-app.yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify deployments</span>
+</span></span><span style="display:flex;"><span>kubectl get deployments -n default
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify services</span>
+</span></span><span style="display:flex;"><span>kubectl get svc -n default
+</span></span></code></pre></div><h2 id="testing-authorization">Testing Authorization</h2>
+<h3 id="test-1-admin-user-accessing-admin-app">Test 1: Admin User Accessing Admin App</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Get admin user token</span>
+</span></span><span style="display:flex;"><span>ADMIN_TOKEN<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>curl -X POST <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/token <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Content-Type: application/x-www-form-urlencoded&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;grant_type=password&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;client_id=traefik-ingress&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;client_secret=your-client-secret&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;username=admin1&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;password=admin1password&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  | jq -r <span style="color:#e6db74">&#39;.access_token&#39;</span><span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Access admin app with admin token</span>
+</span></span><span style="display:flex;"><span>curl -v https://admin.mydomain.intra <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Authorization: Bearer </span>$ADMIN_TOKEN<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Host: admin.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected: 200 OK with x-authenticated-user header</span>
+</span></span></code></pre></div><h3 id="test-2-admin-user-accessing-dev-app-should-fail">Test 2: Admin User Accessing Dev App (Should Fail)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Access dev app with admin token</span>
+</span></span><span style="display:flex;"><span>curl -v https://dev.mydomain.intra <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Authorization: Bearer </span>$ADMIN_TOKEN<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Host: dev.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected: 403 Forbidden</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Response: {&#34;error&#34;: &#34;authorization failed&#34;, &#34;reason&#34;: &#34;group check failed&#34;}</span>
+</span></span></code></pre></div><h3 id="test-3-dev-user-accessing-dev-app">Test 3: Dev User Accessing Dev App</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Get dev user token</span>
+</span></span><span style="display:flex;"><span>DEV_TOKEN<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>curl -X POST <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/token <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Content-Type: application/x-www-form-urlencoded&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;grant_type=password&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;client_id=traefik-ingress&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;client_secret=your-client-secret&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;username=dev1&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;password=dev1password&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  | jq -r <span style="color:#e6db74">&#39;.access_token&#39;</span><span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Access dev app with dev token</span>
+</span></span><span style="display:flex;"><span>curl -v https://dev.mydomain.intra <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Authorization: Bearer </span>$DEV_TOKEN<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Host: dev.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected: 200 OK with x-authenticated-user header</span>
+</span></span></code></pre></div><h3 id="test-4-dev-user-accessing-admin-app-should-fail">Test 4: Dev User Accessing Admin App (Should Fail)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Access admin app with dev token</span>
+</span></span><span style="display:flex;"><span>curl -v https://admin.mydomain.intra <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Authorization: Bearer </span>$DEV_TOKEN<span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Host: admin.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected: 403 Forbidden</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Response: {&#34;error&#34;: &#34;authorization failed&#34;, &#34;reason&#34;: &#34;group check failed&#34;}</span>
+</span></span></code></pre></div><h3 id="test-5-unauthenticated-access-should-fail">Test 5: Unauthenticated Access (Should Fail)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Access without token</span>
+</span></span><span style="display:flex;"><span>curl -v https://admin.mydomain.intra <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Host: admin.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Expected: 401 Unauthorized</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Response: {&#34;error&#34;: &#34;unauthenticated&#34;, &#34;reason&#34;: &#34;missing authorization header&#34;}</span>
+</span></span></code></pre></div><h2 id="advanced-configuration">Advanced Configuration</h2>
+<h3 id="multiple-groups-per-ingress">Multiple Groups per Ingress</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">authorino.kuadrant.io/v1beta2</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AuthConfig</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">multi-group-authz</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;shared.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authentication</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;oidc-jwt&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">jwt</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">jwksUrl</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authorization</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;multi-group-check&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">patternMatching</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">patterns</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">any</span>:
+</span></span><span style="display:flex;"><span>              - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>              - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;dev&#34;</span>
+</span></span><span style="display:flex;"><span>              - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;ops&#34;</span>
+</span></span></code></pre></div><h3 id="role-based--group-based-authorization">Role-Based + Group-Based Authorization</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">authorization</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#e6db74">&#34;role-and-group-check&#34;</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">patternMatching</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">patterns</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">all</span>:
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">any</span>:
+</span></span><span style="display:flex;"><span>                - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.realm_access.roles</span>
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin.read&#34;</span>
+</span></span><span style="display:flex;"><span>                - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.realm_access.roles</span>
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>                  <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin.write&#34;</span>
+</span></span></code></pre></div><h3 id="rate-limiting-per-user-group">Rate Limiting per User Group</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">rate-limit-by-group</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rateLimit</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">average</span>: <span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">burst</span>: <span style="color:#ae81ff">50</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">headerField</span>: <span style="color:#e6db74">&#34;x-authenticated-groups&#34;</span>
+</span></span></code></pre></div><h3 id="logging-and-audit">Logging and Audit</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">authorino.kuadrant.io/v1beta2</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">AuthConfig</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">audited-authz</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">hosts</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;secure.mydomain.intra&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authentication</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;oidc-jwt&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">jwt</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">jwksUrl</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authorization</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;group-check&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">patternMatching</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">patterns</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># Audit logging</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">callbacks</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;audit-log&#34;</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">url</span>: <span style="color:#e6db74">&#34;http://audit-service.audit-system.svc.cluster.local:8080/log&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">method</span>: <span style="color:#e6db74">&#34;POST&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">body</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth</span>
+</span></span></code></pre></div><h2 id="monitoring-and-observability">Monitoring and Observability</h2>
+<h3 id="authorino-metrics">Authorino Metrics</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Enable Authorino metrics</span>
+</span></span><span style="display:flex;"><span>helm upgrade authorino authorino/authorino <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --namespace authorino-system <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set metrics.enabled<span style="color:#f92672">=</span>true <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --set metrics.port<span style="color:#f92672">=</span><span style="color:#ae81ff">8080</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Access metrics</span>
+</span></span><span style="display:flex;"><span>kubectl port-forward -n authorino-system svc/authorino-service 8080:8080
+</span></span></code></pre></div><h3 id="key-metrics">Key Metrics</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>Description</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>authorino_auth_request_total</code></td>
+          <td>Total auth requests</td>
+      </tr>
+      <tr>
+          <td><code>authorino_auth_request_allowed</code></td>
+          <td>Allowed requests</td>
+      </tr>
+      <tr>
+          <td><code>authorino_auth_request_denied</code></td>
+          <td>Denied requests</td>
+      </tr>
+      <tr>
+          <td><code>authorino_auth_latency_seconds</code></td>
+          <td>Authorization latency</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="grafana-dashboard">Grafana Dashboard</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">ConfigMap</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">authorino-dashboard</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">monitoring</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">data</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">authorino.json</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      &#34;dashboard&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;title&#34;: &#34;Authorino Authorization&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;panels&#34;: [
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">          {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            &#34;title&#34;: &#34;Auth Requests&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            &#34;targets&#34;: [
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">                &#34;expr&#34;: &#34;rate(authorino_auth_request_total[5m])&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            ]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">          },
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">          {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            &#34;title&#34;: &#34;Allowed vs Denied&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            &#34;targets&#34;: [
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">                &#34;expr&#34;: &#34;rate(authorino_auth_request_allowed[5m])&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              },
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">                &#34;expr&#34;: &#34;rate(authorino_auth_request_denied[5m])&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            ]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">          },
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">          {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            &#34;title&#34;: &#34;Auth Latency (p99)&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            &#34;targets&#34;: [
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">                &#34;expr&#34;: &#34;histogram_quantile(0.99, rate(authorino_auth_latency_seconds_bucket[5m]))&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            ]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">          }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        ]
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    }</span>
+</span></span></code></pre></div><h3 id="traefik-access-logs">Traefik Access Logs</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Enable access logs in Traefik</span>
+</span></span><span style="display:flex;"><span><span style="color:#ae81ff">helm upgrade traefik traefik/traefik \</span>
+</span></span><span style="display:flex;"><span>  --<span style="color:#ae81ff">namespace traefik-system \</span>
+</span></span><span style="display:flex;"><span>  --<span style="color:#ae81ff">set logs.access.enabled=true \</span>
+</span></span><span style="display:flex;"><span>  --<span style="color:#ae81ff">set logs.access.format=json \</span>
+</span></span><span style="display:flex;"><span>  --<span style="color:#ae81ff">set logs.access.filters.statuscodes=[&#34;200-299&#34;,&#34;exclude&#34;]</span>
+</span></span></code></pre></div><h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="issue-401-unauthorized">Issue: 401 Unauthorized</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check token validity</span>
+</span></span><span style="display:flex;"><span>curl -X POST <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/token/introspect <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Content-Type: application/x-www-form-urlencoded&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;token=YOUR_TOKEN&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;client_id=traefik-ingress&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#34;client_secret=your-client-secret&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Authorino logs</span>
+</span></span><span style="display:flex;"><span>kubectl logs -n authorino-system -l app.kubernetes.io/name<span style="color:#f92672">=</span>authorino
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Traefik logs</span>
+</span></span><span style="display:flex;"><span>kubectl logs -n traefik-system -l app.kubernetes.io/name<span style="color:#f92672">=</span>traefik
+</span></span></code></pre></div><h3 id="issue-403-forbidden-unexpected">Issue: 403 Forbidden (Unexpected)</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Verify user groups in token</span>
+</span></span><span style="display:flex;"><span>echo $TOKEN | jq -R <span style="color:#e6db74">&#39;split(&#34;.&#34;) | .[1] | @base64d | fromjson&#39;</span> | jq <span style="color:#e6db74">&#39;.groups&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check AuthConfig status</span>
+</span></span><span style="display:flex;"><span>kubectl get authconfig admin-ingress-authz -n default -o yaml
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify pattern matching</span>
+</span></span><span style="display:flex;"><span>kubectl logs -n authorino-system -l app.kubernetes.io/name<span style="color:#f92672">=</span>authorino | grep <span style="color:#e6db74">&#34;admin-ingress-authz&#34;</span>
+</span></span></code></pre></div><h3 id="issue-authorino-not-responding">Issue: Authorino Not Responding</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check Authorino service</span>
+</span></span><span style="display:flex;"><span>kubectl get svc -n authorino-system authorino-service
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Test connectivity from Traefik</span>
+</span></span><span style="display:flex;"><span>kubectl exec -n traefik-system traefik-xxxxxxxxxx -- <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  curl -v http://authorino-service.authorino-system.svc.cluster.local:80/healthz
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check Authorino pod status</span>
+</span></span><span style="display:flex;"><span>kubectl get pods -n authorino-system
+</span></span><span style="display:flex;"><span>kubectl describe pod -n authorino-system authorino-xxxxxxxxxx
+</span></span></code></pre></div><h3 id="common-problems-and-solutions">Common Problems and Solutions</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Problem</th>
+          <th>Cause</th>
+          <th>Solution</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>401 Unauthorized</td>
+          <td>Missing/invalid token</td>
+          <td>Verify OIDC configuration</td>
+      </tr>
+      <tr>
+          <td>403 Forbidden</td>
+          <td>Group mismatch</td>
+          <td>Check user groups in Keycloak</td>
+      </tr>
+      <tr>
+          <td>503 Service Unavailable</td>
+          <td>Authorino down</td>
+          <td>Check Authorino pod status</td>
+      </tr>
+      <tr>
+          <td>Timeout</td>
+          <td>Network issue</td>
+          <td>Verify service connectivity</td>
+      </tr>
+      <tr>
+          <td>JWKS fetch failed</td>
+          <td>Network/Cert issue</td>
+          <td>Check issuer URL accessibility</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="security-best-practices">Security Best Practices</h2>
+<h3 id="1-token-validation">1. Token Validation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">authentication</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#e6db74">&#34;oidc-jwt&#34;</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">jwt</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">issuer</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">jwksUrl</span>: <span style="color:#e6db74">&#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">ttl</span>: <span style="color:#ae81ff">3600</span>  <span style="color:#75715e"># Cache JWKS for 1 hour</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">refreshInterval</span>: <span style="color:#ae81ff">300</span>  <span style="color:#75715e"># Refresh every 5 minutes</span>
+</span></span></code></pre></div><h3 id="2-least-privilege-groups">2. Least Privilege Groups</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">authorization</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#e6db74">&#34;least-privilege-check&#34;</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">patternMatching</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">patterns</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">all</span>:  <span style="color:#75715e"># Require ALL conditions</span>
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.groups</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin&#34;</span>
+</span></span><span style="display:flex;"><span>            - <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth.identity.realm_access.roles</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">operator</span>: <span style="color:#ae81ff">incl</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;admin.read&#34;</span>
+</span></span></code></pre></div><h3 id="3-audit-logging">3. Audit Logging</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">callbacks</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#e6db74">&#34;audit-log&#34;</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">http</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">url</span>: <span style="color:#e6db74">&#34;http://audit-service.audit-system.svc.cluster.local:8080/log&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">method</span>: <span style="color:#e6db74">&#34;POST&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">body</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">selector</span>: <span style="color:#ae81ff">auth</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">headers</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;Content-Type&#34;: </span><span style="color:#e6db74">&#34;application/json&#34;</span>
+</span></span></code></pre></div><h3 id="4-rate-limiting">4. Rate Limiting</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">traefik.io/v1alpha1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">auth-rate-limit</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">default</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">rateLimit</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">average</span>: <span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">burst</span>: <span style="color:#ae81ff">50</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">sourceCriterion</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">requestHeaderName</span>: <span style="color:#e6db74">&#34;x-authenticated-user&#34;</span>
+</span></span></code></pre></div><h2 id="comparison-with-alternatives">Comparison with Alternatives</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Traefik+Authorino</th>
+          <th>Istio</th>
+          <th>OPA Gatekeeper</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>External AuthZ</strong></td>
+          <td>✅ Native</td>
+          <td>⚠️ Custom</td>
+          <td>❌ No</td>
+      </tr>
+      <tr>
+          <td><strong>Group-Based</strong></td>
+          <td>✅ Built-in</td>
+          <td>✅ Yes</td>
+          <td>⚠️ Manual</td>
+      </tr>
+      <tr>
+          <td><strong>OIDC Integration</strong></td>
+          <td>✅ Multiple</td>
+          <td>✅ Yes</td>
+          <td>⚠️ Manual</td>
+      </tr>
+      <tr>
+          <td><strong>Performance</strong></td>
+          <td>✅ External</td>
+          <td>⚠️ Sidecar</td>
+          <td>✅ External</td>
+      </tr>
+      <tr>
+          <td><strong>Complexity</strong></td>
+          <td>🟡 Medium</td>
+          <td>🔴 High</td>
+          <td>🟡 Medium</td>
+      </tr>
+      <tr>
+          <td><strong>Kubernetes Native</strong></td>
+          <td>✅ CRD</td>
+          <td>✅ CRD</td>
+          <td>✅ CRD</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="when-to-use-this-approach">When to Use This Approach</h2>
+<p><strong>Choose Traefik + Authorino when:</strong></p>
+<ul>
+<li>✅ Need group-based authorization at ingress</li>
+<li>✅ Want external authorization service</li>
+<li>✅ Using OIDC for authentication</li>
+<li>✅ Need fine-grained policy control</li>
+<li>✅ Want Kubernetes-native CRD approach</li>
+</ul>
+<p><strong>Consider alternatives when:</strong></p>
+<ul>
+<li>📋 Need service mesh features (choose Istio)</li>
+<li>📋 Want policy-as-code (choose OPA)</li>
+<li>📋 Need L7 traffic management only (choose Traefik alone)</li>
+<li>📋 Running on managed Kubernetes with cloud auth (use cloud-native)</li>
+</ul>
+<h2 id="conclusion">Conclusion</h2>
+<p>Traefik + Authorino provides:</p>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>✅ Native external authorization support</li>
+<li>✅ Group-based access control</li>
+<li>✅ OIDC integration out-of-box</li>
+<li>✅ Kubernetes CRD-based configuration</li>
+<li>✅ Fine-grained policy per ingress</li>
+<li>✅ Audit logging capabilities</li>
+<li>✅ Rate limiting integration</li>
+</ul>
+<p><strong>Considerations:</strong></p>
+<ul>
+<li>📋 Additional service to manage (Authorino)</li>
+<li>📋 Network latency for auth checks</li>
+<li>📋 OIDC provider required</li>
+<li>📋 Policy syntax learning curve</li>
+</ul>
+<p>For organizations needing <strong>zero-trust ingress with group-based authorization</strong>, Traefik + Authorino provides a robust, Kubernetes-native solution that integrates seamlessly with existing OIDC providers.</p>
+<hr>
+<p><em>For more Kubernetes security guides, check out our <a href="/kubernetes/k8s-security/">K8s Security Best Practices</a> and <a href="/kubernetes/k8s-rbac/">RBAC Guide</a>.</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="security" term="security" label="Security" />
+                             
+                                <category scheme="networking" term="networking" label="Networking" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes-security" term="kubernetes-security" label="kubernetes-security" />
+                             
+                                <category scheme="traefik" term="traefik" label="traefik" />
+                             
+                                <category scheme="zero-trust" term="zero-trust" label="zero-trust" />
+                            
+                        
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="kubernetes" term="kubernetes" label="Kubernetes" />
+                             
+                                <category scheme="traefik" term="traefik" label="Traefik" />
+                             
+                                <category scheme="authorino" term="authorino" label="Authorino" />
+                             
+                                <category scheme="authorization" term="authorization" label="Authorization" />
+                             
+                                <category scheme="zero-trust" term="zero-trust" label="Zero-Trust" />
+                             
+                                <category scheme="oidc" term="oidc" label="OIDC" />
+                             
+                                <category scheme="rbac" term="rbac" label="RBAC" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>
@@ -23134,8 +24557,8 @@ xfGRpW09Qu
             <title type="html"><![CDATA[OKD OpenShift 4: Service Serving Certificate]]></title>
             <link href="https://devopstales.github.io/kubernetes/openshift4-service-serving-certificate/?utm_source=atom_feed" rel="alternate" type="text/html" />
             
-                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
+                <link href="https://devopstales.github.io/devops/openshift4-buildconfig/?utm_source=atom_feed" rel="related" type="text/html" title="Understand OKD OpenShift 4 Buildconfig Configurations" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-registry/?utm_source=atom_feed" rel="related" type="text/html" title="Configuringure OKD OpenShift 4 registry for bare metal" />
                 <link href="https://devopstales.github.io/kubernetes/openshift4-tekton/?utm_source=atom_feed" rel="related" type="text/html" title="Deploying Tekton on OpenShift 4" />
                 <link href="https://devopstales.github.io/kubernetes/openshift-log4shell/?utm_source=atom_feed" rel="related" type="text/html" title="Openshift: Log4Shell - Remote Code Execution (CVE-2021-44228) (CVE-2021-4104)" />
