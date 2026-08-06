@@ -1,0 +1,102 @@
+---
+title: Rundeck SSO
+url: https://devopstales.github.io/sso/rundeck-sso/
+date: 2019-05-14
+keywords: Keycloak, oauth2, SSO, OIDC, rundeck
+---
+
+
+In this post I will use Preauthenticated Mode for Rundeck with mod_auth_openidc and Keycloak
+
+<!--more-->
+“Preauthenticated” means that the user name and role list are provided to Rundeck from another system, usually a reverse proxy set up “in front” of the Rundeck web application, such as Apache HTTPD.
+
+### Configurate mapping in Keycloak
+Login to Keycloak and create client for the app:
+![Example image](/img/include/gitlab-keycloak1.webp)
+
+At Mappers create mappers for user information:
+
+* name: Audience
+  * mapper type: Audience
+  * Included Client Audience: web
+  * Add to ID token: on
+* name: groups
+  * Mapper Type: Group Membership
+  * Token Claim Name: groups
+  * Full group path: off
+
+### Install httpd
+```
+yum install mod_auth_openidc httpd php mod_ssl -y
+```
+
+### Configurate Rundeck
+```
+nano /etc/rundeck/rundeck-config.properties
+grails.serverURL=https://oauth.devopstales.intra
+# Pre Auth mode settings
+rundeck.security.authorization.preauthenticated.enabled=true
+rundeck.security.authorization.preauthenticated.attributeName=REMOTE_USER_GROUPS
+rundeck.security.authorization.preauthenticated.delimiter=;
+# Header from which to obtain user name
+rundeck.security.authorization.preauthenticated.userNameHeader=X-Forwarded-User
+# Header from which to obtain list of roles
+rundeck.security.authorization.preauthenticated.userRolesHeader=X-Forwarded-Roles
+```
+
+### Create vhost
+```
+nano /etc/httpd/conf.d/outh-site.conf
+# NameVirtualHost *:80
+<VirtualHost *:80>
+   ServerName oauth.devopstales.intra
+   DocumentRoot /var/www/oauth/
+   Redirect permanent / https://oauth.devopstales.intra
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerAdmin webmaster@example.com
+    ServerName oauth.devopstales.intra
+    ServerAlias www.oauth.devopstales.intra
+    DocumentRoot /var/www/oauth/
+    DirectoryIndex index.html index.php
+    ErrorLog /var/log/httpd/oauth-error.log
+    CustomLog /var/log/httpd/oauth-access.log combined
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/domain.pem
+    SSLCertificateKeyFile /etc/httpd/ssl/domain.pem
+    SSLCertificateChainFile /etc/httpd/ssl/domain.pem
+
+    # keycloak
+    OIDCProviderMetadataURL https://sso.devopstales.intra/auth/realms/mydomain/.well-known/openid-configuration
+    OIDCSSLValidateServer Off
+    OIDCClientID web
+    OIDCClientSecret 6b6c68c3-ad51-4124-ac37-4784ed58797e
+    OIDCRedirectURI https://oauth.devopstales.intra/redirect_uri
+    OIDCCryptoPassphrase passphrase
+    OIDCJWKSRefreshInterval 3600
+    OIDCScope "openid email profile"
+    # maps the prefered_username claim to the REMOTE_USER environment variable
+    OIDCRemoteUserClaim preferred_username
+
+    ProxyPreserveHost On
+
+    <Location />
+        AuthType openid-connect
+            Require valid-user
+        RequestHeader set "X-Forwarded-User" %{REMOTE_USER}s
+        RequestHeader set "X-Forwarded-Roles" %{OIDC_CLAIM_groups}e
+        ProxyPass  http://localhost:4440/
+        ProxyPassReverse http://localhost:4440/
+    </Location>
+
+</VirtualHost>
+```
+
+### Start apache
+```
+systemct start httpd
+```
+

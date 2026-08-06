@@ -1,0 +1,56 @@
+---
+title: How to setup Unifi Controller on Debian 10
+url: https://devopstales.github.io/linux/install-unifi-controller/
+date: 2020-10-12
+keywords: Unifi Controller, Unifi, Debian 10, Buster, ubiquiti
+---
+
+
+In this post I will show you how to install Unifi Controller on Debian 10 Buster.
+
+<!--more-->
+
+### Install requiremens
+```
+apt install apt-transport-https ca-certificates wget dirmngr gnupg gnupg2 software-properties-common multiarch-support
+```
+
+### Install MongoDB
+Unifi Controller requires a MongoDB from 2.4 to 4.0. The stander version of MongoDB to Debian 10 is 4.4 and 4.0-s requiremens conflicts with the Debians main libs. So we need to install MongoDB 3.4.
+
+```
+wget -qO - https://www.mongodb.org/static/pgp/server-3.4.asc |  apt-key add -
+echo "deb http://repo.mongodb.org/apt/debian jessie/mongodb-org/3.4 main" | tee /etc/apt/sources.list.d/mongodb-org-3.4.list
+```
+
+We need an old version of libssl to run MongoDB 3.4:
+```
+wget http://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl1.0.0_1.0.1t-1+deb8u12_amd64.deb
+dpkg -i libssl1.0.0_1.0.1t-1+deb8u12_amd64.deb
+```
+
+### Install Java 8
+```
+wget -qO - https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public | sudo apt-key add -
+sudo add-apt-repository --yes https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/
+
+apt update
+apt install adoptopenjdk-8-hotspot
+
+java -version
+
+nano /etc/profile
+export JAVA_HOME="/usr/lib/jvm/adoptopenjdk-8-hotspot-amd64"
+source /etc/profile
+
+echo $JAVA_HOME
+```
+
+### Install Unifi Controller
+
+```
+apt-key adv --keyserver keyserver.ubuntu.com --recv 06E85760C0A52C50
+echo 'deb https://www.ui.com/downloads/unifi/debian stable ubiquiti' | tee /etc/apt/sources.list.d/100-ubnt-unifi.list
+apt update && apt install unifi
+```
+

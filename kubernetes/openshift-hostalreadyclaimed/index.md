@@ -1,0 +1,38 @@
+---
+title: Openshift Error: HostAlreadyClaimed
+url: https://devopstales.github.io/kubernetes/openshift-hostalreadyclaimed/
+date: 2019-05-05
+keywords: ansible, openshift 3.11, openshift okd, openshift tutorial, openshift container platform, rad hat openshift
+---
+
+
+How to solvee Openshift Error: HostAlreadyClaimed
+
+<!--more-->
+I created a new route for a service and the rout not created. Get this error:
+
+```
+Name:			keycloak-gatekeeper
+Namespace:		phpmyadmin
+Created:		17 minutes ago
+Labels:			app=keycloak-gatekeeper
+Annotations:		<none>
+Requested Host:		phpmyadmin.devopstales.intra
+			  rejected by router router: HostAlreadyClaimed (36 seconds ago)
+			    route phpmyadmin/phpmyadmin-phpmyadmin has host phpmyadmin.devopstales.intra
+Path:			<none>
+TLS Termination:	edge
+Insecure Policy:	Redirect
+Endpoint Port:		http
+
+Service:	keycloak-gatekeeper
+Weight:		100 (100%)
+Endpoints:	10.130.2.149:3000
+```
+
+So I listed all the routes but I dod not found this route. In the end the force delete solved my problem.
+
+```
+oc delete route --grace-period=0 --force=true --ignore-not-found=true -n phpmyadmin phpmyadmin-phpmyadmin
+```
+

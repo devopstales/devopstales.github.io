@@ -1,0 +1,40 @@
+---
+title: Solution for: Proxmox backup error due to iothread
+url: https://devopstales.github.io/virtualization/proxmox-backup-error/
+date: 2019-11-18
+keywords: proxmox ve, proxmox cluster
+---
+
+
+If you see the following error when trying to backup a KVM VM image on Proxmox:
+
+<!--more-->
+
+```
+ERROR: Backup of VM 100 failed – disk ‘scsi0’ ‘zfsvols:vm-100-disk-1’ (iothread=on) can’t use backup feature currently. Please set backup=no for this drive at /usr/share/perl5/PVE/VZDump/QemuServer.pm line 77. INFO: Backup job finished with errors TASK ERROR: job errors
+```
+
+
+Posted on September 9, 2017 by Daniel Mettler
+Solution for: Proxmox backup error due to iothread=1
+
+If you see the following error when trying to backup a KVM VM image on Proxmox:
+
+ERROR: Backup of VM 100 failed – disk ‘scsi0’ ‘zfsvols:vm-100-disk-1’ (iothread=on) can’t use backup feature currently. Please set backup=no for this drive at /usr/share/perl5/PVE/VZDump/QemuServer.pm line 77. INFO: Backup job finished with errors TASK ERROR: job errors
+
+edit /etc/pve/qemu-server/100.conf, look for a line similar to
+
+```
+scsi0: zfsvols:vm-100-disk-1,iothread=1,size=70G
+```
+
+and change it to
+
+```
+scsi0: zfsvols:vm-100-disk-1,iothread=0,size=70G
+# OR
+scsi0: zfsvols:vm-100-disk-1,size=70G
+```
+
+After this you can backup the VM. This Problem was solvd in the proxmox 6 (pve-manager 6.0-11)
+

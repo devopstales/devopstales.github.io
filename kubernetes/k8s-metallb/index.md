@@ -1,0 +1,98 @@
+---
+title: Install MetalLB load balancer for Kubernetes
+url: https://devopstales.github.io/kubernetes/k8s-metallb/
+date: 2019-08-08
+keywords: kubernetes deployment, kubernetes ingress, MetalLB
+---
+
+
+In this tutorial I will show you how to install  Metal LB load balancer running on Kubernetes (k8s).
+
+<!--more-->
+
+{{< content "/filedir/kubernetes.html" >}}
+
+### Enviroment
+```bash
+kubectl get node
+NAME     STATUS   ROLES    EXTERNAL-IP
+host-1   Ready    master   203.0.113.1
+host-2   Ready    node     203.0.113.2
+host-3   Ready    node     203.0.113.3
+host-4   Ready    node     203.0.113.4
+```
+
+MetalLB provides a network load-balancer implementation for Kubernetes clusters that do not run on a supported cloud provider, effectively allowing the usage of LoadBalancer Services within ber-metal Installation. Kubernetes does not offer an implementation of network load-balancers (Services of type LoadBalancer) for bare metal clusters. The implementations of Network LB that Kubernetes does ship with are all glue code that calls out to various IaaS platforms (GCP, AWS, Azure…). If you’re not running on a supported IaaS platform (GCP, AWS, Azure…), LoadBalancers will remain in the “pending” state indefinitely when created.
+
+![Example image](/img/include/metallb.webp)
+
+First we need to apply the MetalLB manifest.
+```bash
+kubectl apply -f https://raw.githubusercontent.com/google/metallb/v0.8.1/manifests/metallb.yaml
+```
+
+Create a metallb-configmap.yaml file and modify your IP range accordingly.
+```yaml
+cat < EOF > metallb-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: my-ip-space
+      protocol: layer2
+      addresses:
+      - 203.0.113.2-203.0.113.4
+EOF
+
+kubectl apply -f metallb-config.yaml
+kubectl get pods -n metallb-system
+```
+
+Exposing a service through the load balancer
+```yaml
+cat <EOF>> nginx.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+  - port: 80
+    name: http
+EOF
+```
+
+```bash
+kubectl apply -f nginx-deployment.yaml
+kubectl get svc
+NAME           TYPE           CLUSTER-IP       EXTERNAL-IP    PORT(S)        AGE
+nginx          LoadBalancer   10.109.51.83     203.0.113.2    80:30452/TCP   5m
+```
+

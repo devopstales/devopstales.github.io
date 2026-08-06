@@ -1,0 +1,43 @@
+---
+title: Automatic rolling of Pods due to configuration changes
+url: https://devopstales.github.io/kubernetes/k8s-rolling-upgrade/
+date: 2023-05-29
+keywords: Kubernetes Scheduler, Deployment controller, Rolling Update, Rolling Upgrade, Config change
+---
+
+
+In this post I will show you how you can for pod upgrade at config changes in helm charts.
+<!--more-->
+
+Alongside the deployment of containers, we often ship configuration via `ConfigMap` and/or `Secret` resources. A common challenge is the need to restart the `Pod` resources when there is a change in the associated configuration.
+
+By default, if the `Pod` itself didn’t change, the `Deployment` or `StatefulSet` resource will not trigger a new rollout.
+
+### Roll when Secret or ConfigMap resources changes
+
+So to rol the Pod we need to change something in the spec when the config is changing. But what? and how to realize the change of the `ConfigMap` and/or `Secret`? The solution is to store the checksum of the  `ConfigMap` and/or `Secret` in the annotation of the Deployment, so when the file is changing the checksum is changing too, and with this we gat a new version from the `Deployment`.
+
+```yaml
+kind: Deployment
+[...]
+spec:
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+[...]
+```
+
+For resources defined as part of a `library` chart:
+
+```yaml
+kind: Deployment
+[...]
+spec:
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include ("mylibchart.configmap") . | sha256sum }}
+[...]
+```
+

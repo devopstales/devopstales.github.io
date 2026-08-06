@@ -1,0 +1,105 @@
+---
+title: Azure Key Vault AKS integration with akv2k8s
+url: https://devopstales.github.io/cloud/aks-azure-key-vault-akv2k8s/
+date: 2023-03-05
+keywords: Azure, AKS, streaming
+---
+
+
+
+In this Post I will show you how you can use akv2k8s to synchronize secrets from Azure Key Vault to AKS.
+<!--more-->
+
+AKV2K8s, which stands for Azure Key Vault to Kubernetes, employs two primary elements - the Azure Key Vault Controller and the Azure Key Vault Env Injector. These components enable the injection of secrets, keys, or certificates as environment variables that are exclusively accessible to the main process of the container.
+
+## Install akv2k8s
+
+```bash
+kubectl create ns akv2k8s
+
+helm repo add spv-charts http://charts.spvapi.no
+helm repo update
+
+# install the controller
+helm upgrade --install akv2k8s \
+  spv-charts/akv2k8s \
+  --namespace akv2k8s
+```
+
+## Use akv2k8s injector
+
+For the injector part to work you need to add the `azure-key-vault-env-injection: enabled` label for your namespace:
+
+```yaml
+cat << EOF | kubectl apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: akv2k8s-test
+  labels:
+    azure-key-vault-env-injection: enabled
+EOF
+```
+
+Now we can create a `“AzureKeyVaultSecret”` CRD to sync secret from Key Vault with akv2k8s
+
+```yaml
+cat << EOF | kubectl apply -f -
+apiVersion: spv.no/v1alpha1
+kind: AzureKeyVaultSecret
+metadata:
+  name: my-secret
+  namespace: akv2k8s-test
+spec:
+  vault:
+    name: akv2k8s-test             # name of key vault
+    object:
+      name: my-secret    # name of the akv object
+      type: secret                      # akv object type
+EOF
+```
+
+```yaml
+cat << EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: akv2k8s-test
+  namespace: akv2k8s-test
+spec:
+  containers:
+  - name: akv2k8s-env-test
+    image: spvest/akv2k8s-env-test:2.0.1
+    args: ["TEST_SECRET"]
+    env:
+    - name: TEST_SECRET
+      value: "my-secret@azurekeyvault" # ref to akvs
+EOF
+```
+
+If you try to access the environment variable using `kubectl exec` you won’t be able to see the value (only the container main process have access to it)
+
+## Sync secret from Key vault as AKS Secret
+
+To generate Kubernetes Secret Objects from Key vault you need to create the fallowing `“AzureKeyVaultSecret”` CRD
+
+```yaml
+cat << EOF | kubectl apply -f -
+apiVersion: spv.no/v1alpha1
+kind: AzureKeyVaultSecret
+metadata:
+  name: my-secret
+  namespace: akv2k8s-test
+spec:
+  vault:
+    name: akv2k8s-test             # name of key vault
+    object:
+      name: my-secret    # name of the akv object
+      type: secret                      # akv object type
+  output: 
+    secret: 
+      name: akv-secret-name1            # kubernetes secret name
+      dataKey: my-secret # key to store object value in kubernetes apiVersion: v1
+EOF
+```
+

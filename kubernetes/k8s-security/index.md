@@ -1,0 +1,359 @@
+---
+title: Best Practices for Keeping Kubernetes Clusters Secure
+url: https://devopstales.github.io/kubernetes/k8s-security/
+date: 2026-03-06
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Security, Best Practices, calico, Cilium, Pod Security Standards
+---
+
+
+Kubernetes offers rich configuration options, but defaults are usually the least secure. Most sysadmins don't know how to secure a Kubernetes cluster. So this is my Best Practice list for keeping Kubernetes Clusters Secure.
+
+<!--more-->
+
+{{< content "/filedir/k8s-sec.html" >}}
+
+### Use firewalld
+In most tutorial the first thing in a Kubernets installation is to disable the firewall because is it easier than configure properly.
+```bash
+# master
+firewall-cmd --permanent --add-port=6443/tcp
+firewall-cmd --permanent --add-port=2379-2380/tcp
+firewall-cmd --permanent --add-port=10250/tcp
+firewall-cmd --permanent --add-port=10251/tcp
+firewall-cmd --permanent --add-port=10252/tcp
+firewall-cmd --permanent --add-port=10255/tcp
+firewall-cmd --permanent --add-port=8472/udp
+firewall-cmd --add-masquerade --permanent
+firewall-cmd --permanent --add-port=30000-32767/tcp
+
+# worker
+firewall-cmd --permanent --add-port=10250/tcp
+firewall-cmd --permanent --add-port=10255/tcp
+firewall-cmd --permanent --add-port=8472/udp
+firewall-cmd --permanent --add-port=30000-32767/tcp
+firewall-cmd --add-masquerade --permanent
+
+# frontend
+firewall-cmd --permanent --add-port=10250/tcp
+firewall-cmd --permanent --add-port=10255/tcp
+firewall-cmd --permanent --add-port=8472/udp
+firewall-cmd --permanent --add-port=30000-32767/tcp
+firewall-cmd --add-masquerade --permanent
+firewall-cmd --permanent --zone=public --add-service=http
+firewall-cmd --permanent --zone=public --add-service=https
+```
+
+### Enabling signed kubelet serving certificates
+By default the kubelet serving certificate deployed by kubeadm is self-signed. This means a connection from external services like the `metrics-server` to a kubelet cannot be secured with TLS.
+
+To configure the kubelets in a new kubeadm cluster to obtain properly signed serving certificates you must pass the following minimal configuration to `kubeadm init`:
+
+```bash
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+serverTLSBootstrap: true
+```
+
+If you whant to know more about certificates and thear rotation chenck [my blog post](/kubernetes/k8s-cert/).
+
+### Pod network add-on
+Several external projects provide Kubernetes Pod networks using CNI, some of which also support Network Policy. Use one of them.
+
+* Calico
+* Canal
+* Weave Net
+* Contiv
+* Cilium
+
+See the list of available [networking and network policy add-ons](https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy).
+
+### Using RBAC Authorization
+Role-based access control (RBAC) is a method of regulating access to computer or network resources based on the roles of individual users within your organization. For that you need to create `Role` or `ClusterRole` objects then assign that objects to a user wit `RoleBinding` or `ClusterRoleBinding`.
+
+```yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: $NAMESPACE
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: deployer-access
+  namespace: $NAMESPACE
+rules:
+- apiGroups: ["", "extensions", "apps"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["batch"]
+  resources:
+  - jobs
+  - cronjobs
+  verbs: ["*"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: deployer
+  namespace: $NAMESPACE
+subjects:
+- kind: ServiceAccount
+  name: deployer
+  namespace: $NAMESPACE
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployer-access
+```
+
+### Pod Security Standards (PSS)
+
+> **Important**: PodSecurityPolicy (PSP) was deprecated in Kubernetes 1.21 and **removed in Kubernetes 1.25** (2022). This section has been updated with the modern replacement: Pod Security Admission (PSA) and Pod Security Standards.
+
+Pod Security Standards (PSS) define three security policies that cover a wide range of security controls:
+
+1. **Privileged** - Unrestricted policy, providing the widest possible level of permissions
+2. **Baseline** - Minimally restrictive policy which prevents known privilege escalations
+3. **Restricted** - Heavily restricted policy, following current Pod hardening best practices
+
+#### Using Pod Security Admission
+
+The Pod Security Admission controller is built into Kubernetes and enforces PSS at the namespace level using labels:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secure-workloads
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+```
+
+#### Key Security Controls
+
+Pod Security Standards help you control:
+
+* The ability to run privileged containers and control privilege escalation
+* Access to host filesystems, network, and PID/IPC namespaces
+* Usage of volume types
+* Running as root vs non-root users
+* SELinux, AppArmor, and seccomp profiles
+* Capabilities (adding or dropping Linux capabilities)
+
+#### Using Kyverno for Pod Security
+
+For more advanced policy enforcement, use [Kyverno](https://kyverno.io/) (Kubernetes-native policy management):
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-containers
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+  - name: deny-privileged
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    validate:
+      message: "Privileged containers are not allowed"
+      pattern:
+        spec:
+          containers:
+          - securityContext:
+              privileged: "false"
+```
+
+Install Kyverno:
+```bash
+helm repo add kyverno https://kyverno.github.io/kyverno/
+helm install kyverno kyverno/kyverno -n kyverno --create-namespace
+```
+
+### Audit Logging
+
+Usually it's a best practice to enable audits in your cluster. Let's go ahead and create a basic policy saved on our master.
+
+```yaml
+mkdir -p /etc/kubernetes
+
+cat > /etc/kubernetes/audit-policy.yaml <<EOF
+apiVersion: audit.k8s.io/v1
+kind: Policy
+rules:
+# Do not log from kube-system accounts
+- level: None
+  userGroups:
+  - system:serviceaccounts:kube-system
+  - system:nodes
+- level: None
+  users:
+  - system:apiserver
+  - system:kube-scheduler
+  - system:volume-scheduler
+  - system:kube-controller-manager
+  - system:node
+# Don't log these read-only URLs.
+- level: None
+  nonResourceURLs:
+  - /healthz*
+  - /version
+  - /swagger*
+# Limit level to Metadata so token is not included in the spec/status
+- level: Metadata
+  omitStages:
+  - RequestReceived
+  resources:
+  - group: authentication.k8s.io
+    resources:
+    - tokenreviews
+EOF
+
+mkdir -p /var/log/kubernetes/apiserver
+
+kube-apiserver --audit-log-path=/var/log/kubernetes/apiserver/audit.log \
+--audit-policy-file=/etc/kubernetes/audit-policy.yaml
+```
+
+## Image Security
+
+It doesn't matter how secure your Kubernetes network or infrastructure is if you run outdated, insecure images. You must always update your base images and scan for known vulnerabilities. For applications, use hardened base images and install as few components as possible.
+
+### Image Scanning Tools
+
+* **[Trivy](https://github.com/aquasecurity/trivy)** - Most popular, comprehensive scanner (vulnerabilities, misconfigurations, secrets)
+* **[Clair](https://www.projectquay.io/clair)** - Static analysis for known vulnerabilities
+* **[Grype](https://github.com/anchore/grype)** - Fast vulnerability scanner from Anchore
+* **[Snyk Container](https://snyk.io/product/containers/)** - Commercial solution with fix recommendations
+* **[Chainguard Enforce](https://www.chainguard.dev/)** - Policy enforcement for software supply chains
+
+### Find the Right Base Image
+
+The best choice for a base image is **Distroless** or **Chainguard Images**, which are sets of images made by Google and Chainguard that were created with the intent to be secure. These images contain the bare minimum that's needed for your app.
+
+```dockerfile
+FROM gcr.io/distroless/python3
+COPY --from=build-env /app /app
+WORKDIR /app
+CMD ["hello.py", "/etc"]
+```
+
+Or use Chainguard's hardened images:
+```dockerfile
+FROM cgr.dev/chainguard/python:latest-dev
+COPY --from=build-env /app /app
+WORKDIR /app
+CMD ["hello.py", "/etc"]
+```
+
+### Least Privileged User
+
+Create a dedicated user and group on the image, with minimal permissions to run the application; use the same user to run this process. For example, Node.js image which has a built-in node generic user:
+
+```dockerfile
+USER node
+CMD node index.js
+```
+
+### Sign Your Images with Cosign
+
+Use [Sigstore Cosign](https://github.com/sigstore/cosign) to sign and verify container images:
+
+```bash
+# Sign an image
+cosign sign --key cosign.key myregistry/myapp:v1.0
+
+# Verify before running
+cosign verify --key cosign.pub myregistry/myapp:v1.0
+```
+
+### Store Secrets in etcd Encrypted
+
+The Kubernetes base secret store is not so secure because it stores the data as base64 encoded plain text in etcd.
+
+The `kube-apiserver` process accepts an argument `--encryption-provider-config` that controls how API data is encrypted in etcd. An example configuration is provided below.
+
+```yaml
+mkdir /etc/kubernetes/etcd-enc/
+
+head -c 32 /dev/urandom | base64
+
+nano /etc/kubernetes/etcd-enc/etcd-encryption.yaml
+---
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+    - secrets
+    providers:
+    - aescbc:
+        keys:
+        - name: key1
+          secret: <BASE 64 ENCODED SECRET>
+    - identity: {}
+```
+
+In this example, key1 is the secret containing the encryption/decryption key.
+
+```bash
+nano kube-apiserver.yaml
+...
+    - --encryption-provider-config=/etc/kubernetes/etcd-enc/etcd-encryption.yaml
+...
+    volumeMounts:
+...
+    - mountPath: /etc/kubernetes/etcd-enc
+      name: etc-kubernetes-etcd-enc
+      readOnly: true
+  hostNetwork: true
+...
+  - hostPath:
+      path: /etc/kubernetes/etcd-enc
+      type: DirectoryOrCreate
+    name: etc-kubernetes-etcd-enc
+status: {}
+```
+
+### The CIS Kubernetes Benchmark
+
+The Center for Internet Security (CIS) Kubernetes Benchmark is a reference document that can be used by system administrators, security and audit professionals, and other IT roles to establish a secure configuration baseline for Kubernetes.
+
+Create kube-bench job:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/aquasecurity/kube-bench/main/job.yaml
+kubectl get jobs --watch
+```
+
+Get job output from logs:
+
+```bash
+kubectl logs $(kubectl get pods -l app=kube-bench -o name)
+```
+
+### Additional Security Tools
+
+| Tool | Purpose |
+|------|---------|
+| **kube-bench** | CIS Benchmark validation |
+| **kube-hunter** | Penetration testing for Kubernetes |
+| **Falco** | Runtime security and threat detection |
+| **Kyverno** | Policy management and enforcement |
+| **OPA/Gatekeeper** | Policy engine for Kubernetes |
+| **kubescape** | Security posture scanning |
+| **Trivy Operator** | Continuous vulnerability scanning in-cluster |
+

@@ -1,0 +1,305 @@
+---
+title: Kubernetes with external Ingress Controller with Haproxy and VXLAN
+url: https://devopstales.github.io/kubernetes/k8s-dmz-vxlan/
+date: 2024-04-10
+keywords: kubernetes deployment, haproxy, Kubernetes, ingress controller, cilium, vxlan
+---
+
+
+In this post I will show you how to nstall HAProxy Igress Controller on a separate VM instad of running it in the Kubernetes cluster as a pod. For this I  will use cilium external-workload option.
+
+<!--more-->
+
+{{< content "/filedir/k8s-sec.html" >}}
+
+At the company I working wor we head to create a kubernetes cluster with the DMZ network integration, but I didn't want to place the kubernetes cluster to the DMZ network. So I started to find a way to place only the Ingress Controller to a separate node and place only that to the DMZ. I found thet ther is an option with the HAProxy Igress Controller called external mode wher you can run the Ingress Controller not in a pod in the cluster but on a separate node.
+
+### Prerequisites
+
+* recent enough kernel (>= 4.19.57) 
+* Docker 20.10 or newer
+* External workloads VM must have IP connectivity with the nodes on vxlan port `8472/udp`
+* External workloads VM must have IP connectivity with loadbalancer IP and port
+* External workloads VM must have IP connectivity for kubernetes api
+* All external workloads must have a unique IP address assigned them
+* This guide assumes your external workload manages domain name resolution service by a stand-alone /etc/resolv.conf, or via systemd (e.g., Ubuntu, Debian).
+
+### Ciliium config
+
+```bash
+helm upgrade cilium cilium/cilium -f cilium-helm-values.yaml -n kube-system
+
+cilium status
+
+cilium clustermesh enable --service-type LoadBalancer --enable-external-workloads
+cilium clustermesh vm create f101 -n ingress-system --ipv4-alloc-cidr 10.244.20.0/30
+cilium clustermesh vm status
+cilium clustermesh vm install install-external-workload.sh
+
+scp install-external-workload.sh f101:
+```
+
+The vm object name must be the hostname of the external workload, as returned by the `hostname` command run in the external workload. In this example this is `f101`. For now you must also allocate a small IP CIDR that must be unique to each workload.  In this example this is `10.244.20.0/30`.
+
+### Install Cilium external workload
+
+On the External Ingress COntroller's VM we vill install cilium agent with the script:
+
+```bash
+./install-external-workload.sh
+```
+
+```bash
+sudo cilium-dbg status
+
+KVStore:                 Ok         etcd: 1/1 connected, leases=1, lock leases=1, has-quorum=true: https://clustermesh-apiserver.cilium.io:2379 - 3.5.12 (Leader)
+Kubernetes:              Disabled
+Host firewall:           Disabled
+SRv6:                    Disabled
+CNI Chaining:            none
+Cilium:                  Ok   1.15.3 (v1.15.3-22dfbc58)
+NodeMonitor:             Disabled
+Cilium health daemon:    Ok
+IPAM:                    IPv4: 1/2 allocated from 10.244.20.0/30, IPv6: 1/4294967294 allocated from f00d::a0f:0:0:0/96
+IPv4 BIG TCP:            Disabled
+IPv6 BIG TCP:            Disabled
+BandwidthManager:        Disabled
+Host Routing:            Legacy
+Masquerading:            IPTables [IPv4: Enabled, IPv6: Enabled]
+Controller Status:       14/14 healthy
+Proxy Status:            OK, ip 10.244.20.2, 0 redirects active on ports 10000-20000, Envoy: embedded
+Global Identity Range:   min 256, max 65535
+Hubble:                  Disabled
+Encryption:              Disabled
+Cluster health:                     Probe disabled
+```
+
+```bash
+nslookup -norecurse clustermesh-apiserver.kube-system.svc.cluster.local
+
+Server:         10.96.0.10
+Address:        10.96.0.10#53
+
+Name:   clustermesh-apiserver.kube-system.svc.cluster.local
+Address: 10.99.176.216
+```
+
+```bash
+ping $(sudo cilium-dbg service list get \
+-o jsonpath='{[?(@.spec.flags.name=="clustermesh-apiserver")].spec.backend-addresses[0].ip}') -c 5
+
+PING 10.244.1.92 (10.244.1.92) 56(84) bytes of data.
+64 bytes from 10.244.1.92: icmp_seq=1 ttl=63 time=1.19 ms
+64 bytes from 10.244.1.92: icmp_seq=2 ttl=63 time=0.587 ms
+64 bytes from 10.244.1.92: icmp_seq=3 ttl=63 time=0.697 ms
+64 bytes from 10.244.1.92: icmp_seq=4 ttl=63 time=0.634 ms
+64 bytes from 10.244.1.92: icmp_seq=5 ttl=63 time=0.399 ms
+
+--- 10.244.1.92 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4076ms
+rtt min/avg/max/mdev = 0.399/0.702/1.193/0.264 ms
+```
+
+### Install the ingress controller outside of your cluster
+
+Copy the `/etc/kubernetes/admin.conf` kubeconfig file from the control plane server to this server and store it in the root user’s home directory. The ingress controller will use this to connect to the Kubernetes API.
+
+```bash
+sudo mkdir -p /root/.kube
+sudo cp admin.conf /root/.kube/config
+sudo chown -R root:root /root/.kube
+```
+
+```bash
+kubectl create configmap -n default haproxy-kubernetes-ingress
+```
+
+HAProxy Kubernetes Ingress Controller is compatible with a specific version of HAProxy. Install the HAProxy package on your Linux distribution based on the table below. For Ubuntu and Debian, follow the install steps at [haproxy.debian.net](https://haproxy.debian.net/)
+
+| Ingress controller version | Compatible HAProxy version |
+| -------------------------- | -------------------------- |
+| 1.11 | 2.8 |
+| 1.10 | 2.7 |
+| 1.9 | 2.6 |
+| 1.8 | 2.5 |
+| 1.7 | 2.4 |
+
+In my case I use Ingress controller version `1.11` and HAProxy version `2.8`:
+
+```bash
+curl https://haproxy.debian.net/bernat.debian.org.gpg \
+      | gpg --dearmor > /usr/share/keyrings/haproxy.debian.net.gpg
+echo deb "[signed-by=/usr/share/keyrings/haproxy.debian.net.gpg]" \
+      http://haproxy.debian.net bookworm-backports-2.8 main \
+      > /etc/apt/sources.list.d/haproxy.list
+
+apt-get update
+apt-get install haproxy=2.8.\*
+```
+
+Stop and disable the HAProxy service.
+
+```bash
+sudo systemctl stop haproxy
+sudo systemctl disable haproxy
+```
+
+Call the `setcap` command to allow HAProxy to bind to ports 80 and 443:
+
+```bash
+sudo setcap cap_net_bind_service=+ep /usr/sbin/haproxy
+```
+
+Download the ingress controller from the project’s [GitHub Releases page](https://github.com/haproxytech/kubernetes-ingress/releases/)
+Extract it and then copy it to the /usr/local/bin directory.
+
+```bash
+wget https://github.com/haproxytech/kubernetes-ingress/releases/download/v1.11.3/haproxy-ingress-controller_1.11.3_Linux_x86_64.tar.gz
+
+tar -xzvf haproxy-ingress-controller_1.11.3_Linux_x86_64.tar.gz
+sudo cp ./haproxy-ingress-controller /usr/local/bin/
+```
+
+Create the file `/lib/systemd/system/haproxy-ingress.service` and add the following to it:
+
+```bash
+cat << EOF > /lib/systemd/system/haproxy-ingress.service
+[Unit]
+Description="HAProxy Kubernetes Ingress Controller"
+Documentation=https://www.haproxy.com/
+Requires=network-online.target
+After=network-online.target
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/haproxy-ingress-controller --external --default-ssl-certificate=ingress-system/default-cert --configmap=default/haproxy-kubernetes-ingress --program=/usr/sbin/haproxy --disable-ipv6 --ipv4-bind-address=0.0.0.0 --http-bind-port=80 --https-bind-port=443  --ingress.class=ingress-public
+ExecReload=/bin/kill --signal HUP $MAINPID
+KillMode=process
+KillSignal=SIGTERM
+Restart=on-failure
+LimitNOFILE=65536
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+Enable and start the service.
+
+```bash
+sudo systemctl enable haproxy-ingress
+sudo systemctl start haproxy-ingress
+```
+
+### Demo Aapp
+
+```bash
+nano demo-app.yaml
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "false"
+  labels:
+    app.kubernetes.io/instance: ingress-public
+  name: ingress-public
+spec:
+  controller: haproxy.org/ingress-controller/ingress-public
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ labels:
+   run: app
+ name: app
+ namespace: default
+spec:
+ replicas: 5
+ selector:
+   matchLabels:
+     run: app
+ template:
+   metadata:
+     labels:
+       run: app
+   spec:
+     containers:
+     - name: app
+       image: jmalloc/echo-server
+       ports:
+       - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+ labels:
+   run: app
+ name: app
+ namespace: default
+spec:
+ selector:
+   run: app
+ ports:
+ - name: port-1
+   port: 80
+   protocol: TCP
+   targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+ name: test-ingress
+ namespace: default
+spec:
+  ingressClassName: ingress-public
+  rules:
+  - host: "example.com"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: app
+            port:
+              number: 80
+```
+
+```bash
+kubectl apply -f demo-app.yaml
+```
+
+```bash
+cat /tmp/haproxy-ingress/etc/haproxy.cfg
+...
+backend default_app_port-1
+  mode http
+  balance roundrobin
+  option forwardfor
+  no option abortonclose
+  default-server check
+  server SRV_1 10.244.1.105:8080 enabled
+
+egrep -r "example" /tmp/haproxy-ingress/
+/tmp/haproxy-ingress/etc/maps/host.map:example.com                      example.com
+/tmp/haproxy-ingress/etc/maps/path-prefix.map:example.com/                      default_app_port-1
+```
+
+```bash
+sudo nano /etc/hosts
+127.0.0.1 example.com
+```
+
+```bash
+curl http://example.com
+Request served by app-84bdb7868d-hxwb7
+
+GET / HTTP/1.1
+
+Host: example.com
+Accept: */*
+User-Agent: curl/8.1.2
+X-Forwarded-For: 192.168.56.7
+```
+

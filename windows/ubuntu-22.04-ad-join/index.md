@@ -1,0 +1,145 @@
+---
+title: Ubuntu 22.04 - Microsoft Active Directory Group Policy
+url: https://devopstales.github.io/windows/ubuntu-22.04-ad-join/
+date: 2022-07-05
+keywords: Microsoft's Active Directory, Group Policy, Ubuntu 22.04
+---
+
+
+In this Post I will show you the new Active Directory  Group Policy integration in Ubuntu 22.04.
+<!--more-->
+
+### Environment
+
+* AD Server:
+  * Domain Server: Windows Server 20119
+  * Domain Name: devopstales.intra
+  * Hostname: dc01.devopstales.intra
+  * NetBIOS Name: DC01
+  * Realm: DEVOPSTALES.INTRA
+
+### Join the Ubuntu 22.04 to Active Directory
+
+First install some required packages. 
+
+```bash
+sudo apt install sssd-ad sssd-tools realmd adcli adsys -y
+```
+
+Change the DNS and NTP server to the Active Directory Domain Controller
+
+```bash
+sudo vi /etc/netplan/01-netcfg.yaml 
+---
+...
+    nameservers:
+        addresses: [192.168.100.100]
+
+sudo netplan apply
+```
+
+```bash
+sudo vi /etc/ntp.conf
+...
+server 192.168.100.100 iburst
+
+sudo systemctl restart ntp
+
+ntpq -p
+```
+
+Test Active Directory Domain Connection
+
+```bash
+realm discover dc01.devopstales.intra
+
+devopstales.intra
+  type: kerberos
+  realm-name: DEVOPSTALES.INTRA
+  domain-name: devopstales.intra
+  configured: no
+  server-software: active-directory
+  client-software: sssd
+  required-package: sssd-tools
+  required-package: sssd
+  required-package: libnss-sss
+  required-package: libpam-sss
+  required-package: adcli
+  required-package: samba-common-bin
+```
+
+Join to the Active Directory Domain
+
+```bash
+sudo realm join dc01.devopstales.intra
+Password for Administrator:
+
+id developer-user@devopstales.intra
+uid=1259201103(developer-user@devopstales.intra) gid=1259200513(domain users@devopstales.intra) groups=1259200513(domain users@devopstales.intra),1259200512(domain admins@devopstales.intra),1259200572(denied rodc password replication group@devopstales.intra)
+```
+
+If you want to cut down the domain name from the username:
+
+```bash
+sudo vi /etc/sssd/sssd.conf
+ use_fully_qualified_names = False
+
+systemctl restart sssd
+
+id Administrator
+uid=1259200500(administrator) gid=1259200513(domain users) groups=1259200513(domain users),1259200572(denied rodc password replication group),1259200512(domain admins),1259200518(schema admins),1259200520(group policy creator owners),1259200519(enterprise admins)
+```
+
+Enable home folder creation for domain users:
+
+```bash
+sudo pam-auth-update --enable mkdir
+```
+
+Now you can login wit and AD user to the Ubuntu:
+
+```bash
+exit
+
+Ubuntu 22.04 LTS dlp.srv.world ttyS0
+
+ubuntu-client login: developer-user@devopstales.intra
+Password:
+Welcome to Ubuntu 22.04 LTS (GNU/Linux 5.15.0-25-generic x86_64)
+```
+
+### Manage Linux GPO from Windows AD
+
+To manage Linux clients from AD Group Policy we need to install the custom Group Policies to the AD Domain Controller `sysvol` folder.
+
+Firs we generate the custom Group Policy files:
+
+```bash
+sudo adsysctl policy admx all
+```
+
+On AD Domain Controller copy these files to:
+
+```bash
+.admx C:\Windows\SYSVOL\domain\Policies\PolicyDefinitions\
+.adml C:\Windows\SYSVOL\domain\Policies\PolicyDefinitions\en-US\
+```
+
+### Create GPO for sudo
+
+On the Windows Active Directory Domain Controller open  `Group Policy Management Console`
+
+Create a new GPO and right click `Edit`
+
+Go to `Computer Configuration > Policies > Administrative Templates > Ubuntu > Client Management > Privilege Authorization`. Then Select `Client Administrators` Select `Enable` and add the usernames.
+
+Now force sync the GPOs on the Ubuntu client:
+
+```bash
+adsysctl policy update -av
+
+adsysctl policy applied --details
+```
+
+Now you can sudo with the selected user.
+

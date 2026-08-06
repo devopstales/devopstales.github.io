@@ -1,0 +1,201 @@
+---
+title: Image Signature Verification Admission Controller V2
+url: https://devopstales.github.io/kubernetes/k8s-connaisseur-v2/
+date: 2021-08-01
+keywords: kubernetes deployment, kubernetes vs docker, Connaisseur, Notary, Cosign
+---
+
+
+In this post I will show you how you can deploy Connaisseur 2.0 to Image Signature Verification into a Kubernetes cluster.
+
+<!--more-->
+
+{{< content "/filedir/k8s-sec.html" >}}
+
+### What is Connaisseur?
+Connaisseur is an admission controller for Kubernetes that integrates Image Signature Verification into a cluster, as a means to ensure that only valid images are being deployed.
+
+
+### Notary
+Notary is an open source signing solution for containers based on The Update Framework Notary uses TUFs’ roles and key hierarchy for signing of the images. There are five keys to sign the metadata files which lists all filenames in the collection, their sizes and respective hashes.
+
+```bash
+apt install notary
+```
+
+```bash
+docker pull alpine
+docker tag alpine:latest devopstales/testimage:unsigned
+docker push devopstales/testimage:unsigned
+```
+
+
+```bash
+notary -s https://notary.docker.io -d ~/.docker/trust init -p docker.io/devopstales/testimage     
+Root key found, using: 31579f2a034add499da6e799bc9260d08a15ab1804298218f05f78d97a669f77
+Enter passphrase for root key with ID 31579f2: 
+Enter passphrase for new targets key with ID 42e49c6: 
+Repeat passphrase for new targets key with ID 42e49c6: 
+Enter passphrase for new snapshot key with ID 399243c: 
+Repeat passphrase for new snapshot key with ID 399243c: 
+Enter username: devopstales
+Enter password: 
+Auto-publishing changes to docker.io/devopstales/testimage
+Enter username: devopstales
+Enter password: 
+Successfully published changes for repository docker.io/devopstales/testimage
+
+
+export DOCKER_CONTENT_TRUST=1
+export DOCKER_CONTENT_TRUST_SERVER=https://notary.docker.io
+docker tag alpine:latest devopstales/testimage:signed
+docker push devopstales/testimage:signed
+```
+
+```bash
+$ find ~/.docker/trust/ | head
+/home/devopstales/.docker/trust/
+/home/devopstales/.docker/trust/private
+/home/devopstales/.docker/trust/private/1f4a9a0922605b3bc19c97e180d962d530721288f4fd0845ad0aa37ba4a6f95d.key
+/home/devopstales/.docker/trust/private/fe30e72f5976b2ae7d0d365f28dacfae9c71f11ad854065603ccc806900e84fa.key
+/home/devopstales/.docker/trust/private/3da0d27e2d3b964d238d1d184c7578b5f2737b918ec5b8265474e22b07b2ea22.key
+/home/devopstales/.docker/trust/private/root-priv.key
+/home/devopstales/.docker/trust/private/root-pub.pem
+/home/devopstales/.docker/trust/tuf
+/home/devopstales/.docker/trust/tuf/docker.io
+/home/devopstales/.docker/trust/tuf/docker.io/devopstales
+```
+
+```bash
+notary -s https://notary.docker.io -d ~/.docker/trust list docker.io/devopstales/testimage
+NAME     DIGEST                                                              SIZE (BYTES)    ROLE
+----     ------                                                              ------------    ----
+signed    4661fb57f7890b9145907a1fe2555091d333ff3d28db86c3bb906f6a2be93c87    528             targets/devopstales
+```
+
+### Install Connaisseur
+
+```
+# The installer use yq so we need to install it
+
+wget https://github.com/mikefarah/yq/releases/download/v4.2.0/yq_linux_amd64 -O /usr/bin/yq &&\
+    chmod +x /usr/bin/yq
+```
+
+```bash
+# generate the public root cert
+
+cd ~/.docker/trust/private
+sed '/^role:\sroot$/d' $(grep -iRl "role: root" .) > root-priv.key
+openssl ec -in root-priv.key -pubout -out root-pub.pem
+```
+
+```yaml
+git clone https://github.com/sse-secure-systems/connaisseur.git
+cd connaisseur
+nano helm/values.yaml
+...
+validators:
+...
+# static validator that allows each image
+- name: allow
+  type: static
+  approve: true
+# pre-configured nv1 validator for public notary from Docker Hub
+- name: dockerhub_basics
+  type: notaryv1
+  host: notary.docker.io
+  trust_roots:
+    # public key for official docker images (https://hub.docker.com/search?q=&type=image&image_filter=official)
+    # !if not needed feel free to remove the key!
+  - name: docker_official
+    key: |
+      -----BEGIN PUBLIC KEY-----
+      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOXYta5TgdCwXTCnLU09W5T4M4r9f
+      QQrqJuADP6U7g5r9ICgPSmZuRHP/1AYUfOQW3baveKsT969EfELKj1lfCA==
+      -----END PUBLIC KEY-----
+  # public key securesystemsengineering repo including Connaisseur images
+  # !this key is critical for Connaisseur!
+  - name: securesystemsengineering_official
+    key: |
+      -----BEGIN PUBLIC KEY-----
+      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsx28WV7BsQfnHF1kZmpdCTTLJaWe
+      d0CA+JOi8H4REuBaWSZ5zPDe468WuOJ6f71E7WFg3CVEVYHuoZt2UYbN/Q==
+      -----END PUBLIC KEY-----
+    # public key securesystemsengineering repo including devopstales images
+  - name: devopstales_official
+    key: |
+      -----BEGIN PUBLIC KEY-----
+      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9m6WfwViwT8lYjLF6jAs1bvd1hPp
+      cRUmONP49JszW1X/6Q22DygylIJGyC8IXeb3zBWVMoYDxauiqrFomHUOEA==
+      -----END PUBLIC KEY-----
+
+policy:
+- pattern: "*:*"
+- pattern: "docker.io/library/*:*"
+  validator: dockerhub_basics
+  with:
+    trust_root: docker_official
+- pattern: "k8s.gcr.io/*:*"
+  validator: allow
+- pattern: "docker.io/securesystemsengineering/*:*"
+  validator: dockerhub_basics
+  with:
+    trust_root: securesystemsengineering_official
+- pattern: "docker.io/devopstales/*:*"
+  validator: dockerhub_basics
+  with:
+    trust_root: devopstales_official
+
+```
+
+* the `default` validator is used if no validator is specified in image policy
+* type: supported validators (e.g. "cosign" or "notaryv1") notaryv2 is not yet supported
+* host: url of the notary server
+* key: the public part of the root key, for verifying notary's signatures
+
+Then deploy the helm chart. This can take a few minutes. 
+
+```bash
+helm install connaisseur helm --atomic --create-namespace --namespace connaisseur
+```
+
+```bash
+kubectl get all -n connaisseur
+NAME                                          READY   STATUS    RESTARTS   AGE
+pod/connaisseur-deployment-565d45bb74-ktbmb   1/1     Running   0          71s
+pod/connaisseur-deployment-565d45bb74-pfghx   1/1     Running   0          71s
+pod/connaisseur-deployment-565d45bb74-rcj44   1/1     Running   0          71s
+
+NAME                      TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE
+service/connaisseur-svc   ClusterIP   10.43.196.6   <none>        443/TCP   71s
+
+NAME                                     READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/connaisseur-deployment   3/3     3            3           71s
+
+NAME                                                DESIRED   CURRENT   READY   AGE
+replicaset.apps/connaisseur-deployment-565d45bb74   3         3         3       71s
+```
+
+### Test the Image Signature Verification
+
+```bash
+kubens default
+
+kubectl run unsigned --image=docker.io/devopstales/testimage:unsigned
+Error from server: admission webhook "connaisseur-svc.connaisseur.svc" denied the request: Unable to find signed digest for image docker.io/devopstales/testimage:unsigned.
+
+kubectl run signed --image=docker.io/devopstales/testimage:signed
+pod/signed created
+
+kubectl get po
+```
+
+### Final words
+
+Connaisseur is a grate tool and with the 2.0 it solved all of the 1.0's shortcomings:
+
+* There is no option to whitelist images in a specific namespace.
+* Connaisseur supports only one Notary server
+* Connaisseur supports only one public key
+

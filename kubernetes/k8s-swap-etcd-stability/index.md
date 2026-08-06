@@ -1,0 +1,613 @@
+---
+title: Kubernetes Swap and etcd Stability: Preventing Control Plane Hangs
+url: https://devopstales.github.io/kubernetes/k8s-swap-etcd-stability/
+date: 2026-02-27
+keywords: Kubernetes swap, etcd performance, Kubernetes control plane, kubeadm configuration, etcd loadbalancer, master node resource limits
+---
+
+
+When enabling swap on Kubernetes nodes, you might encounter a critical issue where misbehaving containers don't get killed automatically. When this affects etcd, the API server generating excessive load and consuming all available resources. This post explains the problem and provides two solutions.
+
+<!--more-->
+
+When enabling swap on Kubernetes nodes, you might encounter a critical issue where misbehaving containers don't get killed automatically—they hang indefinitely. When this affects etcd on control plane nodes, the consequences are severe: the API server continuously tries to communicate with the local etcd instance, generating excessive load and consuming all available resources.
+
+## The Problem: Swap and Container Memory Management
+
+Kubernetes was designed with the assumption that swap is disabled. When swap is enabled, the kubelet's ability to enforce memory limits is compromised. Here's what happens:
+
+```
+┌──────────────────────────┐
+│ Container Memory Pressure│
+└────────────┬─────────────┘
+             │
+             ▼
+      ┌─────────────┐
+      │Swap Enabled?│
+      └──────┬──────┘
+             │
+    ┌────────┴────────┐
+    │ Yes             │ No
+    ▼                 ▼
+┌──────────────────┐ ┌──────────────────┐
+│ Memory Swapped   │ │ Container OOM    │
+│ to Disk          │ │ Killed           │
+└────────┬─────────┘ └────────┬─────────┘
+         │                    │
+         ▼                    ▼
+┌──────────────────┐ ┌──────────────────┐
+│ Container Hangs/ │ │ Container        │
+│ Freezes          │ │ Restarted        │
+└────────┬─────────┘ └────────┬─────────┘
+         │                    │
+         ▼                    ▼
+┌──────────────────┐ ┌──────────────────┐
+│ Service          │ │ Service Recovers │
+│ Degradation      │ │                  │
+└──────────────────┘ └──────────────────┘
+```
+
+### Why etcd Suffers Most
+
+When etcd runs on a control plane node with swap enabled and experiences memory pressure:
+
+1. **etcd doesn't get killed** - Instead of an OOM kill and restart, it swaps to disk
+2. **etcd becomes unresponsive** - Disk I/O is orders of magnitude slower than RAM
+3. **API server keeps retrying** - The kube-apiserver constantly attempts to reach the local etcd
+4. **Resource exhaustion** - Retry loops consume CPU and network resources
+5. **Control plane cascade failure** - Other components start failing
+
+```
+
+┌───────────────┐ ┌──────────────────┐ ┌───────────┐ ┌────────────┐
+│kube-apiserver │ │etcd (swapped)    │ │ kubelet   │ │ scheduler  │
+└───────┬───────┘ └────────┬─────────┘ └─────┬─────┘ └─────┬──────┘
+        │                  │                 │             │
+        │                  │Memory pressure  │             │
+        │                  │Swap to disk(slow│             │
+        │                  │                 │             │
+        │Request           │                 │             │
+        │─────────────────>│                 │             │
+        │                  │                 │             │
+        │Timeout(no response)                │             │
+        │<─────────────────│                 │             │
+        │                  │                 │             │
+        │Retry request     │                 │             │
+        │─────────────────>│                 │             │
+        │                  │                 │             │
+        │Timeout           │                 │             │
+        │<─────────────────│                 │             │
+        │                  │                 │             │
+        │╔══════════════════════════════════════════════════╗│
+        │║ Retry Loop:                                      ║│
+        │║ Continuous requests ────────────────────────────>║│
+        │║ CPU spike + Network saturation                   ║│
+        │╚══════════════════════════════════════════════════╝│
+        │                  │                 │             │
+        │                  │Health check     │             │
+        │                  │<────────────────│             │
+        │                  │etcd unhealthy   │             │
+        │                  │but not dead     │             │
+        │                  │                 │             │
+        │Cannot schedule pods─────────────────────────────>│
+        │                  │                 │Cluster degraded
+
+## Solution 1: Set Resource Limits for Control Plane Components
+
+The first line of defense is setting explicit resource limits for all control plane components. This prevents any single component from consuming all available resources.
+
+### Post-Installation Configuration
+
+After cluster installation, create static pod manifests with resource limits:
+
+```bash
+# Backup existing manifests
+sudo cp -r /etc/kubernetes/manifests /etc/kubernetes/manifests.backup
+```
+
+#### kube-apiserver Resources
+
+Edit `/etc/kubernetes/manifests/kube-apiserver.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-apiserver
+  namespace: kube-system
+spec:
+  containers:
+  - name: kube-apiserver
+    image: registry.k8s.io/kube-apiserver:v1.29.0
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+    # ... rest of config
+```
+
+#### kube-controller-manager Resources
+
+Edit `/etc/kubernetes/manifests/kube-controller-manager.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-controller-manager
+  namespace: kube-system
+spec:
+  containers:
+  - name: kube-controller-manager
+    image: registry.k8s.io/kube-controller-manager:v1.29.0
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+```
+
+#### kube-scheduler Resources
+
+Edit `/etc/kubernetes/manifests/kube-scheduler.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-scheduler
+  namespace: kube-system
+spec:
+  containers:
+  - name: kube-scheduler
+    image: registry.k8s.io/kube-scheduler:v1.29.0
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+```
+
+#### etcd Resources
+
+Edit `/etc/kubernetes/manifests/etcd.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: etcd
+  namespace: kube-system
+spec:
+  containers:
+  - name: etcd
+    image: registry.k8s.io/etcd:3.5.10-0
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "2000m"
+    env:
+    - name: ETCD_MEM_LIMIT
+      value: "2Gi"
+```
+
+> **Note:** After modifying static pod manifests, the kubelet will automatically restart the pods with new configurations.
+
+### Configuration via kubeadm (During Installation)
+
+For new clusters, configure resource limits during initialization using a kubeadm configuration file.
+
+Create `kubeadm-config.yaml`:
+
+```yaml
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: v1.29.0
+controlPlaneEndpoint: "lb.example.com:6443"
+
+# API Server configuration
+apiServer:
+  extraArgs:
+    authorization-mode: Node,RBAC
+  timeoutForControlPlane: 4m0s
+  extraVolumes: []
+
+# Controller Manager configuration
+controllerManager:
+  extraArgs:
+    bind-address: 0.0.0.0
+  extraVolumes: []
+
+# Scheduler configuration
+scheduler:
+  extraArgs:
+    bind-address: 0.0.0.0
+  extraVolumes: []
+
+# etcd configuration
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+    extraArgs:
+      quota-backend-bytes: "8589934592"  # 8GB
+      max-request-bytes: "10485760"       # 10MB
+
+# Network configuration
+networking:
+  dnsDomain: cluster.local
+  serviceSubnet: 10.96.0.0/12
+  podSubnet: 10.244.0.0/16
+
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "192.168.1.10"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///var/run/containerd/containerd.sock
+  imagePullPolicy: IfNotPresent
+  name: "control-plane-1"
+  taints:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/control-plane
+
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+# Important: Configure memory management
+memorySwap:
+  swapBehavior: LimitedSwap  # Allow limited swap
+maxPods: 110
+serializeImagePulls: false
+```
+
+Initialize the cluster:
+
+```bash
+sudo kubeadm init --config kubeadm-config.yaml
+```
+
+For joining control plane nodes, create `kubeadm-join-config.yaml`:
+
+```yaml
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: JoinConfiguration
+controlPlane:
+  localAPIEndpoint:
+    advertiseAddress: "192.168.1.11"
+    bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///var/run/containerd/containerd.sock
+  imagePullPolicy: IfNotPresent
+  name: "control-plane-2"
+  taints:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/control-plane
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: "lb.example.com:6443"
+    token: "abcdef.0123456789abcdef"
+    unsafeSkipCAVerification: false
+```
+
+```bash
+sudo kubeadm join --config kubeadm-join-config.yaml
+```
+
+## Solution 2: Deploy etcd LoadBalancer DaemonSet
+
+The second solution distributes etcd traffic across all control plane nodes, preventing any single node's etcd from becoming a bottleneck.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   Control Plane Nodes                           │
+│                                                                 │
+│  ┌─────────────────┐                                           │
+│  │ kube-apiserver  │                                           │
+│  └────────┬────────┘                                           │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────┐                                           │
+│  │Local LB DaemonSet│                                          │
+│  └────────┬────────┘                                           │
+│           │                                                     │
+│           ▼                                                     │
+│     ┌─────────────┐                                            │
+│     │Load Balancer│                                            │
+│     └──────┬──────┘                                            │
+│            │                                                    │
+│       ┌────┴────┬───────────┐                                   │
+│       │         │           │                                   │
+│       ▼         ▼           ▼                                   │
+│  ┌────────┐ ┌────────┐ ┌────────┐                               │
+│  │etcd-1  │ │etcd-2  │ │etcd-3  │                               │
+│  │:2379   │ │:2379   │ │:2379   │                               │
+│  └────────┘ └────────┘ └────────┘                               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+            │         │           │
+            │         │           │
+┌───────────┴─────────┴───────────┴───────────┐
+│              etcd Cluster                   │
+└─────────────────────────────────────────────┘
+```
+
+### Step 1: Create etcd LoadBalancer Service
+
+Create `etcd-lb.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd-loadbalancer
+  namespace: kube-system
+  labels:
+    app: etcd-lb
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  ports:
+  - name: etcd-client
+    port: 2379
+    targetPort: 2379
+    protocol: TCP
+  selector:
+    component: etcd
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: etcd-loadbalancer
+  namespace: kube-system
+  labels:
+    app: etcd-lb
+subsets:
+- addresses:
+  - ip: 192.168.1.10  # control-plane-1
+  - ip: 192.168.1.11  # control-plane-2
+  - ip: 192.168.1.12  # control-plane-3
+  ports:
+  - name: etcd-client
+    port: 2379
+    protocol: TCP
+```
+
+### Step 2: Deploy HAProxy DaemonSet
+
+Create `etcd-haproxy-daemonset.yaml`:
+
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: etcd-haproxy
+  namespace: kube-system
+  labels:
+    app: etcd-haproxy
+spec:
+  selector:
+    matchLabels:
+      app: etcd-haproxy
+  template:
+    metadata:
+      labels:
+        app: etcd-haproxy
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: haproxy
+        image: haproxy:2.8-alpine
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        ports:
+        - containerPort: 2380
+          hostPort: 2380
+          name: etcd-lb
+        volumeMounts:
+        - name: haproxy-config
+          mountPath: /usr/local/etc/haproxy
+        livenessProbe:
+          tcpSocket:
+            port: 2380
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 2380
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: haproxy-config
+        configMap:
+          name: etcd-haproxy-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etcd-haproxy-config
+  namespace: kube-system
+data:
+  haproxy.cfg: |
+    global
+      log stdout format raw local0
+      maxconn 4096
+    
+    defaults
+      log global
+      mode tcp
+      timeout connect 5s
+      timeout client 30s
+      timeout server 30s
+      option dontlognull
+    
+    frontend etcd-frontend
+      bind *:2380
+      default_backend etcd-servers
+    
+    backend etcd-servers
+      balance roundrobin
+      option httpchk GET /health
+      http-check expect status 200
+      server etcd-1 192.168.1.10:2379 check inter 5s fall 3 rise 2
+      server etcd-2 192.168.1.11:2379 check inter 5s fall 3 rise 2
+      server etcd-3 192.168.1.12:2379 check inter 5s fall 3 rise 2
+```
+
+Apply the configuration:
+
+```bash
+kubectl apply -f etcd-haproxy-daemonset.yaml
+```
+
+### Step 3: Configure API Server to Use LoadBalancer
+
+Modify the kube-apiserver manifest to point to the local HAProxy instance:
+
+Edit `/etc/kubernetes/manifests/kube-apiserver.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-apiserver
+  namespace: kube-system
+spec:
+  containers:
+  - name: kube-apiserver
+    command:
+    - kube-apiserver
+    - --etcd-servers=http://127.0.0.1:2380  # Point to local HAProxy
+    # ... rest of config
+```
+
+The kubelet will automatically restart the API server with the new configuration.
+
+### Verify the Setup
+
+```bash
+# Check HAProxy pods are running
+kubectl get pods -n kube-system -l app=etcd-haproxy
+
+# Verify etcd connectivity
+kubectl exec -n kube-system etcd-control-plane-1 -- \
+  etcdctl --endpoints=http://127.0.0.1:2380 endpoint health
+
+# Check API server logs
+kubectl logs -n kube-system kube-apiserver-control-plane-1 | grep -i etcd
+```
+
+## Additional Recommendations
+
+### 1. Monitor etcd Performance
+
+Deploy monitoring for etcd metrics:
+
+```yaml
+# etcd metrics service
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd-metrics
+  namespace: kube-system
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: metrics
+    port: 2381
+    targetPort: 2381
+  selector:
+    component: etcd
+```
+
+Key metrics to watch:
+- `etcd_server_has_leader` - Leader election status
+- `etcd_server_leader_changes_seen_total` - Leader change frequency
+- `etcd_mvcc_db_total_size_in_bytes` - Database size
+- `etcd_disk_backend_commit_duration_seconds` - Disk commit latency
+
+### 2. Consider Disabling Swap
+
+If possible, the best solution is to disable swap entirely:
+
+```bash
+# Disable swap immediately
+sudo swapoff -a
+
+# Remove swap from fstab
+sudo sed -i '/swap/d' /etc/fstab
+
+# Verify
+free -h  # Swap should show 0
+```
+
+### 3. Use Dedicated etcd Nodes
+
+For production clusters, consider running etcd on dedicated nodes separate from the control plane components.
+
+## Conclusion
+
+Running Kubernetes with swap enabled introduces significant risks, especially for etcd stability. The combination of:
+
+1. **Resource limits** on control plane components
+2. **Load balancing** etcd traffic across all control plane nodes
+3. **Proper monitoring** of etcd health metrics
+
+provides defense-in-depth against control plane failures. However, for production environments, disabling swap remains the recommended approach.
+
+```
+
+┌─────────────────────────┐
+│ Kubernetes with Swap    │
+└────────────┬────────────┘
+             │
+             ▼
+      ┌──────────────┐
+      │ Risk Level   │
+      └──────┬───────┘
+             │
+    ┌────────┼──────────┬─────────────┐
+    │        │          │             │
+    ▼        ▼          ▼             ▼
+┌─────────┐ ┌──────────┐ ┌───────────┐ ┌───────────────┐
+│No       │ │Resource  │ │Limits + LB│ │Swap Disabled  │
+│Protection│ │Limits    │ │           │ │               │
+│         │ │Only      │ │           │ │               │
+└────┬────┘ └────┬─────┘ └─────┬─────┘ └───────┬───────┘
+     │           │             │                │
+     ▼           ▼             ▼                ▼
+┌─────────────┐ ┌───────────┐ ┌────────────┐ ┌──────────────┐
+│High Risk:   │ │Medium    │ │Lower Risk: │ │Best Practice:│
+│Control Plane│ │Risk:     │ │Distributed │ │No Swap Issues│
+│Failure      │ │Partial   │ │Load        │ │              │
+│             │ │Protection│ │            │ │              │
+└─────────────┘ └───────────┘ └────────────┘ └──────────────┘
+```
+
+**Remember:** A stable etcd is the foundation of a healthy Kubernetes cluster. Invest in proper resource management and monitoring from the start.
+

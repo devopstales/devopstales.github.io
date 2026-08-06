@@ -1,0 +1,229 @@
+---
+title: Why Kubernetes Pods See Host Resources (And How to Fix It)
+url: https://devopstales.github.io/kubernetes/kubernetes-resource-visibility/
+date: 2025-05-15
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Secuity, best Practices, gvisor
+---
+
+
+When you check resource usage inside a Kubernetes pod, you might be surprised to see the full host machine's resources - even when you've set strict limits. Let's explore why this happens and how to fix it.
+
+<!--more-->
+
+## Why Do Pods See Host Resources?
+
+Even if you define resource `limits` in a Kubernetes pod spec, tools inside the container like:
+
+- `free`, `top`
+- `cat /proc/meminfo`
+- `cat /proc/cpuinfo`
+
+...still show **total host resources** by default.
+
+This is because Linux containers are just processes on the host, and unless further isolated, they have visibility into the full `/proc` filesystem of the host kernel.
+
+When you set resource limits in Kubernetes, you're telling the scheduler how much CPU and memory your pod should be allowed to use, but the pod can still see the host's total resources. 
+
+While your pod can see all resources, Kubernetes enforces your limits by:
+
+- CPU Limits: Using CPU shares and quotas in cgroups to throttle CPU usage
+- Memory Limits: Using memory cgroups to kill the container if it exceeds its limit
+
+---
+
+## What Kubernetes Actually Enforces
+
+Kubernetes uses **Linux cgroups** to **enforce limits** on:
+
+- **CPU usage** (throttled)
+- **Memory usage** (killed on OOM)
+
+So while the **usage is constrained**, **visibility is not** — unless additional isolation is applied.
+
+---
+
+## Solutions to Limit Resource Visibility
+
+Here are your options to make pods see only their allocated resources, listed from most lightweight to most secure:
+
+### Option 1: Use cgroup v2 + Cgroup Namespaces (Limited Visibility Fix)
+
+With cgroup v2 and cgroup namespaces, the pod can be made to see only its limited resources.
+
+Requirements:
+
+- Linux kernel 5.14+ (some features in 5.10+)
+- Container runtime that supports cgroup v2 and namespaces:
+- containerd v1.5+
+- CRI-O v1.22+
+- Kubernetes v1.25+ (improved cgroup v2 support)
+
+How to enable:
+
+Edit your bootloader configuration (e.g., GRUB) to enable systemd's unified cgroup hierarchy:
+
+```bash
+# On your node, edit /etc/default/grub and add:
+GRUB_CMDLINE_LINUX="systemd.unified_cgroup_hierarchy=1"
+
+# Then update grub and reboot
+sudo update-grub
+sudo reboot
+```
+
+Configure your runtime to use cgroup v2 (example for containerd):
+
+```toml
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+  SystemdCgroup = true
+```
+
+Confirm Kubernetes and Kernel Support
+
+```bash
+cat /proc/filesystems | grep cgroup2
+mount | grep cgroup2
+```
+
+Verify from Inside the Pod
+
+```bash
+cat /sys/fs/cgroup/memory.max
+cat /sys/fs/cgroup/cpu.max
+```
+
+More on User namespace configuration [HERE](/kubernetes/k8s-user-namespace/)
+
+### Option 2: Use gVisor / Kata Containers (Sandboxed Runtimes)
+
+These are sandboxed container runtimes that offer much stronger isolation:
+
+- gVisor: User-space kernel; better isolation, lower performance.
+- Kata Containers: Lightweight VMs per pod.
+
+```yaml
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc
+```
+
+```yaml
+spec:
+  runtimeClassName: gvisor
+```
+
+More abaut gvisor [HERE](/kubernetes/gvisor-cri-o/) and [HERE](/kubernetes/gvisor-containerd/)
+
+### Option 3: Use lxcfs (Fakes /proc Files for Containers)
+
+`lxcfs` is a FUSE filesystem that virtualizes /proc/meminfo, /proc/cpuinfo, and /proc/stat to show only the container's assigned resources.
+
+How to Enable lxcfs in Kubernetes:
+
+```bash
+sudo apt install lxcfs -y  # Debian/Ubuntu
+sudo yum install lxcfs -y  # RHEL/CentOS
+# OR
+# DaemonSet to deploy lxcfs on all nodes
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lxcfs
+spec:
+  template:
+    spec:
+      containers:
+      - name: lxcfs
+        image: lxcfs:4.0.12
+        volumeMounts:
+        - name: lxcfs
+          mountPath: /var/lib/lxcfs
+          mountPropagation: Bidirectional
+      volumes:
+      - name: lxcfs
+        hostPath:
+          path: /var/lib/lxcfs
+          type: DirectoryOrCreate
+```
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lxcfs-pod
+spec:
+  containers:
+  - name: myapp
+    image: busybox
+    command: ["top"]
+    resources:
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+    volumeMounts:
+      - name: lxcfs-proc
+        mountPath: /proc/meminfo
+        subPath: meminfo
+      - name: lxcfs-proc
+        mountPath: /proc/cpuinfo
+        subPath: cpuinfo
+  volumes:
+  - name: lxcfs-proc
+    hostPath:
+      path: /var/lib/lxcfs/proc/
+```
+
+### Option 4: Use a Sidecar Container to Override /proc
+
+Some tools (like `frappe/k8s-proc-limits`) dynamically modify /proc files inside the container to reflect limits.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: limited-proc-pod
+spec:
+  shareProcessNamespace: true  # Allows sidecar to see main container's /proc
+  containers:
+  - name: app
+    image: nginx
+    resources:
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+    volumeMounts:
+    - name: proc-overrides
+      mountPath: /proc/cpuinfo
+      subPath: cpuinfo
+    - name: proc-overrides
+      mountPath: /proc/meminfo
+      subPath: meminfo
+
+  - name: proc-limits
+    image: devopstales/k8s-proc-limits:latest
+    env:
+    - name: CPU_LIMIT
+      valueFrom:
+        resourceFieldRef:
+          containerName: main-app
+          resource: limits.cpu
+    - name: MEMORY_LIMIT
+      valueFrom:
+        resourceFieldRef:
+          containerName: main-app
+          resource: limits.memory
+    volumeMounts:
+    - name: proc-overrides
+      mountPath: /fake-proc
+    securityContext:
+      capabilities:
+        add: ["SYS_ADMIN"]  # Minimal privilege for mount --bind
+      readOnlyRootFilesystem: true
+
+  volumes:
+  - name: proc-overrides
+    emptyDir: {}
+  ```
+

@@ -1,0 +1,823 @@
+---
+title: Kubernetes Egress Gateway with Squid Proxy
+url: https://devopstales.github.io/kubernetes/squid-proxy-egress/
+date: 2026-04-15
+keywords: Squid proxy, Kubernetes egress gateway, HTTP proxy, caching proxy, Kubernetes security, egress control, access control
+---
+
+
+Squid is a mature, full-featured HTTP proxy and caching server that can be deployed on Kubernetes for egress control. This post explores using traditional proxy technology for modern Kubernetes egress requirements with access control, caching, and comprehensive logging.
+
+<!--more-->
+
+{{< content "/filedir/egress-gateway-series.html" >}}
+
+## Why Squid Proxy?
+
+Squid has been the **industry-standard HTTP proxy for over 25 years**, providing:
+
+- ✅ **Mature and stable** - Battle-tested in production environments
+- ✅ **Access Control Lists (ACLs)** - Fine-grained traffic control
+- ✅ **Caching** - Reduce bandwidth and improve response times
+- ✅ **Comprehensive logging** - Audit and compliance support
+- ✅ **SSL/TLS inspection** - HTTPS traffic visibility
+- ✅ **Authentication** - Integration with LDAP, AD, RADIUS
+- ✅ **Low resource usage** - Efficient proxy operations
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                           │
+│                                                                 │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐                 │
+│   │  Pod A   │    │  Pod B   │    │  Pod C   │                 │
+│   └────┬─────┘    └────┬─────┘    └────┬─────┘                 │
+│        │               │               │                        │
+│        └───────────────┼───────────────┘                        │
+│                        │                                        │
+│                        ▼                                        │
+│            ┌───────────────────────┐                            │
+│            │  Squid Egress Proxy   │<─── Squid Config           │
+│            └───────────┬───────────┘                            │
+│                        │                                        │
+│           ┌────────────┴────────────┐                           │
+│           │                         │                           │
+│           ▼                         ▼                           │
+│   ┌──────────────────┐    ┌──────────────────┐                 │
+│   │ External HTTP/   │    │  Cache Storage   │                 │
+│   │ HTTPS            │    │                  │                 │
+│   └──────────────────┘    └──────────────────┘                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                        │
+                        │ Access Logs
+                        ▼
+              ┌──────────────────┐
+              │   ELK / Splunk   │
+              └──────────────────┘
+
+              ┌──────────────────┐
+              │   Auth Server    │───┐
+              └──────────────────┘   │
+                                     │ (Authentication)
+                                     └───────────────┘
+```
+
+### Traffic Flow
+
+1. **Pods configured** with HTTP_PROXY/HTTPS_PROXY environment variables
+2. **HTTP/HTTPS traffic** routed to Squid proxy service
+3. **Squid evaluates** ACLs for allow/deny decisions
+4. **Cache lookup** for frequently accessed content
+5. **SSL inspection** (optional) for HTTPS traffic
+6. **Request forwarded** to external destination
+7. **Response cached** and logged
+
+## Prerequisites
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| **Kubernetes** | 1.25+ | Any distribution |
+| **Squid** | 5.x+ | Latest stable |
+| **kubectl** | Latest | Configured with cluster access |
+| **Storage** | PV/PVC | For cache and logs |
+
+## Installation
+
+### Step 1: Create Squid Namespace
+
+```bash
+kubectl create namespace squid-proxy
+```
+
+### Step 2: Create Squid Configuration
+
+Create `squid-config.yaml`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squid-config
+  namespace: squid-proxy
+data:
+  squid.conf: |
+    # Basic configuration
+    http_port 3128
+    visible_hostname squid-proxy
+    
+    # Access Control Lists
+    acl localnet src 10.0.0.0/8
+    acl localnet src 172.16.0.0/12
+    acl localnet src 192.168.0.0/16
+    
+    # SSL ports
+    acl SSL_ports port 443
+    acl Safe_ports port 80
+    acl Safe_ports port 443
+    acl Safe_ports port 21
+    acl Safe_ports port 70
+    acl Safe_ports port 210
+    acl Safe_ports port 1025-65535
+    
+    # HTTP methods
+    acl CONNECT method CONNECT
+    acl GET method GET
+    acl POST method POST
+    
+    # Allowed domains
+    acl allowed_domains dstdomain .github.com
+    acl allowed_domains dstdomain .docker.io
+    acl allowed_domains dstdomain .quay.io
+    acl allowed_domains dstdomain .maven.org
+    acl allowed_domains dstdomain .npmjs.com
+    acl allowed_domains dstdomain .pypi.org
+    
+    # Access rules
+    http_access deny !Safe_ports
+    http_access deny CONNECT !SSL_ports
+    http_access allow localhost
+    http_access allow allowed_domains
+    http_access allow localnet
+    http_access deny all
+    
+    # Caching configuration
+    cache_dir ufs /var/spool/squid 1000 16 256
+    cache_mem 256 MB
+    maximum_object_size_in_memory 4 MB
+    maximum_object_size 100 MB
+    cache_swap_low 98
+    cache_swap_high 99
+    
+    # Logging
+    access_log /var/log/squid/access.log squid
+    cache_log /var/log/squid/cache.log
+    cache_store_log /var/log/squid/store.log
+    
+    # Performance tuning
+    cache_mem_high_watermark 95
+    read_ahead_gap 128 KB
+    positive_dns_ttl 6 hours
+    negative_dns_ttl 1 minute
+    
+    # Refresh patterns (cache control)
+    refresh_pattern -i (/cgi-bin/|\?) 0 0% 0
+    refresh_pattern . 0 20% 4320
+```
+
+### Step 3: Create Squid Deployment
+
+Create `squid-deployment.yaml`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-proxy
+  namespace: squid-proxy
+  labels:
+    app: squid-proxy
+spec:
+  replicas: 2  # High availability
+  selector:
+    matchLabels:
+      app: squid-proxy
+  template:
+    metadata:
+      labels:
+        app: squid-proxy
+    spec:
+      containers:
+        - name: squid
+          image: ubuntu/squid:5.2-22.04_beta
+          ports:
+            - containerPort: 3128
+              name: http
+          volumeMounts:
+            - name: squid-config
+              mountPath: /etc/squid/squid.conf
+              subPath: squid.conf
+              readOnly: true
+            - name: squid-cache
+              mountPath: /var/spool/squid
+            - name: squid-logs
+              mountPath: /var/log/squid
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            tcpSocket:
+              port: 3128
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: 3128
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: squid-config
+          configMap:
+            name: squid-config
+        - name: squid-cache
+          persistentVolumeClaim:
+            claimName: squid-cache-pvc
+        - name: squid-logs
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: squid-proxy
+                topologyKey: kubernetes.io/hostname
+```
+
+### Step 4: Create Persistent Volume Claim
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: squid-cache-pvc
+  namespace: squid-proxy
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+```
+
+### Step 5: Create Service
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: squid-proxy
+  namespace: squid-proxy
+  labels:
+    app: squid-proxy
+spec:
+  selector:
+    app: squid-proxy
+  ports:
+    - name: http
+      port: 3128
+      targetPort: 3128
+      protocol: TCP
+  type: ClusterIP
+```
+
+### Step 6: Apply Configuration
+
+```bash
+kubectl apply -f squid-config.yaml
+kubectl apply -f squid-deployment.yaml
+kubectl apply -f squid-pvc.yaml
+kubectl apply -f squid-service.yaml
+```
+
+### Step 7: Verify Deployment
+
+```bash
+# Check pods are running
+kubectl get pods -n squid-proxy
+
+# Expected output:
+# NAME                            READY   STATUS
+# squid-proxy-xxxxxxxxxx-xxxxx    1/1     Running
+# squid-proxy-yyyyyyyyyy-yyyyy    1/1     Running
+
+# Check service
+kubectl get svc -n squid-proxy
+
+# Test proxy connectivity
+kubectl run test-pod --image=curlimages/curl -it --rm --restart=Never \
+  -- curl -x http://squid-proxy.squid-proxy.svc:3128 \
+  https://www.google.com
+```
+
+## Advanced Configuration
+
+### Authentication with Basic Auth
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # Basic authentication
+    auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwd
+    auth_param basic children 5
+    auth_param basic realm "Squid Proxy"
+    auth_param basic credentialsttl 2 hours
+    
+    acl authenticated proxy_auth REQUIRED
+    http_access allow authenticated allowed_domains
+    http_access deny all
+```
+
+```bash
+# Create password file
+kubectl create secret generic squid-auth \
+  --from-literal=users=$(htpasswd -cb - user1 password123) \
+  --namespace squid-proxy
+```
+
+### LDAP/Active Directory Authentication
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # LDAP authentication
+    auth_param ldap program /usr/lib/squid/ldap_auth \
+      -b "dc=example,dc=com" \
+      -D "cn=admin,dc=example,dc=com" \
+      -w "admin_password" \
+      -f "(sAMAccountName=%s)" \
+      -H ldap://ad.example.com
+    
+    auth_param ldap children 5
+    auth_param ldap realm "Squid Proxy"
+    auth_param ldap credentialsttl 2 hours
+    
+    acl ldap_users proxy_auth REQUIRED
+    http_access allow ldap_users allowed_domains
+```
+
+### SSL/TLS Bump (HTTPS Inspection)
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # SSL Bump configuration
+    https_port 3129 intercept ssl-bump \
+      cert=/etc/squid/ssl/squid.crt \
+      key=/etc/squid/ssl/squid.key
+    
+    ssl_bump peek all
+    ssl_bump splice allowed_domains
+    ssl_bump terminate all
+    
+    # ACLs for SSL bump
+    acl step1 at_step SslBump1
+    acl step2 at_step SslBump2
+    acl step3 at_step SslBump3
+    
+    ssl_bump peek step1
+    ssl_bump peek step2
+    ssl_bump splice step3
+```
+
+```bash
+# Generate CA certificate for SSL bump
+openssl req -new -newkey rsa:2048 -sha256 -days 3650 -nodes -x509 \
+  -subj "/C=US/ST=State/L=City/O=Organization/CN=Squid Proxy CA" \
+  -keyout squid-ca.key -out squid-ca.crt
+
+# Create secret
+kubectl create secret tls squid-ssl-cert \
+  --cert=squid-ca.crt \
+  --key=squid-ca.key \
+  --namespace squid-proxy
+```
+
+### Content Filtering
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # Block specific categories
+    acl blocked_sites dstdomain .facebook.com
+    acl blocked_sites dstdomain .twitter.com
+    acl blocked_sites dstdomain .youtube.com
+    
+    # Block file types
+    acl blocked_files urlpath_regex -i \.(exe|zip|rar|mp4|avi)$
+    
+    # Block keywords
+    acl blocked_keywords urlpath_regex -i (gambling|casino|porn)
+    
+    # Apply blocks
+    http_access deny blocked_sites
+    http_access deny blocked_files
+    http_access deny blocked_keywords
+```
+
+### Rate Limiting
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # Rate limiting by IP
+    acl too_many_ips maxconn 10
+    http_access deny too_many_ips
+    
+    # Rate limiting by bandwidth
+    delay_pools 1
+    delay_class 1 2
+    delay_parameters 1 1000000/1000000 50000/50000
+    delay_access 1 allow all
+    
+    # Connection limits
+    conn_limit_max 100
+    conn_limit_threshold 80
+```
+
+## Routing Traffic to Squid Proxy
+
+### Method 1: Environment Variables
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-server
+  template:
+    metadata:
+      labels:
+        app: api-server
+    spec:
+      containers:
+        - name: api
+          image: myapp/api:v1.0
+          env:
+            - name: HTTP_PROXY
+              value: "http://squid-proxy.squid-proxy.svc:3128"
+            - name: HTTPS_PROXY
+              value: "http://squid-proxy.squid-proxy.svc:3128"
+            - name: NO_PROXY
+              value: "localhost,.svc.cluster.local,.cluster.local,10.0.0.0/8"
+```
+
+### Method 2: Init Container Configuration
+
+```yaml
+spec:
+  initContainers:
+    - name: set-proxy
+      image: busybox
+      command: ['sh', '-c', 'echo "export HTTP_PROXY=http://squid-proxy:3128" >> /etc/profile.d/proxy.sh']
+      volumeMounts:
+        - name: proxy-config
+          mountPath: /etc/profile.d
+  containers:
+    - name: app
+      image: myapp/api:v1.0
+  volumes:
+    - name: proxy-config
+      emptyDir: {}
+```
+
+### Method 3: NetworkPolicy (CNI-dependent)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: force-squid-proxy
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: api-server
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    
+    # Force all HTTP/HTTPS through Squid
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: squid-proxy
+          podSelector:
+            matchLabels:
+              app: squid-proxy
+      ports:
+        - protocol: TCP
+          port: 3128
+```
+
+## Monitoring and Logging
+
+### Access Logs
+
+```bash
+# View access logs
+kubectl logs -n squid-proxy squid-proxy-xxxxx -- squid
+
+# Stream logs
+kubectl logs -n squid-proxy squid-proxy-xxxxx -f -- squid
+
+# Export logs
+kubectl logs -n squid-proxy squid-proxy-xxxxx -- squid > squid-access.log
+```
+
+### Log Format Customization
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # Custom log format
+    logformat squidextended %ts.%03tu %6tr %>a %Ss/%03>Hs %<st %rm %ru %un %Sh/%<A %mt
+    
+    access_log /var/log/squid/access.log squidextended
+```
+
+### Prometheus Metrics
+
+```yaml
+# Deploy squid-exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-exporter
+  namespace: squid-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+    app: squid-exporter
+  template:
+    metadata:
+      labels:
+        app: squid-exporter
+    spec:
+      containers:
+        - name: exporter
+          image: boynux/squid-exporter:latest
+          ports:
+            - containerPort: 9301
+          args:
+            - "-squid.host=squid-proxy.squid-proxy.svc"
+            - "-squid.port=3128"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: squid-exporter
+  namespace: squid-proxy
+spec:
+  selector:
+    app: squid-exporter
+  ports:
+    - port: 9301
+      targetPort: 9301
+```
+
+### Grafana Dashboard
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squid-proxy-dashboard
+  namespace: monitoring
+data:
+  squid-proxy.json: |
+    {
+      "dashboard": {
+        "title": "Squid Proxy",
+        "panels": [
+          {
+            "title": "Request Rate",
+            "targets": [
+              {
+                "expr": "rate(squid_requests_total[5m])"
+              }
+            ]
+          },
+          {
+            "title": "Cache Hit Ratio",
+            "targets": [
+              {
+                "expr": "rate(squid_cache_hits_total[5m]) / rate(squid_requests_total[5m])"
+              }
+            ]
+          },
+          {
+            "title": "Bandwidth Usage",
+            "targets": [
+              {
+                "expr": "rate(squid_kbytes_read_total[5m]) * 1024"
+              }
+            ]
+          },
+          {
+            "title": "Active Connections",
+            "targets": [
+              {
+                "expr": "squid_current_connections"
+              }
+            ]
+          },
+          {
+            "title": "Denied Requests",
+            "targets": [
+              {
+                "expr": "rate(squid_acl_denied_total[5m])"
+              }
+            ]
+          }
+        ]
+      }
+    }
+```
+
+## Security Best Practices
+
+### 1. Restrict Allowed Destinations
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # Whitelist specific domains
+    acl allowed_api dstdomain .api.stripe.com
+    acl allowed_api dstdomain .api.github.com
+    acl allowed_api dstdomain .registry.npmjs.org
+    
+    # Whitelist IP ranges
+    acl allowed_ips dst 52.0.0.0/8
+    acl allowed_ips dst 35.0.0.0/8
+    
+    # Deny everything else
+    http_access allow allowed_api
+    http_access allow allowed_ips
+    http_access deny all
+```
+
+### 2. Enable Request Body Logging
+
+```yaml
+# Add to squid.conf
+data:
+  squid.conf: |
+    # Log request headers
+    logformat detailed %ts.%03tu %6tr %>a %Ss/%03>Hs %<st %rm %ru %un %Sh/%<A %mt %{Referer}>h %{User-Agent}>h
+    
+    access_log /var/log/squid/detailed.log detailed
+```
+
+### 3. Implement SSL Bump for Inspection
+
+```yaml
+# See SSL/TLS Bump section above
+# Important: Distribute CA cert to all pods for trust
+```
+
+### 4. Regular Configuration Audits
+
+```bash
+# Validate Squid configuration
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- squid -k check
+
+# Check configuration syntax
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- squid -k parse
+```
+
+## Troubleshooting
+
+### Issue: Pods Can't Access External Services
+
+```bash
+# Check Squid pods are running
+kubectl get pods -n squid-proxy
+
+# Verify Squid configuration
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- squid -k check
+
+# Test from inside Squid pod
+kubectl exec -n squid-proxy squid-proxy-xxxxx -it -- \
+  curl -x localhost:3128 https://www.google.com
+
+# Check pod proxy configuration
+kubectl get pod api-server-xxxxx -n production -o yaml | grep -i proxy
+```
+
+### Issue: Cache Not Working
+
+```bash
+# Check cache directory
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- ls -la /var/spool/squid
+
+# View cache stats
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- squidclient mgr:info
+
+# Check cache hit ratio
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- squidclient mgr:info | grep -i "hit ratio"
+```
+
+### Issue: SSL Bump Not Working
+
+```bash
+# Verify SSL certificate
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- openssl x509 -in /etc/squid/ssl/squid.crt -text
+
+# Check SSL port configuration
+kubectl exec -n squid-proxy squid-proxy-xxxxx -- netstat -tlnp | grep 3129
+
+# Test SSL bump
+kubectl exec -n squid-proxy squid-proxy-xxxxx -it -- \
+  curl -x localhost:3129 -k https://www.google.com
+```
+
+### Common Problems and Solutions
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| Connection refused | Squid not listening | Check port configuration |
+| 403 Forbidden | ACL blocking traffic | Review http_access rules |
+| 503 Service Unavailable | Cache directory full | Increase cache size |
+| SSL errors | Certificate not trusted | Distribute CA to clients |
+| High memory usage | Cache too large | Reduce cache_mem setting |
+
+## Comparison with Other Solutions
+
+| Feature | Squid | Envoy | Istio | Cilium |
+|---------|-------|-------|-------|--------|
+| **Protocol** | HTTP/HTTPS | HTTP/1,2,3, TCP | HTTP/1,2,3, TCP | L3/L4 |
+| **Caching** | ✅ Full | ❌ No | ❌ No | ❌ No |
+| **ACLs** | ✅ Advanced | ✅ Advanced | ✅ Advanced | ⚠️ Limited |
+| **SSL Inspection** | ✅ Full | ✅ Full | ✅ Full | ❌ No |
+| **Authentication** | ✅ LDAP/AD/RADIUS | ⚠️ Manual | ✅ mTLS | ❌ No |
+| **Logging** | ✅ Comprehensive | ✅ Comprehensive | ✅ Comprehensive | ✅ Hubble |
+| **Maturity** | 25+ years | 8 years | 7 years | 8 years |
+| **Resource Usage** | Low | Low | High | Low |
+
+### When to Choose Squid
+
+**Choose Squid when:**
+- ✅ Need HTTP caching to reduce bandwidth
+- ✅ Require mature, stable proxy solution
+- ✅ Need LDAP/AD authentication
+- ✅ Comprehensive access logging required
+- ✅ Content filtering needed
+- ✅ Team has proxy administration experience
+
+**Consider alternatives when:**
+- 📋 Need TCP/UDP proxying (choose Envoy)
+- 📋 Want automatic mTLS (choose Istio)
+- 📋 Need eBPF performance (choose Cilium)
+- 📋 gRPC/HTTP2 primary protocols (choose Envoy)
+
+## Next Steps
+
+In the next post of this series:
+
+- **Cloud NAT Solutions** - GCP Cloud NAT, Azure Firewall
+- Managed services comparison
+- Cost analysis
+
+## Conclusion
+
+Squid Proxy provides:
+
+**Advantages:**
+- ✅ Mature, battle-tested technology (25+ years)
+- ✅ HTTP caching reduces bandwidth costs
+- ✅ Advanced ACLs for fine-grained control
+- ✅ Comprehensive access logging
+- ✅ LDAP/AD/RADIUS authentication
+- ✅ Content filtering capabilities
+- ✅ Low resource usage
+- ✅ SSL/TLS inspection support
+
+**Considerations:**
+- 📋 HTTP/HTTPS focused (not TCP/UDP)
+- 📋 Self-managed (operations overhead)
+- 📋 Manual mTLS configuration
+- 📋 Less suited for gRPC/HTTP2
+
+For organizations needing a **mature HTTP proxy with caching, authentication, and comprehensive logging**, Squid remains an excellent choice that has stood the test of time.
+

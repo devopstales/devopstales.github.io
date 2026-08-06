@@ -1,0 +1,103 @@
+---
+title: Install Nextcloud
+url: https://devopstales.github.io/linux/nextcloud/
+date: 2019-04-08
+---
+
+
+Nextcloud is a suite of client-server software for creating and using file hosting services. Nextcloud application functionally is similar to Dropbox.
+
+<!--more-->
+
+### Install Postgresql
+```
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -sc)-pgdg main" > /etc/apt/sources.list.d/PostgreSQL.list'
+
+apt update
+apt-get install postgresql-10
+apt-get install pgadmin4
+
+systemctl enable postgresql.service
+```
+
+### Configure database
+```
+createuser cloud
+psql
+ALTER USER cloud WITH ENCRYPTED password 'Password1';
+CREATE DATABASE cloud WITH ENCODING='UTF8' OWNER=cloud;
+\q
+```
+
+### Install requirements
+```
+apt-get install -y libapache2-mod-php php7.0 php7.0-xml php7.0-curl php7.0-gd php7.0 php7.0-cgi php7.0-cli php7.0-zip php7.0-mbstring wget unzip php7.0-pgsql
+```
+
+### Configurate php
+```
+nano /etc/php/7.0/apache2/php.ini
+file_uploads = On
+allow_url_fopen = On
+short_open_tag = On
+memory_limit = 256M
+upload_max_filesize = 100M
+max_execution_time = 360
+date.timezone = Europe/Budapest
+```
+
+### Install Them
+```
+cd /usr/share/redmine/public/themes
+# https://github.com/akabekobeko/redmine-theme-minimalflat2/releases
+wget https://github.com/akabekobeko/redmine-theme-minimalflat2/releases/download/v1.5.0/minimalflat2-1.5.0.zip
+unzip minimalflat2-1.5.0.zip
+```
+
+
+### Configurate Apache
+```
+mkdir /var/www/nextcloud
+chown www-data:www-data /var/www/nextcloud
+chmod 750 /var/www/nextcloud
+
+mkdir -p /var/nextcloud/data
+chown www-data:www-data /var/nextcloud/data
+chmod 750 /var/nextcloud/data
+
+cd  /var/www/nextcloud
+wget https://download.nextcloud.com/server/installer/setup-nextcloud.php
+chown www-data:www-data setup-nextcloud.php
+```
+
+### Create vhostfile
+```
+echo '<VirtualHost *:80>
+ServerAdmin admin@example.com
+DocumentRoot "/var/www/nextcloud"
+ServerName cloud.devopstales.intra
+<Directory "/var/www/nextcloud/">
+Options MultiViews FollowSymlinks
+
+AllowOverride All
+Order allow,deny
+Allow from all
+</Directory>
+TransferLog /var/log/apache2/nextcloud_access.log
+ErrorLog /var/log/apache2/nextcloud_error.log
+</VirtualHost>' > /etc/apache2/sites-available/nextcloud.conf
+
+a2dissite 000-default
+a2ensite nextcloud
+a2enmod rewrite
+a2enmod headers
+a2enmod env
+a2enmod dir
+a2enmod mime
+service apache2 reload
+```
+
+### Install nextcloud
+Go to http://cloud.devopstales.intra/setup-nextcloud.php and add the db configuration to install the aplication.
+

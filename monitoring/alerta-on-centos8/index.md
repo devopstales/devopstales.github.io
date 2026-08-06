@@ -1,0 +1,183 @@
+---
+title: Install alerta on Centos8
+url: https://devopstales.github.io/monitoring/alerta-on-centos8/
+date: 2019-09-28
+keywords: alerta, postgresql, postgres, pgsql, centos 8
+---
+
+
+AIn this post I will show you how to install alerta monitoring dashboard on Centos 8.
+
+<!--more-->
+
+```
+yum install epel-release -y
+yum upgrade -y
+```
+
+### Install and configure postgresql
+
+In a previous post I wrote about how to [Install PostgreSQL 10]({{< relref "/linux/install-postgresql.md#install-postgresql-10-on-centos-8" >}})
+
+```
+sudo su - postgres
+createuser alerta
+createdb -O alerta alerta
+psql
+ALTER USER "alerta" WITH PASSWORD 'alerta';
+\q
+exit
+```
+
+### install python3 packages
+```
+yum install python3 python3-pip python3-setuptools python3-devel python3-psycopg2 gcc git tmux nginx
+```
+
+Create user for alerta and install python3 moduls with it.
+```
+useradd alerta
+usermod -aG alerta nginx
+su - alerta
+pip3 install --user wheel alerta-server alerta uwsgi
+```
+
+# alerta server
+```
+nano /etc/alertad.conf
+DATABASE_URL = 'postgres://alerta:alerta@localhost:5432/alerta'
+PLUGINS=['reject']
+ALLOWED_ENVIRONMENTS=['Production', 'Development', 'Code']
+```
+
+
+We use uwsgi to create a unix socket wgere the alerta webgui can connect.
+```
+sudo mkdir -p /var/log/uwsgi
+sudo chown -R alerta:alerta /var/log/uwsgi
+mkdir /var/run/alerta
+chown -R alerta.alerta /var/run/alerta/
+
+echo "from alerta import app" > /usr/share/nginx/wsgi.py
+```
+
+```
+nano /etc/uwsgi.ini
+[uwsgi]
+chdir = /usr/share/nginx/
+mount = /api=wsgi.py
+callable = app
+manage-script-name = true
+env = BASE_URL=/api
+
+master = true
+processes = 5
+#logger = syslog:alertad
+logto = /var/log/uwsgi/%n.log
+
+socket = /var/run/alerta/uwsgi.sock
+chmod-socket = 664
+uid = alerta
+gid = alerta
+vacuum = true
+
+die-on-term = true
+```
+
+```
+nano /etc/systemd/system/uwsgi.service
+[Unit]
+Description=uWSGI service
+After=syslog.target
+
+[Service]
+ExecStart=/home/alerta/.local/bin/uwsgi --ini /etc/uwsgi.ini
+RuntimeDirectory=uwsgi
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```
+systemctl enable uwsgi
+systemctl start uwsgi
+systemctl status uwsgi
+```
+
+# alerta webgui
+```
+wget https://github.com/alerta/alerta-webui/releases/latest/download/alerta-webui.tar.gz
+tar zxvf alerta-webui.tar.gz
+mv dist/ /usr/share/nginx/alerta
+echo '{"endpoint": "/api"}' > /usr/share/nginx/dist/config.json
+```
+
+```
+nano /etc/nginx/nginx.conf
+    #server {
+    #    listen       80 default_server;
+    #    listen       [::]:80 default_server;
+    #    server_name  _;
+    #    root         /usr/share/nginx/html;
+
+    #    # Load configuration files for the default server block.
+    #    include /etc/nginx/default.d/*.conf;
+
+     #   location / {
+     #   }
+
+     #   error_page 404 /404.html;
+     #       location = /40x.html {
+     #   }
+
+     #   error_page 500 502 503 504 /50x.html;
+     #       location = /50x.html {
+     #   }
+    #}
+```
+
+```
+nano /etc/nginx/conf.d/alerta.conf
+server {
+        listen 80 default_server;
+
+        location /api { try_files $uri @api; }
+        location @api {
+            include uwsgi_params;
+            uwsgi_pass unix:/var/run/alerta/uwsgi.sock;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location / {
+                root /usr/share/nginx/alerta;
+        }
+}
+```
+
+```
+nginx -t
+systemctl restart nginx
+systemctl enable nginx
+```
+
+### test
+Send testalert with alerta client.
+```
+su - alerta
+
+echo '[DEFAULT]
+endpoint = http://localhost/api' >  $HOME/.alerta.conf
+
+echo 'export PATH=$PATH:/home/alerta/.local/bin' >> ~/.bashrc
+PATH=$PATH:/home/alerta/.local/bin
+
+alerta query
+alerta send --resource net01 --event down --severity critical --environment Code --service Network --text 'net01 is down.'
+alerta query
+```
+

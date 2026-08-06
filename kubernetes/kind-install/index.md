@@ -1,0 +1,60 @@
+---
+title: Starting local Kubernetes using kind
+url: https://devopstales.github.io/kubernetes/kind-install/
+date: 2019-12-20
+keywords: kubernetes deployment
+---
+
+
+In this article, I will show you how to run a cluster in single Docker container using kind.
+<!--more-->
+
+### What is kind?
+Kind (Kubernetes IN Docker) is a tool to start kubernetes nodes as a docker container. It is a cross-platform tool you can run with Docker for Windows too.
+
+### Install kind binary
+```
+wget https://github.com/kubernetes-sigs/kind/releases/latest/download/kind-linux-amd64
+chmod +x kind-linux-amd64
+sudo mv kind-linux-amd64 /usr/local/sbin/kind
+```
+
+### Start a cluster for Ingress
+```
+cat <<EOF | kind create cluster --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+        authorization-mode: "AlwaysAllow"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+  - containerPort: 443
+    hostPort: 443
+EOF
+```
+
+
+### Install ingress
+```
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/mandatory.yaml
+
+# patch ingress for kind
+kubectl patch deployments -n ingress-nginx nginx-ingress-controller -p '{"spec":{"template":{"spec":{"containers":[{"name":"nginx-ingress-controller","ports":[{"containerPort":80,"hostPort":80},{"containerPort":443,"hostPort":443}]}],"nodeSelector":{"ingress-ready":"true"}}}}}'
+```
+
+### Demo
+```
+kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/usage.yaml
+
+curl localhost/foo
+```
+

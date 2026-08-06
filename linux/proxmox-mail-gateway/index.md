@@ -1,0 +1,41 @@
+---
+title: Proxmox Mail Gateway
+url: https://devopstales.github.io/linux/proxmox-mail-gateway/
+date: 2019-04-28
+---
+
+
+Proxmox Mail Gateway is a full featured, open-source mail proxy and protects your mail server from spam, viruses, trojans and phishing emails.
+
+<!--more-->
+
+### Configurate Cluster
+```
+pmg1.devopstales.intra 192.168.0.27
+pmg2.devopstales.intra 192.168.0.28
+```
+
+After the base installation login the web interfate:
+
+* 192.168.0.27:8006
+* 192.168.0.28:8006
+
+At Configuration > Cluster create a new cluster
+![Example image](/img/include/pmg_1.webp)
+![Example image](/img/include/pmg_2.webp)
+
+Copy the cluster info:
+![Example image](/img/include/pmg_3.webp)
+
+On the other host (pmg2) go to the same menu and click Join
+![Example image](/img/include/pmg_4.webp)
+Add the datat copyd from the master node (pmg1)
+![Example image](/img/include/pmg_5.webp)
+
+### Basic Configuration
+On the master node's (pmg1) weg interface go to Configuration > Mail Proxy
+![Example image](/img/include/pmg_6.webp)
+Edit the Default Relay and add your interbal mailservers ip:
+![Example image](/img/include/pmg_7.webp)
+On the pmg2 check the config is replicated
+

@@ -1,0 +1,225 @@
+---
+title: How to build containers in Kubernetes
+url: https://devopstales.github.io/kubernetes/container-build-in-kubernetes/
+date: 2022-06-10
+keywords: Kubernetes, Container Build, Rancker KIM, Kaniko, Kpack, Cloud Native Buildpacks, CNB
+---
+
+
+In this blogpost I will show you what tools you can user for privileged builds in Kubernetes.
+<!--more-->
+### Rancker KIM
+
+`kim` is a Kubernetes-aware CLI that will install a small builder backend consisting of a `BuildKit` daemon bound to the Kubelet's underlying `containerd` socket (for building images) along with a small server-side agent that the CLI leverages for image management (think push, pull, etc) rather than talking to the backing containerd/CRI directly. 
+
+Install:
+```bash
+wget https://github.com/rancher/kim/releases/download/v0.1.0-beta.7/kim-linux-amd64
+chmod +x kim-linux-amd64
+mv kim-linux-amd64 /usr/local/bin/kim
+```
+
+KIM also works as a kubectl drop-in pligin. To facilitate this, you can either copy or symlink the local kim binary to kubectl-image (and optionally kubectl-builder)
+```bash
+cd /usr/local/bin
+ln -s kim /usr/local/bin/kubectl-image
+ln -s kim /usr/local/bin/kubectl-builder
+```
+
+Deploy kim:
+```bash
+kubectl crate ns kube-image
+# run on local cluster
+kim builder install -n kube-image --endpoint-addr 127.0.0.1
+# run on a multi node cluster
+kim builder install -n kube-image \
+--selector kubernetes.io/hostname=k8s-m101.k8s.intra
+
+kubectl get po -n kube-image
+
+kubectl port-forward svc/builder 1233:1233 1234:124 --namespace kube-image
+```
+
+Usage:
+```bash
+kim image ls
+IMAGE               TAG                 IMAGE ID            SIZE
+moby/buildkit       v0.8.3              cf14c5e88c0eb       56.5MB
+rancher/kim         v0.1.0-beta.2       fb018f26dd6ef       13.7MB
+
+kim build --tag local/project:tag .
+# or
+kim image build --tag local/project:tag .
+# or
+kubectl image build --tag local/project:tag .
+
+kim images
+IMAGE               TAG                 IMAGE ID            SIZE
+local/project       tag                 3e7bd55385a51       13MB
+moby/buildkit       v0.8.3              cf14c5e88c0eb       56.5MB
+rancher/kim         v0.1.0-beta.2       fb018f26dd6ef       13.7MB
+```
+
+The image built by kim is on the kubernetes node so yo dint't need to pull it. In a local or a single node clusterit is an advantage but in a multi node cluster that means you must use a nde selector on the deployment to select tha same node as the kim server is running. 
+
+
+### Kaniko
+`kaniko` is an open-source container image-building tool created by Google. It does not require privileged access to the host for building container images.
+
+```yaml
+nano kaniko-git.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kaniko
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug
+    args: ["--context=git://github.com/devopstales/k8s-image-build-demo",
+            "--destination=devopstales/kaniko-git:1.0.0",
+            "--forcekgp"]
+    volumeMounts:
+      - name: kaniko-secret
+        mountPath: /kaniko/.docker
+  restartPolicy: Never
+  volumes:
+    - name: kaniko-secret
+      secret:
+        secretName: regcred
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+```
+
+```bash
+kubectl create secret docker-registry regcred \
+    --docker-username=$REGISTRY_USER \
+    --docker-password=$REGISTRY_PASS \
+    --docker-server=$REGISTRY_URL
+
+kubectl apply -f kaniko-git.yaml
+
+kubectl wait \
+    --for condition=containersready \
+    pod kaniko
+
+kubectl logs kaniko --follow
+```
+
+It dose not meter  where Kaniko is running you need a registry to pus the images built by Kaniko and pull when you testing.
+
+### Kpack
+
+`kpack` extends Kubernetes and utilizes unprivileged kubernetes primitives to provide builds of OCI images as a platform implementation of [Cloud Native Buildpacks (CNB)](https://buildpacks.io/). 
+
+To install `kpack` download the [most recent github release](https://github.com/pivotal/kpack/releases). The release.yaml is an asset on the release.
+
+```bash
+kubectl create namespace build
+kubens build
+kubectl apply -f https://github.com/pivotal/kpack/releases/download/v0.6.0/release-0.6.0.yaml
+
+# create secret for push to your registry
+kubectl create secret docker-registry regcred \
+    --docker-username=$REGISTRY_USER \
+    --docker-password=$REGISTRY_PASS \
+    --docker-server=$REGISTRY_URL \
+    --namespace build
+```
+
+Create the configuration for your app docker build:
+
+```yaml
+nano  kpack-config.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-creds
+  namespace: build
+secrets:
+- name: registry-creds
+imagePullSecrets:
+- name: registry-creds
+---
+apiVersion: kpack.io/v1alpha2
+kind: ClusterStore
+metadata:
+  name: default
+spec:
+  sources:
+  - image: gcr.io/paketo-buildpacks/go
+  - image: gcr.io/paketo-buildpacks/java
+  - image: gcr.io/paketo-buildpacks/nodejs
+---
+apiVersion: kpack.io/v1alpha2
+kind: ClusterStack
+metadata:
+  name: base
+spec:
+  id: "io.buildpacks.stacks.bionic"
+  buildImage:
+    image: "paketobuildpacks/build:base-cnb"
+  runImage:
+    image: "paketobuildpacks/run:base-cnb"
+---
+apiVersion: kpack.io/v1alpha2
+kind: Builder
+metadata:
+  name: silly-demo
+  namespace: build
+spec:
+  serviceAccountName: regcred
+  tag: devopstales/kapck-build
+  stack:
+    name: base
+    kind: ClusterStack
+  store:
+    name: default
+    kind: ClusterStore
+  order:
+  - group:
+    - id: paketo-buildpacks/go
+```
+
+```yaml
+nano kpack-image.yaml
+---
+apiVersion: kpack.io/v1alpha2
+kind: Image
+metadata:
+  generateName: silly-demo-
+  namespace: build
+spec:
+  tag: devopstales/kapck-demo
+  additionalTags:
+  - devopstales/kapck-demo:latest
+  - devopstales/kapck-demo:0.0.1
+  serviceAccountName: regcred
+  builder:
+    name: silly-demo
+    kind: Builder
+  source:
+    git:
+      url: https://github.com/devopstales/k8s-image-build-demo
+      revision: ebb790f3959c05e6c196e88016a243a0053f450a
+```
+
+```bash
+kubectl apply -f kpack-config.yaml
+
+kg builder
+NAME         LATESTIMAGE                             READY
+silly-demo   devopstales/kapck-demo@sha256:f2290a3   True
+
+kubectl create -f kpack-image.yaml
+
+kubectl get pods
+kubectl get images
+```
+
+All the source files can be find in [my github repo](https://github.com/devopstales/k8s-image-build-demo).
+
+

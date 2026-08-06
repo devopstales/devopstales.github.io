@@ -1,0 +1,108 @@
+---
+title: CEPH backup with Benji
+url: https://devopstales.github.io/linux/ceph_backup_benji/
+date: 2020-02-24
+keywords: rook, ceph, benji, backup
+---
+
+
+In this article I will show you how to use benji to backup CEPH RBD incrementally.
+
+<!--more-->
+
+Benji Backup is a block based deduplicating backup software. It builds on the excellent foundations and concepts of backy² by Daniel Kraft.
+
+Benji requires `Python 3.6.5` or newer because older Python versions have some shortcomings in the `concurrent.futures` implementation which lead to an excessive memory usage. So in this example I will use docker to make easier to implement.
+
+```
+mkdir -p /opt/benji/config/
+mkdir -p /opt/benji/postgresql/data
+
+nano /opt/benji/docker-compose.yaml
+version: '3.5'
+
+services:
+  benji:
+    image: elementalnet/benji-k8s:0.5.0
+    restart: always
+    volumes:
+      - /etc/ceph:/etc/ceph
+      - /backup/benji-ceph:/data
+      - /opt/benji/config/benji.yaml:/benji/etc/benji.yaml
+      - /opt/benji/config/backup-ceph:/benji/scripts/backup-ceph
+      - /opt/benji/config/crontab:/benji/etc/crontab
+
+  postgres:
+    image: postgres:11
+    restart: always
+    environment:
+      - "POSTGRES_DB=benji-prod"
+      - "POSTGRES_USER=benji-prod"
+      - "POSTGRES_PASSWORD=Password1"
+    volumes:
+      - /opt/benji/postgresql/data:/var/lib/postgresql/data
+```
+
+### Create benji config
+```
+nano /opt/benji/config/benji.yaml
+configurationVersion: '1'
+databaseEngine: postgresql://benji-prod:Password1@postgres:5432/benji-prod
+defaultStorage: storage-1
+storages:
+  - name: storage-1
+    storageId: 1
+    module: file
+    configuration:
+      path: /data
+ios:
+  - name: rbd
+    module: rbd
+```
+
+### Create backup script
+```
+nano /opt/benji/config/backup-ceph
+#!/bin/bash
+
+. common.sh
+. prometheus.sh
+. ceph.sh
+. hooks.sh
+
+FSFREEZE=no
+BENJI_INSTANCE:devopstales
+POOL=testpool
+EXCLUDE="test1"
+
+# benji::backup::ceph test/test test test test/test
+
+echo "POOL :" $POOL;
+for IMAGE in `rbd ls $POOL | grep -v @ | grep -v $EXCLUDE`;
+do
+#   echo $POOL/$IMAGE
+   benji::backup::ceph $POOL/$IMAGE $POOL $IMAGE $POOL/$IMAGE
+done
+```
+
+### Create crontab
+```
+nano /opt/benji/config/crontab
+BENJI_INSTANCE:devopstales
+00 00 * * * root backup-ceph
+00 04 * * * root benji-command enforce days8,weeks3,months2
+00 05 * * * root benji-command cleanup
+30 05 * * * root benji-versions-status
+00 06 * * * root benji-command batch-deep-scrub
+```
+
+### Perform a backup
+```
+cd /opt/benji/
+docker-compose up -d
+docker exec -it benji_benji_1 bash
+benji database-init
+benji backup rbd:testpool/test2 devopstales
+benji ls
+```
+

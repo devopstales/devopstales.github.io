@@ -1,0 +1,33 @@
+---
+title: Install Katello client
+url: https://devopstales.github.io/linux/katello-client/
+date: 2019-05-04
+---
+
+
+Katello brings the full power of content management alongside the provisioning and configuration capabilities of Foreman. Katello is the upstream community project from which the Red Hat Satellite product is derived after Red Hat Satellite Server 6.
+<!--more-->
+
+
+### Install subscription manager
+```
+yum install subscription-manager
+rpm -ivh http://192.168.0.109/pub/katello-ca-consumer-latest.noarch.rpm
+subscription-manager register --org="mydomain" --activationkey="el7-key"
+
+subscription-manager repos --list
+
+cd /etc/yum.repos.d/
+mv CentOS-* epel* katello-client.repo /tmp/
+yum clean all
+yum repolist
+```
+
+### Install Katello client
+
+```
+yum install katello-agent -y
+systemctl start goferd
+systemctl enable goferd
+```
+

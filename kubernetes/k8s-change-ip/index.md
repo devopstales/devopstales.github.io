@@ -1,0 +1,72 @@
+---
+title: How to Change IP on Kubernetes node.
+url: https://devopstales.github.io/kubernetes/k8s-change-ip/
+date: 2022-06-07
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Secuity, best Practices, kube-apiserver, change ip, external ip, loadbalancer
+---
+
+
+In this tutorial I will show you how you can change th IP of the Kubernetes Nodes and Workers.
+
+<!--more-->
+
+On a Kubernetes cluster ther is a component called kube-apiserver. The kube-apiserver need to know the ip address on which to advertise the apiserver (`--apiserver-advertise-address`) to members of the cluster. At the `kubeadm init` there is a phase when the kubeadm generate self-signed certificate for the apiserver valid for the node ips and the ip of the loadbalancer if configures (`--control-plane-endpoint`). If the ip of the node or the loadbalancer (this is the external ip in a cloud environment) change the certificate is no longer valid for that and the `kubectl` won't connect.
+
+The soulution is to reinit the kubernetes cluster with the new ip and keeping the data of the etcd. The kubernetes keep all the objects and states in the etcd database.
+
+### Backup the data on the master
+
+```bash
+systemctl stop kubelet docker
+
+mv /etc/kubernetes /etc/kubernetes-backup
+mv /var/lib/kubelet /var/lib/kubelet-backup
+```
+
+### Preper for the new Cluster
+
+Create the new folderstructure and restore the needed certificates.
+
+```bash
+mkdir /etc/kubernetes
+cp -r /etc/kubernetes-backup/pki /etc/kubernetes
+rm -f /etc/kubernetes/pki/{apiserver.*,etcd/peer.*}
+rm -f ~/.kube/config
+```
+
+Now we can reinit control plane node with data in etcd using command below.
+
+```bash
+systemctl start docker
+
+echo 'KUBELET_EXTRA_ARGS="--node-ip=172.17.8.101"' > /etc/sysconfig/kubelet
+
+# add --kubernetes-version, --pod-network-cidr and --token options if needed
+kubeadm init --control-plane-endpoint "172.17.8.100:16443" --apiserver-advertise-address "172.17.8.101" \
+--ignore-preflight-errors=DirAvailable--var-lib-etcd
+
+cp kubernetes/admin.conf ~/.kube/config
+
+# Verify resutl
+kubectl cluster-info
+
+# wait for some time and delete old node
+sleep 120
+kubectl get nodes --sort-by=.metadata.creationTimestamp
+kubectl delete node $(kubectl get nodes -o jsonpath='{.items[?(@.status.conditions[0].status=="Unknown")].metadata.name}')
+```
+
+Now reset the worker to kubernete cluster and change the ip in the config.
+
+```bash
+kubeadm reset
+
+echo 'KUBELET_EXTRA_ARGS="--node-ip=172.17.8.102"' > /etc/sysconfig/kubelet
+```
+
+Get the join  token from the master and use this on the workers to rejoin to the master.
+
+```bash
+kubeadm token create --print-join-command
+```
+

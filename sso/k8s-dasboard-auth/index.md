@@ -1,0 +1,156 @@
+---
+title: Dashboard authentication with Keycloak and gatekeeper
+url: https://devopstales.github.io/sso/k8s-dasboard-auth/
+date: 2020-01-03
+keywords: Keycloak, Kubernetes, dasboard, oauth2, SSO, OIDC
+---
+
+
+In this post I will show you how to add a keycloak gatekeeper authentication proxy for Kubernetes Dashboard.
+
+<!--more-->
+
+{{< content "/filedir/kubernetes.html" >}}
+
+Kubernetes does not have its own user management and relies on external providers like Keycloak. First we need to integrate an OpeniD prodiver (for me keycloak) with the kubernetes api server.
+
+```bash
+nano /etc/kubernetes/manifests/kube-apiserver.yaml
+...
+    command:
+    - /hyperkube
+    - apiserver
+    - --advertise-address=10.10.40.30
+...
+
+    - --oidc-issuer-url=https://keycloak.devopstales.intra/auth/realms/mydomain
+    - --oidc-client-id=k8s
+    - --oidc-username-claim=email
+    - --oidc-groups-claim=groups
+    # for self sign cert or custom ca
+    #- --oidc-ca-file=/etc/kubernetes/pki/rootca.pem
+...
+
+systemctl restart docker kubelet
+```
+
+We need an authentication proxy before the dasboard. I will use keycloak-gatekeeper for that purpose.
+
+```yaml
+nano proxy-deplayment.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dasboard-proxy
+  labels:
+    app.kubernetes.io/name: dasboard-proxy
+  namespace: kubernetes-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dasboard-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dasboard-proxy
+    spec:
+      containers:
+        - name: dasboard-proxy
+          image: "keycloak/keycloak-gatekeeper:latest"
+          command:
+            - /opt/keycloak-gatekeeper
+            - --discovery-url=https://keycloak.devopstales.intra/auth/realms/mydomain/.well-known/openid-configuration
+            - --client-id=k8s
+            - --client-secret=43219919-0904-4338-bc0f-c986e1891a7a
+            - --listen=0.0.0.0:3000
+            - --encryption-key=AgXa7xRcoClDEU0ZDSH4X0XhL5Qy2Z2j
+            - --redirection-url=https://dashboard.devopstales.intra
+            - --enable-refresh-tokens=true
+            - --upstream-url=https://kubernetes-dashboard
+            # debug:
+            #- --upstream-url=http://echo:8080
+            # for self sign cert or custom ca
+            #- --skip-upstream-tls-verify
+            #- --skip-openid-provider-tls-verify
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dasboard-proxy
+  labels:
+    app.kubernetes.io/name: dasboard-proxy
+  namespace: kubernetes-dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: dasboard-proxy
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: dasboard-proxy
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "64k"
+    cert-manager.io/cluster-issuer: ca-issuer
+  namespace: kubernetes-dashboard
+spec:
+  tls:
+    - hosts:
+        - dashboard.devopstales.intra
+      secretName: dasboard-proxy-tls
+  rules:
+    - host: dashboard.devopstales.intra
+      http:
+        paths:
+          - backend:
+             serviceName: dasboard-proxy
+             servicePort: 3000
+```
+
+Now you can login at dashboard.devopstales.intra but you haven't got any privileges so lets create. some.
+
+```yaml
+nano devops-team_ClusterRoleBinding.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-it-afdeling
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: devops-team
+```
+
+```yaml
+nano user_ClusterRoleBinding.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: devopstales-admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: devopstales
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+```

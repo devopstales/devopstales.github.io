@@ -1,0 +1,243 @@
+---
+title: Install kubernetes with kubeadm and enable swap
+url: https://devopstales.github.io/kubernetes/k8s-install-with-swap/
+date: 2023-09-22
+keywords: kubernetes deployment, kubernetes vs docker
+---
+
+
+Kubeadm is a tool that helps you bootstrap a simple Kubernetes cluster and simplifies the deployment process. In this post I will use kubeadm to install swap enabled kubernetes.
+
+<!--more-->
+
+{{< content "/filedir/kubernetes.html" >}}
+
+In all the previous tutorials we disabled the host swap because Kubernetes dose not allowed to use it. In Kubernetes 1.28 the Linux swap usage 
+
+```bash
+192.168.1.41  kubernetes01 # master node
+
+# hardware requirement
+4 CPU
+16G RAM
+```
+
+### Enable cgroupV2
+
+```bash
+sudo dnf install -y grubby
+sudo grubby \
+  --update-kernel=ALL \
+  --args="systemd.unified_cgroup_hierarchy=1"
+
+cat << EOF >> /etc/systemd/system.conf
+DefaultCPUAccounting=yes
+DefaultIOAccounting=yes
+DefaultIPAccounting=yes
+DefaultBlockIOAccounting=yes
+EOF
+
+init 6
+```
+
+### Configure date time and selinux
+
+```bash
+timedatectl set-timezone Europe/Budapest
+
+dnf install -y vim net-tools chrony ntpstat
+timedatectl set-ntp true
+systemctl enable chronyd --now
+```
+
+```bash
+systemctl stop firewalld
+systemctl mask firewalld
+```
+
+```bash
+setenforce 0
+sed -i 's/=\(enforcing\|permissive\)/=disabled/g' /etc/sysconfig/selinux
+sed -i 's/=\(enforcing\|permissive\)/=disabled/g' /etc/selinux/config
+```
+
+```bash
+echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
+echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf
+sysctl -p
+
+echo "centos.mydomain.lan" > /etc/hostname
+hostnamectl set-hostname centos.mydomain.lan
+
+ifconfig | grep inet | grep -v inet6 | cut -d" " -f10 | sed "s|$|   `hostname -s` `hostname -f`|" >> /etc/hosts
+sed -i "s|::1|#::1|" /etc/hosts
+```
+
+### Install containerd
+
+```bash
+dnf install -y epel-release
+dnf install -y device-mapper-persistent-data lvm2 iproute-tc
+dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+dnf install -y containerd.io
+
+## Configure containerd
+sudo mkdir -p /etc/containerd
+sudo containerd config default > /etc/containerd/config.toml
+```
+
+### Configuration
+
+To use the `systemd` cgroup driver in `/etc/containerd/config.toml` with `runc`, set
+
+```bash
+nano /etc/containerd/config.toml
+...
+          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+            SystemdCgroup = true
+
+cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+
+sysctl --system
+```
+
+
+As you can see we dose n ot siabled the swap:
+
+```bash
+# show swap is on
+$ swapon --show
+NAME      TYPE      SIZE USED PRIO
+/dev/sda1 partition   2G   0B   -2
+
+# check for type cgroup2
+$ mount -l|grep cgroup
+cgroup2 on /sys/fs/cgroup type cgroup2 (rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate)
+
+# check for cpu controller
+$ cat /sys/fs/cgroup/cgroup.subtree_control
+cpu io memory pids
+```
+
+### Install kubeadm
+
+```bash
+cat << EOF >> /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+sudo dnf -y install kubelet kubeadm kubectl --disableexcludes=kubernetes
+```
+
+```bash
+# Start containerd
+systemctl enable --now containerd
+
+echo "runtime-endpoint: unix:///run/containerd/containerd.sock" > /etc/crictl.yaml
+crictl ps
+```
+
+Change runtime in kubeadm config:
+
+```bash
+# add the following flags to KUBELET_KUBEADM_ARGS variable
+cat << EOF > /etc/sysconfig/kubelet
+KUBELET_EXTRA_ARGS="--node-ip=192.168.1.41 --cgroup-driver=systemd --fail-swap-on=false"
+EOF
+```
+
+```bash
+sudo systemctl enable --now kubelet
+sudo systemctl status kubelet
+
+kubeadm config images pull
+```
+
+### Init master
+
+```yaml
+nano kubeadm-config.yaml
+---
+apiVersion: "kubeadm.k8s.io/v1beta3"
+kind: InitConfiguration
+localAPIEndpoint:
+  # local ip and lort
+  advertiseAddress: 192.168.100.10
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  imagePullPolicy: IfNotPresent
+  taints: null
+  kubeletExtraArgs:
+    runtime-cgroups: "/system.slice/containerd.service"
+    rotate-server-certificates: "true"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+# loadbalancer ip and port
+controlPlaneEndpoint: "192.168.100.10:6443"
+networking:
+  serviceSubnet: "10.96.0.0/12"
+  podSubnet: "10.244.0.0/16"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+enableServer: true
+failSwapOn: false
+cgroupDriver: "systemd"
+featureGates:
+  NodeSwap: true
+memorySwap:
+  swapBehavior: LimitedSwap
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: JoinConfiguration
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  imagePullPolicy: IfNotPresent
+  taints: null
+  kubeletExtraArgs:
+    runtime-cgroups: "/system.slice/containerd.service"
+    rotate-server-certificates: "true"
+```
+
+```bash
+kubeadm init --config kubeadm-config.yaml
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
+```
+
+### Join workers to cluster
+```bash
+kubeadm join 192.168.100.10:6443 --token XXXXXXXX \
+    --discovery-token-ca-cert-hash sha256:XXXXXXXX
+```
+
+```bash
+yum install -y https://harbottle.gitlab.io/harbottle-main/7/x86_64/harbottle-main-release.rpm
+yum install -y kubectx helm
+```
+

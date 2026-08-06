@@ -1,0 +1,240 @@
+---
+title: GSD – Get Shit Done: AI-Powered Spec-Driven Development Pipeline
+url: https://devopstales.github.io/ai/gsd-get-shit-done-pipeline/
+date: 2026-04-07
+keywords: GSD, get shit done, spec-driven development, AI coding agents, multi-agent orchestration, context engineering, developer productivity, wave-based execution
+---
+
+
+If you've spent any time working with AI coding assistants, you've probably encountered **context rot** — that moment when your AI session loses track of what it's doing, starts hallucinating, or produces code that doesn't match the original plan. The more complex the task, the faster things spiral.
+
+<!--more-->
+
+Enter [**GSD (Get Shit Done)**](https://github.com/gsd-build/get-shit-done) — a lightweight, open-source meta-prompting and spec-driven development system designed to solve exactly this problem.
+
+## What Is GSD?
+
+GSD is **not** a traditional CI/CD server. It's a **developer-side AI development pipeline** that runs locally or in-chat, orchestrating specialized AI subagents to plan, code, and verify features with structured, traceable workflows.
+
+Think of it as a bridge between **project specification** and **clean, verified code** — using AI agents that never lose context, never skip steps, and always produce atomic, revertable commits.
+
+Key capabilities:
+
+- **Context Engineering** — Keeps main LLM sessions lightweight while offloading heavy work to isolated subagents with fresh 200k-token contexts
+- **Multi-Agent Orchestration** — Thin orchestrator spawns specialized agents: Researcher, Planner, Executor, Verifier, and Debugger
+- **XML Task Formatting** — Atomic, structured task definitions with built-in verification steps
+- **Wave-Based Execution** — Groups plans by dependencies for parallel or sequential execution
+- **Atomic Git Commits** — Each completed task automatically generates a traceable, revertable commit
+- **Built-in Quality Gates** — Pre-flight, revision, escalation, and abort gates detect schema drift, scope reduction, and security threats
+
+## The GSD Pipeline
+
+At its core, GSD transforms a high-level project idea into verified, PR-ready code through a **chat-driven orchestration loop**. Here's how the pipeline looks:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     GSD PIPELINE                                    │
+│                  Spec → Code → Verify → Ship                        │
+└─────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────┐
+    │   INITIALIZE │  /gsd-new-project
+    │              │  - Map codebase
+    │   📋         │  - Extract requirements
+    └──────┬───────┘  - Generate roadmap
+           │
+           ▼
+    ┌──────────────┐
+    │   DISCUSS    │  /gsd-discuss-phase [N]
+    │              │  - Capture implementation preferences
+    │   💬         │  - UI/API decisions
+    └──────┬───────┘  - Resolve gray areas
+           │
+           ▼
+    ┌──────────────┐
+    │     PLAN     │  /gsd-plan-phase [N]
+    │              │  - Research domain
+    │   📐    ┌────┤  - Create XML task plans
+    │        │ ◄──┤  - Verify against requirements
+    │        └────┤  (loops until pass)
+    └──────┬───────┘
+           │
+           ▼
+    ┌──────────────────────────────────────────┐
+    │          EXECUTE (Wave-Based)            │  /gsd-execute-phase [N]
+    │                                          │
+    │   ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+    │   │ Wave 1  │  │ Wave 2  │  │ Wave 3  │  │
+    │   │ Tasks   │─▶│ Tasks   │─▶│ Tasks   │  │
+    │   │(parallel)│  │(parallel)│  │(parallel)│ │
+    │   └─────────┘  └─────────┘  └─────────┘  │
+    │                                          │
+    │   🔧 Each task → fresh 200k context      │
+    │   📝 Auto-commit on completion            │
+    └────────────────────┬─────────────────────┘
+                         │
+                         ▼
+                ┌────────────────┐
+                │   VERIFY       │  /gsd-verify-work [N]
+                │                │  - Walk through deliverables
+                │   ✅    ┌──────┤  - Run automated checks
+                │         │ ◄────┤  - Human UAT
+                │         └──────┤  - Diagnose failures
+                └───────┬────────┘  - Generate fix plans if needed
+                        │
+                        ▼
+                ┌──────────────┐
+                │   SHIP       │  /gsd-ship [N]
+                │              │  - Create PR branch
+                │   🚀         │  - Package verified work
+                └──────┬───────┘  - Trigger external CI
+                       │
+                       ▼
+                ┌──────────────┐
+                │ MILESTONE    │  /gsd-complete-milestone
+                │              │  - Archive & tag
+                │   🏁         │  - Start next cycle
+                └──────────────┘
+```
+
+## Step-by-Step Breakdown
+
+### 1. Initialize — `/gsd-new-project`
+
+Maps your entire codebase, extracts existing requirements, and generates a structured project roadmap. This is your starting point — GSD understands where you are before planning where to go.
+
+### 2. Discuss — `/gsd-discuss-phase [N]`
+
+Captures your implementation preferences, UI/API decisions, and resolves ambiguous requirements before any planning begins. This step ensures the AI doesn't make assumptions that conflict with your intent.
+
+### 3. Plan — `/gsd-plan-phase [N]`
+
+The Researcher agent investigates the domain, the Planner creates structured XML task plans, and the Verifier checks them against requirements. If verification fails, the loop repeats until everything passes.
+
+### 4. Execute — `/gsd-execute-phase [N]`
+
+Plans are grouped into **dependency-aware waves**. Independent tasks run in parallel; dependent tasks run sequentially. Each Executor gets a fresh context window, eliminating context rot. Every completed task generates an atomic Git commit.
+
+### 5. Verify — `/gsd-verify-work [N]`
+
+Walks through every testable deliverable, runs automated checks, and supports human UAT. If something fails, a Debugger agent spawns automatically to generate a fix plan.
+
+### 6. Ship — `/gsd-ship [N]`
+
+Packages verified work into a clean Pull Request branch. External CI systems (GitHub Actions, GitLab CI, Jenkins) handle the rest — testing, security scans, and deployment.
+
+## Command Cheat Sheet
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GSD COMMAND REFERENCE                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Project Setup                                                  │
+│  ─────────────────                                              │
+│  /gsd-new-project            Initialize new project             │
+│                                                                 │
+│  Workflow Phases                                                │
+│  ───────────────                                                │
+│  /gsd-discuss-phase [N]      Discuss phase N preferences       │
+│  /gsd-plan-phase [N]         Plan phase N (research+XML)       │
+│  /gsd-execute-phase [N]      Execute phase N tasks             │
+│  /gsd-verify-work [N]        Verify phase N deliverables       │
+│                                                                 │
+│  Quick Tasks                                                    │
+│  ──────────                                                     │
+│  /gsd-quick --full "..."     Ad-hoc task with full context     │
+│  /gsd-plan-phase 1 --skip-research   Skip research step        │
+│  /gsd-plan-phase 1 --skip-verify     Skip verification         │
+│                                                                 │
+│  Shipping                                                       │
+│  ────────                                                       │
+│  /gsd-ship [N]               Create PR for phase N             │
+│  /gsd-complete-milestone     Archive & tag current milestone   │
+│  /gsd-new-milestone          Start next milestone cycle        │
+│                                                                 │
+│  Configuration                                                  │
+│  ─────────────                                                  │
+│  /gsd-set-profile budget     Use Sonnet/Haiku (faster)         │
+│  /gsd-set-profile quality    Use Opus (higher quality)         │
+│  /gsd-help                   Full command reference            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Installation
+
+GSD supports multiple AI coding assistants (Claude Code, OpenCode, Gemini CLI, Cursor, Copilot, and others).
+
+**Interactive install:**
+
+```bash
+npx get-shit-done-cc@latest
+```
+
+**Non-interactive / CI install:**
+
+```bash
+npx get-shit-done-cc --claude --global
+```
+
+For the best experience, Claude Code users should run with:
+
+```bash
+claude --dangerously-skip-permissions
+```
+
+This enables frictionless automation without permission prompts blocking the workflow.
+
+## How GSD Differs from Traditional CI/CD
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│  Traditional CI/CD Pipeline                                 │
+│  ─────────────────────────────                              │
+│                                                             │
+│  Code → Push → Build → Test → Deploy                        │
+│         ▲                                                   │
+│         └── Human writes everything                          │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  GSD Developer-Side Pipeline                                │
+│  ─────────────────────────────                              │
+│                                                             │
+│  Spec → Discuss → Plan → Execute → Verify → PR              │
+│                                    │                        │
+│                                    ▼                        │
+│                        External CI/CD (Build/Test/Deploy)    │
+│                                                             │
+│  AI agents handle spec-to-code; your CI handles the rest    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+GSD operates **before** your CI/CD pipeline. It handles the spec-to-code workflow locally, then hands off clean, verified branches to your existing CI runner for the build-test-deploy cycle.
+
+## When to Use GSD
+
+- **Complex features** that require planning, research, and multi-step implementation
+- **Projects suffering from context rot** — where AI assistants lose track mid-task
+- **Teams wanting traceable AI-generated work** with atomic commits and verified deliverables
+- **Developers who want structured AI workflows** without enterprise tooling overhead
+
+## When NOT to Use GSD
+
+- Quick one-line fixes or trivial changes
+- Projects that don't benefit from structured planning
+- Teams comfortable with freeform AI chat workflows
+
+## Final Thoughts
+
+GSD is a compelling approach to **spec-driven development** with AI agents. By structuring the workflow into distinct phases with dedicated agents for each task, it solves one of the biggest pain points in AI-assisted coding: **context management**.
+
+The wave-based execution model and automatic atomic commits mean you get clean, reviewable Git history — not a messy dump of AI-generated code. And because it integrates with your existing CI/CD via PR branches, there's no need to change your deployment pipeline.
+
+If you're serious about using AI coding agents for real development work (not just autocomplete), GSD is worth adding to your toolkit.
+
+Check it out on GitHub: [gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done)
+

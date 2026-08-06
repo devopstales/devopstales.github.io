@@ -1,0 +1,74 @@
+---
+title: Openshift Helm
+url: https://devopstales.github.io/kubernetes/openshift-helm/
+date: 2019-04-15
+keywords: ansible, openshift 3.11, openshift okd, openshift tutorial, openshift container platform, rad hat openshift, helm 3
+---
+
+
+I this post I will demonstrate the basic configuration of Helm on Openshift.
+
+<!--more-->
+
+{{< content "/filedir/openshift.html" >}}
+
+### Helm
+Helm is a package manager and teplating engine for Kubernetes. It based on tree main components:
+
+* the helm cli client
+* the helm server called tiller
+* the template pcakage called halm chart
+
+### Install helm cli
+```
+# https://github.com/helm/helm/releases
+curl -s https://storage.googleapis.com/kubernetes-helm/helm-v2.9.1-linux-amd64.tar.gz | tar xz
+cd linux-amd64
+cp helm /usr/bin
+```
+
+### Helm with cluster-admin permissions
+```
+nano helm-cluster-admin.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tiller-admin
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tiller-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: tiller-admin
+  namespace: kube-system
+```
+
+### Init helm
+```
+oc login master.openshift.devopstales.intra:443
+kubectl apply -f helm-cluster-admin.yaml
+helm init --service-account tiller-admin
+```
+
+### Test hem
+```
+oc new-project myapp
+helm install stable/ghost -n blog
+
+oc get pods -n myapp
+export APP_HOST=$(kubectl get svc --namespace myapp blog-ghost --template "{{ range (index .status.loadBalancer.ingress 0) }}{{ . }}{{ end }}")
+export APP_PASSWORD=$(kubectl get secret --namespace myapp blog-ghost -o jsonpath="{.data.ghost-password}" | base64 --decode)
+export APP_DATABASE_PASSWORD=$(kubectl get secret --namespace myapp blog-mariadb -o jsonpath="{.data.mariadb-password}" | base64 --decode)
+helm upgrade blog stable/ghost --set service.type=LoadBalancer,ghostHost=$APP_HOST,ghostPassword=$APP_PASSWORD,mariadb.db.password=$APP_DATABASE_PASSWORD
+
+oc get pods -n myapp
+echo Password: $(kubectl get secret --namespace myapp blog-ghost -o jsonpath="{.data.ghost-password}" | base64 --decode)
+```
+

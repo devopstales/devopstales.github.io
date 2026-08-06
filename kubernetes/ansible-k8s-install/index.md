@@ -1,0 +1,140 @@
+---
+title: Install Kubernetes
+url: https://devopstales.github.io/kubernetes/ansible-k8s-install/
+date: 2019-10-03
+keywords: ansible, configuration management
+---
+
+
+Kubespray is a pre made ansible playbook for Kubernetes installation. In this Post I will show you how to use to install a new Kubernetes cluster.
+
+<!--more-->
+
+{{< content "/filedir/kubernetes.html" >}}
+
+### Environment
+```
+192.168.1.60    deployer.devopstales.intra (LB)
+192.168.1.61    master0.devopstales.intra  (master)
+192.168.1.62    master1.devopstales.intra  (master)
+192.168.1.63    master2.devopstales.intra  (master)
+192.168.1.64    worker0.devopstales.intra  (worker)
+192.168.1.65    worker1.devopstales.intra  (worker)
+
+# hardware requirement
+4 CPU
+16G RAM
+```
+
+### Prerequirement
+```
+# deployer
+
+nano ~/.ssh/config
+Host master0
+    Hostname master0.devopstales.intra
+    User ansible
+
+Host master1
+    Hostname master1.devopstales.intra
+    User ansible
+
+Host master2
+    Hostname master2.devopstales.intra
+    User ansible
+
+Host worker0.devopstales.intra
+    Hostname worker0.devopstales.intra
+    User ansible
+
+Host worker1
+    Hostname worker1.devopstales.intra
+    User ansible
+```
+
+```
+yum install epel-release -y
+yum update -y
+yum install python-pip git tmux nano -y
+git clone https://github.com/kubernetes-sigs/kubespray.git
+cd kubespray
+pip install --user -r requirements.txt
+
+cp -rfp inventory/sample inventory/mycluster
+```
+
+### Configurate Installer
+```
+nano inventory/mycluster/inventory.ini
+master0   ansible_host=192.168.1.61 ip=192.168.1.61
+master1   ansible_host=192.168.1.62 ip=192.168.1.62
+master2   ansible_host=192.168.1.63 ip=192.168.1.63
+worker0   ansible_host=192.168.1.64 ip=192.168.1.64
+worker1   ansible_host=192.168.1.65 ip=192.168.1.65
+
+# ## configure a bastion host if your nodes are not directly reachable
+# bastion ansible_host=x.x.x.x ansible_user=some_user
+
+[kube-master]
+master0
+master1
+master2
+
+[etcd]
+master0
+master1
+master2
+
+[kube-node]
+worker0
+worker1
+
+[calico-rr]
+
+[k8s-cluster:children]
+kube-master
+kube-node
+calico-rr
+```
+
+### Run the Installer
+```
+tmux new -s kubespray
+ansible-playbook -i inventory/mycluster/inventory.ini --become \
+--user=centos --become-user=root cluster.yml
+
+test install on node:
+sudo -i
+kubectl get node
+NAME      STATUS   ROLES    AGE   VERSION
+master0   Ready    master   92m   v1.15.3
+master1   Ready    master   91m   v1.15.3
+master2   Ready    master   91m   v1.15.3
+worker0   Ready    <none>   90m   v1.15.3
+worker1   Ready    <none>   90m   v1.15.3
+
+kubectl config get-clusters
+```
+
+### Let’s configure an external loadbalancer
+```
+sudo firewall-cmd --add-port=6443/tcp --permanent
+sudo firewall-cmd --reload
+
+yum -y install haproxy
+
+nano ..
+listen k8s-apiserver-https
+  bind *:6443
+  option ssl-hello-chk
+  mode tcp
+  balance roundrobin
+  timeout client 3h
+  timeout server 3h
+  server master0 192.168.1.61:6443
+  server master1 192.168.1.62:6443
+  server master2 192.168.1.63:6443
+
+systemctl enable --now haproxy
+```
+

@@ -1,0 +1,103 @@
+---
+title: GitOps solutions for Kubernetes
+url: https://devopstales.github.io/kubernetes/k8s-gitops/
+date: 2021-04-09
+keywords: kubernetes deployment, gitops, Argo CD, Flux CD, Racher Fleet
+---
+
+
+In this post I will compare the GitOps tools for Kubernetes.
+
+<!--more-->
+
+{{< content "/filedir/k8s-gitops.html" >}}
+
+## What is gitops?
+
+GitOps is a way to manage the state of systems, through definitions of the desired state stored in files in a version control system usually Git. With git versioning you can manage your workflow more sourly. If something gos wrong you can rollback easily. There is multiple tools for GitOps in Kubernetes:
+
+* Argo CD
+* Flux CD
+* Racher Fleet
+
+## FluxCD
+
+Flux is described as a GitOps operator for Kubernetes that synchronises the state of manifests in a Git repository to what is running in a cluster. It can watch one single remote repository per installation and it will be able to apply changes only in the namespaces in which its underlying service account has permissions to change. 
+
+
+### FluxCD Installation
+
+```bash
+flux bootstrap git \
+  --url=ssh://git@<host>/<org>/<repository> \
+  --branch=<my-branch> \
+  --path=clusters/my-cluster
+```
+
+### FluxCD Conclusion
+
+Advantages:
+
+* More security with the namespace based separation
+* There is a built-in solution for secret management.
+* flagger for canary deployment
+
+Disadvantage:
+
+* Need to run multiple instance for different namespace control
+* There is no User interface
+
+## ArgoCD
+
+The basic principles of ArgoCD similar then FluxCD however, what makes it different is the capability to manage multi-tenant and multi-cluster deployments. It can use multiple git repository as source and can control multiple namespace or Kubernetes Cluster.
+
+### ArgoCD Installation
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f \
+https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+### ArgoCD Conclusion
+
+Advantages:
+
+* It has a nice modern web UI
+* It can manage multiple source repository and destination namespace or Kubernetes Cluster.
+* Multiple types of identity providers are supported (OIDC, SAML, LDAP. etc...)
+* Configuration drift detection
+* Argo Rollouts for canary deployment
+
+Disadvantage:
+
+* There is no built-in solution for secret management
+
+## Fleet
+Fleet is GitOps at scale. Fleet is designed to manage up to a million clusters. It's also lightweight enough that is works great for a single cluster too, but it really shines when you get to a large scale
+
+### Fleet Installation
+
+```bash
+helm -n fleet-system install --create-namespace --wait \
+    fleet-crd https://github.com/rancher/fleet/releases/download/v0.3.3/fleet-crd-0.3.3.tgz
+helm -n fleet-system install --create-namespace --wait \
+    fleet https://github.com/rancher/fleet/releases/download/v0.3.3/fleet-0.3.3.tgz
+```
+
+### Fleet Conclusion
+
+Advantages:
+
+* Fleet is designed to manage many many clusters
+
+Disadvantage:
+
+* There is no built-in solution for secret management
+* There is no User interface
+* There is no built-in solution for canary deployment
+
+---
+* https://rancher.com/tags/gitops
+* https://www.youtube.com/watch?v=8pbdXAd-F44
+

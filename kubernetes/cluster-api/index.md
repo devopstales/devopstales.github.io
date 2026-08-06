@@ -1,0 +1,119 @@
+---
+title: Kubernetes Cluster API: a step by stap guide
+url: https://devopstales.github.io/kubernetes/cluster-api/
+date: 2025-04-06
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Secuity, best Practices, ClusterAPI, Cluster API
+---
+
+
+In this post I will show you how you can install and manage a Kubernetes cluster with Cluster API.
+<!--more-->
+
+## What is ClusterAPI?
+
+The Cluster API project was started by the Kubernetes Special Interest Group (SIG) Cluster Lifecycle and automates cluster lifecycle management for platform operators using Kubernetes-style APIs and conventions. Currently, more than 100 Kubernetes installers and distributions exist, each with a unique default configurations. Acknowledging this ClusterAPI concentrated on community based providers that bootstrap different kinds of Kubernetes clusters and architectures.
+
+The most commonly used providers are cloud based solutions like AWS, Azure or GCP, or private cloud providers (CloudStack, OpenStack, OpenNebula), but you can also use virtualization engines like vSphere, Proxmox, Nautanix, KubVirt, Virtink, Harwester. The most intrestingsolutions are the hardware based providers like Metal3.
+
+## Create ClusterAPI Clusters with Kind
+
+For this demo I will use ClusterAPI's kind provider to create a cluster. The only dependencies are kubectl and kind. The we will install ClusterAPI's client.
+
+```bash
+curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.0.4/clusterctl-linux-amd64 -o clusterctl
+chmod +x ./clusterctl
+sudo mv ./clusterctl /usr/local/bin/clusterctl
+clusterctl version
+# OR
+brew install kind
+brew install kubernetes-cli
+brew install kubectx
+brew install clusterctl
+```
+
+To manage the new clusters we need a management kubernetes cluster where we will install the ClusterAPI controller and it's CRDs. For this demo I will use a kind cluster for this porpose too.
+
+Fo this the management kind cluster need to be communicat with the underlying docker engine on the host. To do that we need to mount the docker engine socket into the kind cluster's vm.
+
+```yaml
+cat > cluster-mgmt.yaml <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraMounts:
+  - hostPath: /var/lib/docker
+    containerPath: /var/lib/docker
+  - hostPath: /var/run/docker.sock
+    containerPath: /var/run/docker.sock
+EOF
+```
+
+```bash
+kind create cluster --config cluster-mgmt.yaml --name mgmt
+
+docker ps                                                                                                                   
+
+CONTAINER ID   IMAGE                  COMMAND                  CREATED              STATUS          PORTS                                      NAMES
+414fd857c0fb   kindest/node:v1.32.2   "/usr/local/bin/entr…"   About a minute ago   Up 58 seconds   127.0.0.1:43483->6443/tcp                  mgmt-control-plane
+1815dce2b51f   nginx:latest           "/docker-entrypoint.…"   2 weeks ago          Up 49 minutes   0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp   kubedash-proxy
+```
+
+Install the ClusterAPI operator and CRDs:
+
+```bash
+export CLUSTER_TOPOLOGY=true
+clusterctl init --infrastructure docker
+
+kubectl get pod -n capd-system                                                                      
+kubectl get pod -n capi-kubeadm-bootstrap-system
+kubectl get pod -n capi-kubeadm-control-plane-system
+kubectl get crd | grep cluster
+```
+
+Once the management cluster is ready, you can create your first workload cluster.
+
+```bash
+clusterctl generate cluster capi-quickstart --flavor development \
+--kubernetes-version v1.31.0 \
+--control-plane-machine-count=1 \
+--worker-machine-count=0 \
+> capi-quickstart.yaml
+```
+
+```bash
+kubectl apply -f capi-quickstart.yaml
+
+kubectl get cluster
+
+clusterctl describe cluster capi-quickstart
+
+kubectl get kubeadmcontrolplane
+```
+
+```bash
+NAME              CLUSTERCLASS   PHASE         AGE     VERSION
+capi-quickstart   quick-start    Provisioned   5m47s   v1.31.0
+```
+
+### Deploy CNI
+
+```bash
+# First, get the kubeconfig
+clusterctl get kubeconfig capi-quickstart > kubeconfig.capi-quickstart.yaml
+# Install Calico
+kubectl --kubeconfig=./kubeconfig.capi-quickstart.yaml apply \
+-f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+```
+
+## Upgrade cluster
+
+As I sead earlier ClusterApi is a Kubernetes cluster lifecycle manager so you can use it to upgrade your cluster:
+
+```bash
+kubectl get kubeadmcontrolplane,machinedeployments
+
+
+kubectl patch cluster capi-quickstart --type json \
+--patch '[{"op": "replace", "path": "/spec/topology/version", "value": "v1.32.2"}]'
+```

@@ -1,0 +1,109 @@
+---
+title: RKE2 With MetalLB and NGINX Ingress Controller
+url: https://devopstales.github.io/kubernetes/rke2-ingress-loadbalancer/
+date: 2024-02-15
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Secuity, best Practices, rancher, MetalLB, PFSense, bgp
+---
+
+
+In this Post I will show you how to Configure MetalLB to provide a bare metal Load Balancer for NGINX Ingress Controller.
+<!--more-->
+
+### MetalLB Config
+
+First we need to install the MetalLB in RKE2. In my [previous post](/kubernetes/k8s-metallb/) I wrote how to install it. So please check it.
+
+The following configs should be deployed to your K8s environment.
+
+```yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.20.46/32
+  - 192.168.20.47/32
+  - 192.168.20.48/32
+  - 192.168.20.85/32
+  - 192.168.20.86/32
+  - 192.168.20.87/32
+  - 192.168.20.88/32
+  - 192.168.20.89/32
+  - 192.168.20.90/32
+  - 192.168.20.91/32
+  - 192.168.20.92/32
+  - 192.168.20.93/32
+  - 192.168.20.94/32
+  - 192.168.20.95/32
+  autoAssign: true
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - default
+---
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: default
+  namespace: metallb-system
+spec:
+  myASN: 64790
+  peerASN: 64791
+  peerAddress: 192.168.20.64
+---
+apiVersion: metallb.io/v1beta1
+kind: BGPAdvertisement
+metadata:
+  name: default
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - default
+```
+
+> I have both Layer 2 and BGP advertisements enabled. This is because my services and clients share the same subnet. BGP won’t work for clients on the same subnet as the services because it is layer 3, the client will ARP ping for the IP and receive no reply. The PFSense router will only route to service IP’s via the node IP’s from another subnet. Therefore you need both. I chose to have them on the same subnet because this avoids having large amounts of traffic transferring the PFSense FW which is slower and more resource hungry than dedicated switches.
+
+### BGP on PFSense
+
+In my [previous post](/kubernetes/k8s-metallb-bgp-pfsense/) I wrote about how to configure MetalLB in BGP mode with PFSense.
+
+> Just make sure to change the AS number to match your metallb config.
+
+### NGINX Ingress Controller Config
+
+We USE RKE2 as the kubernetes cluster. RKE2 has its own NGINX Ingress Controller already installed in host network mode. So we need to reconfigure the installed helm chart to run with LoadBalancer type service. For this we need to override the default helm values in the helm release object:
+
+```bash
+sudo nano /var/lib/rancher/rke2/server/manifests/rke2-ingress-nginx-config.yaml
+```
+
+Add the following contents.
+
+```yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-ingress-nginx
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    controller:
+      config:
+        use-forwarded-headers: "true"
+        enable-real-ip: "true"
+      publishService:
+        enabled: true
+      service:
+        enabled: true
+        type: LoadBalancer
+        externalTrafficPolicy: Local
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: 192.168.20.45
+```

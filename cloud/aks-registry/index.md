@@ -1,0 +1,121 @@
+---
+title: Azure Conainer Registry integration for AKS
+url: https://devopstales.github.io/cloud/aks-registry/
+date: 2020-11-18
+keywords: Azure, AKS, streaming
+---
+
+
+In this pos I will show you how you can integrate Azure Container Registry to AKS (Azure Kubernetes Service) Cluster.
+<!--more-->
+
+{{< content "/filedir/aks.html" >}}
+
+### Set the subscription
+```
+az login
+az account list
+az account set --subscription <SUBSCRIPTION_ID>
+```
+
+### Creating an Azure Resource Group
+```
+az group create --location <REGION_NAME> --name <RESOURCE_GROUP_NAME>
+```
+
+### Provisioning an Azure Container Registry
+```
+az acr create --name <REGISTRY_NAME> \
+--resource-group <RESOURCE_GROUP_NAME> \
+--sku Basic
+
+
+az ad sp create-for-rbac \
+  --scopes /subscriptions/<SUBSCRIPTION_ID>/resourcegroups/<RESOURCE_GROUP_NAME>/providers/Microsoft.ContainerRegistry/registries/<REGISTRY_NAME> \
+  --role Contributor \
+  --name <SERVICE_PRINCIPAL_NAME>
+
+docker login <REGISTRY_NAME> -u <CLIENT_ID>
+```
+
+### Create a new AKS cluster with ACR integration
+```
+az aks create -n <KUBERNETS_CLUSTER_NAME> \
+-g <RESOURCE_GROUP_NAME> \
+--generate-ssh-keys \
+--attach-acr <REGISTRY_NAME>
+```
+
+### Configure ACR integration for existing AKS clusters
+```
+az aks update -n <KUBERNETS_CLUSTER_NAME> \
+-g <RESOURCE_GROUP_NAME> \
+--attach-acr <REGISTRY_NAME>
+```
+
+### Use Kubernetes Secret for registry integration
+```
+ACR_NAME=<REGISTRY_NAME>
+ACR_UNAME=$(az acr credential show -n $ACR_NAME --query="username" -o tsv)
+ACR_PASSWD=$(az acr credential show -n $ACR_NAME --query="passwords[0].value" -o tsv)
+
+kubectl create secret docker-registry acr-secret \
+  --docker-server=$ACR_NAME \
+  --docker-username=$ACR_UNAME \
+  --docker-password=$ACR_PASSWD \
+  --docker-email=ignorethis@email.com
+```
+
+Use secret in Kubernetes
+```
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sample-pod
+spec:
+  containers:
+  - name: sample-pod-container
+    image: youruniquename.azurecr.io/sample-container:0.0.1
+  imagePullSecrets:
+  - name: acr-secret
+```
+
+### Use Service Account For authentication
+```
+ACR_NAME=<REGISTRY_NAME>
+ACR_UNAME=$()
+ACR_PASSWD=$()
+
+kubectl create secret docker-registry acr-secret \
+  --docker-server=$ACR_NAME \
+  --docker-username=$ACR_UNAME \
+  --docker-password=$ACR_PASSWD \
+  --docker-email=ignorethis@email.com
+```
+
+Use ServiceAccount in Kubernetes
+```
+--docker-password=$ACR_PASSWD \
+--docker-email=ignorethis@email.com
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+name: SampleAccount
+namespace: default
+imagePullSecrets:
+- name: acr-secret
+---
+apiVersion: v1
+kind: Pod
+metadata:
+name: sample-pod
+spec:
+containers:
+- name: sample-pod-container
+  image: youracrname.azurecr.io/sample-container:0.0.1
+serviceAccountName: SampleAccount
+```
+

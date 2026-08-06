@@ -1,0 +1,277 @@
+---
+title: Kubernetes Policy
+url: https://devopstales.github.io/kubernetes/kubernetes-policy/
+date: 2021-01-15
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Secuity, best Practices, NetworkPolicy, OPA Gatekeeper, Kyverno, mutating webhook, Admission Controller, Cosign
+---
+
+
+In this post I will show you how you can enforce best practices on Kubernetes Clusters.
+<!--more-->
+
+> **Updated July 2021**: Updated Features/Capabilities table. Notable change: Added "Self-service reports" comparison, the ability for non-policy admins to view policy violations (decoupled from policy objects).
+> 
+> **Updated June 2021**: Updated Features/Capabilities table. Notable changes: Kyverno now supports high availability and metrics.
+>
+> **Updated Aug 2021**: Updated Features/Capabilities table. Notable changes: Kyverno now supports Image Signature Verification with Cosign
+
+
+{{< content "/filedir/k8s-sec.html" >}}
+
+For a production ready  Kubernetes cluster it is very important to enforcing cluster-wide policies to restrict what a container is allowed to do. We do this wit PS in a previous pos. But how should we enforce our best practices to the cluster users?
+
+### OPA
+Open Policy Agent (OPA), is a policy engine for Cloud Native environments hosted by CNCF. It is a general purpose policy engine. OPA policies are written in a Domain Specific Language (DSL) called Rego.
+
+### OPA Gatekeeper
+Gatekeeper is specifically built for Kubernetes Admission Control use case of OPA. It uses OPA internally, but specifically for the Kubernetes admission control. Compared to using OPA with its sidecar kube-mgmt (aka Gatekeeper v1.0), Gatekeeper is integrated with the OPA Constraint Framework to enforce CRD-based policies and allow declaratively configured policies to be reliably shareable. 
+
+Install OPA Gatekeeper:
+```bash
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+```
+
+Now we need to create a policy template and a constraint that adds the variables to the template. If I want to create  a policy to enforce all image comes from Only gcr.io, I need this Template:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredregistry
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredRegistry
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            image:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredregistry
+        violation[{"msg": msg, "details": {"Registry should be": required}}] {
+          input.review.object.kind == "Pod"
+          some i
+          image := input.review.object.spec.containers[i].image
+          required := input.parameters.registry
+          not startswith(image,required)
+          msg := sprintf("Forbidden registry: %v", [image])
+        }
+```
+
+This template defines which parameters you need to define as well as the actual Rego code that will do the validation. Fo the constraint we specify that we need this constraint applied to Pods only and we pass the registry name that we need the images to be pulled from.
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredRegistry
+metadata:
+  name: images-must-come-from-gcr
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    registry: "gcr.io/"
+```
+
+Test the policy with an image from github:
+
+```bash
+kubectl run --generator=run-pod/v1 busybox1 --image=busybox -- sleep 3600
+
+message: 'admission webhook "validation.gatekeeper.sh" denied the request: [denied
+      by images-must-come-from-gcr] Forbidden registry: busybox'
+```
+
+Another great feature of OPA Gatekeeper is audit functionality, it enables periodic evaluations of replicated resources against the policies enforced in the cluster to detect pre-existing misconfigurations.
+
+
+Audit results are stored as violations listed in the status field of the failed constraint.
+
+```bash
+kubectl describe policystrictonly.constraints.gatekeeper.sh policy-strict-constraint
+```
+
+
+### OPA and Gatekeeper
+You can deploy OPA kube-mgmt as both validating webhook as well as mutating webhook configurations. Whereas, Gatekeeper currently does not support mutating admission control scenarios.
+
+### Kyverno
+Kyverno is a policy engine designed for Kubernetes. With Kyverno, policies are managed as Kubernetes resources and no new language is required to write policies. This allows using familiar tools such as kubectl, git, and kustomize to manage policies. Kyverno policies can validate, mutate, and generate Kubernetes resources. The Kyverno CLI can be used to test policies and validate resources as part of a CI/CD pipeline. (Source: [Kyverno](https://kyverno.io/) )
+
+Install kyverno:
+```bash
+helm repo add kyverno https://kyverno.github.io/kyverno/
+helm repo update
+helm install kyverno --namespace kyverno kyverno/kyverno --create-namespace
+```
+
+#### Validate configurations
+Here is an example of a Kyverno policy that validates that images are only pulled from gcr.io:
+
+```yaml
+apiVersion : kyverno.io/v1alpha1
+kind: Policy
+metadata:
+  name: check-registries
+spec:
+  rules:
+  - name: check-registries
+    resource:
+      kinds:
+      - Deployment
+      - StatefulSet
+    validate:
+      message: "Registry is not allowed"
+      pattern:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: "*"
+                # Check allowed registries
+                image: "*/gcr.io/*"
+```
+
+Here the `kind` is `Policy` not `ClusterPolicy`  which means policies will only apply to resources within the namespace in which they are defined.
+
+#### Mutate Configurations
+Kyverno supports two different ways to mutate configurations. The first approach is to use a JSON Patch:
+
+```yaml
+apiVersion : kyverno.io/v1alpha1
+kind : Policy
+metadata :
+  name : policy-deployment
+spec :
+  rules:
+    - name: patch-add-label
+      resource:
+        kinds : 
+        - Deployment
+      mutate:
+        patches:
+        - path: /metadata/labels/isMutated
+          op: add
+          value: "true"
+```
+
+The other way to mutate resources based on conditionals that describes the desired state:
+
+```yaml
+apiVersion: kyverno.io/v1alpha1
+kind: Policy
+metadata:
+  name: set-image-pull-policy
+spec:
+  rules:
+  - name: set-image-pull-policy
+    resource:
+      kinds:
+      - Deployment
+    mutate:
+      overlay:
+        spec:
+          template:
+            spec:
+              containers:
+                # if the image tag is latest, set the imagePullPolicy to Always
+                - (image): "*:latest"
+                  imagePullPolicy: "Always"
+```
+
+#### Generate Configurations
+Policy rule can generates new configurations:
+
+```yaml
+apiVersion: kyverno.io/v1alpha1
+kind: Policy
+metadata:
+  name: "default"
+spec:
+  rules:
+  - name: "deny-all-traffic"
+    resource: 
+      kinds:
+       - Namespace
+      name: "*"
+    generate: 
+      kind: NetworkPolicy
+      name: deny-all-traffic
+      data:
+        spec:
+        podSelector:
+          matchLabels: {}
+          matchExpressions: []
+        policyTypes: []
+        metadata:
+          annotations: {}
+          labels:
+            policyname: "default"
+```
+
+### Policy Reports
+Kyverno policy reports provide information about policy execution and violations. Kyverno creates policy reports for each Namespace and a single cluster-level report for cluster resources.
+
+```bash
+$ kubectl get polr -A
+NAMESPACE     NAME                  PASS   FAIL   WARN   ERROR   SKIP   AGE
+default       polr-ns-default       338    2      0      0       0      28h
+flux-system   polr-ns-flux-system   135    5      0      0       0      28h
+
+$ kubectl get clusterpolicyreport -A
+NAME                  PASS   FAIL   WARN   ERROR   SKIP   AGE
+clusterpolicyreport   0      0      0      0       0      142m
+```
+
+```bash
+$ kubectl describe polr polr-ns-default | grep "Status: \+fail" -B10
+  Message:        validation error: Running as root is not allowed. The fields spec.securityContext.runAsNonRoot, spec.containers[*].securityContext.runAsNonRoot, and spec.initContainers[*].securityContext.runAsNonRoot must be `true`. Rule check-containers[0] failed at path /spec/securityContext/runAsNonRoot/. Rule check-containers[1] failed at path /spec/containers/0/securityContext/.
+  Policy:         require-run-as-non-root
+  Resources:
+    API Version:  v1
+    Kind:         Pod
+    Name:         add-capabilities-init-containers
+    Namespace:    default
+    UID:          1caec743-faed-4d5a-90f7-5f4630febd58
+  Rule:           check-containers
+  Scored:         true
+  Status:         fail
+--
+  Message:        validation error: Running as root is not allowed. The fields spec.securityContext.runAsNonRoot, spec.containers[*].securityContext.runAsNonRoot, and spec.initContainers[*].securityContext.runAsNonRoot must be `true`. Rule check-containers[0] failed at path /spec/securityContext/runAsNonRoot/. Rule check-containers[1] failed at path /spec/containers/0/securityContext/.
+  Policy:         require-run-as-non-root
+  Resources:
+    API Version:  v1
+    Kind:         Pod
+    Name:         sysctls
+    Namespace:    default
+    UID:          b98bdfb7-10e0-467f-a51c-ac8b75dc2e95
+  Rule:           check-containers
+  Scored:         true
+  Status:         fail
+```
+
+### Comparison
+
+![OPA VS Kyverno](/img/include/opa_vs_kyverno.webp)
+
+| Features/Capabilities | OPA Gatekeeper | Kyverno |
+|-----------------------|----------------|---------|
+| Validation | ✓ | ✓ |
+| Mutation | alpha | ✓ |
+| Generation | X | ✓ |
+| Policy as native resources | Rego in CRD | ✓ |
+| Metrics exposed | ✓ | ✓ |
+| OpenAPI validation schema (kubectl explain) | X | ✓ |
+| High Availability | ✓ | alpha |
+| API object lookup | ✓ | ✓ |
+| CLI with test ability | ✓ | ✓ |
+| Policy audit ability | ✓ | ✓ |
+| Self-service reports | X | ✓ |
+| Image Signature Verification | X | ✓ |
+

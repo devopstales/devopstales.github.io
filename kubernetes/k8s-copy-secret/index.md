@@ -1,0 +1,17 @@
+---
+title: Copying Kubernetes Secrets Between Namespaces
+url: https://devopstales.github.io/kubernetes/k8s-copy-secret/
+date: 2019-05-03
+keywords: kubernetes deployment, helm 3
+---
+
+
+A simple way of copying common secret data between namespaces
+
+<!--more-->
+
+```
+kubectl get secret private-registry --namespace=dev1 --export -o yaml |\
+   kubectl apply --namespace=dev2 -f -
+```
+

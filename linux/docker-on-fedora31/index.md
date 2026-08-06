@@ -1,0 +1,26 @@
+---
+title: Install docker on fedora 31
+url: https://devopstales.github.io/linux/docker-on-fedora31/
+date: 2019-12-04
+keywords: docker, fedora 31
+---
+
+
+On Fedora 31 after starting docker container some error as follows because of cgroups v2.
+<!--more-->
+
+```
+docker: Error response from daemon: OCI runtime create failed: container_linux.go:346: starting container process caused "process_linux.go:297: applying cgroup configuration for process caused \"open /sys/fs/cgroup/docker/cpuset.cpus.effective: no such file or directory\"": unknown.
+```
+
+
+This is beacaue Fedora 31 uses cgroups v2 by default and docker doesn’t yet support cgroupsv2. In this tutorial I am going to show you how to change cgroups to v1 as a quick fix to run docker.
+
+```
+sudo nano /etc/default/grub
+GRUB_CMDLINE_LINUX="systemd.unified_cgroup_hierarchy=0"
+
+grub2-mkconfig -o /boot/efi/EFI/fedora/grub.cfg
+reboot
+```
+

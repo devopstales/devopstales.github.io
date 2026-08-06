@@ -1,0 +1,344 @@
+---
+title: Migrating to FluxCD Operator with UI
+url: https://devopstales.github.io/kubernetes/fluxcd-operator-migration-gitlab/
+date: 2026-03-02
+keywords: FluxCD migration, Flux Operator, Flux UI, GitLab integration, GitOps, Kubernetes automation, Flux web interface
+---
+
+
+FluxCD Operator brings a simplified management experience and a native web UI for monitoring your GitOps workflows. This guide walks you through migrating an existing FluxCD installation to the Operator pattern with UI enabled, while maintaining GitLab as your Git source.
+
+<!--more-->
+
+## What is FluxCD Operator?
+
+FluxCD Operator is a new way to manage Flux instances on Kubernetes. Instead of installing Flux components directly, you deploy a **FluxInstance** custom resource that manages the entire Flux stack.
+
+```bash
+┌─────────────────────────────────────────────────────────┐
+│              FluxCD Operator                            │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           FluxInstance CR                       │    │
+│  │  - Manages Flux components                      │    │
+│  │  - Handles upgrades automatically               │    │
+│  │  - Provides web UI (Flux Web UI)                │    │
+│  └─────────────────────────────────────────────────┘    │
+│         │              │              │                 │
+│         ▼              ▼              ▼                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐               │
+│  │  Source  │  │ Kustomize│  │  Helm    │               │
+│  │Controller│  │Controller│  │Controller│               │
+│  └──────────┘  └──────────┘  └──────────┘               │
+└─────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│    GitLab       │
+│  (Git Source)   │
+└─────────────────┘
+```
+
+### Benefits of Migrating
+
+| Feature | Traditional Flux | Flux Operator |
+|---------|-----------------|---------------|
+| **Installation** | Flux CLI (`flux install`) | Kubernetes manifests / Helm |
+| **Upgrades** | Manual (`flux upgrade`) | Automatic via CR updates |
+| **Configuration** | CLI flags / bootstrap | Declarative (FluxInstance CR) |
+| **Web UI** | Third-party (Weave GitOps) | Native Flux Web UI |
+| **Multi-tenancy** | Complex | Built-in support |
+| **Observability** | Manual setup | Integrated dashboards |
+
+## Prerequisites
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| **Kubernetes** | 1.25+ | Tested on 1.28, 1.29 |
+| **Existing Flux** | v2.0+ | v1.x requires additional migration steps |
+| **GitLab** | 15.0+ | Self-managed or GitLab.com |
+| **kubectl** | Latest | Configured with cluster access |
+| **flux CLI** | v2.2+ | For verification and troubleshooting |
+
+### Verify Current Flux Installation
+
+```bash
+# Check Flux components
+flux check --pre
+
+# List existing Flux resources
+kubectl get GitRepository -A
+kubectl get Kustomization -A
+kubectl get HelmRelease -A
+kubectl get HelmRepository -A
+
+# Check Flux version
+flux --version
+```
+
+## Step 1: Backup Existing Flux Configuration
+
+Before making any changes, export all existing Flux resources:
+
+```bash
+# Create backup directory
+mkdir -p ~/flux-backup/$(date +%Y%m%d-%H%M%S)
+BACKUP_DIR=~/flux-backup/$(date +%Y%m%d-%H%M%S)
+
+# Export all Flux resources
+kubectl get GitRepository -A -o yaml > $BACKUP_DIR/gitrepositories.yaml
+kubectl get Kustomization -A -o yaml > $BACKUP_DIR/kustomizations.yaml
+kubectl get HelmRelease -A -o yaml > $BACKUP_DIR/helmreleases.yaml
+kubectl get HelmRepository -A -o yaml > $BACKUP_DIR/helmrepositories.yaml
+kubectl get ImageRepository -A -o yaml > $BACKUP_DIR/imagerepositories.yaml
+kubectl get ImagePolicy -A -o yaml > $BACKUP_DIR/imagepolicies.yaml
+kubectl get ImageUpdateAutomation -A -o yaml > $BACKUP_DIR/imageupdateautomations.yaml
+
+# Export Flux secrets (GitLab credentials)
+kubectl get secret -n flux-system -o yaml > $BACKUP_DIR/flux-secrets.yaml
+
+# Export existing flux-system namespace
+kubectl get namespace flux-system -o yaml > $BACKUP_DIR/namespace.yaml
+
+echo "Backup completed: $BACKUP_DIR"
+```
+
+### Export GitLab Webhook Configuration
+
+```bash
+# Get existing webhook secrets
+kubectl get secret -n flux-system webhook-secret -o yaml > $BACKUP_DIR/webhook-secret.yaml
+
+# Document existing webhook URLs
+kubectl get GitRepository -A -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.url}{"\n"}{end}' > $BACKUP_DIR/git-urls.txt
+```
+
+## Step 2: Upgrade to latest fux and object versions
+
+```bash
+git clone https://gitlab.mydomain.intra/k8s/fluxcd-system.git
+cd fluxcd-system
+
+# upgrade to 2.6
+flux migrate -v 2.6 -f . --dry-run
+flux migrate -v 2.6 -f .
+
+git commit -am "Migrate to Flux v2.6 APIs"
+git push
+
+flux reconcile ks flux-system --with-source
+
+# migrate CRDs
+flux migrate
+
+flux check
+
+# upgrade flux components
+flux install --export > clusters/k8s-system/flux-system/gotk-components.yaml
+
+git commit -am "Upgrade to Flux v2.8"
+git push
+
+# upgrade to 2.8
+flux migrate -v 2.8 -f . --dry-run
+flux migrate -v 2.8 -f .
+
+git commit -am "Migrate to Flux v2.8 APIs"
+git push
+
+flux reconcile ks flux-system --with-source
+
+flux check
+```
+
+## Step 3: Install FluxCD Operator
+
+### Add Flux Operator Helm Repository
+
+```bash
+helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+  --namespace flux-system
+```
+
+### Verify Operator Installation
+
+```bash
+# Check operator pods
+kubectl get pods -n flux-system
+
+# Expected output:
+# NAME                              READY   STATUS    RESTARTS   AGE
+# flux-operator-xxxxxxxxxx-xxxxx    1/1     Running   0          2m
+
+# Check operator deployment
+kubectl get deployment -n flux-system
+```
+
+## Step 4: Create FluxInstance with Operator
+
+Create `flux-instance.yaml`:
+
+```yaml
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: "1h"
+    fluxcd.controlplane.io/reconcileArtifactEvery: "10m"
+    fluxcd.controlplane.io/reconcileTimeout: "5m"
+spec:
+  distribution:
+    version: "2.x"
+    registry: "ghcr.io/fluxcd"
+    artifact: "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
+  components:
+    - source-controller
+    - kustomize-controller
+    - helm-controller
+    - notification-controller
+    - image-reflector-controller
+    - image-automation-controller
+  cluster:
+    type: kubernetes
+    size: medium
+    multitenant: false
+    networkPolicy: true
+    domain: "cluster.local"
+  sync:
+    kind: GitRepository
+    name: flux-system
+    url: "https://gitlab.mydomain.intra/k8s/fluxcd-system.git"
+    ref: "refs/heads/main"
+    path: "clusters/k8s-system"
+    pullSecret: "flux-system"
+```
+
+```bash
+kubectl apply -f flux-instance.yaml
+
+kubectl get FluxInstance flux                
+NAME   AGE   READY   STATUS                          REVISION
+flux   65m   True    Reconciliation finished in 8s   v2.8.5@sha256:20fa97fb1f001dd254d0e7ef9e1be6d2e1f10f972e731c087a8121aef80c0cc2
+```
+
+Once the resource is reconciled, the operator will take over the management of the Flux components, the Flux GitRepository and Kustomization.
+
+Running the trace command should result in a “Not managed by Flux” message:
+
+```bash
+$ flux trace kustomization flux-system
+failed to trace Kustomization/flux-system in namespace flux-system: object not managed by Flux
+```
+
+## Step 5: Cleanup the repository
+
+To finalize the migration, remove the Flux manifests from the Git repository:
+
+```bash
+cd flux-system
+
+rm -f clusters/k8s-system/flux-system/gotk-components.yaml
+mv flux-instance.yaml clusters/k8s-system/flux-system/flux-instance.yaml
+
+git commit -ma "add: FluxInstance resource"
+git push
+
+flux reconcile ks flux-system --with-source
+```
+
+Commit and push the changes to the repository.
+
+## Stap 6: Monitoring
+
+Create `monitoring.yaml`:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: flux-operator
+  namespace: flux-system
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - flux-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flux-operator
+  endpoints:
+    - targetPort: 8080
+      path: /metrics
+      interval: 30s
+```
+
+```bash
+cd flux-system
+
+nano clusters/k8s-system/flux-system/monitoring.yaml
+
+git commit -ma "add: FluxInstance monitoring"
+git push
+
+flux reconcile ks flux-system --with-source
+```
+
+It is recommended to change the reporting interval to 30s when using the Prometheus metrics exported by the operator:
+
+```bash
+helm upgrade flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+  --namespace flux-system \
+  --set reporting.interval=30s
+```
+
+## Step 7: Access Flux Web UI
+
+#### Enable Web UI
+
+Create `values.yaml`
+
+```yaml
+reporting:
+  interval: 30s
+web:
+  enabled: true
+  config:
+    baseURL: https://flux.example.com
+    authentication:
+      type: OAuth2
+      oauth2:
+        provider: OIDC
+        clientID: <DEX-CLIENT-ID>
+        clientSecret: <DEX-CLIENT-SECRET>
+        issuerURL: https://dex.example.com
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: flux.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - hosts:
+          - flux.example.com
+        secretName: flux-web-tls
+```
+
+```bash
+helm upgrade flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+  --namespace flux-system \
+  -f values.yaml
+```
+
+#### Port Forward (Testing)
+
+```bash
+kubectl port-forward svc/flux-operator -n flux-system 8080:9080
+```
+
+Then access: `http://localhost:8080`

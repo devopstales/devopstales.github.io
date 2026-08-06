@@ -1,0 +1,86 @@
+---
+title: Prometheus Install
+url: https://devopstales.github.io/monitoring/prometheus-install/
+date: 2018-08-21
+keywords: promethsus, noSQL
+---
+
+
+Prometheus is an open-source monitoring system with a built-in noSQL time-series database. It offers a multi-dimensional data model, a flexible query language, and diverse visualization possibilities. Prometheus collects metrics from http nedpoint. Most service dind't have this endpoint so you need optional programs that generate additional metrics cald exporters.
+
+<!--more-->
+
+In this tutorial, you'll install, configure, and secure Prometheus and Node Exporter to generate metrics about your server's performance.
+
+### Download Prometheus
+```
+curl -LO "https://github.com/prometheus/prometheus/releases/download/v2.2.1/prometheus-2.2.1.linux-amd64.tar.gz"
+tar -xzf prometheus-2.2.1.linux-amd64.tar.gz
+```
+
+### Install binaris
+```
+cp prometheus-*linux-amd64/prometheus /usr/local/bin/
+cp prometheus-*linux-amd64/promtool /usr/local/bin/
+
+useradd --no-create-home --shell /bin/false prometheus
+
+mkdir /etc/prometheus
+mkdir /var/lib/prometheus
+
+chown prometheus:prometheus /var/lib/prometheus
+chown prometheus:prometheus /usr/local/bin/prometheus
+chown prometheus:prometheus /usr/local/bin/promtool
+
+cp -r prometheus-*linux-amd64/consoles /etc/prometheus
+cp -r prometheus-*linux-amd64/console_libraries /etc/prometheus
+
+chown -R prometheus:prometheus /etc/prometheus/consoles
+chown -R prometheus:prometheus /etc/prometheus/console_libraries
+
+cp prometheus-*linux-amd64/prometheus.yml /etc/prometheus/
+chown -R prometheus:prometheus /etc/prometheus/prometheus.yml
+```
+
+### Create servis for prometheus
+```
+nano /etc/systemd/system/prometheus.service
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+    --config.file /etc/prometheus/prometheus.yml \
+    --storage.tsdb.path /var/lib/prometheus/ \
+    --web.console.templates=/etc/prometheus/consoles \
+    --web.console.libraries=/etc/prometheus/console_libraries
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Configure Prometheus
+```
+nano /etc/prometheus/prometheus.yml
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9090']
+```
+
+```
+systemctl daemon-reload
+systemctl start prometheus
+systemctl status prometheus
+```
+

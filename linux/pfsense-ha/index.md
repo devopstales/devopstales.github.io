@@ -1,0 +1,107 @@
+---
+title: Configurate HA pfsense cluster
+url: https://devopstales.github.io/linux/pfsense-ha/
+date: 2019-04-10
+keywords: pfsense, HA, cluster
+---
+
+
+In this post I will configure 2 pfsense server to a HA cluster.
+<!--more-->
+
+### The Architecture
+```
+ ------ WAN ------
+ |               |
+PF1 -- sync -- PF2
+ |               |
+ ----- LAN -------  
+
+WAN: 192.168.0.0/24 (Bridge)
+LAN: 10.0.1.0/24
+SYNC: 10.0.2.0/24
+```
+
+```
+pf1:
+WAN 192.168.0.21
+LAN: 10.0.1.21
+SYNC:10.0.2.21
+
+pf2:
+WAN 192.168.0.22
+LAN: 10.0.1.22
+SYNC:10.0.2.22
+```
+
+![Example image](/img/include/carp_1.webp)
+
+![Example image](/img/include/carp_2.webp)
+
+![Example image](/img/include/carp_3.webp)
+
+### Firewall rules For sync
+On both firewalls add two rules to allow traffic on the SYNC interface: <br>
+go to `Firewall > Rules > Sync` and click `Add`.
+
+Rule 1:
+![Example image](/img/include/carp_4.webp)
+
+Rule 2:
+![Example image](/img/include/carp_5.webp)
+
+Rule 3:
+![Example image](/img/include/carp_6.webp)
+
+### Synchronization Settings
+Go to `System > High Availability Sync` and configure the sections like on the pictures.
+
+Master:
+![Example image](/img/include/carp_7.webp)
+
+Slave:
+![Example image](/img/include/carp_8.webp)
+
+Test the synchronisation. Go to `System > User management` and createa new user on the master node. <br>
+Then check on the slave node.
+
+If it doesn't work, check:
+
+* Are the firewall web interfaces running on the same protocols and ports?
+* Is the admin password set correctly? (`User Manager > Users > admin`.)
+* Are the firewall rules to allow synch set to use the correct interface (SYNC)?
+* If you're using VMs, are the firewalls on the same internal network?
+
+### create virtual IPs
+On the master node go to `Firewall > Virtual IPs` and click `Add`. Create a new VIP adres for LAN and WAN interfaces.
+
+WAN VIP on master:
+![Example image](/img/include/carp_9.webp)
+
+WAN VIP on salave:
+![Example image](/img/include/carp_10.webp)
+
+LAN VIP on master:
+![Example image](/img/include/carp_11.webp)
+
+LAN VIP on slave:
+![Example image](/img/include/carp_12.webp)
+
+### Change outbound NAT
+Change the configuration of the outbound NAT to use the shared public IP (the WAN VIP) <br>
+Go to `Firewall > NAT > Outbound` and set the mode to `Hybrid Outbound NAT` rule generation.
+
+![Example image](/img/include/carp_13.webp)
+
+![Example image](/img/include/carp_14.webp)
+
+Find your LAN IP ranges (there should be two) and click the edit icon and change the Translation Address to the WAN VIP address.
+
+![Example image](/img/include/carp_15.webp)
+
+Do the same for the other LAN network mapping. It should end up looking like this:
+
+![Example image](/img/include/carp_16.webp)
+
+If you’ll be using your pfSense firewall as a DNS resolver you must change the settings of the DNS service (`Services > DNS Resolver > General Settings`) to lissen on the LAN VIP address. Then chnage the address of the DNS server in the DHCP configuration to us the LAN VIP adress.
+

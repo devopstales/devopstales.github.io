@@ -1,0 +1,134 @@
+---
+title: Cluster Pools got marked read only, OSDs are near full.
+url: https://devopstales.github.io/linux/ceph-full-osd/
+date: 2022-01-12
+---
+
+
+In this post I will show you what can you do whet an OSD is full and the ceph cluster is locked.
+<!--more-->
+
+OSDs should never be full in theory and administrators should monitor how full OSDs are. If OSDs are approaching 80% full, it’s time for the administrator to take action to prevent OSDs from filling up.  Action can include re-weighting the OSDs in question and or adding more OSDs to the cluster.
+
+```bash
+# ceph osd dump | grep ratio
+full_ratio 0.95
+backfillfull_ratio 0.9
+nearfull_ratio 0.85
+```
+
+By default, when OSDs reach '''85%''' capacity, `nearfull_ratio warning` is triggered.
+By default when OSDs reach '''90%''' capacity, `backfillfull_ratio warning` is triggered.  At this point the cluster will deny backfilling to the OSD in question.
+By default when OSDs reach '''95%''' capacity, `full_ratio is triggered`, all PGs (Placement Groups) on the OSDs in question will be marked Read Only, as well as all pools which are associated with the PGs on the OSD. The cluster is marked Read Only, to prevent corruption from occurring.   
+
+### Check Osd usage
+
+```bash
+ceph --connect-timeout=5 osd df tree
+```
+
+```bash
+ceph osd status
+
++----+--------+-------+-------+--------+---------+--------+---------+-----------+
+| id |  host  |  used | avail | wr ops | wr data | rd ops | rd data |   state   |
++----+--------+-------+-------+--------+---------+--------+---------+-----------+
+| 0  | ceph01 | 1352G | 1441G |    0   |     0   |    0   |     0   | exists,up |
+| 1  | ceph02 | 1104G | 1689G |    0   |     0   |    0   |     0   | exists,up |
+| 2  | ceph03 | 1800G |  994G |    0   |     0   |    0   |     0   | exists,up |
+| 3  | ceph04 | 1764G | 1030G |    0   |     0   |    0   |     0   | exists,up |
+| 4  | ceph01 | 1185G | 1608G |    0   |     0   |    0   |     0   | exists,up |
+| 5  | ceph01 | 1107G | 1686G |    0   |     0   |    0   |     0   | exists,up |
+| 6  | ceph02 |  614G |  316G |    0   |     0   |    0   |     0   | exists,up |
+| 7  | ceph03 |  370G |  560G |    0   |     0   |    0   |     0   | exists,up |
+| 8  | ceph03 |  411G |  520G |    0   |     0   |    0   |     0   | exists,up |
+| 9  | ceph04 |  493G |  438G |    0   |     0   |    0   |     0   | exists,up |
+| 10 | ceph04 |  285G |  645G |    0   |     0   |    0   |     0   | exists,up |
++----+--------+-------+-------+--------+---------+--------+---------+-----------+
+```
+
+To get the cluster out of this state, data needs to be pushed away or removed from the OSDs in question. In the below example it is a single OSD in question (osd.4), but there could be many OSDs that are marked full.  
+The first objective is to get the OSDs that are full below 95% capacity, so the cluster is not marked Read Only. It is possible to achieve this goal with a lower Weight value, .90, .85, .80, etc.
+
+```bash
+ceph osd set noout
+ceph osd reweight 4 .85
+```
+
+### Temprary Fix
+
+`ceph osd set-full-ratio .96` will change the `full_ratio` to 96% and remove the Read Only flag on OSDs which are 95% -96% full. If OSDs are 96% full it's possible to set `ceph osd set-full-ratio .97`, however, do NOT set this value too high.
+
+`ceph osd set-backfillfull-ratio 91` will change the `backfillfull_ratio` to 91% and allow backfill to occur on OSDs which are 90-91% full.  This setting is helpful when there are multiple OSDs which are full. 
+
+```bash
+ceph osd set-nearfull-ratio .90
+ceph osd set-backfillfull-ratio .95
+ceph osd set-full-ratio .97
+```
+
+### Fix by balance
+
+Now we can add more OSD to the cluster or force the rebalance of the data. In this case I will do the second because I hawe no more space in my server for more OSD disks.
+
+```bash
+ceph balancer on
+ceph balancer mode upmap
+ceph balancer status
+ceph balancer ls
+```
+
+I’m going to run the reweight by utilization command on my cluster; this is will automatically adjust the OSDs over storage utilization to redistribute pages and rebalance my cluster.
+
+```bash
+ceph osd reweight-by-utilization
+
+moved 10 / 512 (1.95312%)
+avg 51.2
+stddev 21.9399 -> 22.4535 (expected baseline 6.78823)
+min osd.10 with 20 -> 20 pgs (0.390625 -> 0.390625 * mean)
+max osd.3 with 87 -> 90 pgs (1.69922 -> 1.75781 * mean)
+
+oload 120
+max_change 0.05
+max_change_osds 4
+average_utilization 0.4747
+overload_utilization 0.5697
+osd.6 weight 1.0000 -> 0.9500
+osd.7 weight 1.0000 -> 0.9500
+osd.8 weight 1.0000 -> 0.9500
+osd.1 weight 1.0000 -> 0.9500
+```
+
+We can see that Ceph made adjustments to 4 OSDs and only lowered their weight by .05 like I mentioned just a small about is necessary. You’ll notice that the storage was redistributed, and now let’s look at my final result on how the reweighting looks for each OSD.
+
+```bash
+ceph osd tree
+
+ID CLASS WEIGHT   TYPE NAME          STATUS REWEIGHT PRI-AFF 
+-1       20.92242 root default                               
+-3        8.18697     host ceph01                         
+ 0   hdd  2.72899         osd.0          up  1.00000 1.00000 
+ 4   hdd  2.72899         osd.4          up  1.00000 1.00000 
+ 5   hdd  2.72899         osd.5          up  1.00000 1.00000 
+-5        3.63869     host ceph02                         
+ 1   hdd  2.72899         osd.1          up  0.80005 1.00000 
+ 6   hdd  0.90970         osd.6          up  0.75006 1.00000 
+-7        4.54839     host ceph03                         
+ 2   hdd  2.72899         osd.2          up  1.00000 1.00000 
+ 7   hdd  0.90970         osd.7          up  0.75006 1.00000 
+ 8   hdd  0.90970         osd.8          up  0.75006 1.00000 
+-9        4.54839     host ceph04                         
+ 3   hdd  2.72899         osd.3          up  0.95001 1.00000 
+ 9   hdd  0.90970         osd.9          up  1.00000 1.00000 
+10   hdd  0.90970         osd.10         up  1.00000 1.00000 
+```
+
+If the percentig is below the 96 treshold you can configure back the ratios:
+
+```bash
+ceph osd set-nearfull-ratio .85
+ceph osd set-backfillfull-ratio .90
+ceph osd set-full-ratio .95
+```
+

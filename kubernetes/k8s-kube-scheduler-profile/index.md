@@ -1,0 +1,190 @@
+---
+title: Kube-Scheduler Profile
+url: https://devopstales.github.io/kubernetes/k8s-kube-scheduler-profile/
+date: 2024-10-23
+keywords: Kubernetes, K8S, Kube-Scheduler
+---
+
+
+
+In this post I will show you how you can create a custom Kube-Scheduler profile to chaneg scheduling options.
+<!--more-->
+
+### What is Kube-Scheduler?
+
+Kube-Scheduler is the component that is makes decisions on where to run Pods based on various criteria such as node selectors, affinities, hardware constraints, resource limits. By default the sheduler schedules the pods to the lease used node. In this example I will change this to the ![MostAllocated strategy](https://kubernetes.io/docs/concepts/scheduling-eviction/resource-bin-packing/#enabling-bin-packing-using-mostallocated-strategy). With this configuration you can save resources and mony.
+
+> This post was tested on Kubernetes version 1.25 and later.
+
+### Find Kube-Scheduler config
+
+On the masternodes find the `/etc/kubernetes/manifests/kube-scheduler.yaml` file.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    component: kube-scheduler
+    tier: control-plane
+  name: kube-scheduler
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - kube-scheduler
+    - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
+    - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
+    - --bind-address=127.0.0.1
+    - --kubeconfig=/etc/kubernetes/scheduler.conf
+    - --leader-elect=true
+    - --port=0
+    image: k8s.gcr.io/kube-scheduler:v1.25.2
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10259
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    name: kube-scheduler
+    resources:
+      requests:
+        cpu: 100m
+    startupProbe:
+      failureThreshold: 24
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10259
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    volumeMounts:
+    - mountPath: /etc/kubernetes/scheduler.conf
+      name: kubeconfig
+      readOnly: true
+  hostNetwork: true
+  priorityClassName: system-node-critical
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/scheduler.conf
+      type: FileOrCreate
+    name: kubeconfig
+status: {}
+```
+
+### Create Config for the scheduler
+
+```yaml
+apiVersion: kubescheduler.config.k8s.io/v1beta2
+kind: KubeSchedulerConfiguration
+leaderElection:
+   leaderElect: false
+profiles:
+   - schedulerName: custom-scheduler
+     pluginConfig:
+       - args:
+           apiVersion: kubescheduler.config.k8s.io/v1beta2
+           kind: NodeResourcesFitArgs
+           scoringStrategy:
+               resources:
+                   - name: cpu
+                     weight: 1
+                   - name: memory
+                     weight: 1
+               type: MostAllocated
+         name: NodeResourcesFit
+     plugins:
+       score:
+           enabled:
+               - name: NodeResourcesFit
+                 weight: 1
+```
+
+### Update scheduler manifest
+
+```bash
+sudo cp kube-scheduler.yaml.bak /etc/kubernetes/manifests/kube-scheduler.yaml
+```
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    component: kube-scheduler
+    tier: control-plane
+  name: kube-scheduler
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - kube-scheduler
+    - --config=/etc/kubernetes/myscheduler.conf
+    - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
+    - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
+    image: k8s.gcr.io/kube-scheduler:v1.25.2
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10259
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    name: kube-scheduler
+    resources:
+      requests:
+        cpu: 100m
+    startupProbe:
+      failureThreshold: 24
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10259
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    volumeMounts:
+    - mountPath: /etc/kubernetes/scheduler.conf
+      name: kubeconfig
+      readOnly: true
+    - mountPath: /etc/kubernetes/myscheduler.conf
+      name: mysched
+      readOnly: true
+  hostNetwork: true
+  priorityClassName: system-node-critical
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/scheduler.conf
+      type: FileOrCreate    
+    name: kubeconfig
+  - hostPath:
+      path: /etc/kubernetes/myscheduler.conf
+      type: FileOrCreate
+    name: mysched
+```
+
+> Remember to xhnage the config on all master nodes.
+
+```bash
+sudo cp kube-scheduler.yaml /etc/kubernetes/manifests/kube-scheduler.yaml
+```

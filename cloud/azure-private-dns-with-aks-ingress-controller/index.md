@@ -1,0 +1,142 @@
+---
+title: Use Azure Private DNS with AKS Ingress Controller
+url: https://devopstales.github.io/cloud/azure-private-dns-with-aks-ingress-controller/
+date: 2024-07-17
+keywords: Azure, AKS, streaming, ingress, ingress controller, private, public, Azure Private DNS, aks-app-routing-operator
+---
+
+
+In this pos I will show you how you can use Azure Private DNS with app routing operator Ingress Controller on AKS (Azure Kubernetes Service) Cluster.
+<!--more-->
+
+{{< content "/filedir/aks.html" >}}
+
+### Get AKS credentials
+
+```bash
+az login
+az aks get-credentials --resource-group test-cluster --name test-cluster
+kubectl get nodes
+```
+
+### Create an Azure private DNS zone
+
+```bash
+az network private-dns zone create --resource-group myResourceGoup --name private.contoso.com
+```
+
+To publish a private DNS zone to your virtual network, you need to specify a list of virtual networks that are allowed to resolve records within the zone. These are called `virtual network links`. So we are going to create a separete network for this (you can use an existing one) and then linke it to the DNS zone.
+
+```bash
+az network vnet create \
+--name myAzureVNet \
+--resource-group myResourceGroup \
+--location eastus \
+--address-prefix 10.2.0.0/16 \
+--subnet-name mysubnet \
+--subnet-prefixes 10.2.0.0/24
+
+az network private-dns link vnet create \
+--resource-group myResourceGroup \
+--name myDNSLink \
+--zone-name private.contoso.com \
+--virtual-network myAzureVNet \
+--registration-enabled false
+```
+
+### Attach an Azure private DNS zone to the application routing add-on
+
+```bash
+ZONEID=$(az network private-dns zone show --resource-group myResourceGroup --name private.contoso.com --query "id" --output tsv)
+
+az aks approuting zone add \
+--resource-group myResourceGroup \
+--name myAKSCluster \
+--ids=${ZONEID} \
+--attach-zones
+```
+
+### Create an NGINX ingress controller with a private IP address and an internal load balancer
+
+As you can see in the [previous post](/cloud/aks-ingress-controller-v2) you can create an Ingress controller with a private IP address and an internal load balancer like this:
+
+```yaml
+apiVersion: approuting.kubernetes.azure.com/v1alpha1
+kind: NginxIngressController
+metadata:
+  name: nginx-internal
+spec:
+  ingressClassName: nginx-internal
+  controllerNamePrefix: nginx-internal
+  loadBalancerAnnotations: 
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+```
+
+```bash
+kubectl apply -f nginx-internal-controller.yaml
+
+kubectl get nginxingresscontroller
+
+NAME             INGRESSCLASS                         CONTROLLERNAMEPREFIX   AVAILABLE
+default          webapprouting.kubernetes.azure.com   nginx                  True
+nginx-internal   nginx-internal                       nginx-internal         True
+```
+
+### Create ans Ingress that uses a host name from Azure private DNS zone and a private IP address
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aks-helloworld
+  namespace: hello-web-app-routing
+spec:
+  ingressClassName: nginx-internal
+  rules:
+  - host: <Hostname>
+    http:
+      paths:
+      - backend:
+          service:
+            name: aks-helloworld
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+```
+
+```bash
+kubectl apply -f ingress.yaml -n hello-web-app-routing
+
+kubectl get ingress -n hello-web-app-routing
+
+NAME             CLASS            HOSTS                            ADDRESS      PORTS   AGE
+aks-helloworld   nginx-internal   helloworld.private.contoso.com   10.224.0.7   80      98s
+```
+
+### Verify the Azure private DNS zone was updated
+
+```bash
+az network private-dns record-set a list --resource-group myResourceGroup --zone-name private.contoso.com
+```
+
+```json
+[
+  {
+    "aRecords": [
+      {
+        "ipv4Address": "10.224.0.7"
+      }
+    ],
+    "etag": "188f0ce5-90e3-49e6-a479-9e4053f21965",
+    "fqdn": "helloworld.private.contoso.com.",
+    "id": "/subscriptions/xxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxx/resourceGroups/foo/providers/Microsoft.Network/privateDnsZones/private.contoso.com/A/helloworld",
+    "isAutoRegistered": false,
+    "name": "helloworld",
+    "resourceGroup": "foo",
+    "ttl": 300,
+    "type": "Microsoft.Network/privateDnsZones/A"
+  }
+]
+```
+
