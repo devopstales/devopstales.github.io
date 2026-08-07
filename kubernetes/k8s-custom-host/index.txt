@@ -1,0 +1,65 @@
+---
+title: Add a Custom Host to Kubernetes
+url: https://devopstales.github.io/kubernetes/k8s-custom-host/
+date: 2021-07-22
+keywords: CoreDNS, kubernetes vs docker
+---
+
+
+In this post I will show you how to add custom hosts to kubernetes.
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kubernetes.html&#34; &gt;}}
+
+CoreDNS is the DNS server in kubernetes. I some situation I need to add custom hosts to be resolvable in the kubernetes netwok.
+
+First, edit the ConfigMap of the coredns using the following command:
+
+```bash
+kubectl edit cm -n kube-system coredns
+# or
+kubectl edit cm -n kube-system rke2-coredns-rke2-coredns
+```
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+          lameduck 5s
+        }
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+          pods insecure
+          fallthrough in-addr.arpa ip6.arpa
+        }
+        prometheus :9153
+        forward . 8.8.8.8 8.8.4.4
+        cache 30
+        loop
+        reload
+        loadbalance
+        hosts /etc/coredns/customdomains.db k8s.intra {
+          172.17.14.10 rancher.k8s.intra
+          172.17.14.10 hubble.k8s.intra
+          172.17.14.10 grafana.k8s.intra
+          172.17.14.10 alertmanager.k8s.intra
+          172.17.14.10 prometheus.k8s.intra
+          172.17.14.10 sso.k8s.intra
+          fallthrough
+        }
+    }
+```
+
+Delete coredens pods:
+
+```bash
+kubectl get pod -n kube-system | grep dns
+kubectl delete pod -n kube-system core-dns-#########
+```
+
+It’s done! You can now reach that custom host from inside any pod on the cluster.
+

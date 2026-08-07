@@ -1,0 +1,261 @@
+---
+title: Using AWS Prometheus (AMP) for monitoring AWS EKS cluster.
+url: https://devopstales.github.io/cloud/aws-eks-amp-monitoring/
+date: 2022-02-18
+keywords: kubernetes deployment, CNI, AWS, EKS, Elastic Kubernetes Registry, prometheus, grafana, 
+---
+
+
+In this pos I will show you how you can install the AWS managed Prometheus Service for EKS monitoring.
+&lt;!--more--&gt;
+
+
+### Create a new AMP workspace 
+
+```bash
+aws amp create-workspace --alias eks-workshop --region $AWS_REGION
+```
+
+### Setup IAM for Prometheus Server to send metrics to AMP
+
+After setting the `YOUR_EKS_CLUSTER_NAME` variable the below shell script can be used to:
+
+* Creates an IAM role with an IAM policy
+* Creates a Kubernetes service account
+* Creates a trust relationship between the IAM role and the OIDC provider
+
+for the AMP and EKS cluster.
+
+```bash
+##!/bin/bash
+CLUSTER_NAME=YOUR_EKS_CLUSTER_NAME
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query &#34;Account&#34; --output text)
+OIDC_PROVIDER=$(aws eks describe-cluster --name $CLUSTER_NAME --query &#34;cluster.identity.oidc.issuer&#34; --output text | sed -e &#34;s/^https:\/\///&#34;)
+
+PROM_SERVICE_ACCOUNT_NAMESPACE=prometheus
+GRAFANA_SERVICE_ACCOUNT_NAMESPACE=grafana
+SERVICE_ACCOUNT_NAME=iamproxy-service-account
+SERVICE_ACCOUNT_IAM_ROLE=EKS-AMP-ServiceAccount-Role
+SERVICE_ACCOUNT_IAM_ROLE_DESCRIPTION=&#34;IAM role to be used by a K8s service account with write access to AMP&#34;
+SERVICE_ACCOUNT_IAM_POLICY=AWSManagedPrometheusWriteAccessPolicy
+SERVICE_ACCOUNT_IAM_POLICY_ARN=arn:aws:iam::$AWS_ACCOUNT_ID:policy/$SERVICE_ACCOUNT_IAM_POLICY
+#
+# Setup a trust policy designed for a specific combination of K8s service account and namespace to sign in from a Kubernetes cluster which hosts the OIDC Idp.
+# If the IAM role already exists, then add this new trust policy to the existing trust policy
+#
+echo &#34;Creating a new trust policy&#34;
+read -r -d &#39;&#39; NEW_TRUST_RELATIONSHIP &lt;&lt;EOF
+ [
+    {
+      &#34;Effect&#34;: &#34;Allow&#34;,
+      &#34;Principal&#34;: {
+        &#34;Federated&#34;: &#34;arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}&#34;
+      },
+      &#34;Action&#34;: &#34;sts:AssumeRoleWithWebIdentity&#34;,
+      &#34;Condition&#34;: {
+        &#34;StringEquals&#34;: {
+          &#34;${OIDC_PROVIDER}:sub&#34;: &#34;system:serviceaccount:${GRAFANA_SERVICE_ACCOUNT_NAMESPACE}:${SERVICE_ACCOUNT_NAME}&#34;
+        }
+      }
+    },
+    {
+      &#34;Effect&#34;: &#34;Allow&#34;,
+      &#34;Principal&#34;: {
+        &#34;Federated&#34;: &#34;arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}&#34;
+      },
+      &#34;Action&#34;: &#34;sts:AssumeRoleWithWebIdentity&#34;,
+      &#34;Condition&#34;: {
+        &#34;StringEquals&#34;: {
+          &#34;${OIDC_PROVIDER}:sub&#34;: &#34;system:serviceaccount:${PROM_SERVICE_ACCOUNT_NAMESPACE}:${SERVICE_ACCOUNT_NAME}&#34;
+        }
+      }
+    }
+  ]
+EOF
+#
+# Get the old trust policy, if one exists, and append it to the new trust policy
+#
+OLD_TRUST_RELATIONSHIP=$(aws iam get-role --role-name $SERVICE_ACCOUNT_IAM_ROLE --query &#39;Role.AssumeRolePolicyDocument.Statement[]&#39; --output json)
+COMBINED_TRUST_RELATIONSHIP=$(echo $OLD_TRUST_RELATIONSHIP $NEW_TRUST_RELATIONSHIP | jq -s add)
+echo &#34;Appending to the existing trust policy&#34;
+read -r -d &#39;&#39; TRUST_POLICY &lt;&lt;EOF
+{
+  &#34;Version&#34;: &#34;2012-10-17&#34;,
+  &#34;Statement&#34;: ${COMBINED_TRUST_RELATIONSHIP}
+}
+EOF
+echo &#34;${TRUST_POLICY}&#34; &gt; TrustPolicy.json
+#
+# Setup the permission policy grants write permissions for all AWS StealFire workspaces
+#
+read -r -d &#39;&#39; PERMISSION_POLICY &lt;&lt;EOF
+{
+   &#34;Version&#34;:&#34;2012-10-17&#34;,
+   &#34;Statement&#34;:[
+      {
+         &#34;Effect&#34;:&#34;Allow&#34;,
+         &#34;Action&#34;:[
+            &#34;aps:RemoteWrite&#34;,
+            &#34;aps:QueryMetrics&#34;,
+            &#34;aps:GetSeries&#34;,
+            &#34;aps:GetLabels&#34;,
+            &#34;aps:GetMetricMetadata&#34;
+         ],
+         &#34;Resource&#34;:&#34;*&#34;
+      }
+   ]
+}
+EOF
+echo &#34;${PERMISSION_POLICY}&#34; &gt; PermissionPolicy.json
+
+#
+# Create an IAM permission policy to be associated with the role, if the policy does not already exist
+#
+SERVICE_ACCOUNT_IAM_POLICY_ID=$(aws iam get-policy --policy-arn $SERVICE_ACCOUNT_IAM_POLICY_ARN --query &#39;Policy.PolicyId&#39; --output text)
+if [ &#34;$SERVICE_ACCOUNT_IAM_POLICY_ID&#34; = &#34;&#34; ]; 
+then
+  echo &#34;Creating a new permission policy $SERVICE_ACCOUNT_IAM_POLICY&#34;
+  aws iam create-policy --policy-name $SERVICE_ACCOUNT_IAM_POLICY --policy-document file://PermissionPolicy.json 
+else
+  echo &#34;Permission policy $SERVICE_ACCOUNT_IAM_POLICY already exists&#34;
+fi
+
+#
+# If the IAM role already exists, then just update the trust policy.
+# Otherwise create one using the trust policy and permission policy
+#
+SERVICE_ACCOUNT_IAM_ROLE_ARN=$(aws iam get-role --role-name $SERVICE_ACCOUNT_IAM_ROLE --query &#39;Role.Arn&#39; --output text)
+if [ &#34;$SERVICE_ACCOUNT_IAM_ROLE_ARN&#34; = &#34;&#34; ]; 
+then
+  echo &#34;$SERVICE_ACCOUNT_IAM_ROLE role does not exist. Creating a new role with a trust and permission policy&#34;
+  #
+  # Create an IAM role for Kubernetes service account 
+  #
+  SERVICE_ACCOUNT_IAM_ROLE_ARN=$(aws iam create-role \
+  --role-name $SERVICE_ACCOUNT_IAM_ROLE \
+  --assume-role-policy-document file://TrustPolicy.json \
+  --description &#34;$SERVICE_ACCOUNT_IAM_ROLE_DESCRIPTION&#34; \
+  --query &#34;Role.Arn&#34; --output text)
+  #
+  # Attach the trust and permission policies to the role
+  #
+  aws iam attach-role-policy --role-name $SERVICE_ACCOUNT_IAM_ROLE --policy-arn $SERVICE_ACCOUNT_IAM_POLICY_ARN  
+else
+  echo &#34;$SERVICE_ACCOUNT_IAM_ROLE_ARN role already exists. Updating the trust policy&#34;
+  #
+  # Update the IAM role for Kubernetes service account with a with the new trust policy
+  #
+  aws iam update-assume-role-policy --role-name $SERVICE_ACCOUNT_IAM_ROLE --policy-document file://TrustPolicy.json
+fi
+echo $SERVICE_ACCOUNT_IAM_ROLE_ARN
+
+# EKS cluster hosts an OIDC provider with a public discovery endpoint.
+# Associate this Idp with AWS IAM so that the latter can validate and accept the OIDC tokens issued by Kubernetes to service accounts.
+# Doing this with eksctl is the easier and best approach.
+#
+eksctl utils associate-iam-oidc-provider --cluster $CLUSTER_NAME --approve
+```
+
+### Setting up Prometheus server in the Kubernetes cluster
+
+We need to provision a Prometheus server inside our EKS cluster that would be tasked to collect all the cluster metrics and ship them to AMP (or AWS Managed Service for Prometheus)
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+kubectl create ns prometheus
+```
+
+```yaml
+nano amp_ingest_override_values.yaml
+---
+serviceAccounts:
+  ## Disable alert manager roles
+  server:
+        name: &#34;iamproxy-service-account&#34;
+  alertmanager:
+    create: false
+  ## Disable pushgateway
+  pushgateway:
+    create: false
+
+server:
+  remoteWrite:
+    -
+      queue_config:
+        max_samples_per_send: 1000
+        max_shards: 200
+        capacity: 2500
+  ## Use a statefulset instead of a deployment for resiliency
+  statefulSet:
+    enabled: true
+  ## Store blocks locally for short time period only
+  retention: 1h
+  
+## Disable alert manager
+alertmanager:
+  enabled: false
+
+## Disable pushgateway
+pushgateway:
+  enabled: false
+```
+
+```bash
+export SERVICE_ACCOUNT_IAM_ROLE=EKS-AMP-ServiceAccount-Role
+export SERVICE_ACCOUNT_IAM_ROLE_ARN=$(aws iam get-role --role-name $SERVICE_ACCOUNT_IAM_ROLE --query &#39;Role.Arn&#39; --output text)
+export WORKSPACE_ID=$(aws amp list-workspaces --alias eks-workshop | jq .workspaces[0].workspaceId -r)
+
+helm install prometheus-for-amp prometheus-community/prometheus -n prometheus -f ./amp_ingest_override_values.yaml \
+--set serviceAccounts.server.annotations.&#34;eks\.amazonaws\.com/role-arn&#34;=&#34;${SERVICE_ACCOUNT_IAM_ROLE_ARN}&#34; \
+--set server.remoteWrite[0].url=&#34;https://aps-workspaces.${AWS_REGION}.amazonaws.com/workspaces/${WORKSPACE_ID}/api/v1/remote_write&#34; \
+--set server.remoteWrite[0].sigv4.region=${AWS_REGION}
+```
+
+### Visualizing metrics using Grafana
+
+You need a dashboard to visualize the metrics in Promethsus. You can install a Grafana to the EKS Cluster by helm or use AWS Grafana.
+
+#### Install Grafana by helm
+
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+kubectl create ns grafana
+helm install grafana-for-amp grafana/grafana -n grafana
+```
+
+```yaml
+nano amp_query_override_values.yaml
+---
+
+serviceAccount:
+    name: &#34;iamproxy-service-account&#34;
+    annotations:
+
+        eks.amazonaws.com/role-arn: &#34;${IAM_PROXY_PROMETHEUS_ROLE_ARN}&#34;
+grafana.ini:
+  auth:
+    sigv4_auth_enabled: true
+```
+
+```bash
+helm upgrade --install grafana-for-amp grafana/grafana -n grafana -f ./amp_query_override_values.yaml
+
+# get passwor
+kubectl get secrets grafana-for-amp -n grafana -o jsonpath=&#39;{.data.admin-password}&#39;|base64 --decode
+
+# port-forward to get th ui:
+kubectl port-forward -n grafana pods/GRAFANA_POD_NAME 5001:3000 
+```
+
+### Configure Grafana
+
+Before we can visualize the metrics in Grafana, it has to be configured with one or more data sources. Here, we will specify the workspace within Amazon Managed Service for Prometheus as a data source, as shown below. In the URL field, specify the Endpoint – query URL displayed in the AMP workspace details page without the /api/v1/query string at the end of the URL.
+
+![aws-grafana](/img/include/aws-grafana01.webp)
+
+You’re now ready to query metrics data for the Prometheus Counter `http_requests_total` stored in the managed service workspace and visualize the rate of HTTP requests over a trailing 5-minute period using a Prometheus query as follows:
+`sum(rate(http_requests_total{exported_job=”recommender”}[5m])) by (path)`
+
+The figure below illustrates how to visualize this metric in Grafana across the different path labels captured in the Prometheus Counter.
+
+![aws-grafana](/img/include/aws-grafana02.webp)

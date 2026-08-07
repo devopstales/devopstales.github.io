@@ -1,0 +1,47 @@
+---
+title: Use Ceph CephFS
+url: https://devopstales.github.io/linux/ceph-cephfs/
+date: 2019-03-12
+keywords: rook, ceph
+---
+
+
+The Ceph Filesystem (CephFS) is a POSIX-compliant filesystem that uses a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3 and Swift APIs, or native bindings (librados).
+
+&lt;!--more--&gt;
+### Environment
+```
+192.168.1.31    ceph01
+192.168.1.32    ceph02
+192.168.1.33    ceph03
+```
+
+### Prerequirements
+```
+# Create MDS (MetaData Server)
+ceph-deploy --overwrite-conf mds create ceph02
+
+# create pools
+sudo ceph osd pool create cephfs_data 128
+sudo ceph osd pool create cephfs_metadata 128
+
+# enable pools
+sudo ceph fs new cephfs cephfs_metadata cephfs_data
+
+# show pools
+sudo ceph osd lspools
+sudo ceph fs ls
+sudo ceph mds stat
+```
+
+### Basic Usage
+```
+# Mount CephFS on a Client.
+
+yum -y install ceph-fuse
+ssh ceph@ceph01 &#34;sudo ceph-authtool -p /etc/ceph/ceph.client.admin.keyring&#34; &gt; admin.key
+chmod 600 admin.key
+
+mount -t ceph ceph01:6789:/ /mnt -o name=admin,secretfile=admin.key
+```
+

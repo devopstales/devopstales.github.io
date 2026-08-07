@@ -1,0 +1,105 @@
+---
+title: Grafana Loki
+url: https://devopstales.github.io/monitoring/grafana-loki/
+date: 2019-06-22
+keywords: grafana, dashboard, loki, kubernetes, logging
+---
+
+
+
+Loki is a Prometheus-inspired logging service for cloud native infrastructure.
+It’s similar to well-known ELK stack but more simple use and is intended to be used mostly Kubernetes.
+&lt;!--more--&gt;
+
+### Loki components
+Loki-stack consists of three main components:
+- promtail – agent to collect logs on a host and push them to a Loki instance
+- loki – TSDB (Time-series database) logs aggregation and processing server
+- Grafana – for querying and displaying logs
+
+### Deployment
+
+```
+yum install nginx -y
+systemct start nginx
+
+mkdir /opt/loki
+cd /opt/loki/
+```
+
+```
+nano loki-promtail-conf.yml
+server:
+
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+
+  filename: /tmp/positions.yaml
+
+client:
+
+  url: http://loki:3100/api/prom/push
+
+scrape_configs:
+
+  - job_name: system
+    entry_parser: raw
+    static_configs:
+    - targets:
+        - localhost
+      labels:
+        job: varlogs
+        __path__: /var/log/*log
+
+  - job_name: nginx
+    entry_parser: raw
+    static_configs:
+    - targets:
+        - localhost
+      labels:
+        job: nginx
+        __path__: /var/log/nginx/*log
+```
+
+```
+nano docker-compose.yml
+version: &#34;3&#34;
+
+networks:
+  loki:
+
+services:
+  loki:
+    image: grafana/loki:master
+    ports:
+      - &#34;3100:3100&#34;
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - loki
+
+  promtail:
+    image: grafana/promtail:master
+    volumes:
+       - /opt/loki/loki-promtail-conf.yml:/etc/promtail/docker-config.yaml
+      - /var/log:/var/log
+    command: -config.file=/etc/promtail/docker-config.yaml
+    networks:
+      - loki
+
+  grafana:
+    image: grafana/grafana:master
+    ports:
+      - &#34;3000:3000&#34;
+    networks:
+      - loki
+```
+
+```
+docker-compose up -d
+
+# add datasource
+key=”{job=\”nginx\”}” appeared – all good.
+```
+

@@ -1,0 +1,119 @@
+---
+title: kubedash 1.0
+url: https://devopstales.github.io/kubernetes/kubedash-1.0/
+date: 2023-03-20
+keywords: Kubernetes, kubedash, kubernetes dashboard, admin dashboard, web ui, kubernetes user management, Image scan, image security
+---
+
+
+Today I am happy to announce the release of KubeDash 1.0. This blog post focuses on the functionality provided by the KubeDash 1.0. 
+
+&lt;!--more--&gt;
+
+## What is KubeDash?
+
+KubeDash is a general purpose, web-based UI for Kubernetes clusters. It allows users to observe applications running in the cluster and troubleshoot them, as well as manage the cluster itself. It supports [OpenID Connect Tokens](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#openid-connect-tokens) as a way to identify users who access the cluster
+
+![KubeDash](/img/include/KubeDash_1.0_pic_01.webp)
+
+The Default user is admin / admin
+
+![KubeDash](/img/include/KubeDash_1.0_pic_03.webp)
+
+![KubeDash](/img/include/KubeDash_1.0_pic_05.webp)
+
+![KubeDash](/img/include/KubeDash_1.0_pic_04.webp)
+
+You can watch the installed helm charts:
+
+![KubeDash](/img/include/KubeDash_1.0_pic_02.webp)
+
+## Usage
+
+To ease deployment I created a helm chart for trivy-operator.
+
+```bash
+helm repo add devopstales https://devopstales.github.io/helm-charts
+helm repo update
+helm upgrade --install kubedash devopstales/kubedash
+```
+
+Create a value file for deploy:
+
+```yaml
+TimeZone: &#34;CET&#34;
+logLevel: &#34;INFO&#34;
+flaskConfig: &#34;production&#34; #or development
+
+serviceAccount:
+  create: true
+  name: &#34;kubedash-admin&#34;
+
+image:
+  repository: devopstales/kubedash
+  tag: 0.1
+  pullPolicy: Always
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [&#34;all&#34;]
+
+ingress:
+  enabled: true
+  url: &#34;kubedash.mydomain.intra&#34;
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: &#34;10m&#34;
+    kubernetes.io/ingress.class: nginx
+  tls:
+    enabled: true
+    tlsSecret: &#34;mycert-tls&#34;
+    certManager:
+      enabled: false
+      clusterIssuer: &#34;letsencrypt&#34;
+  whitelist:
+    enabled: false
+    ips: []
+
+route:
+  enabled: false
+```
+
+The following tables lists configurable parameters of the kubedash chart and their default values.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| TimeZone | string | `&#34;CET&#34;` | Time Zone in container |
+| affinity | object | `{}` | Set the affinity for the pod. |
+| containerSecurityContext | object | `{}` | list of the container&#39;s SecurityContexts |
+| flaskConfig | string | `&#34;production&#34;` | flask environment: production or development |
+| image.pullPolicy | string | `&#34;Always&#34;` | The docker image pull policy |
+| image.repository | string | `&#34;devopstales/kubedash&#34;` | The docker image repository to use |
+| image.tag | string | `&#34;0.1-devel&#34;` | The docker image tag to use |
+| ingress.annotations | object | `{}` | Extra annotation to the Ingress object |
+| ingress.enabled | bool | `true` | Enable Ingress object creation |
+| ingress.tls.certManager.clusterIssuer | string | `&#34;letsencrypt&#34;` | Name of the certManager cluster issuer to use |
+| ingress.tls.certManager.enabled | bool | `false` | Enable certManager |
+| ingress.tls.enabled | bool | `true` | Enable tls on Ingress object |
+| ingress.tls.tlsSecret | string | `&#34;&#34;` | Name of the secret storing tls cert |
+| ingress.url | string | `&#34;kubedash.mydomain.intra&#34;` | URL of the Ingress object |
+| ingress.whitelist.enabled | bool | `false` | Enable ip blocking on ingress |
+| ingress.whitelist.ips | list | `[]` | List of ips to allow communication |
+| logLevel | string | `&#34;INFO&#34;` | Log level |
+| nodeSelector | object | `{}` | Set nodeSelector for the pod |
+| persistence.accessMode | string | `&#34;ReadWriteOnce&#34;` | Volumes mode |
+| persistence.annotations | object | `{}` | Volumes annotations |
+| persistence.enabled | bool | `true` | Volumes for the pod |
+| persistence.size | string | `&#34;1Gi&#34;` | Volumes size |
+| podSecurityContext | object | `{}` | list of the pos&#39;s SecurityContexts |
+| route.annotations | object | `{}` | Extra annotation to the OpenShift Route object |
+| route.enabled | bool | `false` | Enable OpenShift Route object creation |
+| route.url | string | `&#34;kubedash.mydomain.intra&#34;` | URL of the OpenShift Route object |
+| serviceAccount.create | bool | `true` | Enable automatic serviceAccount creation |
+| serviceAccount.name | string | `&#34;kubedash-admin&#34;` | Configure the name of the serviceAccount |
+| tolerations | list | `[]` | Set tolerations for the pod |
+

@@ -1,0 +1,165 @@
+---
+title: Firewall Ports for AD Domain Join
+url: https://devopstales.github.io/linux/pfsense-ad-join/
+date: 2026-03-05
+keywords: pfsense, active-directory, ports, dns, kerberos, ldap, smb, domain join, firewall rules
+---
+
+
+Joining clients to an Active Directory domain requires specific firewall ports to be open. This updated guide for 2026 covers the minimum and recommended ports for Windows 11/Server 2022&#43; domain joins, including pfSense firewall configuration examples.
+
+&lt;!--more--&gt;
+
+## Minimum Required Ports
+
+Windows 11 and Server 2022 clients can join a Windows Server 2022/2025 AD Domain with the following ports allowed through the firewall:
+
+| Port | Protocol | Service | Purpose |
+|------|----------|---------|---------|
+| 88 | TCP/UDP | Kerberos | Key Distribution Center (KDC) authentication |
+| 135 | TCP | RPC | Remote Procedure Call for domain operations |
+| 139 | TCP | NetBIOS | Session Service for legacy compatibility |
+| 389 | TCP/UDP | LDAP | Directory queries and domain locator |
+| 445 | TCP | SMB/CIFS | File sharing, NetLogon, Group Policy |
+| 53 | UDP/TCP | DNS | Domain name resolution (critical for DC locator) |
+| 464 | TCP/UDP | Kerberos | Password changes (kpasswd) |
+| 49152-65535 | TCP | RPC EPM | Dynamic RPC endpoint mapper (high ports) |
+
+### Why High Ports Matter
+
+Without the TCP high ports (49152-65535) open, you may see errors like:
+
+![Domain Join Error](/img/include/AD-FW-01.webp)
+
+This occurs because Windows uses dynamic RPC ports for various domain operations. The firewall blocks these connections:
+
+![Port Blocking](/img/include/AD-FW-02.webp)
+
+## Recommended Additional Ports
+
+For full functionality including password changes, time synchronization, and optimal performance:
+
+| Port | Protocol | Service | Purpose |
+|------|----------|---------|---------|
+| 123 | UDP | NTP | Time synchronization (critical for Kerberos) |
+| 137 | UDP | NetBIOS | Name resolution (legacy) |
+| 138 | UDP | NetBIOS | Datagram service (legacy) |
+| 636 | TCP/UDP | LDAPS | LDAP over SSL/TLS |
+| 3268 | TCP | Global Catalog | Forest-wide searches |
+| 3269 | TCP | GC SSL | Global Catalog over SSL |
+
+## pfSense Firewall Configuration
+
+### Step 1: Create Firewall Aliases
+
+Create an alias for your Domain Controllers to simplify rule management:
+
+```
+Firewall &gt; Aliases &gt; Add
+Name: DC_IPs
+Type: Host(s)
+Entries: 192.168.1.10, 192.168.1.11, 192.168.1.12
+```
+
+### Step 2: Create Firewall Rules
+
+Navigate to `Firewall &gt; Rules &gt; LAN` and create the following rules:
+
+![Firewall Rules](/img/include/AD-FW-03.webp)
+
+| Rule | Protocol | Source | Destination | Port | Action |
+|------|----------|--------|-------------|------|--------|
+| Kerberos | TCP/UDP | * | DC_IPs | 88 | Allow |
+| DNS | TCP/UDP | * | DC_IPs | 53 | Allow |
+| LDAP | TCP/UDP | * | DC_IPs | 389, 636 | Allow |
+| SMB | TCP | * | DC_IPs | 445 | Allow |
+| RPC | TCP | * | DC_IPs | 135 | Allow |
+| RPC High Ports | TCP | * | DC_IPs | 49152-65535 | Allow |
+| NTP | UDP | * | DC_IPs | 123 | Allow |
+| Global Catalog | TCP | * | DC_IPs | 3268, 3269 | Allow |
+
+### Step 3: Rule Order
+
+Ensure your rules are ordered correctly - more specific rules should be at the top:
+
+```bash
+1. Allow DNS to DC_IPs (53)
+2. Allow Kerberos to DC_IPs (88)
+3. Allow LDAP/LDAPS to DC_IPs (389, 636)
+4. Allow SMB to DC_IPs (445)
+5. Allow RPC to DC_IPs (135, 49152-65535)
+6. Allow NTP to DC_IPs (123)
+7. Allow Global Catalog to DC_IPs (3268, 3269)
+8. Default deny rule
+```
+
+## Testing Domain Join Connectivity
+
+### Using PowerShell
+
+```powershell
+# Test Kerberos connectivity
+Test-NetConnection -ComputerName dc01.mydomain.local -Port 88
+
+# Test LDAP connectivity
+Test-NetConnection -ComputerName dc01.mydomain.local -Port 389
+
+# Test SMB connectivity
+Test-NetConnection -ComputerName dc01.mydomain.local -Port 445
+
+# Test DNS resolution
+Resolve-DnsName -Name mydomain.local -Type SOA
+
+# Test domain join readiness
+Test-ComputerSecureChannel -Verbose
+```
+
+### Using telnet (if available)
+
+```bash
+telnet dc01.mydomain.local 88
+telnet dc01.mydomain.local 389
+telnet dc01.mydomain.local 445
+```
+
+## Common Issues and Solutions
+
+### Issue: &#34;The specified domain either does not exist or could not be contacted&#34;
+
+**Solution:** Check DNS configuration. The client must be able to resolve SRV records:
+
+```powershell
+nslookup -type=SRV _ldap._tcp.mydomain.local
+nslookup -type=SRV _kerberos._tcp.mydomain.local
+```
+
+### Issue: &#34;The network path was not found&#34;
+
+**Solution:** Verify SMB (port 445) connectivity and that no intermediate firewall is blocking it.
+
+### Issue: &#34;The clock skew is too great&#34;
+
+**Solution:** Ensure NTP (port 123) is open and the client time is within 5 minutes of the DC time.
+
+### Issue: Domain join succeeds but with warnings
+
+**Solution:** This typically indicates high RPC ports are blocked. Add rules for ports 49152-65535.
+
+## Security Best Practices
+
+1. **Restrict Source IPs**: Where possible, limit AD firewall rules to specific subnets or VLANs
+2. **Use LDAPS**: Prefer LDAPS (636) over plain LDAP (389) for encrypted directory communications
+3. **Monitor Logs**: Enable firewall logging for denied packets to troubleshoot connectivity issues
+4. **Segment Networks**: Place domain controllers in a dedicated management VLAN
+5. **Regular Audits**: Periodically review firewall rules and remove unnecessary access
+
+## Windows Server 2025 Changes
+
+Windows Server 2025 introduces enhanced security defaults:
+
+- **SMB Signing Required**: All SMB traffic must be signed
+- **LDAP Channel Binding**: Enhanced protection against man-in-the-middle attacks
+- **Kerberos Armoring**: Default in Server 2025, requires compatible clients
+
+Ensure your firewall rules accommodate these security enhancements without blocking legitimate traffic.
+

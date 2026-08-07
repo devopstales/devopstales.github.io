@@ -1,0 +1,268 @@
+---
+title: Kubernetes authentication with Keycloak and gangway
+url: https://devopstales.github.io/sso/k8s-gangway/
+date: 2020-01-06
+keywords: Keycloak, Kubernetes, dasboard, oauth2, SSO, OIDC
+---
+
+
+Kuberos is an OIDC authentication helper for kubectl loin.
+
+&gt; VMware has depricated gangway at Jul 16, 2021.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kubernetes.html&#34; &gt;}}
+
+```bash
+nano /etc/kubernetes/manifests/kube-apiserver.yaml
+...
+    command:
+    - /hyperkube
+    - apiserver
+    - --advertise-address=10.10.40.30
+...
+
+    - --oidc-issuer-url=https://keycloak.devopstales.intra/auth/realms/mydomain
+    - --oidc-client-id=k8s
+    - --oidc-username-claim=email
+    - --oidc-groups-claim=groups
+...
+
+systemctl restart docker kubelet
+```
+
+```yaml
+nano gangway.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gangway
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gangway-key
+  labels:
+    app.kubernetes.io/name: gangway
+type: Opaque
+data:
+  sessionkey: &#34;ZTZNYlJUbDdHcHlSeXVFU0J6ZDZmbUs5Mks5a21NWEo=&#34;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gangway
+  namespace: gangway
+data:
+  gangway.yaml: |
+    clusterName: &#34;minikube&#34;
+    authorizeURL: &#34;https://keycloak.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/auth&#34;
+    tokenURL: &#34;https://keycloak.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/token&#34;
+    audience: &#34;https://keycloak.devopstales.intra/auth/realms/mydomain/protocol/openid-connect/userinfo&#34;
+    # Used to specify the scope of the requested Oauth authorization.
+    # scopes: [&#34;openid&#34;, &#34;profile&#34;, &#34;email&#34;, &#34;offline_access&#34;]
+    # scopes: [&#34;groups&#34;]
+    # scopes: [&#34;openid&#34;, &#34;profile&#34;, &#34;email&#34;, &#34;offline_access&#34;, &#34;groups&#34;]
+    # Where to redirect back to. This should be a URL where gangway is reachable.
+    # Typically this also needs to be registered as part of the oauth application
+    # with the oAuth provider.
+    # Env var: GANGWAY_REDIRECT_URL
+    redirectURL: &#34;https://gangway.devopstales.intra/callback&#34;
+    clientID: &#34;k8s&#34;
+    clientSecret: &#34;43219919-0904-4338-bc0f-c986e1891a7a&#34;
+    # The JWT claim to use as the username. This is used in UI.
+    # Default is &#34;nickname&#34;. This is combined with the clusterName
+    # for the &#34;user&#34; portion of the kubeconfig.
+    # Env var: GANGWAY_USERNAME_CLAIM
+    # usernameClaim: &#34;sub&#34;
+    usernameClaim: &#34;preferred_username&#34;
+    emailClaim: &#34;email&#34;
+    # The API server endpoint used to configure kubectl
+    # Env var: GANGWAY_APISERVER_URL
+    # apiServerURL: &#34;https://kube.codeformuenster.org:6443&#34;
+    apiServerURL: &#34;https://192.168.0.106:8443&#34;
+    # The path to find the CA bundle for the API server. Used to configure kubectl.
+    # This is typically mounted into the default location for workloads running on
+    # a Kubernetes cluster and doesn&#39;t need to be set.
+    # Env var: GANGWAY_CLUSTER_CA_PATH
+    # cluster_ca_path: &#34;/var/run/secrets/kubernetes.io/serviceaccount/ca.crt&#34;
+    # The path to a root CA to trust for self signed certificates at the Oauth2 URLs
+    # Env var: GANGWAY_TRUSTED_CA_PATH
+    # for self signd certificate:
+    trustedCAPath: /gangway/rootca.crt
+    # The path gangway uses to create urls (defaults to &#34;&#34;)
+    # Env var: GANGWAY_HTTP_PATH
+    # httpPath: &#34;https://${GANGWAY_HTTP_PATH}&#34;
+    # for self signd certificate:
+  rootca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIEATCCAumgAwIBAgIUXHOQsGW&#43;UHpCphHViHSvyBny8BwwDQYJKoZIhvcNAQEL
+    BQAwgY4xCzAJBgNVBAYTAkhVMQ0wCwYDVQQIDARQZXN0MREwDwYDVQQHDAhCdWRh
+    cGVzdDETMBEGA1UECgwKTXkgQ29tcGFueTELMAkGA1UECwwCT1UxFzAVBgNVBAMM
+    Dm15ZG9tYWluLmludHJhMSIwIAYJKoZIhvcNAQkBFhNyb290QG15ZG9tYWluLmlu
+    dHJhMCAXDTE5MTIyNzE3MTk0OVoYDzIxMTkxMjAzMTcxOTQ5WjCBjjELMAkGA1UE
+    BhMCSFUxDTALBgNVBAgMBFBlc3QxETAPBgNVBAcMCEJ1ZGFwZXN0MRMwEQYDVQQK
+    DApNeSBDb21wYW55MQswCQYDVQQLDAJPVTEXMBUGA1UEAwwObXlkb21haW4uaW50
+    cmExIjAgBgkqhkiG9w0BCQEWE3Jvb3RAbXlkb21haW4uaW50cmEwggEiMA0GCSqG
+    SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDevUZouW101hAu68qojvfmnC3fUIA9L5nj
+    J&#43;OTbgwDhxYduHVcmwFcrZJzBn/udm72sAUsjmoc34ZoEQVr1mCjrnDdb3NtOWBI
+    XYmN7/RySzu5DSFLFv8Sj&#43;27VvGLpYTXgDEt&#43;IQpV4EgosX6DzjYK7BtmqaWCY3t
+    aClGnzxEotlxMakTCt9eALD&#43;l/ffV4NbiS6sPNaOFHbG8CKRnfzDzqh78qYaSH8d
+    wWxGLGAvciNm1wv1G3NIkjMIZlkMqAv6uTzEtfOPQrHigG8sbb4hHAg8a9RtH2Sk
+    nXjZRb3Wfo&#43;XJ2eUCZyC6pwvZfEuZBuRAAo12Ycp/Ve2FC3kvpzLAgMBAAGjUzBR
+    MB0GA1UdDgQWBBTRPLiCReojvBQXna2zkBBTsKdsnzAfBgNVHSMEGDAWgBTRPLiC
+    ReojvBQXna2zkBBTsKdsnzAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUA
+    A4IBAQBXp676KZ7VTPc/RPI&#43;QIyb0ugPE&#43;w6fkpw1PIzG&#43;y0h53AsOu15tXxKX5L
+    SwotjXoDuTnqQqLZ5wTFSiolscay&#43;MpEDnoIdo&#43;Pw7u3q3bpn6GmDjae1BaIL/En
+    wvxvvJQsOJrXfEUQeC6M75i/MrYPSwhWNDAbqJTY2qEuRXcj/AALGrnlF5DEEd&#43;O
+    RYw79sj&#43;xU88/kCOVWI35LwiH&#43;/0QWFyKcPQvY8nER69nt5evFGqUQPE6qlOJKg/
+    YD8dK&#43;OF26Ta/qz0iKNAfh3WDgYU4lHAawKtwAbpBVBLlzLl&#43;bD11BQvn6zDWVWA
+    rfrwKUIO&#43;dwSL3ZKS0kA0OlN3dyy
+    -----END CERTIFICATE-----
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gangway
+  namespace: gangway
+  labels:
+    app: gangway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gangway
+  strategy:
+  template:
+    metadata:
+      labels:
+        app: gangway
+    spec:
+      containers:
+      - name: gangway
+        image: gcr.io/heptio-images/gangway:v3.2.0
+        command: [&#34;gangway&#34;, &#34;-config&#34;, &#34;/gangway/gangway.yaml&#34;]
+        env:
+        - name: GANGWAY_SESSION_SECURITY_KEY
+          valueFrom:
+            secretKeyRef:
+              key: sessionkey
+              name: gangway-key
+        - name: GANGWAY_PORT
+          value: &#34;8080&#34;
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          requests:
+            cpu: &#34;100m&#34;
+            memory: &#34;128Mi&#34;
+          limits:
+            cpu: &#34;200m&#34;
+            memory: &#34;512Mi&#34;
+        volumeMounts:
+        - name: gangway
+          mountPath: /gangway/
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 20
+          timeoutSeconds: 1
+          periodSeconds: 60
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          timeoutSeconds: 1
+          periodSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: gangway
+        configMap:
+          name: gangway
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: gangway
+  namespace: gangway
+  labels:
+    app: gangway
+spec:
+  type: ClusterIP
+  ports:
+    - name: &#34;http&#34;
+      protocol: TCP
+      port: 80
+      targetPort: &#34;http&#34;
+  selector:
+    app: gangway
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: gangway
+  namespace: gangway
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: ca-issuer
+    ingress.kubernetes.io/force-ssl-redirect: &#34;true&#34;
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-buffer-size: &#34;64k&#34;
+spec:
+  rules:
+  - host: gangway.devopstales.intra
+    http:
+      paths:
+      - backend:
+          serviceName: gangway
+          servicePort: http
+  tls:
+  - secretName: gangway-tls
+    hosts:
+    - gangway.devopstales.intra
+```
+
+![gangway](/img/include/gangway.webp)
+
+Below is an example of a `ClusterRoleBinding` that binds the role `cluster-admin` to the Keycloak group `devops-team`. (In my case it came from ldap) Create your own role bindings to fit your needs and apply them to the cluster.
+
+```yaml
+nano devops-team_ClusterRoleBinding.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-it-afdeling
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: devops-team
+```
+
+```yaml
+nano user_ClusterRoleBinding.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: devopstales-admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: devopstales
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+```
+

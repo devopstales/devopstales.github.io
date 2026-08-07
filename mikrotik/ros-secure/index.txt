@@ -1,0 +1,146 @@
+---
+title: MikroTik - RouterOS: Secure your router
+url: https://devopstales.github.io/mikrotik/ros-secure/
+date: 2022-07-12
+keywords: mikrotik, routeros, Neighbor Discovery, firewall, User management
+---
+
+
+In this post I will show you can secure your MikroTik RouterOS router.
+&lt;!--more--&gt;
+
+## User Management
+
+Creating a New User and New Group Policy:
+
+```bash
+user add name=devopstales group=full password=Password1
+
+user group add name=monitor policy=read,telnet,winbox,local
+
+user add name=nmc group=monitor password=Password1
+
+user print
+Columns: NAME, GROUP, LAST-LOGGED-IN
+# NAME         GROUP    LAST-LOGGED-IN      
+;;; system default user
+0 admin        full     jun/14/2022 10:21:31
+1 vagrant      full     jul/17/2022 09:47:17
+2 devopstales  full                         
+3 nmc          monitor
+```
+
+Enable Disable User:
+
+```bash
+user disable 3
+
+user print
+Flags: X - DISABLED
+Columns: NAME, GROUP, LAST-LOGGED-IN
+#   NAME         GROUP    LAST-LOGGED-IN      
+;;; system default user
+0   admin        full     jun/14/2022 10:21:31
+1   vagrant      full     jul/17/2022 09:47:17
+2   devopstales  full                         
+3 X nmc          monitor     
+
+user enable 3
+
+user print
+Columns: NAME, GROUP, LAST-LOGGED-IN
+# NAME         GROUP    LAST-LOGGED-IN      
+;;; system default user
+0 admin        full     jun/14/2022 10:21:31
+1 vagrant      full     jul/17/2022 09:47:17
+2 devopstales  full                         
+3 nmc          monitor
+```
+
+Restrict User Access for MikroTik by IP Address:
+
+```bash
+user set nmc address=202.4.100.35,172.16.1.0/24,2405:7600:b:4::2
+
+user print
+Columns: NAME, GROUP, ADDRESS, LAST-LOGGED-IN
+# NAME         GROUP    ADDRESS               LAST-LOGGED-IN      
+;;; system default user
+0 admin        full                           jun/14/2022 10:21:31
+1 vagrant      full                           jul/17/2022 09:47:17
+2 devopstales  full                                               
+3 nmc          monitor  202.4.100.35/32                           
+                        172.16.1.0/24                             
+                        2405:7600:b:4::2/128
+```
+
+### Restrict access by IP
+
+```bash
+# RouterOS 6
+/user set admin allowed-address=192.168.88.0/24
+
+# RouterOS 7
+/user set admin address=192.168.88.0/24
+```
+
+## MAC Connectivity Access
+
+By default connecting to the router by MAC adress is allowd from all interface. This is a security risk so we will disable on the WAN interface:
+
+First we will create an inteface list and add the interfaces we want to allow the connection to this list:
+
+```bash
+/interface list add name=listBridge
+/interface list member add list=listBridge interface=ether2
+```
+
+Allow the connection only from this list:
+
+```bash
+# Apply newly created list to the MAC server:
+tool mac-server set allowed-interface-list=listBridge
+
+# Do the same for Winbox MAC access
+tool mac-server mac-winbox set allowed-interface-list=listBridge
+```
+
+## Neighbor Discovery
+MikroTik Neighbor discovery protocol is used to show and recognize other MikroTik routers in the network. Disable neighbor discovery on public interfaces:
+
+```bash
+/ip neighbor discovery-settings set discover-interface-list=listBridge
+```
+
+### Firewall rules
+IP connectivity on the WAN interface must be limited in the firewall. We will accept only ICMP(ping/traceroute), IP Winbox, and ssh access.
+
+```bash
+/ip firewall filter
+  add chain=input connection-state=established,related action=accept comment=&#34;accept established,related&#34;;
+  add chain=input connection-state=invalid action=drop;
+  add chain=input in-interface=ether1 protocol=icmp action=accept comment=&#34;allow ICMP&#34;;
+  add chain=input in-interface=ether1 protocol=tcp port=8291 action=accept comment=&#34;allow Winbox&#34;;
+  add chain=input in-interface=ether1 protocol=tcp port=22 action=accept comment=&#34;allow SSH&#34;;
+  add chain=input in-interface=ether1 action=drop comment=&#34;block everything else&#34;;
+```
+
+Although the firewall protects the router from the public interface, you may still want to disable RouterOS services.
+
+```bash
+/ip service disable telnet,ftp,www,api
+```
+
+Change default service ports, this will immediately stop most of the random SSH brute force login attempts:
+
+```bash
+/ip service set ssh port=2200
+```
+
+
+Additionally, each service can be secured by allowed IP address:
+
+```bash
+/ip service set winbox address=192.168.88.0/24
+```
+

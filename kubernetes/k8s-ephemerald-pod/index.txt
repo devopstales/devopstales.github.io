@@ -1,0 +1,255 @@
+---
+title: Debug with Ephemeral Containers
+url: https://devopstales.github.io/kubernetes/k8s-ephemerald-pod/
+date: 2022-09-12
+keywords: kubernetes deployment, Kubernetes 1.25, debug, Ephemeral, Ephemeral Containers, Containers
+---
+
+In this post I will show you how you can debug your application in a pod with a new function called Ephemeral Containers released in Kubernetes 1.25.
+
+
+&lt;!--more--&gt;
+
+In security perspective it is a best practice to create a container with only the necessary tools to run the app. This means when your application not working correctly you didn&#39;t have the tools to debug. You can try to copy the tools to the container on-demand with `kubectl cp` but it isn&#39;t always possible. 
+
+So what Other option we have? With the new Ephemeral Containers option we can add a new container to the existing pod and use this container to debug. This option is available in k8s versions 1.23 and become Generally Available with 1.25. In practice Kubernetes extended the Pod object specification with a new `ephemeralContainers` attribute. This attribute holds a list of [Container v1 core](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#container-v1-core) objects.
+
+### Demo time
+
+For demo purpose I will use a distroless python container. &#34;Distroless&#34; images contain only your application and its runtime dependencies. They do not contain package managers, shells or any other programs you would expect to find in a standard Linux distribution, so it is perfect for the demo.
+
+```bash
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slim
+spec:
+  selector:
+    matchLabels:
+      app: slim
+  template:
+    metadata:
+      labels:
+        app: slim
+    spec:
+      containers:
+      - name: app
+        image: gcr.io/distroless/python3-debian11
+        command:
+        - python
+        - -m
+        - http.server
+        - &#39;8080&#39;
+EOF
+```
+
+Now I will try to login to the container:
+
+```bash
+POD_NAME=$(kubectl get pods -l app=slim -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+
+# no bash in the container
+$ kubectl exec -it -c app ${POD_NAME} -- bash
+error: Internal error occurred: error executing command in container: failed to exec in container: failed to start exec &#34;43d1e91f41310fb1ede9fbab741921091edfe116311f18a3881f90f68d06dc13&#34;: OCI runtime exec failed: exec failed: unable to start container process: exec: &#34;bash&#34;: executable file not found in $PATH: unknown
+
+# ther is sh in the container but limited tools
+$ kubectl exec -it -c app ${POD_NAME} -- sh
+$# ps
+sh: 3: ps: not found
+```
+
+So, let&#39;s try inspecting Pods using an ephemeral container:
+
+```bash
+$ kubectl debug -it --attach=false -c debugger --image=nicolaka/netshoot ${POD_NAME}
+
+$  kubectl get pod ${POD_NAME}   -o jsonpath=&#39;{.spec.ephemeralContainers}&#39; | jq
+
+[
+  {
+    &#34;image&#34;: &#34;nicolaka/netshoot&#34;,
+    &#34;imagePullPolicy&#34;: &#34;Always&#34;,
+    &#34;name&#34;: &#34;debugger&#34;,
+    &#34;resources&#34;: {},
+    &#34;stdin&#34;: true,
+    &#34;terminationMessagePath&#34;: &#34;/dev/termination-log&#34;,
+    &#34;terminationMessagePolicy&#34;: &#34;File&#34;,
+    &#34;tty&#34;: true
+  }
+]
+
+$ kubectl get pod ${POD_NAME}   -o jsonpath=&#39;{.status.ephemeralContainerStatuses}&#39; | jq
+[
+  {
+    &#34;containerID&#34;: &#34;containerd://c3a58d41f5b007aa1d7c2f6758c0d397428bf1d3575380a0661f34efaab4bb34&#34;,
+    &#34;image&#34;: &#34;docker.io/nicolaka/netshoot:latest&#34;,
+    &#34;imageID&#34;: &#34;docker.io/nicolaka/netshoot@sha256:aeafd567d7f7f1edb5127ec311599bb2b8a9c0fb31d7a53e9cff26af6d29fd4e&#34;,
+    &#34;lastState&#34;: {},
+    &#34;name&#34;: &#34;debugger&#34;,
+    &#34;ready&#34;: false,
+    &#34;restartCount&#34;: 0,
+    &#34;state&#34;: {
+      &#34;running&#34;: {
+        &#34;startedAt&#34;: &#34;2022-09-07T08:30:44Z&#34;
+      }
+    }
+  }
+]
+```
+
+If the ephemeral container is running, we can try attaching to it:
+
+```bash
+$ kubectl attach -it -c debugger ${POD_NAME}
+
+$# netstat -tulpn
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name
+tcp        0      0 0.0.0.0:8080            0.0.0.0:*               LISTEN      -
+
+$# wget -O - 127.0.0.1:8080
+Connecting to localhost:8080 (127.0.0.1:8080)
+writing to stdout
+&lt;!DOCTYPE HTML PUBLIC &#34;-//W3C//DTD HTML 4.01//EN&#34; &#34;http://www.w3.org/TR/html4/strict.dtd&#34;&gt;
+&lt;html&gt;
+...
+&lt;/html&gt;
+```
+
+### Shared namespace
+
+When you try to check the processes in the container you only see the debugger container processes. So, `kubectl debug` just put the debug container in the same `net` and `ipc` linux namespace. I you want to know more about pods an how they work [check my other post about this topic](https://devopstales.github.io/kubernetes/containers-vs-pods/).
+
+```bash
+$# ps auxf
+PID   USER     TIME  COMMAND
+    1 root      0:00 zsh
+   14 root      0:00 ps auxf
+
+
+```
+
+In the [official documentation](https://kubernetes.io/docs/tasks/configure-pod-container/share-process-namespace/) there is a workaround to enable shared linux namespaces for the debugger container:
+
+```bash
+$ kubectl patch deployment slim --patch &#39;
+spec:
+  template:
+    spec:
+      shareProcessNamespace: true&#39;
+
+# or just start the debug container with hare-processes in the first place
+$ kubectl debug -it --attach=false -c debugger --image=nicolaka/netshoot --share-processes ${POD_NAME}
+```
+
+Wait for pod restart then test:
+
+```bash
+$ kubectl get pods
+NAME                    READY   STATUS        RESTARTS   AGE
+slim-5f5ffd5958-b9sgt   1/1     Terminating   0          72m
+slim-66475779f5-5c27b   1/1     Running       0          20s
+
+$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+slim-66475779f5-5c27b   1/1     Running   0          48s
+
+$ POD_NAME=$(kubectl get pods -l app=slim -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+
+$ kubectl debug -it --attach=false -c debugger --image=nicolaka/netshoot ${POD_NAME}
+
+$ kubectl attach -it -c debugger ${POD_NAME}
+
+$# ps aux
+PID   USER     TIME  COMMAND
+    1 65535     0:00 /pause
+    7 root      0:00 python -m http.server 8080
+   14 root      0:01 zsh
+   72 root      0:00 ps aux
+```
+
+Now if I want to access the filesystem of the misbehaving container, because of the shared pid linux namespace I have a trick:
+
+```bash
+# From inside the ephemeral container:
+$# ls /proc/$(pgrep python)/root/usr/bin
+c_rehash   getconf    iconv      locale     openssl    python     python3.9  zdump
+catchsegv  getent     ldd        localedef  pldd       python3    tzselect
+```
+
+### Troubleshooting network activity
+
+```bash
+# From inside the ephemeral container:
+$# tcpdump -i lo -n port 8080
+```
+
+Now try to send a request to the pos. For this I will start a port forward and curl it:
+
+```bash
+kubectl port-forward pod/${POD_NAME} 8080:8080 &amp;
+curl http://127.0.0.1:8080
+```
+
+You will see the fallowing:
+
+```bash
+# From inside the ephemeral container:
+$# tcpdump -i lo -n port 8080
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+09:45:01.727624 IP 127.0.0.1.41968 &gt; 127.0.0.1.8080: Flags [S], seq 3878283086, win 65495, options [mss 65495,sackOK,TS val 2031418309 ecr 0,nop,wscale 7], length 0
+09:45:01.727635 IP 127.0.0.1.8080 &gt; 127.0.0.1.41968: Flags [S.], seq 2447903554, ack 3878283087, win 65483, options [mss 65495,sackOK,TS val 2031418309 ecr 2031418309,nop,wscale 7], length 0
+09:45:01.727643 IP 127.0.0.1.41968 &gt; 127.0.0.1.8080: Flags [.], ack 1, win 512, options [nop,nop,TS val 2031418309 ecr 2031418309], length 0
+09:45:01.734499 IP 127.0.0.1.41968 &gt; 127.0.0.1.8080: Flags [P.], seq 1:79, ack 1, win 512, options [nop,nop,TS val 2031418316 ecr 2031418309], length 78: HTTP: GET / HTTP/1.1
+09:45:01.734521 IP 127.0.0.1.8080 &gt; 127.0.0.1.41968: Flags [.], ack 79, win 511, options [nop,nop,TS val 2031418316 ecr 2031418316], length 0
+09:45:01.735712 IP 127.0.0.1.8080 &gt; 127.0.0.1.41968: Flags [P.], seq 1:155, ack 79, win 512, options [nop,nop,TS val 2031418317 ecr 2031418316], length 154: HTTP: HTTP/1.0 200 OK
+09:45:01.735721 IP 127.0.0.1.41968 &gt; 127.0.0.1.8080: Flags [.], ack 155, win 511, options [nop,nop,TS val 2031418317 ecr 2031418317], length 0
+09:45:01.735753 IP 127.0.0.1.8080 &gt; 127.0.0.1.41968: Flags [P.], seq 155:961, ack 79, win 512, options [nop,nop,TS val 2031418317 ecr 2031418317], length 806: HTTP
+09:45:01.735757 IP 127.0.0.1.41968 &gt; 127.0.0.1.8080: Flags [.], ack 961, win 505, options [nop,nop,TS val 2031418317 ecr 2031418317], length 0
+09:45:01.735800 IP 127.0.0.1.8080 &gt; 127.0.0.1.41968: Flags [F.], seq 961, ack 79, win 512, options [nop,nop,TS val 2031418317 ecr 2031418317], length 0
+09:45:01.742812 IP 127.0.0.1.41968 &gt; 127.0.0.1.8080: Flags [F.], seq 79, ack 962, win 512, options [nop,nop,TS val 2031418324 ecr 2031418317], length 0
+09:45:01.742820 IP 127.0.0.1.8080 &gt; 127.0.0.1.41968: Flags [.], ack 80, win 512, options [nop,nop,TS val 2031418324 ecr 2031418324], length 0
+```
+
+### Tracing/profiling processes using ephemeral containers.
+
+```bash
+# From inside the ephemeral container:
+$# ps aux
+PID   USER     TIME  COMMAND
+    1 65535     0:00 /pause
+    7 root      0:00 python -m http.server 8080
+   14 root      0:01 zsh
+   72 root      0:00 ps aux
+
+$# strace -p 7
+strace: Process 7 attached
+restart_syscall(&lt;... resuming interrupted read ...&gt;) = 0
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 1 ([{fd=3, revents=POLLIN}])
+accept4(3, {sa_family=AF_INET, sin_port=htons(40652), sin_addr=inet_addr(&#34;127.0.0.1&#34;)}, [16], SOCK_CLOEXEC) = 4
+getsockname(4, {sa_family=AF_INET, sin_port=htons(8080), sin_addr=inet_addr(&#34;127.0.0.1&#34;)}, [128 =&gt; 16]) = 0
+clone(child_stack=0x7f57a50ccfb0, flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, parent_tid=[299], tls=0x7f57a50cd700, child_tidptr=0x7f57a50cd9d0) = 299
+futex(0x93a56c, FUTEX_WAKE_PRIVATE, 1)  = 1
+futex(0x93a570, FUTEX_WAKE_PRIVATE, 1)  = 1
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500)   = 0 (Timeout)
+poll([{fd=3, events=POLLIN}], 1, 500^Cstrace: Process 8 detached
+ &lt;detached ...&gt;
+
+$# strace -f -p 7
+```

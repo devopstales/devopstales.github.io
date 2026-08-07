@@ -1,0 +1,94 @@
+---
+title: SSO login to Gitlab
+url: https://devopstales.github.io/sso/gitlab-keycloak/
+date: 2019-04-06
+keywords: Keycloak, Gitlab, oauth2, SSO, OIDC
+---
+
+
+Configurate Gitab to use Keycloak as SSO Identity Proider.
+
+&lt;!--more--&gt;
+
+### Configurate Keycloak
+Login to Keycloak and create client for Gitlab:
+![Example image](/img/include/gitlab-keycloak1.webp)
+
+At Mappers create mappers for all user information to GitLab:
+
+* Name: name
+  * Mapper Type: User Property
+  * Property: Username
+* Name: email
+  * Mapper Type: User Property
+  * Property: Email
+* Name: first_name
+  * Mapper Type: User Property
+  * Property: FirstName
+* Name: last_name
+  * Mapper Type: User Property
+  * Property: LastName
+
+### Configurate Gitlab
+```
+nano /etc/gitlab/gitlab.rb
+gitlab_rails[&#39;omniauth_enabled&#39;] = true
+gitlab_rails[&#39;omniauth_block_auto_created_users&#39;] = false
+gitlab_rails[&#39;omniauth_allow_single_sign_on&#39;] = [&#39;oauth2_generic&#39;]
+# gitlab_rails[&#39;omniauth_auto_sign_in_with_provider&#39;] = &#39;oauth2_generic&#39;
+
+gitlab_rails[&#39;omniauth_providers&#39;] = [
+{
+        &#39;name&#39; =&gt; &#39;oauth2_generic&#39;,
+        &#39;app_id&#39; =&gt; &#39;gitlab&#39;,
+        &#39;app_secret&#39; =&gt; &#39;KEYCLOAK SECRET GOES HERE&#39;,
+        &#39;args&#39; =&gt; {
+        client_options: {
+                &#39;site&#39; =&gt; &#39;http://sso.devopstales.intra&#39;, # including port if necessary
+                &#39;user_info_url&#39; =&gt; &#39;/auth/realms/devopstales/protocol/openid-connect/userinfo&#39;,
+                &#39;authorize_url&#39; =&gt; &#39;/auth/realms/devopstales/protocol/openid-connect/auth&#39;,
+                &#39;token_url&#39; =&gt; &#39;/auth/realms/devopstales/protocol/openid-connect/token&#39;,
+        },
+        user_response_structure: {
+        #root_path: [&#39;user&#39;], # i.e. if attributes are returned in JsonAPI format (in a &#39;user&#39; node nested under a &#39;data&#39; node)
+        attributes: { email:&#39;email&#39;, first_name:&#39;given_name&#39;, last_name:&#39;family_name&#39;, name:&#39;name&#39;, nickname:&#39;preferred_username&#39; }, # if the nickname attribute of a user is called &#39;username&#39;
+        id_path: &#39;preferred_username&#39;
+        },
+        }
+}
+]
+
+gitlab-ctl reconfigure
+```
+
+### Gitlab Mattermost config
+```
+# on gitlab gui:
+login: admin area / Applications / new
+Redirect URI use:
+http://mattermost.devopstales.intra/login/gitlab/complete
+http://mattermost.devopstales.intra/signup/gitlab/complete
+
+# configfile
+nano /etc/gitlab/gitlab.rb
+
+mattermost_external_url &#39;http://mattermost.devopstales.intra&#39;
+mattermost[&#39;enable&#39;] = true
+mattermost[&#39;service_address&#39;] = &#34;127.0.0.1&#34;
+mattermost[&#39;service_port&#39;] = &#34;8065&#34;
+mattermost[&#39;sql_driver_name&#39;] = &#39;postgres&#39;
+mattermost[&#39;sql_data_source&#39;] = &#34;postgres://mmuser:Password1@127.0.0.1:5432/mattermost?sslmode=disable&amp;connect_timeout=10&#34;
+mattermost[&#39;log_file_directory&#39;] = &#39;/var/log/gitlab/mattermost/&#39;
+mattermost_nginx[&#39;enable&#39;] = false
+
+mattermost[&#39;gitlab_enable&#39;] = true
+mattermost[&#39;gitlab_id&#39;] = &#34;&lt;ID&gt;&#34; # oauth id drom gitlab gui
+mattermost[&#39;gitlab_secret&#39;] = &#34;&lt;token&gt;&#34; # oauth token drom gitlab gui
+mattermost[&#39;gitlab_scope&#39;] = &#34;&#34;
+mattermost[&#39;gitlab_auth_endpoint&#39;] = &#34;http://gitlab.devopstales.intra/oauth/authorize&#34;
+mattermost[&#39;gitlab_token_endpoint&#39;] = &#34;http://gitlab.devopstales.intra/oauth/token&#34;
+mattermost[&#39;gitlab_user_api_endpoint&#39;] = &#34;http://gitlab.devopstales.intra/api/v4/user&#34;
+
+gitlab-ctl reconfigure
+```
+

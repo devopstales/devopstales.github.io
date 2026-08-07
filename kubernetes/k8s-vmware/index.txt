@@ -1,0 +1,203 @@
+---
+title: Configure Kubernetes In-Tree vSphere Cloud Provider
+url: https://devopstales.github.io/kubernetes/k8s-vmware/
+date: 2020-10-14
+keywords: kubernetes deployment, vmware, vSphere
+---
+
+
+In this post I will show you how can you use vmware for persistent storagi on K8S.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kubernetes.html&#34; &gt;}}
+
+### vSphere Configuration
+
+* Create a folder for all the VMs in vCenter
+ * In the navigator, select the data center
+ * Right-click and select the menu option to create the folder.
+ * Select: All vCenter Actions &gt; New VM and Template Folder.
+ * Move K8S vms to this folder
+* The name of the virtual machine must match the name of the nodes for the K8S cluster.
+
+![Example image](/img/include/k8s-vmware.webp)
+
+### Set up the GOVC environment:
+
+```bash
+# on deployer
+curl -LO https://github.com/vmware/govmomi/releases/download/v0.20.0/govc_linux_amd64.gz
+gunzip govc_linux_amd64.gz
+chmod &#43;x govc_linux_amd64
+cp govc_linux_amd64 /usr/bin/govc
+echo &#34;export GOVC_URL=&#39;vCenter IP OR FQDN&#39;&#34; &gt;&gt; /etc/profile
+echo &#34;export GOVC_USERNAME=&#39;vCenter User&#39;&#34; &gt;&gt; /etc/profile
+echo &#34;export GOVC_PASSWORD=&#39;vCenter Password&#39;&#34; &gt;&gt; /etc/profile
+echo &#34;export GOVC_INSECURE=1&#34; &gt;&gt; /etc/profile
+source /etc/profile
+```
+
+Add `disk.enableUUID=1` for all VM:
+
+```bash
+govc vm.info &lt;vm&gt;
+govc ls /Datacenter/kubernetes/&lt;vm-folder-name&gt;
+# example:
+govc ls /Datacenter/kubernetes/k8s-01
+
+govc vm.change -e=&#34;disk.enableUUID=1&#34; -vm=&#39;VM Path&#39;
+# example:
+govc vm.change -e=&#34;disk.enableUUID=1&#34; -vm=&#39;/datacenter/kubernetes/k8s-01/k8s-m01&#39;
+```
+
+VM Hardware should be at version 15 or higher. Upgrade if needed:
+
+```bash
+govc vm.option.info &#39;/datacenter/kubernetes/k8s-01/k8s-m01&#39; | grep HwVersion
+
+govc vm.upgrade -version=15 -vm &#39;/datacenter/kubernetes/k8s-01/k8s-m01&#39;
+```
+
+### Create the required Roles
+
+* Navigate in the vSphere Client - Menu &gt; Administration &gt; Roles
+* Add a new Role and select the permissions required. Repeat for each role.
+
+| Roles |	Privileges | Entities | Propagate to Children |
+|:------:|:------:|:------:|:-------:|
+| vcp-manage-k8s-node-vms | Resource.AssignVMToPoolVirtualMachine.Config.AddExistingDisk, VirtualMachine.Config.AddNewDisk, VirtualMachine.Config.AddRemoveDevice, VirtualMachine.Config.RemoveDisk, VirtualMachine.Config.SettingsVirtualMachine.Inventory.Create, VirtualMachine.Inventory.Delete | Cluster, Hosts, VM Folder | Yes |
+|vcp-manage-k8s-volumes | Datastore.AllocateSpace, Datastore.FileManagement (Low level file operations) | Datastore | No |
+| vcp-view-k8s-spbm-profile | StorageProfile.View (Profile-driven storage view) | vCenter | No |
+| Read-only (pre-existing default role) | System.Anonymous, System.Read, System.View | Datacenter, Datastore Cluster, Datastore Storage Folder | No |
+
+### Create a service account
+
+* Create a vsphere user, or add a domain user, to provide access and assign the new roles to.
+
+### Create vsphere.conf
+Create the vSphere configuration file in /etc/kubernetes/vcp/vsphere.conf - you’ll need to create the folder.
+
+```bash
+nano /etc/kubernetes/vcp/vsphere.conf
+[Global]
+user = &#34;k8s-user@vsphere.local&#34;
+password = &#34;password for k8s-user&#34;
+port = &#34;443&#34;
+insecure-flag = &#34;1&#34;
+
+[VirtualCenter &#34;10.0.1.200&#34;]
+datacenters = &#34;DC-1&#34;
+
+[Workspace]
+server = &#34;10.0.1.200&#34;
+datacenter = &#34;DC-1&#34;
+default-datastore = &#34;vsanDatastore&#34;
+resourcepool-path = &#34;ClusterNameHere/Resources&#34;
+folder = &#34;kubernetes&#34;
+
+[Disk]
+scsicontrollertype = pvscsi
+```
+
+### Modify the kubelet service
+On master:
+
+```bash
+nano /etc/systemd/system/kubelet.service
+[Service]
+...
+ExecStart=/usr/bin/docker run \
+...
+        /hyperkube kubelet \
+...
+--cloud-provider=vsphere --cloud-config=/etc/kubernetes/vsphere.conf    
+```
+
+On worker:
+
+```bash
+nano /etc/systemd/system/kubelet.service
+[Service]
+...
+ExecStart=/usr/bin/docker run \
+...
+        /hyperkube kubelet \
+...
+--cloud-provider=vsphere  
+```
+
+### Modify container manifests
+Add following flags to the kubelet service configuration (usually in the systemd config file), as well as the controller-manager and api-server container manifest files on the master node (usually in /etc/kubernetes/manifests).
+
+```bash
+nano /etc/kubernetes/manifests/kube-apiserver.yaml
+...
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+...
+    - --cloud-provider=vsphere
+    - --cloud-config=/etc/kubernetes/vsphere.conf
+    volumeMounts:
+    - mountPath: /etc/kubernetes/vcp
+      name: vcp
+      readOnly: true
+...
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/vcp
+      type: DirectoryOrCreate
+    name: vcp
+```
+
+Restart the services.
+
+```bash
+systemctl restart kubelet docker
+```
+
+### Add providerID
+
+```bash
+kubectl get nodes -o json | jq &#39;.items[]|[.metadata.name, .spec.providerID, .status.nodeInfo.systemUUID]&#39;
+
+nano k8s-vmware-pacher.sh
+DATACENTER=&#39;&lt;Datacenter&gt;&#39;
+FOLDER=&#39;&lt;vm-folder-name&gt;&#39;
+for vm in $(govc ls /$DATACENTER/vm/$FOLDER ); do
+  MACHINE_INFO=$(govc vm.info -json -dc=$DATACENTER -vm.ipath=&#34;$vm&#34; -e=true)
+  # My VMs are created on vmware with upper case names, so I need to edit the names with awk
+  VM_NAME=$(jq -r &#39; .VirtualMachines[] | .Name&#39; &lt;&lt;&lt; $MACHINE_INFO | awk &#39;{print tolower($0)}&#39;)
+  # UUIDs come in lowercase, upper case then
+  VM_UUID=$( jq -r &#39; .VirtualMachines[] | .Config.Uuid&#39; &lt;&lt;&lt; $MACHINE_INFO | awk &#39;{print toupper($0)}&#39;)
+  echo &#34;Patching $VM_NAME with UUID:$VM_UUID&#34;
+  # This is done using dry-run to avoid possible mistakes, remove when you are confident you got everything right.
+  kubectl patch node $VM_NAME -p &#34;{\&#34;spec\&#34;:{\&#34;providerID\&#34;:\&#34;vsphere://$VM_UUID\&#34;}}&#34;
+done
+
+chmod &#43;x openshift-vmware-pacher.sh
+./openshift-vmware-pacher.sh
+```
+
+### Create vSphere storage-class
+
+```bash
+nano vmware-sc.yml
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: &#34;true&#34;
+  name: &#34;vsphere-standard&#34;
+provisioner: kubernetes.io/vsphere-volume
+parameters:
+    diskformat: zeroedthick
+    datastore: &#34;NFS&#34;
+reclaimPolicy: Delete
+
+kubectl aplay -f vmware-sc.yml
+```
+

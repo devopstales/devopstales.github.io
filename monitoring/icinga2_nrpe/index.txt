@@ -1,0 +1,54 @@
+---
+title: Install nrpe tp Icinga2
+url: https://devopstales.github.io/monitoring/icinga2_nrpe/
+date: 2019-12-12
+keywords: icinga, icinga2, nagios, nrpe
+---
+
+
+In this tutorial I will show you how to nrpe check in Icinga2.
+
+&lt;!--more--&gt;
+
+### install nrpe on the clients
+```
+yum install nrpe nagios-plugins-all -y
+
+firewall-cmd --permanent --add-port=5665/tcp
+firewall-cmd --reload
+```
+
+### install nrpe on the server
+```
+yum install nrpe nagios-plugins-all -y
+
+firewall-cmd --permanent --add-port=5665/tcp
+firewall-cmd --reload
+```
+
+### configurate icinga to use nrpe
+```
+vi /etc/icinga2/conf.d/linux_services.conf
+apply Service &#34;nrpe-disk-root&#34; {
+  import &#34;generic-service&#34;
+  check_command = &#34;nrpe&#34;
+  vars.nrpe_command = &#34;check_disk&#34;
+  vars.nrpe_arguments = [ &#34;20%&#34;, &#34;10%&#34;, &#34;/&#34; ]
+  assign where &#34;linux-servers&#34; in host.groups
+  ignore where match(&#34;*icinga*&#34;, host.name)
+}
+
+vi /etc/icinga2/conf.d/CLIENTS/server1.conf
+object Host &#34;server1&#34; {
+  address = &#34;192.168.10.60&#34;
+  check_command = &#34;ping&#34;
+  vars.os = &#34;Linux&#34;
+}
+```
+
+Test the config and restart:
+```
+icinga2 daemon -C
+systemctl restart icinga2
+```
+

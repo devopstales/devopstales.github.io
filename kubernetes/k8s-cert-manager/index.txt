@@ -1,0 +1,145 @@
+---
+title: Install cert-manager for Kubernetes
+url: https://devopstales.github.io/kubernetes/k8s-cert-manager/
+date: 2019-12-29
+keywords: kubernetes deployment
+---
+
+
+In this tutorial I will show you how to install  cert-manager running on Kubernetes (k8s).
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kubernetes.html&#34; &gt;}}
+
+cert-manager is a native Kubernetes certificate management controller. It can help with issuing certificates from a variety of sources, such as Let’s Encrypt, HashiCorp Vault, Venafi, a simple signing key pair, or self signed.
+
+### Install cert-managger
+
+In order to install cert-manager, we must first create a namespace to run it in.
+```
+kubectl create namespace cert-manager
+```
+
+Install the `CustomResourceDefinitions` and cert-manager itself
+```
+kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.12.0/cert-manager.yaml
+```
+
+Verifying the installation
+```
+kubectl get pods --namespace cert-manager
+
+NAME                                       READY   STATUS    RESTARTS   AGE
+cert-manager-5c6866597-zw7kh               1/1     Running   0          2m
+cert-manager-cainjector-577f6d9fd7-tr77l   1/1     Running   0          2m
+cert-manager-webhook-787858fcdb-nlzsq      1/1     Running   0          2m
+```
+
+### Create a ClusterIssuer
+
+Before you can begin issuing certificates, you must configure at least one `Issuer` or `ClusterIssuer` resource in your cluster. These resources represent a particular signing authority and detail how the certificate requests are going to be honored. For this Demo I will use my own CA as an Issuer.
+
+```
+cat issuer.yaml
+apiVersion: cert-manager.io/v1alpha2
+kind: ClusterIssuer
+metadata:
+  name: ca-issuer
+  namespace: cert-manager
+spec:
+  ca:
+    secretName: ca-key-pair
+
+kubectl apply -f issuer.yaml
+```
+
+In order to create my certs, I must submit my CA certificate and singing private key to the Kubernetes Cluster so that cert-manager is able to use them and sign certificates.
+
+```
+cat  rootCA.key | base64
+LS0tLS1CRUdJTiB...
+cat rootCA.crt | base64
+LS0tLSD5DUdJTiB...
+
+cat ca-key-pair.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ca-key-pair
+  namespace: cert-manager
+data:
+  tls.key: LS0tLS1CRUdJTiB...
+  tls.crt: LS0tLSD5DUdJTiB...
+
+kubectl apply -f ca-key-pair.yaml
+```
+
+### demo
+
+Create cert for test
+
+```
+cat test-resources.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager-test
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: test-selfsigned
+  namespace: cert-manager-test
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: selfsigned-cert
+  namespace: cert-manager-test
+spec:
+  commonName: example.com
+  secretName: selfsigned-cert-tls
+  issuerRef:
+    name: test-selfsigned
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: ca-cert
+  namespace: cert-manager-test
+spec:
+  commonName: example.com
+  secretName: ca-cert-tls
+  issuerRef:
+    name: ca-issuer
+    kind: ClusterIssuer
+
+kubectl apply -f test-resources.yaml
+```
+
+```
+kubectl describe certificate -n cert-manager-test
+
+...
+Spec:
+  Common Name:  example.com
+  Issuer Ref:
+    Name:       test-selfsigned
+  Secret Name:  selfsigned-cert-tls
+Status:
+  Conditions:
+    Last Transition Time:  2019-12-29T17:34:30Z
+    Message:               Certificate is up to date and has not expired
+    Reason:                Ready
+    Status:                True
+    Type:                  Ready
+  Not After:               2019-12-29T17:34:29Z
+Events:
+  Type    Reason      Age   From          Message
+  ----    ------      ----  ----          -------
+  Normal  CertIssued  4s    cert-manager  Certificate issued successfully
+```
+

@@ -1,0 +1,117 @@
+---
+title: Wazuh SIEM Authentication
+url: https://devopstales.github.io/linux/wazuh-authentication/
+date: 2023-09-05
+keywords: Wazuh, SIEM, logging, CentOS
+---
+
+
+In this post I will show you how to configure LDAP Authentication in a Wazuh Open Source SIEM solution.
+&lt;!--more--&gt;
+
+Wazuh SIEM is base on Opensearch the fork of Elasticsearch. So we need to edit the security configuration for the Wazuh Indexer that is basicly an Opensearch.
+
+```yaml
+nano /etc/wazuh-indexer/opensearch-security/config.yml
+---
+config:
+  dynamic:
+    authc:
+      basic_internal_auth_domain:
+       	description: &#34;Authenticate via HTTP Basic against internal users database&#34;
+       	http_enabled: true
+        transport_enabled: true
+       	order: 4
+       	http_authenticator:
+          type: basic
+          challenge: true
+        authentication_backend:
+          type: intern
+      ldap:
+	description: &#34;Authenticate via LDAP or Active Directory&#34;
+        http_enabled: true
+        transport_enabled: true
+        order: 1
+        http_authenticator:
+          type: basic
+          challenge: false
+        authentication_backend:
+          type: ldap
+          config:
+            enable_ssl: false
+            enable_start_tls: false
+            enable_ssl_client_auth: false
+            verify_hostnames: true
+            hosts:
+            - 192.168.0.40:389
+            bind_dn: CN=ldapsync,DC=mydomain,DC=intra
+            password: Aa123456
+            userbase: &#39;DC=mydomain,DC=intra&#39;
+            usersearch: &#39;(sAMAccountName={0})&#39;
+            username_attribute: &#39;(sAMAccountName={0})&#39;
+    authz:
+      roles_from_myldap:
+        description: &#34;Authorize via LDAP or Active Directory&#34;
+        http_enabled: true
+        transport_enabled: true
+        authorization_backend:
+          type: ldap
+          config:
+            enable_ssl: false
+            enable_start_tls: false
+            enable_ssl_client_auth: false
+            verify_hostnames: true
+            hosts:
+            - 192.168.0.40:389
+            bind_dn: CN=ldapsync,DC=mydomain,DC=intra
+            password: Aa123456
+            rolebase: &#39;DC=mydomain,DC=intra&#39;
+            rolesearch: &#39;(member={0})&#39;
+            userroleattribute: null
+            userrolename: none
+            rolename: cn
+            resolve_nested_roles: true
+            userbase: &#39;DC=mydomain,DC=intra&#39;
+            usersearch: &#39;(sAMAccountName={0})&#39;
+            skip_users:
+            - kibanaserver
+```
+
+Create role mapping for your group. In this example I will use `devops-team` to mapp to the same role as admin.
+
+```yaml
+nano /etc/wazuh-indexer/opensearch-security/roles_mapping.yml
+---
+all_access:
+  reserved: true
+  hidden: false
+  backend_roles:
+  - &#34;admin&#34;
+  - &#34;devops-team&#34;
+  hosts: []
+  users: []
+  and_backend_roles: []
+  description: &#34;Maps admin to all_access&#34;
+```
+
+Apply config and role mapping:
+
+```bash
+export JAVA_HOME=/usr/share/wazuh-indexer/jdk/
+bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh \
+	-f /etc/wazuh-indexer/opensearch-security/config.yml -icl \
+        -key /etc/wazuh-indexer/certs/admin-key.pem \
+        -cert /etc/wazuh-indexer/certs/admin.pem \
+        -cacert /etc/wazuh-indexer/certs/root-ca.pem \
+        -h 192.168.108.102 -nhnv
+
+bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh \
+	-f /etc/wazuh-indexer/opensearch-security/roles_mapping.yml -icl \
+	-key /etc/wazuh-indexer/certs/admin-key.pem \
+	-cert /etc/wazuh-indexer/certs/admin.pem \
+	-cacert /etc/wazuh-indexer/certs/root-ca.pem \
+	-h 192.168.108.102 -nhnv
+
+systemctl restart wazuh-dashboard
+```
+

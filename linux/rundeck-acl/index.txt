@@ -1,0 +1,98 @@
+---
+title: Configure Rundeck ACL
+url: https://devopstales.github.io/linux/rundeck-acl/
+date: 2019-12-10
+---
+
+
+In this post I will configure access control in Rundeck.
+
+&lt;!--more--&gt;
+
+### Configurate AD groups in rundeck
+The modification of the `web.xml` no longer needed after 3.0.x.
+```
+nano /var/lib/rundeck/exp/webapp/WEB-INF/web.xml
+        &lt;security-role&gt;
+               &lt;role-name&gt;rundeck-administrators&lt;/role-name&gt;
+               &lt;role-name&gt;rundeck-project&lt;/role-name&gt;
+        &lt;/security-role&gt;
+```
+
+### Configure the privilege for AD group
+```
+nano /etc/rundec/admin.aclpolicy
+
+description: Admin, all access.
+context:
+  project: &#39;.*&#39; # all projects
+for:
+  resource:
+    - allow: &#39;*&#39; # allow read/create all kinds
+  adhoc:
+    - allow: &#39;*&#39; # allow read/running/killing adhoc jobs
+  job:
+    - allow: &#39;*&#39; # allow read/write/delete/run/kill of all jobs
+  node:
+    - allow: &#39;*&#39; # allow read/run for all nodes
+by:
+  group: rundeck-administrators
+
+---
+
+description: Admin, all access.
+context:
+  application: &#39;rundeck&#39;
+for:
+  resource:
+    - allow: &#39;*&#39; # allow create of projects
+  project:
+    - allow: &#39;*&#39; # allow view/admin of all projects
+  project_acl:
+    - allow: &#39;*&#39; # allow admin of all project-level ACL policies
+  storage:
+    - allow: &#39;*&#39; # allow read/create/update/delete for all /keys/* storage content
+by:
+  group: rundeck-administrators
+---
+
+description: rundeck-project  PROJECT all access.
+context:
+  project: &#39;PROJECT&#39;
+for:
+  resource:
+    - allow: &#39;*&#39; # allow read/create all kinds
+  adhoc:
+    - allow: &#39;*&#39; # allow read/running/killing adhoc jobs
+  job:
+    - allow: &#39;*&#39; # allow read/write/delete/run/kill of all jobs
+  node:
+    - allow: &#39;*&#39; # allow read/run for all nodes
+by:
+  group: rundeck-project
+
+---
+
+description: rundeck-project, all access.
+context:
+  application: &#39;rundeck&#39;
+for:
+  project:
+    - match:
+        name: &#39;PROJECT&#39;
+      allow: [read]
+  system:
+    - match:
+        name: &#39;.*&#39;
+      allow: [read]
+  storage:
+    - equals:
+        path: &#39;keys&#39;
+      allow: [read]
+    - match:
+        path: &#39;keys/id_rsa*&#39;
+      allow: [read]
+by:
+  group: rundeck-project
+```
+

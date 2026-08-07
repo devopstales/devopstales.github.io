@@ -1,0 +1,163 @@
+---
+title: AWS - pfsense: Site-to-site VPN using static routes
+url: https://devopstales.github.io/cloud/aws-s2s-vpn/
+date: 2022-02-22
+keywords: AWS, vpn, ipsec, pfsense
+---
+
+
+In this post I willll show you how to configure a VPN between pfSense and AWS using static routes. 
+&lt;!--more--&gt;
+
+To create a VPN on AWS side you need the following Components:
+
+* Customer Gateway - This is represent the on-premise side of the vpn
+* virtual private gateway - this is a router in the aws
+* vpn Connection
+* virtual priveta cloud
+
+`vpc -&gt; virtual private gateway -&gt; vpn Connection -&gt; Customer Gateway`
+
+![vpn infra](/img/include/vpn-how-it-works-vgw.webp)
+
+We need to create this components and connect them to each other.
+
+### Customer Gateway
+
+```bash
+# set to your own public ip
+export CLIENT_PUBLIC_IP=1.2.3.4
+
+# Create the customer gateway using the following AWS command:
+aws ec2 create-customer-gateway --type ipsec.1 --public-ip $CLIENT_PUBLIC_IP
+
+{
+    &#34;CustomerGateway&#34;: {
+        &#34;CustomerGatewayId&#34;: &#34;cgw-0e11f167&#34;,
+        &#34;IpAddress&#34;: &#34;1.2.3.4&#34;,
+        &#34;State&#34;: &#34;available&#34;,
+        &#34;Type&#34;: &#34;ipsec.1&#34;,
+        &#34;BgpAsn&#34;: &#34;65000&#34;
+    }
+}
+
+export CUSTOMER_GATEWAY=cgw-0e11f167
+```
+
+### Create a Virtual Private Gateway
+
+Create a target gateway and attach it to your VPC network.
+
+```bash
+# Create a virtual private gateway with a specific AWS-side ASN:
+aws ec2 create-vpn-gateway --type ipsec.1
+
+{
+    &#34;VpnGateway&#34;: {
+        &#34;AmazonSideAsn&#34;: 64512,
+        &#34;State&#34;: &#34;available&#34;,
+        &#34;Type&#34;: &#34;ipsec.1&#34;,
+        &#34;VpnGatewayId&#34;: &#34;vgw-9a4cacf3&#34;,
+        &#34;VpcAttachments&#34;: []
+    }
+}
+
+export VPN_GATEWAY_ID=vgw-9a4cacf3
+export VPC_ID=
+
+# Attach the virtual private gateway to your VPC network:
+aws ec2 attach-vpn-gateway --vpn-gateway-id $VPN_GATEWAY_ID --vpc-id $VPC_ID
+```
+
+### Create a VPN Connection
+
+```bash
+export AWS_TIP=169.254.0.0/30
+# random string for secret
+export SHARED_SECRET=g23r8gr7grg23r8g2fnmf
+# my network on the on-premise side
+export ONPREM_NETWORK=192.168.1.0/24
+
+aws ec2 create-vpn-connection \
+    --type ipsec.1 \
+    --customer-gateway-id $CUSTOMER_GATEWAY \
+    --vpn-gateway-id $VPN_GATEWAY_ID \
+    --options TunnelOptions=&#34;[{TunnelInsideCidr=$AWS_TIP,PreSharedKey=$SHARED_SECRET}]&#34;,StaticRoutesOnly=true,LocalIpv4NetworkCidr=$ONPREM_NETWORK
+
+{
+    &#34;VpnConnection&#34;: {
+        &#34;CustomerGatewayConfiguration&#34;: &#34;...configuration information...&#34;,
+        &#34;CustomerGatewayId&#34;: &#34;cgw-0e11f167&#34;,
+        &#34;Category&#34;: &#34;VPN&#34;,
+        &#34;State&#34;: &#34;pending&#34;,
+        &#34;VpnConnectionId&#34;: &#34;vpn-123123123123abcab&#34;,
+        &#34;VpnGatewayId&#34;: &#34;vgw-9a4cacf3&#34;,
+        &#34;Options&#34;: {
+            &#34;EnableAcceleration&#34;: false,
+            &#34;StaticRoutesOnly&#34;: true,
+            &#34;LocalIpv4NetworkCidr&#34;: &#34;192.168.1.0/24&#34;,
+            &#34;RemoteIpv4NetworkCidr&#34;: &#34;0.0.0.0/0&#34;,
+            &#34;TunnelInsideIpVersion&#34;: &#34;ipv4&#34;,
+            &#34;TunnelOptions&#34;: [
+                {
+                    &#34;OutsideIpAddress&#34;: &#34;203.0.113.3&#34;,
+                    &#34;TunnelInsideCidr&#34;: &#34;169.254.0.0/30&#34;,
+                    &#34;PreSharedKey&#34;: &#34;g23r8gr7grg23r8g2fnmf&#34;
+                },
+                {}
+            ]
+        },
+        &#34;Routes&#34;: [],
+        &#34;Tags&#34;: []
+    }
+}
+```
+
+In the `TunnelOptions` you can configure other options of the vpn like:
+
+```bash
+IKEVersions=[{Value=ikev2})
+Phase2DHGroupNumbers=[{Value=15})
+Phase1DHGroupNumbers=[{Value=15})
+Phase2IntegrityAlgorithms=[{Value=SHA2-256})
+Phase1IntegrityAlgorithms=[{Value=SHA2-256})
+Phase2EncryptionAlgorithms=[{Value=AES256-GCM-16})
+Phase1EncryptionAlgorithms=[{Value=AES256-GCM-16})
+```
+
+### Configure Routing
+
+```bash
+aws ec2 create-route --route-table-id rtb-89012345678901234 \
+--destination-cidr-block 172.31.0.0/16 \
+--transit-gateway-id tgw-56789012345678901 
+```
+
+### Download the configuration file
+After you create the Site-to-Site VPN connection, you can download a sample configuration file to use for configuring the customer gateway device.
+
+&gt; The configuration file is an example only and might not match your intended Site-to-Site VPN connection settings entirely. It specifies the minimum requirements for a Site-to-Site VPN connection of AES128, SHA1, and Diffie-Hellman group 2 in most AWS Regions, and AES128, SHA2, and Diffie-Hellman group 14 in the AWS GovCloud Regions. It also specifies pre-shared keys for authentication. You must modify the example configuration file to take advantage of additional security algorithms, Diffie-Hellman groups, private certificates, and IPv6 traffic. 
+
+* Open the Amazon VPC console at https://console.aws.amazon.com/vpc/
+* In the navigation pane, choose Site-to-Site VPN Connections.
+* Select your VPN connection and choose Download Configuration.
+
+
+### Creating a new IPsec VPN on pfsense
+
+At `VPN &gt; IPsec &gt; Add`  Fill out the values from the text file that you just downloaded from AWS. It looks like this.
+
+![vpn infra](/img/include/aws-vpn01.webp)
+
+![vpn infra](/img/include/aws-vpn02.webp)
+
+![vpn infra](/img/include/aws-vpn03.webp)
+
+![vpn infra](/img/include/aws-vpn04.webp)
+
+As with `Phase 1`, do the same for `Phase 2`. Read the values from the text file.
+
+![vpn infra](/img/include/aws-vpn05.webp)
+
+![vpn infra](/img/include/aws-vpn06.webp)
+

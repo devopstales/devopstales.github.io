@@ -1,0 +1,363 @@
+---
+title: How to Install ESXi Nested Inside Proxmox VE
+url: https://devopstales.github.io/virtualization/install-vmware-in-proxmox/
+date: 2026-03-08
+keywords: proxmox, esxi, vmware, vSphere, nested virtualization, homelab
+---
+
+
+Running VMware ESXi nested inside Proxmox VE is perfect for testing vSphere features, learning VMware technologies, or building a homelab. This updated guide for 2026 covers Proxmox VE 8.x and VMware ESXi 8.0 U3 with the correct virtual hardware configuration.
+
+&lt;!--more--&gt;
+
+## Prerequisites
+
+- **Proxmox VE 8.x** host with Intel VT-x/AMD-V virtualization support
+- **ESXi 8.0 U3** ISO (download from [VMware Customer Connect](https://customerconnect.vmware.com/))
+- Minimum **16GB RAM** (32GB&#43; recommended for running nested VMs)
+- **SSD storage** for better performance
+- Sufficient CPU cores (8&#43; recommended)
+
+## Enable Nested Virtualization on Proxmox Host
+
+### Check Current Status
+
+First, verify if nested virtualization is enabled:
+
+```bash
+# For Intel CPUs
+cat /sys/module/kvm_intel/parameters/nested
+
+# For AMD CPUs
+cat /sys/module/kvm_amd/parameters/nested
+```
+
+If the output is `N` or `0`, nested virtualization is disabled.
+
+### Enable Nested Virtualization
+
+**For Intel CPUs:**
+
+```bash
+echo &#34;options kvm-intel nested=Y&#34; &gt; /etc/modprobe.d/kvm-intel.conf
+echo &#34;options kvm-intel enable_shadow_vmcs=Y&#34; &gt;&gt; /etc/modprobe.d/kvm-intel.conf
+echo &#34;options kvm-intel enable_apicv=Y&#34; &gt;&gt; /etc/modprobe.d/kvm-intel.conf
+echo &#34;options kvm-intel unrestrict_guest=Y&#34; &gt;&gt; /etc/modprobe.d/kvm-intel.conf
+```
+
+**For AMD CPUs:**
+
+```bash
+echo &#34;options kvm-amd nested=1&#34; &gt; /etc/modprobe.d/kvm-amd.conf
+echo &#34;options kvm-amd avic=1&#34; &gt;&gt; /etc/modprobe.d/kvm-amd.conf
+```
+
+### Reload KVM Module
+
+Stop all VMs and reload the KVM module:
+
+```bash
+# For Intel
+modprobe -r kvm_intel
+modprobe -r kvm
+modprobe kvm
+modprobe kvm_intel
+
+# For AMD
+modprobe -r kvm_amd
+modprobe -r kvm
+modprobe kvm
+modprobe kvm_amd
+```
+
+### Verify Configuration
+
+```bash
+# Should return &#39;Y&#39; or &#39;1&#39;
+cat /sys/module/kvm_intel/parameters/nested
+
+# Check CPU flags in VMs
+grep -E &#39;vmx|svm&#39; /proc/cpuinfo
+```
+
+## Create the ESXi Virtual Machine
+
+### Download ESXi ISO
+
+Download ESXi 8.0 U3 from VMware and upload it to your Proxmox storage:
+
+```bash
+# Upload via SCP or use the Proxmox web UI
+scp VMware-VMvisor-Installer-8.0U3-*.iso root@proxmox:/var/lib/vz/template/iso/
+```
+
+### VM Configuration Options
+
+Create a new VM through the Proxmox web UI with these **critical settings**:
+
+#### General Settings
+
+| Setting | Value |
+|---------|-------|
+| **Name** | esxi-nested-01 |
+| **Guest OS** | Linux |
+| **Version** | 6.x - 2.6 Kernel |
+
+#### System Tab
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **BIOS** | OVMF (UEFI) | Required for ESXi 8.x |
+| **QEMU Agent** | Checked | Enable for better integration |
+| **SCSI Controller** | VMware PVSCSI | Best compatibility |
+| **Machine** | q35 | Required for ESXi 8.x |
+
+#### CPU Tab
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **Cores** | 4-8 | Minimum 4, 8&#43; recommended |
+| **Sockets** | 1-2 | Match your licensing needs |
+| **Type** | host | Passthrough CPU features |
+| **NUMA** | Checked | If your hardware supports it |
+
+#### Memory Tab
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **Memory** | 16384 MB | Minimum for ESXi, 32GB&#43; for nested VMs |
+| **Ballooning** | Unchecked | Disable for ESXi |
+| **Hugepages** | Optional | Can improve performance |
+
+#### Hard Disk Tab
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **Bus/Device** | SATA | Critical for ESXi to see the disk |
+| **SSD Emulation** | Checked | If using SSD storage |
+| **Discard** | Checked | Enable TRIM support |
+| **Size** | 128GB&#43; | Minimum 64GB, 128GB&#43; recommended |
+
+#### Network Tab
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **Model** | VMware vmxnet3 | Best performance and compatibility |
+| **Bridge** | vmbr0 | Or your preferred bridge |
+
+### Advanced: VM Configuration via CLI
+
+For fine-tuned control, create the VM via command line:
+
+```bash
+qm create 100 --name esxi-nested-01 \
+  --memory 16384 \
+  --balloon 0 \
+  --cpu host \
+  --cores 4 \
+  --sockets 1 \
+  --numa 1 \
+  --bios ovmf \
+  --machine q35 \
+  --scsihw pvscsi \
+  --sata0 local:iso/VMware-VMvisor-Installer-8.0U3-*.iso,media=cdrom \
+  --sata1 local-lvm:128,ssd=1,discard=on \
+  --boot order=sata0;sata1 \
+  --net0 virtio,bridge=vmbr0,mtu=1500 \
+  --agent enabled=1 \
+  --ostype l26
+```
+
+### Required VM Configuration Changes
+
+After creating the VM, edit `/etc/pve/qemu-server/100.conf` and add:
+
+```bash
+# Enable nested virtualization
+args: -cpu host,&#43;vmx
+
+# Or for AMD:
+# args: -cpu host,&#43;svm
+
+# Hide KVM hypervisor signature (optional, can help with ESXi detection)
+hidden: 1
+
+# CPU flags for better compatibility
+cpu: host,flags=&#43;vmx
+```
+
+## Install ESXi
+
+### Boot the Installer
+
+1. Start the VM and open the console
+2. ESXi installer should boot automatically
+3. Press Enter to continue through the welcome screen
+
+### Installation Steps
+
+1. **Accept EULA**: Press F11
+2. **Select Disk**: Choose the SATA disk you configured
+3. **Keyboard Layout**: Select your preferred layout (usually US Default)
+4. **Root Password**: Set a strong root password
+5. **Confirm Installation**: Press F11 to begin
+
+### Post-Installation
+
+After installation completes:
+
+1. Remove the ISO from the CD-ROM
+2. Reboot the VM
+3. ESXi will boot and obtain an IP via DHCP
+4. Note the IP address from the console
+
+## Configure ESXi
+
+### Initial Network Configuration
+
+Press F2 to access the Direct Console User Interface (DCUI):
+
+1. **Configure Management Network**
+2. **IP Configuration**: Set static IP or keep DHCP
+3. **DNS Configuration**: Set hostname and DNS servers
+4. **Troubleshooting Options**: Enable SSH for remote management
+
+### Access vSphere Client
+
+From your workstation, navigate to `https://&lt;esxi-ip&gt;/ui/` and log in with root credentials.
+
+### Install VMware Tools (Optional)
+
+For better integration, you can install VMware Tools in nested VMs, but note that QEMU Guest Agent may work better for Proxmox-managed operations.
+
+## Performance Optimization
+
+### Proxmox Host Tuning
+
+```bash
+# Enable IOMMU for Intel (in /etc/default/grub)
+GRUB_CMDLINE_LINUX_DEFAULT=&#34;quiet intel_iommu=on iommu=pt&#34;
+
+# Enable IOMMU for AMD (in /etc/default/grub)
+GRUB_CMDLINE_LINUX_DEFAULT=&#34;quiet amd_iommu=on&#34;
+
+# Update GRUB and reboot
+update-grub
+reboot
+```
+
+### ESXi VM Tuning
+
+Add these to the VM configuration for better performance:
+
+```bash
+qm set 100 --args &#39;-cpu host,&#43;vmx,&#43;vpid,&#43;vapic,&#43;tsc-adjust&#39;
+qm set 100 --machine q35
+qm set 100 --cpu cputype=host
+```
+
+### Storage Optimization
+
+```bash
+# For SSD storage, enable discard
+qm set 100 --sata1 local-lvm:vm-100-disk-1,ssd=1,discard=on
+
+# Use VirtIO SCSI with discard for better performance
+qm set 100 --scsihw virtio-scsi-pci
+qm set 100 --scsi0 local-lvm:vm-100-disk-1,ssd=1,discard=on,iothread=1
+```
+
+## Troubleshooting
+
+### ESXi Installer Doesn&#39;t See Disk
+
+**Problem**: The ESXi installer reports &#34;No disks found&#34;
+
+**Solution**: 
+- Ensure you&#39;re using SATA controller for the disk (not SCSI or VirtIO)
+- Set SCSI controller to VMware PVSCSI
+- Use q35 machine type
+
+### ESXi Boots to Purple Screen
+
+**Problem**: PSOD (Purple Screen of Death) on boot
+
+**Solution**:
+- Ensure nested virtualization is enabled on the Proxmox host
+- Add `&#43;vmx` or `&#43;svm` CPU flags to the VM config
+- Increase memory allocation (minimum 8GB for ESXi 8.x)
+
+### Network Connectivity Issues
+
+**Problem**: ESXi management network not working
+
+**Solution**:
+- Use vmxnet3 network adapter
+- Ensure the Proxmox bridge is properly configured
+- Check VLAN settings if using VLANs
+
+### Poor Performance
+
+**Problem**: Nested VMs run slowly
+
+**Solution**:
+- Enable hardware passthrough if available
+- Use SSD storage
+- Increase CPU and memory allocation
+- Enable hugepages on Proxmox host
+
+## Running Nested VMs
+
+Once ESXi is installed and configured:
+
+1. **Create Port Groups**: Set up virtual switches and port groups
+2. **Upload ISOs**: Upload guest OS ISOs to ESXi datastore
+3. **Create VMs**: Create nested VMs through the vSphere Client
+4. **Install VMware Tools**: For better performance in nested VMs
+
+### Example: Creating a VM via ESXi CLI
+
+```bash
+# SSH to ESXi and list datastores
+esxcli storage filesystem list
+
+# Create VM registration
+vim-cmd solo/registervm /vmfs/volumes/datastore1/vmname/vmname.vmx
+```
+
+## Backup and Snapshots
+
+### Proxmox Level
+
+You can backup the entire ESXi VM using Proxmox Backup Server or vzdump:
+
+```bash
+# Create backup
+vzdump 100 --storage backup-storage --mode snapshot
+
+# Create snapshot
+qm snapshot 100 pre-upgrade
+```
+
+### ESXi Level
+
+Use vSphere&#39;s built-in snapshot functionality for nested VMs, but be aware of the performance implications of nested snapshots.
+
+## Security Considerations
+
+1. **Network Isolation**: Place ESXi management on a separate VLAN
+2. **Firewall Rules**: Restrict access to ESXi management interface
+3. **SSH Access**: Disable SSH when not in use
+4. **Lockdown Mode**: Enable ESXi lockdown mode for production
+5. **Regular Updates**: Keep both Proxmox and ESXi updated
+
+## Resource Requirements Summary
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **Proxmox RAM** | 32GB | 64GB&#43; |
+| **ESXi RAM** | 8GB | 16-32GB |
+| **CPU Cores** | 4 | 8&#43; |
+| **Storage** | 64GB SSD | 256GB&#43; NVMe |
+| **Network** | 1GbE | 10GbE |
+

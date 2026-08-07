@@ -1,0 +1,348 @@
+---
+title: Create EKS Cluster with eksctl
+url: https://devopstales.github.io/cloud/aws-eks-install/
+date: 2022-02-11
+keywords: kubernetes deployment, CNI, CNI, Container Network Interface, calico, AWS, EKS, Elastic Kubernetes Registry, VPC CNI, eksctl
+---
+
+
+In this pos I will show you how you can install an AWS managed Elastic Kubernetes Service with ekscli.
+&lt;!--more--&gt;
+
+### Create an AWS KMS Custom Managed Key
+
+Create a CMK for the EKS cluster to use when encrypting your Kubernetes secrets:
+
+```bash
+aws kms create-alias --alias-name alias/devopstales --target-key-id $(aws kms create-key --query KeyMetadata.Arn --output text)
+```
+
+### Create EKS Cluster with eksctl
+`eksctl` is a simple CLI tool for creating clusters on EKS. To download the latest release, run:
+
+```bash
+curl --silent --location &#34;https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz&#34; | tar xz -C /tmp
+sudo mv /tmp/eksctl /usr/local/bin
+```
+
+```bash
+# Let’s start by setting a few environment variables:
+export AWS_REGION=eu-central-1
+export ACCOUNT_ID=$(aws sts get-caller-identity --query &#39;Account&#39; --output text)
+export EKS_CLUSTER_NAME=eks-devopstales
+
+# Get the KMS Custom Managed Key resource name:
+export MASTER_ARN=$(aws kms describe-key --key-id alias/devopstales --query KeyMetadata.Arn --output text)
+
+# Create a cluster
+eksctl create cluster \
+  --name $EKS_CLUSTER_NAME \
+  --region $AWS_REGION \
+  --managed
+```
+
+If ylou need mor advanced configuration You can create a deployment file for `eksctl`:
+
+```yaml
+cat &lt;&lt; EOF &gt; eks_devopstales.yaml
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: eks-devopstales
+  region: ${AWS_REGION}
+  version: &#34;1.21&#34;
+availabilityZones: [&#34;eu-central-1a&#34;]
+managedNodeGroups:
+- name: workers
+  labels: 
+      role: workers
+      environment: poc
+  desiredCapacity: 1
+  instanceType: t3.small
+  volumeEncrypted: true
+  volumeSize: 30
+  ssh:
+    enableSsm: true
+secretsEncryption:
+  keyARN: ${MASTER_ARN}
+# To enable all of the control plane logs, uncomment below:
+# cloudWatch:
+#  clusterLogging:
+#    enableTypes: [&#34;*&#34;]
+EOF
+```
+
+Next, use the file you created as the input for the eksctl cluster creation:
+
+```bash
+eksctl create cluster -f eks_devopstales.yaml
+```
+
+Test The cluster
+
+```bash
+kubectl get nodes
+```
+
+### Using IAM Groups to manage Kubernetes cluster access
+
+We are going to create 3 roles:
+* **k8sAdmin** role which will have admin rights in our EKS cluster
+* **k8sDev** role which will give access to the developers namespace in our EKS cluster
+* **k8sInteg** role which will give access to the integration namespace in our EKS cluster
+
+Create the roles:
+
+```bash
+POLICY=$(echo -n &#39;{&#34;Version&#34;:&#34;2012-10-17&#34;,&#34;Statement&#34;:[{&#34;Effect&#34;:&#34;Allow&#34;,&#34;Principal&#34;:{&#34;AWS&#34;:&#34;arn:aws:iam::&#39;; echo -n &#34;$ACCOUNT_ID&#34;; echo -n &#39;:root&#34;},&#34;Action&#34;:&#34;sts:AssumeRole&#34;,&#34;Condition&#34;:{}}]}&#39;)
+
+echo ACCOUNT_ID=$ACCOUNT_ID
+echo POLICY=$POLICY
+
+aws iam create-role \
+  --role-name k8sAdmin \
+  --description &#34;Kubernetes administrator role (for AWS IAM Authenticator for Kubernetes).&#34; \
+  --assume-role-policy-document &#34;$POLICY&#34; \
+  --output text \
+  --query &#39;Role.Arn&#39;
+
+aws iam create-role \
+  --role-name k8sDev \
+  --description &#34;Kubernetes developer role (for AWS IAM Authenticator for Kubernetes).&#34; \
+  --assume-role-policy-document &#34;$POLICY&#34; \
+  --output text \
+  --query &#39;Role.Arn&#39;
+  
+aws iam create-role \
+  --role-name k8sInteg \
+  --description &#34;Kubernetes role for integration namespace in quick cluster.&#34; \
+  --assume-role-policy-document &#34;$POLICY&#34; \
+  --output text \
+  --query &#39;Role.Arn&#39;
+
+```
+
+We will define 3 groups:
+* **k8sAdmin** - users from this group will have admin rights on the kubernetes cluster
+* **k8sDe** - users from this group will have full access only in the development namespace of the cluster
+* **k8sInteg** - users from this group will have access to integration namespace.
+
+Create k8sAdmin IAM Group:
+
+```bash
+aws iam create-group --group-name k8sAdmin
+
+ADMIN_GROUP_POLICY=$(echo -n &#39;{
+  &#34;Version&#34;: &#34;2012-10-17&#34;,
+  &#34;Statement&#34;: [
+    {
+      &#34;Sid&#34;: &#34;AllowAssumeOrganizationAccountRole&#34;,
+      &#34;Effect&#34;: &#34;Allow&#34;,
+      &#34;Action&#34;: &#34;sts:AssumeRole&#34;,
+      &#34;Resource&#34;: &#34;arn:aws:iam::&#39;; echo -n &#34;$ACCOUNT_ID&#34;; echo -n &#39;:role/k8sAdmin&#34;
+    }
+  ]
+}&#39;)
+echo ADMIN_GROUP_POLICY=$ADMIN_GROUP_POLICY
+
+aws iam put-group-policy \
+--group-name k8sAdmin \
+--policy-name k8sAdmin-policy \
+--policy-document &#34;$ADMIN_GROUP_POLICY&#34;
+```
+
+Create k8sDev IAM Group:
+
+```bash
+aws iam create-group --group-name k8sDev
+
+DEV_GROUP_POLICY=$(echo -n &#39;{
+  &#34;Version&#34;: &#34;2012-10-17&#34;,
+  &#34;Statement&#34;: [
+    {
+      &#34;Sid&#34;: &#34;AllowAssumeOrganizationAccountRole&#34;,
+      &#34;Effect&#34;: &#34;Allow&#34;,
+      &#34;Action&#34;: &#34;sts:AssumeRole&#34;,
+      &#34;Resource&#34;: &#34;arn:aws:iam::&#39;; echo -n &#34;$ACCOUNT_ID&#34;; echo -n &#39;:role/k8sDev&#34;
+    }
+  ]
+}&#39;)
+echo DEV_GROUP_POLICY=$DEV_GROUP_POLICY
+
+aws iam put-group-policy \
+--group-name k8sDev \
+--policy-name k8sDev-policy \
+--policy-document &#34;$DEV_GROUP_POLICY&#34;
+```
+
+Create k8sInteg IAM Group:
+
+```bash
+aws iam create-group --group-name k8sInteg
+
+INTEG_GROUP_POLICY=$(echo -n &#39;{
+  &#34;Version&#34;: &#34;2012-10-17&#34;,
+  &#34;Statement&#34;: [
+    {
+      &#34;Sid&#34;: &#34;AllowAssumeOrganizationAccountRole&#34;,
+      &#34;Effect&#34;: &#34;Allow&#34;,
+      &#34;Action&#34;: &#34;sts:AssumeRole&#34;,
+      &#34;Resource&#34;: &#34;arn:aws:iam::&#39;; echo -n &#34;$ACCOUNT_ID&#34;; echo -n &#39;:role/k8sInteg&#34;
+    }
+  ]
+}&#39;)
+echo INTEG_GROUP_POLICY=$INTEG_GROUP_POLICY
+
+aws iam put-group-policy \
+--group-name k8sInteg \
+--policy-name k8sInteg-policy \
+--policy-document &#34;$INTEG_GROUP_POLICY&#34;
+```
+
+Create IAM Users and add to the groups:
+
+```bash
+aws iam create-user --user-name PaulAdmin
+aws iam create-user --user-name JeanDev
+aws iam create-user --user-name PierreInteg
+
+aws iam add-user-to-group --group-name k8sAdmin --user-name PaulAdmin
+aws iam add-user-to-group --group-name k8sDev --user-name JeanDev
+aws iam add-user-to-group --group-name k8sInteg --user-name PierreInteg
+
+# Get Access key for the users
+aws iam create-access-key --user-name PaulAdmin | tee /tmp/PaulAdmin.json
+aws iam create-access-key --user-name JeanDev | tee /tmp/JeanDev.json
+aws iam create-access-key --user-name PierreInteg | tee /tmp/PierreInteg.json
+```
+
+### Configure Kubernetes RBAC 
+
+```bash
+kubectl create namespace integration
+kubectl create namespace development
+```
+
+Configuring access to development namespace:
+
+```yaml
+cat &lt;&lt; EOF | kubectl apply -f - -n development
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dev-role
+rules:
+  - apiGroups:
+      - &#34;&#34;
+      - &#34;apps&#34;
+      - &#34;batch&#34;
+      - &#34;extensions&#34;
+    resources:
+      - &#34;configmaps&#34;
+      - &#34;cronjobs&#34;
+      - &#34;deployments&#34;
+      - &#34;events&#34;
+      - &#34;ingresses&#34;
+      - &#34;jobs&#34;
+      - &#34;pods&#34;
+      - &#34;pods/attach&#34;
+      - &#34;pods/exec&#34;
+      - &#34;pods/log&#34;
+      - &#34;pods/portforward&#34;
+      - &#34;secrets&#34;
+      - &#34;services&#34;
+    verbs:
+      - &#34;create&#34;
+      - &#34;delete&#34;
+      - &#34;describe&#34;
+      - &#34;get&#34;
+      - &#34;list&#34;
+      - &#34;patch&#34;
+      - &#34;update&#34;
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dev-role-binding
+subjects:
+- kind: User
+  name: dev-user
+roleRef:
+  kind: Role
+  name: dev-role
+  apiGroup: rbac.authorization.k8s.io
+EOF
+```
+
+Configuring access to integration namespace:
+
+```yaml
+cat &lt;&lt; EOF | kubectl apply -f - -n integration
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: integ-role
+rules:
+  - apiGroups:
+      - &#34;&#34;
+      - &#34;apps&#34;
+      - &#34;batch&#34;
+      - &#34;extensions&#34;
+    resources:
+      - &#34;configmaps&#34;
+      - &#34;cronjobs&#34;
+      - &#34;deployments&#34;
+      - &#34;events&#34;
+      - &#34;ingresses&#34;
+      - &#34;jobs&#34;
+      - &#34;pods&#34;
+      - &#34;pods/attach&#34;
+      - &#34;pods/exec&#34;
+      - &#34;pods/log&#34;
+      - &#34;pods/portforward&#34;
+      - &#34;secrets&#34;
+      - &#34;services&#34;
+    verbs:
+      - &#34;create&#34;
+      - &#34;delete&#34;
+      - &#34;describe&#34;
+      - &#34;get&#34;
+      - &#34;list&#34;
+      - &#34;patch&#34;
+      - &#34;update&#34;
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: integ-role-binding
+subjects:
+- kind: User
+  name: integ-user
+roleRef:
+  kind: Role
+  name: integ-role
+  apiGroup: rbac.authorization.k8s.io
+EOF
+```
+
+Gives Access to our IAM Roles to EKS Cluster:
+
+```bash
+eksctl create iamidentitymapping \
+  --cluster eksworkshop-eksctl \
+  --arn arn:aws:iam::${ACCOUNT_ID}:role/k8sDev \
+  --username dev-user
+
+eksctl create iamidentitymapping \
+  --cluster eksworkshop-eksctl \
+  --arn arn:aws:iam::${ACCOUNT_ID}:role/k8sInteg \
+  --username integ-user
+
+eksctl create iamidentitymapping \
+  --cluster eksworkshop-eksctl \
+  --arn arn:aws:iam::${ACCOUNT_ID}:role/k8sAdmin \
+  --username admin \
+  --group system:masters
+```
+

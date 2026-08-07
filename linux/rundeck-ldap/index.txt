@@ -1,0 +1,125 @@
+---
+title: Configure Rundeck LADAP
+url: https://devopstales.github.io/linux/rundeck-ldap/
+date: 2019-12-09
+---
+
+
+In this post I will configure Rundeck to use LDAP as a User backend.
+
+&lt;!--more--&gt;
+
+### Rundeck LDAP config file
+```
+nano /etc/rundeck/jaas-ldap.conf
+
+# openldap
+ldap {
+      com.dtolabs.rundeck.jetty.jaas.JettyCachingLdapLoginModule required
+      contextFactory=&#34;com.sun.jndi.ldap.LdapCtxFactory&#34;
+      debug=&#34;true&#34;
+      providerUrl=&#34;ldap://openldap:389&#34;
+      bindDn=&#34;cn=admin,dc=mydomain,dc=intra&#34;
+      bindPassword=&#34;Password1&#34;
+      authenticationMethod=&#34;simple&#34;
+      forceBindingLogin=&#34;true&#34;
+      userBaseDn=&#34;dc=mydomain,dc=intra&#34;
+      userRdnAttribute=&#34;cn&#34;
+      userIdAttribute=&#34;cn&#34;
+      userPasswordAttribute=&#34;userPassword&#34;
+      userObjectClass=&#34;inetOrgPerson&#34;
+      roleBaseDn=&#34;dc=mydomain,dc=intra&#34;
+      roleNameAttribute=&#34;cn&#34;
+      roleMemberAttribute=&#34;uniqueMember&#34;
+      roleObjectClass=&#34;groupOfUniqueNames&#34;
+      supplementalRoles=&#34;admin, user&#34;;
+      };
+
+# windows AD
+ldap {
+      com.dtolabs.rundeck.jetty.jaas.JettyCachingLdapLoginModule required
+      contextFactory=&#34;com.sun.jndi.ldap.LdapCtxFactory&#34;
+      debug=&#34;true&#34;
+      providerUrl=&#34;ldap://devopstales.intra:389&#34;
+      bindDn=&#34;cn=admin,dc=mydomain,dc=intra&#34;
+      bindPassword=&#34;Password1&#34;
+      authenticationMethod=&#34;simple&#34;
+      forceBindingLogin=&#34;true&#34;
+      userBaseDn=&#34;dc=mydomain,dc=intra&#34;
+      userRdnAttribute=&#34;sAMAccountName&#34;
+      userIdAttribute=&#34;sAMAccountName&#34;
+      userPasswordAttribute=&#34;unicodePwd&#34;
+      userObjectClass=&#34;user&#34;
+      roleBaseDn=&#34;dc=mydomain,dc=intra&#34;
+      roleNameAttribute=&#34;cn&#34;
+      roleMemberAttribute=&#34;member&#34;
+      roleObjectClass=&#34;group&#34;
+      supplementalRoles=&#34;admin, user&#34;;
+      };
+```
+
+### Rundeck multibackend config file
+```
+nano /etc/rundeck/jaas-multiauth.conf
+
+multiauth {
+      com.dtolabs.rundeck.jetty.jaas.JettyCombinedLdapLoginModule required
+      contextFactory=&#34;com.sun.jndi.ldap.LdapCtxFactory&#34;
+      debug=&#34;true&#34;
+      providerUrl=&#34;ldap://ad1:389&#34;
+      bindDn=&#34;cn=admin,dc=mydomain,dc=intra&#34;
+      bindPassword=&#34;Password1&#34;
+      authenticationMethod=&#34;simple&#34;
+      forceBindingLogin=&#34;true&#34;
+      userBaseDn=&#34;ou=Users,dc=mydomain,dc=intra&#34;
+      userRdnAttribute=&#34;cn&#34;
+      userIdAttribute=&#34;cn&#34;
+      userPasswordAttribute=&#34;userPassword&#34;
+      userObjectClass=&#34;inetOrgPerson&#34;
+      roleBaseDn=&#34;ou=Groups,dc=mydomain,dc=intra&#34;
+      roleNameAttribute=&#34;cn&#34;
+      roleMemberAttribute=&#34;uniqueMember&#34;
+      roleObjectClass=&#34;groupOfUniqueNames&#34;
+
+      ignoreRoles=&#34;true&#34;
+      storePass=&#34;true&#34;
+      clearPass=&#34;true&#34;
+      useFirstPass=&#34;false&#34;
+      tryFirstPass=&#34;false&#34;
+      supplementalRoles=&#34;admin, user&#34;;
+
+      org.rundeck.jaas.jetty.JettyRolePropertyFileLoginModule required
+      debug=&#34;true&#34;
+      useFirstPass=&#34;true&#34;
+      file=&#34;/etc/rundeck/realm.properties&#34;;
+      };
+```
+
+### Configure Rundeck to use multibackend config file
+```
+nano /etc/rundeck/profile
+
+JAAS_CONF=&#34;${JAAS_CONF:-$RDECK_CONFIG/jaas-ldap.conf}&#34;
+LOGIN_MODULE=&#34;ldap&#34;
+
+# OR based on your distro
+nano /etc/default/rundeckd
+
+export JAAS_CONF=&#34;/etc/rundeck/jaas-ldap.conf&#34;
+export LOGIN_MODULE=&#34;ldap&#34;
+```
+
+### Configure Rundeck to use LDAP config file
+```
+nano /etc/rundeck/profile
+
+JAAS_CONF=&#34;${JAAS_CONF:-$RDECK_CONFIG/jaas-multiauth.conf}&#34;
+LOGIN_MODULE=&#34;multiauth&#34;
+
+# OR based on your distro
+nano /etc/default/rundeckd
+
+export JAAS_CONF=&#34;/etc/rundeck/jaas-multiauth.conf&#34;
+export LOGIN_MODULE=&#34;multiauth&#34;
+```
+

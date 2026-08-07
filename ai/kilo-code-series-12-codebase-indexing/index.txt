@@ -1,0 +1,623 @@
+---
+title: Kilo Code: Mastering Codebase Indexing for Semantic AI Search
+url: https://devopstales.github.io/ai/kilo-code-series-12-codebase-indexing/
+date: 2026-04-05
+---
+
+
+One of the most powerful features of Kilo Code is its ability to understand your **entire codebase semantically**—not just through keyword matching, but by grasping the actual meaning and relationships in your code.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kilo-code-series.html&#34; &gt;}}
+
+![Advanced codebase indexing with semantic search](/img/coding-terminal.webp)
+*Semantic search finds code by meaning, not just keywords*
+
+This is powered by **Codebase Indexing**, a feature that transforms how AI interacts with your repository. In this post, we&#39;ll dive deep into how codebase indexing works, why it&#39;s essential for effective AI development, and how to configure it for optimal performance.
+
+## The Problem: Traditional Search Falls Short
+
+Before we understand codebase indexing, let&#39;s look at the problem it solves.
+
+### Keyword Search Limitations
+
+Traditional code search tools (grep, VS Code search, etc.) rely on **exact text matching**:
+
+```bash
+Search: &#34;user authentication&#34;
+
+Results:
+✓ Files containing &#34;user authentication&#34;
+✗ Files about &#34;login flow&#34; (no match)
+✗ Files about &#34;session validation&#34; (no match)
+✗ Files about &#34;identity verification&#34; (no match)
+```
+
+**The problem?** These are all related concepts, but keyword search can&#39;t find them because they use different words.
+
+### Context Window Limitations
+
+Even if you could search perfectly, LLMs have **context window limits**:
+
+```bash
+┌─────────────────────────────────────────────────────┐
+│              LLM Context Window (e.g., 100K tokens) │
+│                                                     │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ Your entire codebase: 500K&#43; tokens              │ │
+│ │ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ │ │
+│ │ │ File A  │ │ File B  │ │ File C  │ │  ...    │ │ │
+│ │ └─────────┘ └─────────┘ └─────────┘ └─────────┘ │ │
+│ │                                                 │ │
+│ │    Doesn&#39;t fit in context window!               │ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+You can&#39;t feed your entire repository to the AI for every question.
+
+## The Solution: Codebase Indexing
+
+**Codebase Indexing** solves both problems by:
+
+1. **Creating semantic embeddings** of your code (understanding meaning, not just text)
+2. **Storing embeddings in a vector database** for fast similarity search
+3. **Retrieving relevant code** based on your query&#39;s meaning
+4. **Feeding only relevant context** to the AI
+
+### How It Works
+
+```bash
+┌────────────────────────────────────────────────────────────┐
+│              Kilo Code Codebase Indexing Pipeline          │
+│                                                            │
+│  STEP 1: Indexing (One-time &#43; Incremental Updates)         │
+│  ───────────────────────────────────────────────────────── │
+│                                                            │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │   Your       │───&gt;│   Code       │───&gt;│   Vector     │  │
+│  │   Codebase   │    │   Embedder   │    │   Database   │  │
+│  │              │    │              │    │   (Qdrant)   │  │
+│  └──────────────┘    └──────────────┘    └──────────────┘  │
+│                                                            │
+│  STEP 2: Query Time (Every AI Request)                     │
+│  ────────────────────────────────────────────────          │
+│                                                            │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │   User       │───&gt;│   Query      │───&gt;│   Vector     │  │
+│  │   Question   │    │   Embedder   │    │   Search     │  │
+│  └──────────────┘    └──────────────┘    └──────────────┘  │
+│                              │                    │        │
+│                              │                    ▼        │
+│                              │         ┌──────────────┐    │
+│                              │         │   Relevant   │    │
+│                              └────────&gt;│   Code       │    │
+│                                        │   Snippets   │    │
+│                                        └──────┬───────┘    │
+│                                               │            │
+│                                               ▼            │
+│                                        ┌──────────────┐    │
+│                                        │   AI Agent   │    │
+│                                        │   (with      │    │
+│                                        │   context)   │    │
+│                                        └──────────────┘    │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+## Key Benefits
+
+### 1. **Semantic Understanding**
+
+The AI finds code based on **meaning**, not just keywords:
+
+```bash
+Query: &#34;How do users log in?&#34;
+
+Results include:
+✓ LoginController.authenticate()
+✓ SessionValidator.validate()
+✓ IdentityService.verifyCredentials()
+✓ AuthMiddleware.checkToken()
+```
+
+### 2. **Cross-File Context**
+
+The AI understands relationships **across files**:
+
+```bash
+Query: &#34;Where is the database connection configured?&#34;
+
+Results include:
+✓ config/database.ts (connection setup)
+✓ src/lib/db.ts (connection pool)
+✓ src/repositories/user.ts (usage example)
+✓ .env.example (configuration variables)
+```
+
+### 3. **Faster, More Accurate Responses**
+
+By providing only relevant context:
+
+- **Reduced token usage** = lower costs
+- **Less noise** = better AI responses
+- **Faster processing** = quicker answers
+
+### 4. **Works with Large Codebases**
+
+Indexing scales to **hundreds of thousands of lines** of code:
+
+| Codebase Size | Index Size | Query Time |
+|---------------|------------|------------|
+| 10K lines | ~50 MB | &lt; 100ms |
+| 100K lines | ~500 MB | &lt; 200ms |
+| 1M lines | ~5 GB | &lt; 500ms |
+
+## Architecture Components
+
+Kilo Code&#39;s indexing system consists of three main components:
+
+### 1. **Embedding Model**
+
+Converts code into vector representations:
+
+```bash
+Code: &#34;function authenticate(user, password) { ... }&#34;
+       │
+       ▼
+Embedding: [0.123, -0.456, 0.789, ..., -0.321]
+           (1024-dimensional vector)
+```
+
+**Recommended models:**
+
+| Model | Dimensions | Speed | Accuracy | Best For |
+|-------|------------|-------|----------|----------|
+| `nomic-embed-text` | 768 | Fast | Good | General purpose |
+| `mxbai-embed-large` | 1024 | Medium | Better | Large codebases |
+| `bge-m3` | 1024 | Medium | Best | Multi-language |
+
+### 2. **Vector Database**
+
+Stores and searches embeddings efficiently:
+
+**Kilo Code supports:**
+
+- **Qdrant** (Recommended) - Fast, scalable, easy to self-host
+- **Chroma** - Simple, good for local development
+- **Pinecone** - Managed service, no infrastructure
+
+### 3. **Index Manager**
+
+Handles incremental updates and cache invalidation:
+
+```bash
+File changed → Detect → Re-embed → Update index
+                                    │
+                                    ▼
+                            No full re-index needed!
+```
+
+## Configuration Guide
+
+### Step 1: Choose Your Stack
+
+**For most users, we recommend:**
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;enabled&#34;: true,
+    &#34;provider&#34;: &#34;qdrant&#34;,
+    &#34;embeddingModel&#34;: &#34;nomic-embed-text&#34;,
+    &#34;maxContextTokens&#34;: 100000
+  }
+}
+```
+
+### Step 2: Set Up Qdrant
+
+**Option A: Local Qdrant (Recommended for Development)**
+
+```bash
+# Run Qdrant with Docker
+docker run -d \
+  -p 6333:6333 \
+  -p 6334:6334 \
+  -v qdrant_storage:/qdrant/storage \
+  qdrant/qdrant
+```
+
+**Option B: Self-Hosted Qdrant**
+
+```bash
+# Install Qdrant
+curl -fsSL https://qdrant.tech/install.sh | bash
+
+# Start Qdrant
+./qdrant
+```
+
+**Option C: Qdrant Cloud**
+
+```bash
+# Sign up at https://cloud.qdrant.io
+# Get your API key and endpoint
+```
+
+### Step 3: Configure Kilo Code
+
+Create or update `.kilocode/indexing.json`:
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;enabled&#34;: true,
+    &#34;provider&#34;: &#34;qdrant&#34;,
+    &#34;qdrant&#34;: {
+      &#34;url&#34;: &#34;http://localhost:6333&#34;,
+      &#34;apiKey&#34;: null,
+      &#34;collectionName&#34;: &#34;kilocode-codebase&#34;
+    },
+    &#34;embeddingModel&#34;: &#34;nomic-embed-text&#34;,
+    &#34;embeddingProvider&#34;: &#34;ollama&#34;,
+    &#34;ollama&#34;: {
+      &#34;url&#34;: &#34;http://localhost:11434&#34;,
+      &#34;model&#34;: &#34;nomic-embed-text&#34;
+    },
+    &#34;maxContextTokens&#34;: 100000,
+    &#34;includePatterns&#34;: [
+      &#34;**/*.ts&#34;,
+      &#34;**/*.tsx&#34;,
+      &#34;**/*.js&#34;,
+      &#34;**/*.jsx&#34;,
+      &#34;**/*.py&#34;,
+      &#34;**/*.go&#34;,
+      &#34;**/*.rs&#34;,
+      &#34;**/*.java&#34;,
+      &#34;**/*.md&#34;
+    ],
+    &#34;excludePatterns&#34;: [
+      &#34;node_modules/**&#34;,
+      &#34;dist/**&#34;,
+      &#34;build/**&#34;,
+      &#34;vendor/**&#34;,
+      &#34;.git/**&#34;,
+      &#34;**/*.min.js&#34;,
+      &#34;**/*.bundle.js&#34;,
+      &#34;**/test/**&#34;,
+      &#34;**/*.test.ts&#34;,
+      &#34;**/*.spec.ts&#34;
+    ],
+    &#34;chunkSize&#34;: 512,
+    &#34;chunkOverlap&#34;: 50,
+    &#34;incrementalIndexing&#34;: true,
+    &#34;watchMode&#34;: true
+  }
+}
+```
+
+### Step 4: Build the Index
+
+```bash
+# In your project directory
+kilo-code index build
+
+# Or through the Kilo UI
+# Command Palette → Kilo Code: Rebuild Index
+```
+
+**Initial indexing progress:**
+
+```bash
+🔍 Kilo Code Indexing Service
+
+Scanning repository...
+✓ Found 1,247 files
+✓ Filtering excluded patterns...
+✓ 892 files to index
+
+Creating embeddings...
+[████████████████░░░░] 75% (669/892 files)
+Estimated time remaining: 2 minutes
+
+Indexing complete!
+✓ 892 files indexed
+✓ 12,453 chunks created
+✓ Index size: 487 MB
+```
+
+## Advanced Configuration
+
+### Multi-Language Projects
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;includePatterns&#34;: [
+      &#34;**/*.ts&#34;,      // TypeScript
+      &#34;**/*.py&#34;,      // Python
+      &#34;**/*.go&#34;,      // Go
+      &#34;**/*.rs&#34;,      // Rust
+      &#34;**/*.sql&#34;,     // SQL
+      &#34;**/*.graphql&#34;, // GraphQL
+      &#34;**/*.md&#34;       // Documentation
+    ],
+    &#34;languageWeights&#34;: {
+      &#34;typescript&#34;: 1.0,
+      &#34;python&#34;: 1.0,
+      &#34;go&#34;: 1.0,
+      &#34;sql&#34;: 0.8,
+      &#34;markdown&#34;: 0.5
+    }
+  }
+}
+```
+
+### Performance Tuning
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;chunkSize&#34;: 512,        // Larger = fewer chunks, less precise
+    &#34;chunkOverlap&#34;: 50,      // Higher = better context, more storage
+    &#34;batchSize&#34;: 32,         // Higher = faster indexing, more memory
+    &#34;parallelWorkers&#34;: 4,    // Match your CPU cores
+    &#34;cacheEmbeddings&#34;: true  // Avoid re-embedding unchanged files
+  }
+}
+```
+
+### Storage Optimization
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;storagePath&#34;: &#34;.kilocode/index&#34;,
+    &#34;compressionEnabled&#34;: true,
+    &#34;compressionLevel&#34;: 6,
+    &#34;retentionDays&#34;: 90,
+    &#34;cleanupOnStartup&#34;: true
+  }
+}
+```
+
+## Usage Examples
+
+### Example 1: Finding Implementation Patterns
+
+```bash
+Query: &#34;How do we handle API errors in this codebase?&#34;
+
+Kilo Code (with indexing):
+Based on your codebase, here&#39;s how API errors are handled:
+
+1. **Error Wrapper** (`src/lib/api-error.ts`)
+   - Custom ApiError class with status codes
+   - Used in 47 files across the project
+
+2. **Error Handler Middleware** (`src/middleware/error-handler.ts`)
+   - Centralized error handling for Express routes
+   - Converts errors to consistent JSON responses
+
+3. **Common Patterns Found:**
+   - try/catch with ApiError wrapping
+   - Error logging with correlation IDs
+   - Client-friendly error messages
+
+Would you like me to show examples from specific files?
+```
+
+### Example 2: Understanding Architecture
+
+```bash
+Query: &#34;Explain the authentication flow&#34;
+
+Kilo Code (with indexing):
+Based on your codebase, here&#39;s the authentication flow:
+
+1. **Entry Point** (`src/routes/auth.ts`)
+   - POST /auth/login endpoint
+   - Validates credentials via AuthService
+
+2. **Service Layer** (`src/services/auth-service.ts`)
+   - Calls UserRepository.findByEmail()
+   - Validates password with bcrypt
+   - Generates JWT token
+
+3. **Token Validation** (`src/middleware/auth-middleware.ts`)
+   - Verifies JWT signature
+   - Attaches user to request context
+   - Used by 23 protected routes
+
+4. **Session Management** (`src/services/session-service.ts`)
+   - Tracks active sessions in Redis
+   - Handles token refresh
+
+Here&#39;s a diagram of the flow...
+```
+
+### Example 3: Refactoring Assistance
+
+```bash
+Query: &#34;I need to add rate limiting to all API endpoints&#34;
+
+Kilo Code (with indexing):
+Based on your codebase structure, here&#39;s how to add rate limiting:
+
+**Current Architecture:**
+- Express.js with middleware pattern
+- 47 API routes across 12 route files
+- Redis already used for sessions
+
+**Recommended Approach:**
+
+1. **Create Rate Limit Middleware**
+   - Use express-rate-limit with Redis store
+   - Reuse existing Redis connection
+
+2. **Apply to Routes**
+   - Add to `src/middleware/index.ts`
+   - Import in route files
+
+3. **Configuration**
+   - Add rate limit config to `src/config/rate-limit.ts`
+   - Environment variables for thresholds
+
+Here&#39;s the implementation...
+```
+
+## Troubleshooting
+
+### Issue: Indexing is Slow
+
+**Solutions:**
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;parallelWorkers&#34;: 8,      // Increase for more CPU cores
+    &#34;batchSize&#34;: 64,           // Larger batches
+    &#34;excludePatterns&#34;: [       // Exclude more files
+      &#34;**/test/**&#34;,
+      &#34;**/*.test.*&#34;,
+      &#34;**/*.spec.*&#34;,
+      &#34;**/fixtures/**&#34;,
+      &#34;**/mocks/**&#34;
+    ]
+  }
+}
+```
+
+### Issue: Search Results Are Irrelevant
+
+**Solutions:**
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;chunkSize&#34;: 256,          // Smaller chunks for precision
+    &#34;embeddingModel&#34;: &#34;bge-m3&#34;, // Better accuracy model
+    &#34;similarityThreshold&#34;: 0.7  // Higher threshold
+  }
+}
+```
+
+### Issue: Index is Too Large
+
+**Solutions:**
+
+```json
+{
+  &#34;indexing&#34;: {
+    &#34;chunkSize&#34;: 1024,         // Larger chunks
+    &#34;excludePatterns&#34;: [       // Exclude more
+      &#34;**/*.md&#34;,
+      &#34;docs/**&#34;,
+      &#34;examples/**&#34;
+    ],
+    &#34;compressionEnabled&#34;: true,
+    &#34;retentionDays&#34;: 30
+  }
+}
+```
+
+### Issue: Qdrant Connection Fails
+
+**Check:**
+
+```bash
+# Verify Qdrant is running
+curl http://localhost:6333
+
+# Check Kilo Code config
+kilo-code config get indexing.qdrant.url
+
+# Test connection
+kilo-code index test-connection
+```
+
+## Best Practices
+
+### 1. **Index Only What You Need**
+
+```json
+{
+  &#34;includePatterns&#34;: [&#34;**/*.ts&#34;, &#34;**/*.tsx&#34;],
+  &#34;excludePatterns&#34;: [&#34;**/node_modules/**&#34;, &#34;**/dist/**&#34;]
+}
+```
+
+### 2. **Use Incremental Indexing**
+
+```json
+{
+  &#34;incrementalIndexing&#34;: true,
+  &#34;watchMode&#34;: true
+}
+```
+
+### 3. **Clean Index Periodically**
+
+```bash
+# Rebuild index monthly
+kilo-code index rebuild
+
+# Or clean old indexes
+kilo-code index cleanup --older-than 30d
+```
+
+### 4. **Monitor Index Health**
+
+```bash
+# Check index status
+kilo-code index status
+
+# View index statistics
+kilo-code index stats
+```
+
+### 5. **Use Appropriate Embedding Model**
+
+| Use Case | Recommended Model |
+|----------|-------------------|
+| General purpose | `nomic-embed-text` |
+| Multi-language | `bge-m3` |
+| Maximum accuracy | `mxbai-embed-large` |
+| Limited resources | `all-minilm` |
+
+## Performance Benchmarks
+
+### Index Size by Codebase
+
+| Lines of Code | Index Size | Build Time |
+|---------------|------------|------------|
+| 10K | 50 MB | 30 seconds |
+| 50K | 250 MB | 2 minutes |
+| 100K | 500 MB | 4 minutes |
+| 500K | 2.5 GB | 15 minutes |
+| 1M | 5 GB | 30 minutes |
+
+### Query Performance
+
+| Index Size | P50 Latency | P95 Latency | P99 Latency |
+|------------|-------------|-------------|-------------|
+| 100K lines | 50ms | 100ms | 200ms |
+| 500K lines | 100ms | 200ms | 400ms |
+| 1M lines | 200ms | 400ms | 800ms |
+
+## Conclusion
+
+Codebase Indexing is the **foundation** that makes Kilo Code&#39;s AI truly useful for large projects. Without it, the AI is working blind—guessing at your code structure and missing critical context.
+
+**Key takeaways:**
+
+- ✅ Indexing enables semantic search (meaning, not keywords)
+- ✅ Qdrant &#43; Ollama is the recommended stack
+- ✅ Configure exclude patterns to reduce index size
+- ✅ Incremental indexing keeps index fresh efficiently
+- ✅ Proper indexing = better AI responses &#43; lower costs
+
+With codebase indexing properly configured, your AI assistant transforms from a generic coding helper into an expert on **your** codebase.
+

@@ -1,0 +1,203 @@
+---
+title: Install kubernetes with kubeadm V2
+url: https://devopstales.github.io/kubernetes/k8s-install-containerd-v2/
+date: 2022-05-02
+keywords: kubernetes deployment, kubernetes vs docker
+---
+
+
+Kubeadm is a tool that helps you bootstrap a simple Kubernetes cluster and simplifies the deployment process.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kubernetes.html&#34; &gt;}}
+
+```bash
+192.168.1.41  kubernetes01 # master node
+192.168.1.42  kubernetes02 # frontend node
+192.168.1.43  kubernetes03 # worker node
+192.168.1.44  kubernetes04 # worker node
+192.168.1.45  kubernetes05 # worker node
+
+# hardware requirement
+4 CPU
+16G RAM
+```
+
+### Enable cgroupV2
+
+```bash
+sudo dnf install -y grubby
+sudo grubby \
+  --update-kernel=ALL \
+  --args=&#34;systemd.unified_cgroup_hierarchy=1&#34;
+
+cat &lt;&lt; EOF &gt;&gt; /etc/systemd/system.conf
+DefaultCPUAccounting=yes
+DefaultIOAccounting=yes
+DefaultIPAccounting=yes
+DefaultBlockIOAccounting=yes
+EOF
+
+init 6
+```
+
+### Configure date time and selinux
+
+```bash
+timedatectl set-timezone Europe/Budapest
+
+dnf install -y vim net-tools chrony ntpstat
+timedatectl set-ntp true
+systemctl enable chronyd --now
+```
+
+```bash
+systemctl stop firewalld
+systemctl mask firewalld
+```
+
+```bash
+setenforce 0
+sed -i &#39;s/=\(enforcing\|permissive\)/=disabled/g&#39; /etc/sysconfig/selinux
+sed -i &#39;s/=\(enforcing\|permissive\)/=disabled/g&#39; /etc/selinux/config
+```
+
+```bash
+echo &#34;net.ipv6.conf.all.disable_ipv6 = 1&#34; &gt;&gt; /etc/sysctl.conf
+echo &#34;net.ipv6.conf.default.disable_ipv6 = 1&#34; &gt;&gt; /etc/sysctl.conf
+sysctl -p
+
+echo &#34;centos.mydomain.lan&#34; &gt; /etc/hostname
+hostnamectl set-hostname centos.mydomain.lan
+
+ifconfig | grep inet | grep -v inet6 | cut -d&#34; &#34; -f10 | sed &#34;s|$|   `hostname -s` `hostname -f`|&#34; &gt;&gt; /etc/hosts
+sed -i &#34;s|::1|#::1|&#34; /etc/hosts
+```
+
+### Install containerd
+```bash
+dnf install -y epel-release
+dnf install -y device-mapper-persistent-data lvm2 iproute-tc
+dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+dnf install -y containerd.io
+
+## Configure containerd
+sudo mkdir -p /etc/containerd
+sudo containerd config default &gt; /etc/containerd/config.toml
+```
+
+### Configuuration
+
+To use the `systemd` cgroup driver in `/etc/containerd/config.toml` with `runc`, set
+
+```bash
+nano /etc/containerd/config.toml
+...
+          [plugins.&#34;io.containerd.grpc.v1.cri&#34;.containerd.runtimes.runc.options]
+            SystemdCgroup = true
+
+cat &lt;&lt;EOF | sudo tee /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+cat &lt;&lt;EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+
+sysctl --system
+```
+
+
+As you can see we dose n ot siabled the swap:
+
+```bas
+# show swap is on
+$ swapon --show
+NAME      TYPE      SIZE USED PRIO
+/dev/sda1 partition   2G   0B   -2
+
+# check for type cgroup2
+$ mount -l|grep cgroup
+cgroup2 on /sys/fs/cgroup type cgroup2 (rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate)
+
+# check for cpu controller
+$ cat /sys/fs/cgroup/cgroup.subtree_control
+cpu io memory pids
+```
+
+### Install kubeadm
+
+```bash
+cat &lt;&lt; EOF &gt;&gt; /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+sudo dnf -y install kubelet kubeadm kubectl --disableexcludes=kubernetes
+```
+
+```bash
+# Start containerd
+systemctl enable --now containerd
+
+echo &#34;runtime-endpoint: unix:///run/containerd/containerd.sock&#34; &gt; /etc/crictl.yaml
+crictl ps
+```
+
+Change runtime in kubeadm config:
+
+```bash
+# add the following flags to KUBELET_KUBEADM_ARGS variable
+cat &lt;&lt; EOF &gt; /etc/sysconfig/kubelet
+KUBELET_EXTRA_ARGS=&#34;--node-ip=192.168.1.41 --container-runtime=remote --container-runtime-endpoint=/run/containerd/containerd.sock --cgroup-driver=systemd --fail-swap-on=false&#34;
+EOF
+```
+
+```bash
+sudo systemctl enable --now kubelet
+sudo systemctl status kubelet
+
+kubeadm config images pull
+```
+
+### Init master
+```bash
+sudo kubeadm init \
+--pod-network-cidr=10.244.0.0/16 \
+--apiserver-advertise-address=192.168.1.41 \
+--cri-socket=unix:///run/containerd/containerd.sock \
+--ignore-preflight-errors=&#34;Swap&#34;
+
+
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
+```
+
+### Join workers to cluster
+```bash
+kubeadm join 192.168.100.10:6443 --token XXXXXXXX \
+    --discovery-token-ca-cert-hash sha256:XXXXXXXX
+```
+
+```bash
+yum install -y https://harbottle.gitlab.io/harbottle-main/7/x86_64/harbottle-main-release.rpm
+yum install -y kubectx helm
+```
+

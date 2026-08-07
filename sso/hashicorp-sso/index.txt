@@ -1,0 +1,53 @@
+---
+title: SSO for hashicorp vault
+url: https://devopstales.github.io/sso/hashicorp-sso/
+date: 2019-05-20
+keywords: Keycloak, HashiCorp Vault, oauth2, SSO, OIDC
+---
+
+
+In this post I wil shiw you hiw to configure Hashicorp vault with Keycloak for SSO.
+&lt;!--more--&gt;
+
+```
+vault auth enable oidc
+
+vault write auth/oidc/config \
+    oidc_discovery_url=&#34;https://sso.devopstales.intra/auth/realms/mydomain&#34; \
+    oidc_client_id=&#34;web&#34; \
+    oidc_client_secret=&#34;07d66ebd-1018-46c6-9c88-80aa3d4c2f68&#34; \
+    default_role=&#34;reader&#34;
+```
+
+```
+vault write auth/oidc/role/reader \
+        bound_audiences=&#34;web&#34; \
+        allowed_redirect_uris=&#34;http://192.168.0.112:8200/ui/vault/auth/oidc/oidc/callback&#34; \
+        allowed_redirect_uris=&#34;http://192.168.0.112:8250/oidc/callback&#34; \
+        user_claim=&#34;sub&#34; \
+        policies=&#34;reader&#34;
+```
+
+```
+nano reader.hcl
+# Read permission on the k/v secrets
+path &#34;/secret/*&#34; {
+    capabilities = [&#34;read&#34;, &#34;list&#34;]
+}
+
+nano manager.hcl
+# Manage k/v secrets
+path &#34;/secret/*&#34; {
+    capabilities = [&#34;create&#34;, &#34;read&#34;, &#34;update&#34;, &#34;delete&#34;, &#34;list&#34;]
+}
+```
+
+```
+vault policy write reader reader.hcl
+vault policy write manager manager.hcl
+
+vault policy list
+```
+
+![Example image](/img/include/vault-oidc.webp)
+

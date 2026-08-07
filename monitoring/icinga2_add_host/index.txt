@@ -1,0 +1,72 @@
+---
+title: Add host to Icinga2
+url: https://devopstales.github.io/monitoring/icinga2_add_host/
+date: 2019-12-11
+keywords: icinga, icinga2, nagios
+---
+
+
+In this tutorial I will show you how to add hosts to Icinga2.
+
+&lt;!--more--&gt;
+
+### Create new host
+```
+nano /etc/icinga2/conf.d/my_router.conf
+object Host &#34;Router&#34; {
+  address = &#34;192.168.1.1&#34;
+  check_command = &#34;hostalive&#34;
+}
+
+```
+
+If we want to check the web admin interface of the router we can add a http check to see if the HTTP server is alive and responds with the proper HTTP codes
+
+```
+nano /etc/icinga2/conf.d/my_router.conf
+...
+object Service &#34;http&#34; {
+  host_name = &#34;Router&#34;
+  check_command = &#34;http&#34;
+}
+```
+
+### Ad custom check
+
+We will us the check_udpport script. This is the syntax.
+```
+/usr/lib64/nagios/plugins/check_udpport –H 127.0.0.1 –p 69
+```
+
+Now we need to create a nwe command in icinga2:
+```
+nano /etc/icinga2/conf.d/commands.conf
+object CheckCommand &#34;myudp&#34; {
+  command = [ PluginDir &#43; &#34;/check_udpport&#34; ]
+
+    arguments = {
+    &#34;-H&#34; = &#34;$addr$&#34;
+    &#34;-p&#34; = &#34;$port$&#34;
+  }
+  vars.addr = &#34;$address$&#34;
+}
+```
+
+We have a nwe command so we can create a service to use rhis command:
+
+```
+nano /etc/icinga2/conf.d/my_router.conf
+...
+object Service &#34;dhcp&#34; {
+  host_name = Router&#34;
+  check_command = &#34;myudp&#34;
+vars.port = &#34;67&#34;
+}
+```
+
+Test the config and restart:
+```
+icinga2 daemon -C
+systemctl restart icinga2
+```
+

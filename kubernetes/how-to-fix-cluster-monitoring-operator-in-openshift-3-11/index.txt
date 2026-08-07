@@ -1,0 +1,41 @@
+---
+title: How to fix cluster-monitoring-operator in OpenShift 3.11
+url: https://devopstales.github.io/kubernetes/how-to-fix-cluster-monitoring-operator-in-openshift-3-11/
+date: 2020-07-10
+keywords: ansible, openshift 3.11, openshift okd, openshift tutorial, openshift container platform, rad hat openshift
+---
+
+
+Default install use an old image for cluster-monitoring-operator with imagestream false latanci alert  problem.
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/openshift.html&#34; &gt;}}
+
+### Export running deployment to yaml
+```
+oc project openshift-monitoring
+oc get --export deployment/cluster-monitoring-operator -o yaml &gt; cluster-monitoring-operator.yaml
+```
+
+### Patch and deploy the yaml
+
+```
+sed -i -e &#34;s|image:.*|image: quay.io/openshift/origin-cluster-monitoring-operator:v3.11
+|&#34; \
+&gt; cluster-monitoring-operator.yaml
+
+oc apply -f cluster-monitoring-operator.yaml
+
+
+curl -k -H &#34;Authorization: Bearer `oc serviceaccounts get-token asb-client`&#34; https://`oc get routes -n openshift-ansible-service-broker --no-headers | awk &#39;{print $2}&#39;`/osb/v2/catalog
+
+oc delete deployment/prometheus-operator
+oc delete statefulset/alertmanager-main
+oc delete statefulset/prometheus-k8s
+```
+
+### Config for new install
+```
+openshift_cluster_monitoring_operator_image=quay.io/openshift/origin-cluster-monitoring-operator:v3.11
+```
+

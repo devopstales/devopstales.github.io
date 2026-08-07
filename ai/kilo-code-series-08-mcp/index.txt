@@ -1,0 +1,879 @@
+---
+title: Kilo Code: Advanced MCP Integration
+url: https://devopstales.github.io/ai/kilo-code-series-08-mcp/
+date: 2026-04-01
+---
+
+
+In our previous post, we looked at how Steering can provide persistent rules for your agents. But what if the agent needs to control the world?
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kilo-code-series.html&#34; &gt;}}
+
+This is where **Advanced MCP Integration** comes in. Developed by Anthropic and adopted by the entire AI industry, the Model Context Protocol (MCP) is an open standard that allows AI models to connect to external data and tools. Instead of the AI being a &#34;brain in a jar,&#34; MCP gives it &#34;hands&#34; and &#34;eyes.&#34;
+
+## What is MCP?
+
+**Model Context Protocol (MCP)** is an open standard that defines how AI assistants interact with external systems. Think of it as USB-C for AI tools—a universal connector.
+
+### The Problem MCP Solves
+
+Without MCP, every AI tool needs custom integrations:
+
+```bash
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   GitHub    │────▶│  Custom     │────▶│   AI        │
+│   API       │     │  Integration│     │   Assistant │
+└─────────────┘     └─────────────┘     └─────────────┘
+
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Slack     │────▶│  Custom     │────▶│   AI        │
+│   API       │     │  Integration│     │   Assistant │
+└─────────────┘     └─────────────┘     └─────────────┘
+
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Database  │────▶│  Custom     │────▶│   AI        │
+│             │     │  Integration│     │   Assistant │
+└─────────────┘     └─────────────┘     └─────────────┘
+
+Result: Fragile, hard-to-maintain integrations
+```
+
+With MCP, there&#39;s a standard interface:
+
+```bash
+┌─────────────┐
+│   GitHub    │
+│   MCP       │
+│   Server    │
+└──────┬──────┘
+       │
+┌──────┴──────┐     ┌─────────────┐
+│   MCP       │────▶│   AI        │
+│   Host      │     │   Assistant │
+│   (Kilo)    │     │             │
+└──────┬──────┘     └─────────────┘
+       │
+┌──────┴──────┐
+│   Slack     │
+│   MCP       │
+│   Server    │
+└─────────────┘
+
+Result: Standard, swappable integrations
+```
+
+---
+
+## MCP Architecture
+
+### Core Components
+
+| Component | Description | Example |
+|-----------|-------------|---------|
+| **MCP Host** | The AI application | Kilo Code, Claude Desktop |
+| **MCP Server** | Provides tools/resources | GitHub MCP, PostgreSQL MCP |
+| **MCP Client** | Connects host to server | Built into Kilo Code |
+
+### MCP Capabilities
+
+1. **Tools**: Functions the AI can call
+   - `github.create_issue()`
+   - `postgres.query()`
+   - `filesystem.read_file()`
+
+2. **Resources**: Data the AI can access
+   - GitHub issues
+   - Database tables
+   - File system contents
+
+3. **Prompts**: Pre-defined templates
+   - Code review template
+   - Bug report template
+   - PR description template
+
+---
+
+## Installing MCP Servers
+
+### Method 1: npm Installation
+
+Many MCP servers are published as npm packages:
+
+```bash
+# GitHub MCP Server
+npm install -g @modelcontextprotocol/server-github
+
+# PostgreSQL MCP Server
+npm install -g @modelcontextprotocol/server-postgres
+
+# Filesystem MCP Server
+npm install -g @modelcontextprotocol/server-filesystem
+
+# Slack MCP Server
+npm install -g @modelcontextprotocol/server-slack
+```
+
+### Method 2: Docker Installation
+
+Some servers run better in containers:
+
+```bash
+# PostgreSQL MCP Server via Docker
+docker run -d \
+  -p 3000:3000 \
+  -e DATABASE_URL=&#34;postgresql://user:pass@localhost:5432/mydb&#34; \
+  mcp/postgres-server
+
+# Redis MCP Server via Docker
+docker run -d \
+  -p 3001:3001 \
+  -e REDIS_URL=&#34;redis://localhost:6379&#34; \
+  mcp/redis-server
+```
+
+### Method 3: npx (No Installation)
+
+Run servers directly with npx:
+
+```bash
+# Run GitHub MCP without installing
+npx @modelcontextprotocol/server-github
+
+# Run in Kilo Code config
+{
+  &#34;mcpServers&#34;: {
+    &#34;github&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-github&#34;]
+    }
+  }
+}
+```
+
+---
+
+## Configuring MCP in Kilo Code
+
+### Configuration File
+
+Create or edit `.kilocode/mcp.json`:
+
+```json
+{
+  &#34;mcpServers&#34;: {
+    &#34;github&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-github&#34;],
+      &#34;env&#34;: {
+        &#34;GITHUB_TOKEN&#34;: &#34;${GITHUB_TOKEN}&#34;
+      },
+      &#34;enabled&#34;: true
+    },
+    &#34;filesystem&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-filesystem&#34;],
+      &#34;args&#34;: [&#34;/Users/paladm/projects&#34;],
+      &#34;enabled&#34;: true
+    },
+    &#34;postgres&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-postgres&#34;],
+      &#34;env&#34;: {
+        &#34;DATABASE_URL&#34;: &#34;${DATABASE_URL}&#34;
+      },
+      &#34;enabled&#34;: true
+    },
+    &#34;slack&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-slack&#34;],
+      &#34;env&#34;: {
+        &#34;SLACK_BOT_TOKEN&#34;: &#34;${SLACK_BOT_TOKEN}&#34;
+      },
+      &#34;enabled&#34;: false
+    }
+  }
+}
+```
+
+### Environment Variables
+
+Store secrets in `.env` file:
+
+```bash
+# .kilocode/.env
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
+SLACK_BOT_TOKEN=xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxx
+```
+
+### Verify MCP Setup
+
+```bash
+# List configured servers
+kilo-code mcp list
+
+# Output:
+Configured MCP Servers:
+  ✓ github (connected)
+  ✓ filesystem (connected)
+  ✓ postgres (connected)
+  ✗ slack (disabled)
+
+# Test server connection
+kilo-code mcp test github
+
+# Output:
+Testing GitHub MCP Server...
+✓ Connection successful
+✓ Available tools: 15
+✓ Available resources: 8
+```
+
+---
+
+## Using MCP Tools
+
+### GitHub Integration
+
+Once connected, Kilo Code can interact with GitHub:
+
+```bash
+User: &#34;Create a GitHub issue for the login bug we found&#34;
+
+Kilo Code (via MCP):
+I&#39;ll create a GitHub issue with the details we discussed.
+
+Using GitHub MCP Server:
+- Repository: myorg/myapp
+- Title: Login fails with valid credentials
+- Labels: bug, priority-high
+- Assignee: @current-user
+
+Creating issue...
+✓ Issue #142 created: https://github.com/myorg/myapp/issues/142
+
+Would you like me to:
+1. Create a branch for this issue?
+2. Add more details to the issue?
+3. Notify the team on Slack?
+```
+
+**Available GitHub Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `github.create_issue` | Create new issue |
+| `github.update_issue` | Update existing issue |
+| `github.create_pull_request` | Create PR |
+| `github.get_file` | Read file from repo |
+| `github.search_code` | Search codebase |
+| `github.list_issues` | List repository issues |
+| `github.get_pull_request` | Get PR details |
+| `github.create_comment` | Add comment to issue/PR |
+
+### Filesystem Integration
+
+Access files beyond the current project:
+
+```bash
+User: &#34;Copy the config from our templates repo&#34;
+
+Kilo Code (via MCP):
+I&#39;ll use the Filesystem MCP to access the templates repo.
+
+Reading from: /Users/paladm/templates/webapp/config.json
+Writing to: /Users/paladm/projects/myapp/config.json
+
+✓ File copied successfully
+
+Contents:
+{
+  &#34;app&#34;: {
+    &#34;name&#34;: &#34;MyApp&#34;,
+    &#34;version&#34;: &#34;1.0.0&#34;
+  },
+  &#34;database&#34;: {
+    &#34;host&#34;: &#34;localhost&#34;,
+    &#34;port&#34;: 5432
+  }
+}
+```
+
+**Available Filesystem Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `filesystem.read_file` | Read file contents |
+| `filesystem.write_file` | Write file contents |
+| `filesystem.list_directory` | List directory contents |
+| `filesystem.create_directory` | Create new directory |
+| `filesystem.delete_file` | Delete a file |
+| `filesystem.move_file` | Move/rename file |
+| `filesystem.search` | Search for files |
+
+### Database Integration
+
+Query databases directly:
+
+`````bash
+User: &#34;Check how many users signed up this week&#34;
+
+Kilo Code (via MCP):
+I&#39;ll query the PostgreSQL database.
+
+Executing query:
+```sql
+SELECT COUNT(*) as new_users, 
+       DATE(created_at) as signup_date
+FROM users
+WHERE created_at &gt;= NOW() - INTERVAL &#39;7 days&#39;
+GROUP BY DATE(created_at)
+ORDER BY signup_date;
+```
+
+Results:
+| signup_date | new_users |
+|-------------|-----------|
+| 2026-03-25 | 45 |
+| 2026-03-26 | 52 |
+| 2026-03-27 | 38 |
+| 2026-03-28 | 67 |
+| 2026-03-29 | 71 |
+| 2026-03-30 | 89 |
+| 2026-03-31 | 43 |
+
+Total: 405 new users this week
+`````
+
+**Available Database Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `postgres.query` | Execute SQL query |
+| `postgres.list_tables` | List all tables |
+| `postgres.describe_table` | Show table schema |
+| `postgres.insert` | Insert row |
+| `postgres.update` | Update rows |
+| `postgres.delete` | Delete rows |
+
+---
+
+## Building Custom MCP Servers
+
+### Why Build Custom Servers?
+
+While many MCP servers exist, you might need custom integrations for:
+- Internal APIs
+- Proprietary databases
+- Company-specific tools
+- Legacy systems
+
+### MCP Server Structure
+
+A basic MCP server in TypeScript:
+
+```typescript
+// my-custom-server.ts
+import { Server } from &#39;@modelcontextprotocol/sdk/server/index.js&#39;;
+import { StdioServerTransport } from &#39;@modelcontextprotocol/sdk/server/stdio.js&#39;;
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from &#39;@modelcontextprotocol/sdk/types.js&#39;;
+
+// Create server instance
+const server = new Server(
+  {
+    name: &#39;my-custom-server&#39;,
+    version: &#39;1.0.0&#39;,
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
+
+// Define available tools
+server.setRequestHandler(ListToolsRequestSchema, async () =&gt; {
+  return {
+    tools: [
+      {
+        name: &#39;get_user_data&#39;,
+        description: &#39;Get user data from internal API&#39;,
+        inputSchema: {
+          type: &#39;object&#39;,
+          properties: {
+            userId: {
+              type: &#39;string&#39;,
+              description: &#39;The user ID to fetch&#39;,
+            },
+          },
+          required: [&#39;userId&#39;],
+        },
+      },
+      {
+        name: &#39;create_report&#39;,
+        description: &#39;Generate a custom report&#39;,
+        inputSchema: {
+          type: &#39;object&#39;,
+          properties: {
+            reportType: {
+              type: &#39;string&#39;,
+              enum: [&#39;daily&#39;, &#39;weekly&#39;, &#39;monthly&#39;],
+            },
+            startDate: {
+              type: &#39;string&#39;,
+              description: &#39;Start date (ISO format)&#39;,
+            },
+            endDate: {
+              type: &#39;string&#39;,
+              description: &#39;End date (ISO format)&#39;,
+            },
+          },
+          required: [&#39;reportType&#39;],
+        },
+      },
+    ],
+  };
+});
+
+// Handle tool calls
+server.setRequestHandler(CallToolRequestSchema, async (request) =&gt; {
+  const { name, arguments: args } = request.params;
+
+  if (name === &#39;get_user_data&#39;) {
+    const { userId } = args as { userId: string };
+    
+    // Fetch from internal API
+    const response = await fetch(`https://api.internal/users/${userId}`);
+    const data = await response.json();
+    
+    return {
+      content: [
+        {
+          type: &#39;text&#39;,
+          text: JSON.stringify(data, null, 2),
+        },
+      ],
+    };
+  }
+
+  if (name === &#39;create_report&#39;) {
+    const { reportType, startDate, endDate } = args as {
+      reportType: string;
+      startDate?: string;
+      endDate?: string;
+    };
+    
+    // Generate report logic here
+    const report = await generateReport(reportType, startDate, endDate);
+    
+    return {
+      content: [
+        {
+          type: &#39;text&#39;,
+          text: report,
+        },
+      ],
+    };
+  }
+
+  throw new Error(`Unknown tool: ${name}`);
+});
+
+// Start server
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error(&#39;MCP Server running on stdio&#39;);
+}
+
+main().catch((error) =&gt; {
+  console.error(&#39;Server error:&#39;, error);
+  process.exit(1);
+});
+```
+
+### Package Configuration
+
+Create `package.json`:
+
+```json
+{
+  &#34;name&#34;: &#34;@mycompany/mcp-custom-server&#34;,
+  &#34;version&#34;: &#34;1.0.0&#34;,
+  &#34;type&#34;: &#34;module&#34;,
+  &#34;bin&#34;: {
+    &#34;mcp-custom-server&#34;: &#34;./dist/index.js&#34;
+  },
+  &#34;scripts&#34;: {
+    &#34;build&#34;: &#34;tsc&#34;,
+    &#34;start&#34;: &#34;node dist/index.js&#34;
+  },
+  &#34;dependencies&#34;: {
+    &#34;@modelcontextprotocol/sdk&#34;: &#34;^1.0.0&#34;
+  },
+  &#34;devDependencies&#34;: {
+    &#34;typescript&#34;: &#34;^5.0.0&#34;,
+    &#34;@types/node&#34;: &#34;^20.0.0&#34;
+  }
+}
+```
+
+### Register Custom Server
+
+Add to `.kilocode/mcp.json`:
+
+```json
+{
+  &#34;mcpServers&#34;: {
+    &#34;custom&#34;: {
+      &#34;command&#34;: &#34;node&#34;,
+      &#34;args&#34;: [&#34;/path/to/my-custom-server/dist/index.js&#34;],
+      &#34;env&#34;: {
+        &#34;API_KEY&#34;: &#34;${INTERNAL_API_KEY}&#34;
+      }
+    }
+  }
+}
+```
+
+---
+
+## MCP Resources
+
+Resources let AI read external data without tools:
+
+### GitHub Resources
+
+```json
+{
+  &#34;mcpServers&#34;: {
+    &#34;github&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-github&#34;],
+      &#34;env&#34;: {
+        &#34;GITHUB_TOKEN&#34;: &#34;${GITHUB_TOKEN}&#34;
+      }
+    }
+  }
+}
+```
+
+```bash
+User: &#34;Show me the open issues in our repo&#34;
+
+Kilo Code:
+Reading from github://myorg/myapp/issues?state=open
+
+Found 12 open issues:
+
+1. #142 - Login fails with valid credentials (High)
+2. #141 - Mobile menu not responsive (Medium)
+3. #140 - Add dark mode toggle (Low)
+...
+```
+
+### Database Resources
+
+```bash
+User: &#34;What tables do we have?&#34;
+
+Kilo Code:
+Reading from postgres://localhost/mydb/tables
+
+Available tables:
+- users (15,234 rows)
+- products (892 rows)
+- orders (45,678 rows)
+- reviews (23,456 rows)
+```
+
+---
+
+## MCP Prompts
+
+Prompts are reusable templates for common tasks:
+
+### Creating a Prompt Server
+
+```typescript
+// prompts-server.ts
+import { Server } from &#39;@modelcontextprotocol/sdk/server/index.js&#39;;
+import {
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+} from &#39;@modelcontextprotocol/sdk/types.js&#39;;
+
+const server = new Server({
+  name: &#39;prompts-server&#39;,
+  version: &#39;1.0.0&#39;,
+}, {
+  capabilities: {
+    prompts: {},
+  },
+});
+
+server.setRequestHandler(ListPromptsRequestSchema, async () =&gt; {
+  return {
+    prompts: [
+      {
+        name: &#39;code_review&#39;,
+        description: &#39;Generate a code review for a pull request&#39;,
+        arguments: [
+          {
+            name: &#39;pr_url&#39;,
+            description: &#39;URL of the pull request&#39;,
+            required: true,
+          },
+        ],
+      },
+      {
+        name: &#39;bug_report&#39;,
+        description: &#39;Create a structured bug report&#39;,
+        arguments: [
+          {
+            name: &#39;description&#39;,
+            description: &#39;Description of the bug&#39;,
+            required: true,
+          },
+          {
+            name: &#39;steps&#39;,
+            description: &#39;Steps to reproduce&#39;,
+            required: true,
+          },
+        ],
+      },
+    ],
+  };
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async (request) =&gt; {
+  const { name, arguments: args } = request.params;
+
+  if (name === &#39;code_review&#39;) {
+    return {
+      messages: [
+        {
+          role: &#39;user&#39;,
+          content: {
+            type: &#39;text&#39;,
+            text: `Please review this pull request: ${args.pr_url}
+
+Focus on:
+1. Code quality and best practices
+2. Security vulnerabilities
+3. Performance implications
+4. Test coverage
+5. Documentation
+
+Provide specific suggestions with code examples.`,
+          },
+        },
+      ],
+    };
+  }
+
+  if (name === &#39;bug_report&#39;) {
+    return {
+      messages: [
+        {
+          role: &#39;user&#39;,
+          content: {
+            type: &#39;text&#39;,
+            text: `Create a structured bug report:
+
+Description: ${args.description}
+Steps to Reproduce: ${args.steps}
+
+Format the report with:
+- Summary
+- Environment
+- Steps to Reproduce
+- Expected Behavior
+- Actual Behavior
+- Screenshots (if applicable)
+- Severity Assessment`,
+          },
+        },
+      ],
+    };
+  }
+});
+```
+
+### Using Prompts
+
+`````bash
+User: /prompt code_review https://github.com/myorg/myapp/pull/50
+
+Kilo Code:
+Using prompt: code_review
+
+## Code Review for PR #50
+
+### Summary
+This PR adds user authentication with JWT tokens. Overall good implementation with a few concerns.
+
+### Security Issues
+
+#### 1. Hardcoded Secret (Critical)
+Line 23: JWT secret is hardcoded
+```typescript
+// Bad
+const secret = &#39;my-secret-key&#39;;
+```
+Fix: Use environment variable
+
+### Code Quality
+
+#### 2. Missing Error Handling
+The login function doesn&#39;t handle database errors...
+
+[Full review continues]
+`````
+
+---
+
+## Common MCP Integrations
+
+### Development Tools
+
+| Server | Purpose | Install |
+|--------|---------|---------|
+| GitHub | Issues, PRs, code | `@modelcontextprotocol/server-github` |
+| GitLab | GitLab API | `@modelcontextprotocol/server-gitlab` |
+| Jira | Issue tracking | `@modelcontextprotocol/server-jira` |
+| Linear | Project management | `@modelcontextprotocol/server-linear` |
+
+### Databases
+
+| Server | Purpose | Install |
+|--------|---------|---------|
+| PostgreSQL | PostgreSQL queries | `@modelcontextprotocol/server-postgres` |
+| MySQL | MySQL queries | `@modelcontextprotocol/server-mysql` |
+| MongoDB | MongoDB queries | `@modelcontextprotocol/server-mongodb` |
+| Redis | Redis operations | `@modelcontextprotocol/server-redis` |
+
+### Communication
+
+| Server | Purpose | Install |
+|--------|---------|---------|
+| Slack | Slack messaging | `@modelcontextprotocol/server-slack` |
+| Discord | Discord bot | `@modelcontextprotocol/server-discord` |
+| Email | Send emails | `@modelcontextprotocol/server-email` |
+
+### File &amp; System
+
+| Server | Purpose | Install |
+|--------|---------|---------|
+| Filesystem | File operations | `@modelcontextprotocol/server-filesystem` |
+| Memory | Persistent memory | `@modelcontextprotocol/server-memory` |
+| Shell | Command execution | `@modelcontextprotocol/server-shell` |
+
+---
+
+## Security Best Practices
+
+### 1. Limit Server Permissions
+
+```json
+{
+  &#34;mcpServers&#34;: {
+    &#34;filesystem&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-filesystem&#34;, &#34;/allowed/path&#34;],
+      &#34;readonly&#34;: true
+    }
+  }
+}
+```
+
+### 2. Use Environment Variables for Secrets
+
+```bash
+# Good: Secrets in environment
+export GITHUB_TOKEN=ghp_xxxx
+kilo-code start
+
+# Bad: Secrets in config file
+{
+  &#34;github&#34;: {
+    &#34;token&#34;: &#34;ghp_xxxx&#34;  // Don&#39;t do this!
+  }
+}
+```
+
+### 3. Enable Only Needed Servers
+
+```json
+{
+  &#34;mcpServers&#34;: {
+    &#34;github&#34;: { &#34;enabled&#34;: true },
+    &#34;postgres&#34;: { &#34;enabled&#34;: true },
+    &#34;slack&#34;: { &#34;enabled&#34;: false },  // Disable unused
+    &#34;shell&#34;: { &#34;enabled&#34;: false }   // Dangerous, disable
+  }
+}
+```
+
+### 4. Audit Tool Usage
+
+```bash
+# Log MCP tool calls
+kilo-code mcp logs
+
+# Review recent activity
+kilo-code mcp audit --last 24h
+```
+
+---
+
+## Troubleshooting
+
+### Issue: Server Won&#39;t Connect
+
+```bash
+# Check server status
+kilo-code mcp status github
+
+# Test connection
+kilo-code mcp test github
+
+# View logs
+kilo-code mcp logs github
+```
+
+**Common fixes:**
+1. Verify environment variables are set
+2. Check network connectivity
+3. Ensure server package is installed
+4. Review server logs for errors
+
+### Issue: Tool Not Available
+
+```bash
+# List available tools
+kilo-code mcp tools github
+
+# Refresh server
+kilo-code mcp restart github
+```
+
+### Issue: Permission Denied
+
+```bash
+# Check filesystem permissions
+ls -la /path/to/directory
+
+# Update MCP config with correct path
+{
+  &#34;filesystem&#34;: {
+    &#34;args&#34;: [&#34;/correct/path&#34;]
+  }
+}
+```
+

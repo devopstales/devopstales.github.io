@@ -1,0 +1,485 @@
+---
+title: Send pfSense Logs to Wazuh
+url: https://devopstales.github.io/linux/wazuh-pfsense-syslog/
+date: 2026-03-15
+keywords: Wazuh, SIEM, logging, pfSense, syslog-ng, firewall logs, security monitoring
+---
+
+
+Centralizing pfSense firewall logs in Wazuh SIEM provides critical security visibility and threat detection capabilities. This updated guide for 2026 covers pfSense 2.7.x/2.8.x and Wazuh 4.8&#43; with proper syslog formatting and decoder configuration.
+
+&lt;!--more--&gt;
+
+## Architecture Overview
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   pfSense   │◄──►│  syslog-ng  │◄──►│   Wazuh     │◄──►│  Elastic/   │
+│   Firewall  │    │   (plugin)  │    │   Manager   │    │  OpenSearch │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+     RFC5424              TCP/UDP           Rules/          Dashboards
+    Syslog               5514/udp         Decoders
+```
+
+## Why Not Wazuh Agent on pfSense?
+
+Since pfSense 2.5&#43;, installing the Wazuh agent directly on pfSense is **not recommended**:
+
+- ⚠️ Breaks the pfSense upgrade manager UI
+- ⚠️ Can cause package conflicts with FreeBSD base
+- ⚠️ Limited agent functionality on FreeBSD
+- ⚠️ May impact firewall performance
+
+**Recommended approach:** Forward logs via syslog to Wazuh Manager.
+
+## The Syslog Format Challenge
+
+### The Problem
+
+pfSense 2.5&#43; supports both RFC5424 and RFC3164 syslog formats:
+
+| Format | Issue |
+|--------|-------|
+| **RFC5424** | Wazuh decoders expect RFC3164 format |
+| **RFC3164 (native)** | FreeBSD syslogd omits hostname field |
+
+Without proper hostname in syslog messages, Wazuh&#39;s default pfSense decoders fail to parse logs correctly.
+
+### The Solution
+
+Use the **syslog-ng package** on pfSense to properly format and forward logs to Wazuh.
+
+## Step 1: Install syslog-ng Package
+
+### Navigate to Package Manager
+
+1. Log into pfSense web interface
+2. Go to **System** → **Package Manager** → **Available Packages**
+3. Search for `syslog-ng`
+
+![Install syslog-ng](/img/include/pfsese_wazuh_syslog_00.webp)
+
+4. Click **Install** next to syslog-ng
+5. Wait for installation to complete
+
+### Verify Installation
+
+```bash
+# SSH to pfSense or use console
+pkg info | grep syslog-ng
+```
+
+## Step 2: Configure syslog-ng
+
+### Access syslog-ng Settings
+
+Navigate to **Services** → **syslog-ng** → **Settings** tab
+
+Configure the following:
+
+| Setting | Value |
+|---------|-------|
+| **Enable syslog-ng** | ✓ Checked |
+| **High Priority** | ✓ Checked (ensures syslog-ng handles logs) |
+| **Log Level** | Info or Warning (based on your needs) |
+| **Capture DNS Resolver Logs** | ✓ Checked |
+| **Capture DHCP Logs** | ✓ Checked |
+| **Capture Filter Logs** | ✓ Checked |
+| **Capture System Logs** | ✓ Checked |
+
+![syslog-ng Settings](/img/include/pfsese_wazuh_syslog_03.webp)
+
+Click **Save**
+
+## Step 3: Configure pfSense Remote Logging
+
+### Enable Remote Syslog
+
+Navigate to **Status** → **System Logs** → **Settings** tab
+
+Configure remote logging:
+
+| Setting | Value |
+|---------|-------|
+| **Enable Remote Logging** | ✓ Checked |
+| **Remote log servers** | 192.168.1.50:5514 (Wazuh server IP) |
+| **Syslog format** | RFC3164 (for Wazuh compatibility) |
+| **Send to all remote log servers** | ✓ Checked |
+| **Filter log entries** | Select desired log types |
+
+![Remote Logging Settings](/img/include/pfsese_wazuh_syslog_01.webp)
+
+### Select Log Types to Forward
+
+Enable the following log types for comprehensive security monitoring:
+
+- ✓ **System General Logs**
+- ✓ **System Gateway Logs**
+- ✓ **Filter Logs** (firewall events - critical!)
+- ✓ **DNS Resolver Logs**
+- ✓ **DHCP Logs**
+- ✓ **VPN Logs** (if using IPsec/OpenVPN)
+- ✓ **NTP Logs**
+
+![Log Types](/img/include/pfsese_wazuh_syslog_02.webp)
+
+Click **Save**
+
+## Step 4: Configure Wazuh Manager
+
+### Edit ossec.conf
+
+On the Wazuh Manager server, edit `/var/ossec/etc/ossec.conf`:
+
+```xml
+&lt;ossec_config&gt;
+  &lt;!-- pfSense syslog input --&gt;
+  &lt;remote&gt;
+    &lt;connection&gt;syslog&lt;/connection&gt;
+    &lt;port&gt;5514&lt;/port&gt;
+    &lt;protocol&gt;udp&lt;/protocol&gt;
+    &lt;allowed-ips&gt;192.168.1.10&lt;/allowed-ips&gt;
+    &lt;local_ip&gt;192.168.1.50&lt;/local_ip&gt;
+  &lt;/remote&gt;
+  
+  &lt;!-- Optional: TCP input for reliability --&gt;
+  &lt;remote&gt;
+    &lt;connection&gt;syslog&lt;/connection&gt;
+    &lt;port&gt;5514&lt;/port&gt;
+    &lt;protocol&gt;tcp&lt;/protocol&gt;
+    &lt;allowed-ips&gt;192.168.1.10&lt;/allowed-ips&gt;
+    &lt;local_ip&gt;192.168.1.50&lt;/local_ip&gt;
+  &lt;/remote&gt;
+&lt;/ossec_config&gt;
+```
+
+**Configuration Notes:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `port` | Syslog port (5514 is non-standard, avoids conflicts) |
+| `protocol` | UDP (standard) or TCP (more reliable) |
+| `allowed-ips` | pfSense firewall IP address |
+| `local_ip` | Wazuh Manager IP (if multi-homed) |
+
+### Restart Wazuh Manager
+
+```bash
+systemctl restart wazuh-manager
+systemctl status wazuh-manager
+```
+
+## Step 5: Configure syslog-ng Forwarding
+
+### Add Destination
+
+Navigate to **Services** → **syslog-ng** → **Advanced** tab
+
+Add a new **destination** entry:
+
+| Field | Value |
+|-------|-------|
+| **Type** | destination |
+| **Name** | DST_WAZUH_SYSLOG |
+| **Configuration** | See below |
+
+```bash
+network(&#34;192.168.1.50&#34; transport(&#34;udp&#34;) port(5514));
+```
+
+For TCP (more reliable):
+
+```bash
+network(&#34;192.168.1.50&#34; transport(&#34;tcp&#34;) port(5514));
+```
+
+### Add Log Path
+
+Add a new **log** entry to connect source to destination:
+
+| Field | Value |
+|-------|-------|
+| **Type** | log |
+| **Name** | LOG_WAZUH_FORWARD |
+| **Configuration** | See below |
+
+```bash
+log { source(_DEFAULT); destination(DST_WAZUH_SYSLOG); };
+```
+
+### Optional: Rewrite Hostname
+
+If hostname is not appearing correctly in Wazuh, add a rewrite rule:
+
+| Field | Value |
+|-------|-------|
+| **Type** | rewrite |
+| **Name** | REWRITE_HOSTNAME |
+| **Configuration** | See below |
+
+```bash
+set(&#34;pfsense.mydomain.intra&#34;, value(&#34;HOST&#34;));
+```
+
+Then modify the log path to include the rewrite:
+
+```bash
+log { source(_DEFAULT); rewrite(REWRITE_HOSTNAME); destination(DST_WAZUH_SYSLOG); };
+```
+
+![syslog-ng Advanced Config](/img/include/pfsese_wazuh_syslog_04.webp)
+
+Click **Save** and **Apply Changes**
+
+## Step 6: Verify Wazuh Decoders
+
+### Check Default pfSense Decoders
+
+Wazuh includes built-in pfSense decoders. Verify they&#39;re loaded:
+
+```bash
+# List pfSense decoders
+grep -r &#34;pfsense&#34; /var/ossec/etc/decoders/
+
+# Check decoder file
+cat /var/ossec/etc/decoders/pfsense_decoders.xml
+```
+
+### Test Log Parsing
+
+```bash
+# Use wazuh-logtest to verify parsing
+/var/ossec/bin/wazuh-logtest
+
+# Enter a sample pfSense log:
+&lt;14&gt;Jan 15 10:30:45 pfsense.mydomain.intra filterlog: ...
+```
+
+### Custom Decoders (If Needed)
+
+If default decoders don&#39;t parse your logs correctly, create custom decoders:
+
+```xml
+&lt;!-- /var/ossec/etc/decoders/local_pfsense.xml --&gt;
+&lt;decoder name=&#34;pfsense-custom&#34;&gt;
+    &lt;program_name&gt;pfsense&lt;/program_name&gt;
+&lt;/decoder&gt;
+
+&lt;decoder name=&#34;pfsense-filterlog&#34;&gt;
+    &lt;parent&gt;pfsense-custom&lt;/parent&gt;
+    &lt;prematch&gt;filterlog:&lt;/prematch&gt;
+&lt;/decoder&gt;
+```
+
+## Step 7: Configure Wazuh Rules
+
+### Default pfSense Rules
+
+Wazuh includes default rules for pfSense in `/var/ossec/etc/rules/pfsense_rules.xml`:
+
+```xml
+&lt;!-- Sample rule for blocked traffic --&gt;
+&lt;rule id=&#34;87100&#34; level=&#34;3&#34;&gt;
+    &lt;decoded_as&gt;pfsense&lt;/decoded_as&gt;
+    &lt;match&gt;block&lt;/match&gt;
+    &lt;description&gt;pfSense: Firewall blocked connection&lt;/description&gt;
+&lt;/rule&gt;
+```
+
+### Custom Rules
+
+Create custom rules for your security requirements:
+
+```xml
+&lt;!-- /var/ossec/etc/rules/local_rules.xml --&gt;
+&lt;group name=&#34;pfsense,firewall,&#34;&gt;
+    
+    &lt;!-- Critical: Multiple blocked connections from same IP --&gt;
+    &lt;rule id=&#34;100100&#34; level=&#34;10&#34;&gt;
+        &lt;if_sid&gt;87100&lt;/if_sid&gt;
+        &lt;same_source_ip /&gt;
+        &lt;options&gt;frequency=5&lt;/options&gt;
+        &lt;timeframe&gt;60&lt;/timeframe&gt;
+        &lt;description&gt;pfSense: Multiple blocked connections - possible scan&lt;/description&gt;
+    &lt;/rule&gt;
+    
+    &lt;!-- High: SSH brute force --&gt;
+    &lt;rule id=&#34;100101&#34; level=&#34;12&#34;&gt;
+        &lt;if_sid&gt;87100&lt;/if_sid&gt;
+        &lt;match&gt;port 22&lt;/match&gt;
+        &lt;options&gt;frequency=10&lt;/options&gt;
+        &lt;timeframe&gt;300&lt;/timeframe&gt;
+        &lt;description&gt;pfSense: Possible SSH brute force attack&lt;/description&gt;
+    &lt;/rule&gt;
+    
+&lt;/group&gt;
+```
+
+## Step 8: Verify Log Reception
+
+### Check Wazuh Logs
+
+```bash
+# Monitor Wazuh logs
+tail -f /var/ossec/logs/ossec.log | grep -i pfsense
+
+# Check alerts
+tail -f /var/ossec/logs/alerts/alerts.json | jq &#39;.data.srcip&#39; | sort | uniq -c
+```
+
+### Verify in Wazuh Dashboard
+
+1. Navigate to **Security events** in Wazuh Dashboard
+2. Filter by agent: `pfsense`
+3. Verify firewall events are appearing
+
+### Test Firewall Log Generation
+
+From a test machine, generate firewall logs:
+
+```bash
+# Port scan (will be blocked)
+nmap -sS 192.168.1.1
+
+# Check if logs appear in Wazuh
+```
+
+## Advanced Configuration
+
+### Log Enrichment
+
+Add GeoIP and threat intelligence enrichment:
+
+```xml
+&lt;!-- In ossec.conf --&gt;
+&lt;ossec_config&gt;
+    &lt;ruleset&gt;
+        &lt;rule_dir&gt;ruleset/rules&lt;/rule_dir&gt;
+        &lt;rule_exclude&gt;0215-policy_rules.xml&lt;/rule_exclude&gt;
+        &lt;decoder_dir&gt;ruleset/decoders&lt;/decoder_dir&gt;
+        &lt;decoder_exclude&gt;decoders/aws.xml&lt;/decoder_exclude&gt;
+    &lt;/ruleset&gt;
+&lt;/ossec_config&gt;
+```
+
+### Alert Correlation
+
+Configure alert correlation for threat detection:
+
+```xml
+&lt;global&gt;
+    &lt;white_list&gt;127.0.0.1&lt;/white_list&gt;
+    &lt;white_list&gt;^localhost.localdomain$&lt;/white_list&gt;
+    
+    &lt;!-- Alert correlation --&gt;
+    &lt;log_analysis&gt;
+        &lt;max_eps&gt;10000&lt;/max_eps&gt;
+    &lt;/log_analysis&gt;
+&lt;/global&gt;
+```
+
+### Integration with External Tools
+
+```xml
+&lt;!-- Slack integration --&gt;
+&lt;slack&gt;
+    &lt;enabled&gt;yes&lt;/enabled&gt;
+    &lt;hook_url&gt;https://hooks.slack.com/services/XXX/YYY/ZZZ&lt;/hook_url&gt;
+    &lt;alert_level&gt;10&lt;/alert_level&gt;
+&lt;/slack&gt;
+
+&lt;!-- Email alerts --&gt;
+&lt;email_alerts&gt;
+    &lt;email_to&gt;security@mydomain.intra&lt;/email_to&gt;
+    &lt;rule_id&gt;100100,100101&lt;/rule_id&gt;
+    &lt;do_not_delay/&gt;
+&lt;/email_alerts&gt;
+```
+
+## Troubleshooting
+
+### Logs Not Appearing in Wazuh
+
+**Check connectivity:**
+
+```bash
+# On pfSense
+tcpdump -i any -n port 5514
+
+# On Wazuh
+tcpdump -i any -n port 5514
+nc -ulvp 5514
+```
+
+**Verify syslog-ng is running:**
+
+```bash
+# On pfSense
+ps aux | grep syslog-ng
+```
+
+### Decoder Issues
+
+**Test log format:**
+
+```bash
+# Check raw logs on Wazuh
+tail -f /var/ossec/logs/archives/archives.log | grep pfsense
+
+# Verify decoder matching
+/var/ossec/bin/wazuh-logtest -f /var/ossec/logs/archives/archives.log
+```
+
+### Performance Issues
+
+**If experiencing high log volume:**
+
+1. Filter logs in pfSense before forwarding
+2. Use TCP with compression
+3. Increase Wazuh worker processes
+4. Consider log sampling for high-volume events
+
+## Security Best Practices
+
+### Network Security
+
+1. **Dedicated Management VLAN**: Place Wazuh and pfSense management on separate VLAN
+2. **Firewall Rules**: Restrict syslog traffic to specific IPs
+3. **TLS Encryption**: Use syslog-ng with TLS for log forwarding
+
+### Wazuh Hardening
+
+```bash
+# Secure Wazuh configuration
+chown root:wazuh /var/ossec/etc/ossec.conf
+chmod 640 /var/ossec/etc/ossec.conf
+
+# Enable FIM on configuration files
+&lt;syscheck&gt;
+    &lt;directories&gt;/var/ossec/etc&lt;/directories&gt;
+&lt;/syscheck&gt;
+```
+
+### Log Retention
+
+Configure appropriate log retention:
+
+```xml
+&lt;alerts&gt;
+    &lt;log_format&gt;json&lt;/log_format&gt;
+    &lt;rotation&gt;
+        &lt;maximum&gt;30&lt;/maximum&gt;
+        &lt;unit&gt;days&lt;/unit&gt;
+    &lt;/rotation&gt;
+&lt;/alerts&gt;
+```
+
+## Wazuh 4.8&#43; Features
+
+New features in Wazuh 4.8&#43; for firewall monitoring:
+
+- **Enhanced GeoIP**: More accurate IP geolocation
+- **MITRE ATT&amp;CK Integration**: Map firewall events to attack techniques
+- **Machine Learning**: Anomaly detection for firewall traffic
+- **Improved Dashboards**: Pre-built pfSense visualizations
+

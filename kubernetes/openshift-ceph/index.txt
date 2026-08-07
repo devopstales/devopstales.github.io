@@ -1,0 +1,148 @@
+---
+title: Openshift Ceph RBD for dynamic provisioning
+url: https://devopstales.github.io/kubernetes/openshift-ceph/
+date: 2019-04-12
+keywords: ansible, openshift 3.11, openshift okd, openshift tutorial, openshift container platform, rad hat openshift, rook ceph
+---
+
+
+In this post I will show you how can you use CEPH RBD for persistent storagi on Openshift.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/openshift.html&#34; &gt;}}
+
+### Environment
+```
+# openshift cluster
+192.168.1.41    openshift01 # master node
+192.168.1.42    openshift02 # infra node
+192.168.1.43    openshift03 # worker node
+
+# ceph cluster
+192.168.1.31    ceph01
+192.168.1.32    ceph02
+192.168.1.33    ceph03
+```
+
+### Prerequirement
+RBD volume provisioner needs admin key from Ceph to provision storage. To get the admin key from Ceph cluster use this command:
+```
+sudo ceph --cluster ceph auth get-key client.admin | base64
+QVFBOFF2SlZheUJQRVJBQWgvS2cwT1laQUhPQno3akZwekxxdGc9PQ==
+
+nano ceph-admin-secret.yaml
+apiVersion: v1
+data:
+  key: QVFBOFF2SlZheUJQRVJBQWgvS2cwT1laQUhPQno3akZwekxxdGc9PQ==
+kind: Secret
+metadata:
+  name: ceph-admin-secret
+  namespace: kube-system
+type: kubernetes.io/rbd
+
+```
+
+I will also create a separate Ceph pool for
+```
+sudo ceph --cluster ceph osd pool create k8s 1024 1024
+sudo ceph --cluster ceph auth get-or-create client.k8s mon &#39;allow r&#39; osd &#39;allow rwx pool=k8s&#39;
+sudo ceph --cluster ceph auth get-key client.k8s | base64
+QVFBOFF2SlZheUJQRVJBQWgvS2ctS2htOFNSZnRvclJPRk1jdXc9PQ==
+
+nano ceph-secret-k8s.yaml
+apiVersion: v1
+data:
+  key: QVFBOFF2SlZheUJQRVJBQWgvS2ctS2htOFNSZnRvclJPRk1jdXc9PQ==
+kind: Secret
+metadata:
+  name: ceph-secret-k8s
+  namespace: kube-system
+type: kubernetes.io/rbd
+
+```
+
+```
+# on all openshift node
+yum install -y ceph-common
+
+# on one openshift master node
+nano  k8s-storage.yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: &#34;true&#34;
+  name: k8s
+parameters:
+  adminId: admin
+  adminSecretName: ceph-admin-secret
+  adminSecretNamespace: kube-system
+  imageFeatures: layering
+  imageFormat: &#34;2&#34;
+  monitors: 192.168.1.31:6789, 192.168.1.32:6789, 192.168.1.33:6789
+  pool: k8s
+  userId: k8s
+  userSecretName: ceph-secret-k8s
+provisioner: kubernetes.io/rbd
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+
+
+oc create -f ceph-admin-secret.yaml
+oc create -f ceph-secret-k8s.yaml
+oc create -f k8s-storage.yaml
+```
+
+### Add secrets to existng namespaces
+```
+# on one openshift master node
+oc project default
+oc apply -f ceph-secret-k8s.yaml
+
+oc project management-infra
+oc apply -f ceph-secret-k8s.yaml
+
+oc project openshift-infra
+oc apply -f ceph-secret-k8s.yaml
+
+oc project openshift-logging
+oc apply -f ceph-secret-k8s.yaml
+
+oc project openshift-metrics-server
+oc apply -f ceph-secret-k8s.yaml
+
+oc project openshift-monitoring
+oc apply -f ceph-secret-k8s.yaml
+```
+
+### Add secret to template
+If we add the secret to the template iw will be present in all of the newly created namespaces.
+```
+# on one openshift master node
+su - origin
+oc adm create-bootstrap-project-template -o yaml &gt; template.yaml
+# add secrets to  the yml without namespace
+nano template.yaml
+...
+- apiVersion: v1
+  data:
+    key: QVFBOFF2SlZheUJQRVJBQWgvS2ctS2htOFNSZnRvclJPRk1jdXc9PQ==
+  kind: Secret
+  metadata:
+    name: ceph-secret-k8s
+  type: kubernetes.io/rbd
+...
+oc create -f template.yaml -n default
+
+# on all the openshift master nodes
+nano /etc/origin/master/master-config.yaml
+...
+projectConfig:
+  projectRequestTemplate: &#34;default/project-request&#34;
+...
+
+master-restart api
+master-restart controllers
+```
+

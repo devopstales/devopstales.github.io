@@ -1,0 +1,183 @@
+---
+title: Install Prometheus for Gitlab
+url: https://devopstales.github.io/monitoring/install-prometheus-for-gitlab/
+date: 2019-06-10
+keywords: prometheus, gitlab, nosql
+---
+
+
+Prometheus is an open-source monitoring system with a built-in noSQL time-series database. It offers a multi-dimensional data model, a flexible query language, and diverse visualization possibilities. Prometheus collects metrics from http nedpoint. Most service dind’t have this endpoint so you need optional programs that generate additional metrics cald exporters.
+
+&lt;!--more--&gt;
+
+
+### Install prometheus from package
+```
+curl -s https://packagecloud.io/install/repositories/prometheus-rpm/release/script.rpm.sh | sudo bash
+
+yum install prometheus2 alertmanager -y
+```
+
+### Configurate Prometheus
+```
+nano /etc/prometheus/promethsu.yml
+---
+global:
+  scrape_interval: 15s
+  scrape_timeout: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+       - localhost:9095
+
+rule_files:
+  - &#34;/etc/prometheus/alert.rules&#34;
+
+scrape_configs:
+- job_name: prometheus
+  static_configs:
+  - targets:
+    - localhost:9090
+- job_name: redis
+  static_configs:
+  - targets:
+    - localhost:9121
+- job_name: postgres
+  static_configs:
+  - targets:
+    - localhost:9187
+- job_name: node
+  static_configs:
+  - targets:
+    - localhost:9100
+- job_name: gitlab-workhorse
+  static_configs:
+  - targets:
+    - localhost:9229
+- job_name: gitlab-unicorn
+  metrics_path: &#34;/-/metrics&#34;
+  static_configs:
+  - targets:
+    - 127.0.0.1:8080
+- job_name: gitlab-sidekiq
+  static_configs:
+  - targets:
+    - 127.0.0.1:8082
+- job_name: gitlab_monitor_database
+  metrics_path: &#34;/database&#34;
+  static_configs:
+  - targets:
+    - localhost:9168
+- job_name: gitlab_monitor_sidekiq
+  metrics_path: &#34;/sidekiq&#34;
+  static_configs:
+  - targets:
+    - localhost:9168
+- job_name: gitlab_monitor_process
+  metrics_path: &#34;/process&#34;
+  static_configs:
+  - targets:
+    - localhost:9168
+- job_name: gitaly
+  static_configs:
+  - targets:
+    - localhost:9236
+- job_name: nginx
+  static_configs:
+  - targets:
+    - localhost:9913
+- job_name: &#39;playframework-app&#39;
+  scrape_interval: 5s
+  metrics_path: &#39;/metrics&#39;
+  static_configs:
+  - targets: [&#39;localhost:9000&#39;]
+```
+
+```
+nano /etc/prometheus/alert.rules
+groups:
+- name: host
+  rules:
+  - alert: low_connected_users
+    expr: play_current_users &lt; 2
+    for: 30s
+    labels:
+      severity: slack
+    annotations:
+      summary: &#34;Instance {{ $labels.instance }} under lower load&#34;
+      description: &#34;{{ $labels.instance }} of job {{ $labels.job }} is under lower load.&#34;
+```
+
+![Example image](/img/include/mattermost_gitlab4.webp)&lt;br&gt;&lt;br&gt;
+![Example image](/img/include/mattermost_gitlab5.webp)&lt;br&gt;&lt;br&gt;
+![Example image](/img/include/mattermost_gitlab6.webp)&lt;br&gt;&lt;br&gt;
+![Example image](/img/include/mattermost_gitlab7.webp)&lt;br&gt;&lt;br&gt;
+![Example image](/img/include/mattermost_gitlab8.webp)&lt;br&gt;&lt;br&gt;
+
+```
+nano /etc/prometheus/alertmanager.yml
+global:
+
+templates:
+- &#39;/etc/prometheus/template/*.tmpl&#39;
+
+route:
+ group_by: [alertname, job]
+ # If an alert isn&#39;t caught by a route, send it to slack.
+ receiver: slack_general
+ routes:
+  - match:
+      severity: slack
+    receiver: slack_general
+
+receivers:
+- name: slack_general
+  slack_configs:
+  - api_url: http://mattermost.devopstales.intra/hooks/9g4qwgpkzi898jzzeszzzzutmc
+    channel: &#39;monitoring&#39;
+    username: &#34;prometheus&#34; #name ins mattermost
+    text: &#34;&#34;
+    send_resolved: true
+```
+
+```
+mkdir /etc/prometheus/template/
+nano /etc/prometheus/template/alertmessage.tmpl
+{{ define &#34;__slack_text&#34; }}
+{{ range .Alerts }}{{ .Annotations.description}}{{ end }}
+{{ end }}
+
+{{ define &#34;__slack_title&#34; }}
+{{ range .Alerts }} :scream: {{ .Annotations.summary}} :scream: {{ end }}
+{{ end }}
+
+{{ define &#34;slack.default.text&#34; }}{{ template &#34;__slack_text&#34; . }}{{ end }}
+{{ define &#34;slack.default.title&#34; }}{{ template &#34;__slack_title&#34; . }}{{ end }}
+```
+
+### Configurate Gitlab
+
+![Example image](/img/include/mattermost_gitlab1.webp)&lt;br&gt;&lt;br&gt;
+![Example image](/img/include/mattermost_gitlab2.webp)&lt;br&gt;&lt;br&gt;
+![Example image](/img/include/mattermost_gitlab3.webp)&lt;br&gt;&lt;br&gt;
+
+```
+nano /etc/gitlab/gitlab.rb
+alertmanager[&#39;enable&#39;] = false
+prometheus[&#39;enable&#39;] = false
+node_exporter[&#39;enable&#39;] = true
+redis_exporter[&#39;enable&#39;] = true
+postgres_exporter[&#39;enable&#39;] = true
+gitlab_monitor[&#39;enable&#39;] = true
+
+gitlab-ctl reconfigure
+
+systemctl start alertmanager.service
+systemctl status alertmanager.service
+systemctl start prometheus.service
+systemctl status prometheus.service
+```
+

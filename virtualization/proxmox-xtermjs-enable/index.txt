@@ -1,0 +1,68 @@
+---
+title: How to: Enable Serial Console for guest virtual machine (VM) on Proxmox VE (PVE)
+url: https://devopstales.github.io/virtualization/proxmox-xtermjs-enable/
+date: 2022-04-19
+keywords: proxmox ve, proxmox cluster
+---
+
+
+This article explains how to redirect messages to a serial console in on Debian and use Serial Console on Proxmox VE.
+&lt;!--more--&gt;
+
+We need to add serial0 to the virtual machine. Use following command to add the serial0 port
+
+```bash
+qm set [vmid] -serial0 socket
+```
+
+Now we need to configure the Debian:
+
+```bash
+nano /etc/default/grub
+GRUB_CMDLINE_LINUX_DEFAULT=&#34;console=ttyS0,115200n8 console=tty1&#34;
+GRUB_CMDLINE_LINUX=&#34;&#34;
+GRUB_TERMINAL=&#34;serial console&#34;
+GRUB_SERIAL_COMMAND=&#34;serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1&#34;
+```
+
+Now we need to configure the REHEL:
+
+```bash
+echo &#39;GRUB_CMDLINE_LINUX=&#34;quiet console=tty0 console=ttyS0,115200&#34;&#39; &gt;&gt; /tmp/grub
+
+nano /etc/default/grub
+```
+
+Add `console=tty0 console=ttyS0,115200` to the end of the line `GRUB_CMDLINE_LINUX`
+
+Now we need to update the grub by using following command
+
+```bash
+# Debian/Ubuntu etc.
+update-grub
+# RHEL/CentOS/Fedora
+grub2-mkconfig --output=/boot/grub2/grub.cfg
+```
+
+Set to autostart the serial consol service.
+
+```bash
+mkdir -p /etc/systemd/system/serial-getty@ttyS0.service.d/
+nano /etc/systemd/system/serial-getty@ttyS0.service.d/override.conf
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty -o &#39;-p -- \\u&#39; 115200 %I $TERM
+
+systemctl daemon-reload
+systemctl restart serial-getty@ttyS0.service
+systemctl enable serial-getty@ttyS0.service
+```
+
+Reboot and test the autostart of the Serial Console
+
+```bash
+init 6
+ps -ef | grep ttyS0
+systemctl status serial-getty@ttyS0.service
+```
+

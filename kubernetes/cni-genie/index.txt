@@ -1,0 +1,243 @@
+---
+title: CNI-Genie: network separation with multiple CNI
+url: https://devopstales.github.io/kubernetes/cni-genie/
+date: 2023-10-27
+keywords: Kubernetes, k8s, flannel, kubernetes deployment, cni, weave, weave network, CNI-Genie
+---
+
+
+In this post I will show you how you can use CNI-Genie for network separation with multiple CNI.
+
+&lt;!--more--&gt;
+
+
+### Wat is CNI-Genie?
+
+CNI-Genie CNI from Huawei is a container network interface plugin for Kubernetes that enables attaching multiple network interfaces to pods. In Kubernetes, each pod has only one network interface by default, other than local loopback. With CNI-Genie, you can create multi-homed pods that have multiple interfaces. CNI-Genie acts a as ‘meta’ plugin that can call other CNI plugins to configure additional interfaces. 
+
+### Kind for testing
+
+For this Demo  will use Kind (Kubernetes in Docker) for easy reproduction. The fallowing kind config will create a one master one worker Kubernetes cluster without a preinstalled CNI.
+
+```yaml
+nano kind-c1-config.yaml
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+networking:
+  disableDefaultCNI: true
+  podSubnet: &#34;10.244.0.0/16&#34;
+  serviceSubnet: &#34;10.245.0.0/16&#34;
+```
+
+As you can see the kind kbernetes cluster will use `10.244.0.0/16` as its pod network. Normally I whoud use the same network in the CNI configuration. In this demo I will install multiple CNIs in one cluster, so I cut this network in two. Flannel will use `10.244.0.0/17` as its network and weave-net `10.244.128.0/17`.
+
+## Install CNI networks
+
+So frs I will start the kind network:
+
+```bash
+kind create cluster --name c1 --config kind-c1-config.yaml
+Creating cluster &#34;c1&#34; ...
+ ✓ Ensuring node image (kindest/node:v1.27.0) 🖼
+ ✓ Preparing nodes 📦 📦
+ ✓ Writing configuration 📜
+ ✓ Starting control-plane 🕹️
+ ✓ Installing StorageClass 💾
+ ✓ Joining worker nodes 🚜
+Set kubectl context to &#34;kind-c1&#34;
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-c1
+
+Thanks for using kind! 😊
+```
+
+Then Install flannel network. For this I downloaded the flannel yaml from its git repo and modified it to use `kube-system` as its namespace and `10.244.0.0/17` as its network.
+
+```yaml
+  net-conf.json: |
+    {
+      &#34;Network&#34;: &#34;10.244.0.0/17&#34;,
+      &#34;Backend&#34;: {
+        &#34;Type&#34;: &#34;vxlan&#34;
+      }
+    }
+```
+
+```bash
+kubens kube-system
+kubectl apply -f kube-flannel.yaml
+```
+
+I thought it will be enough but I get an error at the flannel pods:
+
+```bash
+kubectl describe pod coredns-6d4b75cb6d-c9vr2 -n kube-system
+Name:                 coredns-6d4b75cb6d-c9vr2
+Namespace:            kube-system
+...
+...
+Events:
+  Type     Reason                  Age                    From               Message
+  ----     ------                  ----                   ----               -------
+  Warning  FailedScheduling        6m34s (x26 over 132m)  default-scheduler  0/3 nodes are available: 3 node(s) had untolerated taint {node.kubernetes.io/not-ready: }. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.
+  Normal   Scheduled               4m24s                  default-scheduler  Successfully assigned kube-system/coredns-6d4b75cb6d-c9vr2 to testcluster-worker
+  ...
+  ...
+  ...
+  Warning  FailedCreatePodSandBox  2m39s                  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox &#34;cde73425ddab3522e243e810b75fac3cda51724a8f1f3c45f4a58c6df05bb613&#34;: plugin type=&#34;flannel&#34; failed (add): failed to delegate add: failed to find plugin &#34;bridge&#34; in path [/opt/cni/bin]
+  Warning  FailedCreatePodSandBox  7s (x12 over 2m28s)    kubelet            (combined from similar events): Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox &#34;fc18a7232cce32804a88edface3219f4d7dcaa6ae4cd3d2e6e268b7f4c30b801&#34;: plugin type=&#34;flannel&#34; failed (add): failed to delegate add: failed to find plugin &#34;bridge&#34; in path [/opt/cni/bin]
+```
+
+At this point I realized that the kubernetes node docker image dose not contain the necessary binaries, so I built a docker image that contains this binaries and I copies this binaries from an init container:
+
+```yaml
+      initContainers:
+      - name: install-containernetworking-plugins
+        image: devopstales/containernetworking-plugins:1.0
+        command:
+        - /bin/sh
+        - &#39;-c&#39;
+        - cp -R /containernetworking-plugins/* /opt/cni/bin/
+        volumeMounts:
+        - name: cni-plugin
+          mountPath: /opt/cni/bin
+```
+
+Next we will install the weave-net. I downloaded its yaml from the git repo and modified it to use `10.244.128.0/17` as its network.
+
+```yaml
+          containers:
+            - name: weave
+              command:
+                - /home/weave/launch.sh
+              env:
+                - name: INIT_CONTAINER
+                  value: &#34;true&#34;
+                - name: HOSTNAME
+                  valueFrom:
+                    fieldRef:
+                      apiVersion: v1
+                      fieldPath: spec.nodeName
+                - name: IPALLOC_RANGE
+                  value: 10.244.128.0/17
+```
+
+```bash
+kubens kube-system
+kubectl apply -f weave-daemonset-k8s.yaml
+```
+
+Now all the pods are running:
+
+```bash
+kubectl get pods -n kube-system
+NAME                                       READY   STATUS    RESTARTS      AGE
+coredns-5d78c9869d-mfkrx                   1/1     Running   0             1h
+coredns-5d78c9869d-twr8t                   1/1     Running   0             1h
+etcd-c1-control-plane                      1/1     Running   0             1h
+kube-apiserver-c1-control-plane            1/1     Running   0             1h
+kube-controller-manager-c1-control-plane   1/1     Running   1 (20m ago)   1h
+kube-flannel-ds-h7f64                      1/1     Running   0             1h
+kube-flannel-ds-v5w2c                      1/1     Running   0             1h
+kube-proxy-46g2z                           1/1     Running   0             1h
+kube-proxy-qxx29                           1/1     Running   0             1h
+kube-scheduler-c1-control-plane            1/1     Running   0             1h
+weave-net-h8rcz                            2/2     Running   1 (20m ago)   1h
+weave-net-xhcld                            2/2     Running   1 (20m ago)   1h
+```
+
+### Install CNI-Genie
+
+Tp install the CNI-Genie I used the yaml from CNI-Genie&#39;s yaml with a modification. The yaml contains outdated RBAC objects so you need to switch `rbac.authorization.k8s.io/v1bet1` to `rbac.authorization.k8s.io/v1`
+
+```bash
+wget https://raw.githubusercontent.com/cni-genie/CNI-Genie/master/conf/1.8/genie-plugin.yaml
+nano genie-plugin.yaml
+kubectl apply -f genie-plugin.yaml
+```
+
+```bash
+kubectl get pods -n kube-system
+NAME                                       READY   STATUS    RESTARTS      AGE
+coredns-5d78c9869d-mfkrx                   1/1     Running   0             1h
+coredns-5d78c9869d-twr8t                   1/1     Running   0             1h
+etcd-c1-control-plane                      1/1     Running   0             1h
+genie-plugin-l65tj                         1/1     Running   0             1h
+kube-apiserver-c1-control-plane            1/1     Running   0             1h
+kube-controller-manager-c1-control-plane   1/1     Running   1 (20m ago)   1h
+kube-flannel-ds-h7f64                      1/1     Running   0             1h
+kube-flannel-ds-v5w2c                      1/1     Running   0             1h
+kube-proxy-46g2z                           1/1     Running   0             1h
+kube-proxy-qxx29                           1/1     Running   0             1h
+kube-scheduler-c1-control-plane            1/1     Running   0             1h
+weave-net-h8rcz                            2/2     Running   1 (20m ago)   1h
+weave-net-xhcld                            2/2     Running   1 (20m ago)   1h
+```
+
+In the node containers you can find all the tree CNI configs:
+
+```bash
+docker exec -it c1-worker ls -laF /etc/cni/net.d/
+total 28
+drwx------ 1 root root 4096 Oct 26 14:01 ./
+drwxr-xr-x 1 root root 4096 Jun 15 00:37 ../
+-rw-r--r-- 1 root root 1487 Oct 26 14:01 00-genie.conf
+-rw-r--r-- 1 root root  292 Oct 26 13:50 10-flannel.conflist
+-rw-r--r-- 1 root root  318 Oct 26 13:51 10-weave.conflist
+-rw-r--r-- 1 root root  271 Oct 26 14:01 genie-kubeconfig
+```
+
+### Demo
+
+I will start two pods in different networks:
+
+```yaml
+nano test1.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx1
+  namespace: default
+  annotations:
+    cni: &#34;weave&#34;
+spec:
+  containers:
+  - image: nginx:latest
+    imagePullPolicy: Always
+    name: nginx
+```
+
+```yaml
+nano test2.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx2
+  namespace: default
+  annotations:
+    cni: &#34;flannel&#34;
+spec:
+  containers:
+  - image: nginx:latest
+    imagePullPolicy: Always
+    name: nginx
+```
+
+The `nginx1` will run in `weave` network and the `nginx2` in `flannel` network.
+
+```bash
+kubectl apply -f nginx1.yaml
+kubectl apply -f nginx2.yaml
+
+kubectl get po -o wide
+NAME     READY   STATUS    RESTARTS   AGE    IP             NODE        NOMINATED NODE   READINESS GATES
+nginx1   1/1     Running   0          101s   10.244.128.2   c1-worker   &lt;none&gt;           &lt;none&gt;
+nginx2   1/1     Running   0          4s     10.244.1.5     c1-worker   &lt;none&gt;           &lt;none&gt;
+```

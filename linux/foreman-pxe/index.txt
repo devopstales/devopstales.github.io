@@ -1,0 +1,295 @@
+---
+title: Install Foreman PXE boot
+url: https://devopstales.github.io/linux/foreman-pxe/
+date: 2019-11-07
+keywords: foreman, the foreman, katello, PXE, PXE boot
+---
+
+
+Foreman is a complete lifecycle management tool for physical and virtual servers. We give system administrators the power to easily automate repetitive tasks, quickly deploy applications, and proactively manage servers, on-premise or in the cloud.
+&lt;!--more--&gt;
+
+I hawe a VM with two virtual interface the enp0s3 for NAT and enp0s9 with an internal network.
+
+
+### Install DHCP server
+```
+yum install -y dhcp nano -y
+
+echo &#34;DHCPDARGS=enp0s9&#34; &gt;&gt; /etc/sysconfig/dhcpd
+```
+
+```
+cat &gt; /etc/dhcp/dhcpd.conf &lt;&lt; EOF
+#DHCP configuration for PXE boot server
+ddns-update-style interim;
+ignore client-updates;
+authoritative;
+allow booting;
+allow bootp;
+allow unknown-clients;
+
+# A slightly different configuration for an internal subnet.
+subnet 192.168.100.0
+netmask 255.255.255.0
+{
+range 192.168.100.101 192.168.100.200;
+option domain-name-servers 192.168.100.100;
+option routers 192.168.100.100;
+default-lease-time 600;
+max-lease-time 7200;
+
+# PXE SERVER IP
+next-server 192.168.100.100; #  PXE server ip
+filename &#34;pxelinux.0&#34;;
+}
+EOF
+```
+
+```
+systemctl start dhcpd.service
+systemctl enable dhcpd.service
+systemctl status dhcpd.service
+```
+
+### Install DNS server
+```
+yum -y install bind bind-utils
+
+nano /etc/named.conf
+options {
+        ...
+        // listen-on port 53 { 127.0.0.1; };
+        // listen-on-v6 port 53 { ::1; };
+        ...
+        allow-query     { localhost; 192.168.100.0/24; };
+        ...
+        forwarders {
+                8.8.8.8;
+                8.8.4.4;
+        };
+};
+include &#34;/etc/named.my.zones&#34;;
+```
+
+```
+touch /etc/named.my.zones
+chown root:named /etc/named.my.zones
+
+nano /etc/named.my.zones
+zone &#34;devopstales.intra&#34; IN {
+         type master;
+         file &#34;devopstales.intra.db&#34;;
+         allow-update { none; };
+};
+```
+
+```
+nano /var/named/devopstales.intra.db
+@   IN  SOA     primary.devopstales.intra. root.mydomain.intra. (
+                                                1001    ;Serial
+                                                3H      ;Refresh
+                                                15M     ;Retry
+                                                1W      ;Expire
+                                                1D      ;Minimum TTL
+                                                )
+
+;Name Server Information
+@      IN  NS      primary.devopstales.intra.
+
+;IP address of Name Server
+primary IN  A       192.168.100.100
+
+;Mail exchanger
+devopstales.intra. IN  MX 10   mail.mydomain.intra.
+
+;A - Record HostName To IP Address
+foreman IN  A       192.168.100.100
+mail    IN  A       192.168.100.50
+```
+
+```
+systemctl restart named
+systemctl status named
+systemctl enable named
+```
+
+### Install vtftp
+```
+yum install vsftpd -y
+
+nano /etc/vsftpd/vsftpd.conf
+anonymous_enable=YES
+write_enable=NO
+
+systemctl enable vsftpd
+systemctl restart vsftpd
+systemctl status vsftpd
+
+cd /opt
+wget http://ftp.bme.hu/centos/7/isos/x86_64/CentOS-7-x86_64-Minimal-1908.iso
+wget http://ftp.bme.hu/centos/7/isos/x86_64/sha256sum.txt
+
+sha256sum CentOS-7-x86_64-Minimal-1908.iso
+cat sha256sum.txt
+
+mount -o loop /opt/CentOS-7-x86_64-Minimal-1908.iso  /mnt
+
+mkdir /var/ftp/pub/CentOS_7_x86_64
+rsync -rv --progress /mnt/ /var/ftp/pub/CentOS_7_x86_64/
+umount /mnt
+restorecon -Rv /var/ftp/pub/
+```
+
+### Install Foreman
+```
+yum -y install https://yum.puppet.com/puppet6-release-el-7.noarch.rpm
+yum -y install http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+yum -y install https://yum.theforeman.org/releases/1.23/el7/x86_64/foreman-release.rpm
+yum -y install foreman-installer
+
+foreman-installer \
+--foreman-initial-organization &#34;mydomain&#34; \
+--foreman-initial-location &#34;office&#34; \
+--enable-foreman-plugin-ansible \
+--enable-foreman-proxy-plugin-ansible \
+--enable-foreman-plugin-remote-execution \
+--enable-foreman-proxy-plugin-remote-execution-ssh \
+--enable-foreman-plugin-cockpit \
+--enable-foreman-plugin-openscap
+```
+
+### Configure hammer
+```
+nano ~/.hammer/cli.modules.d/foreman.yml
+:foreman:
+ :host: &#39;https://foreman.devopstales.intra/&#39;
+ :username: &#39;admin&#39;
+ :password: &#39;**********&#39;
+
+hammer defaults add --param-name organization --param-value &#34;mydomain&#34;
+hammer defaults add --param-name location --param-value &#34;office&#34;
+hammer defaults list
+```
+
+### Configurate PXEboot
+```
+sudo ss -lnup | grep 69
+grep disa /etc/xinetd.d/tftp
+ls -l /var/lib/tftpboot/
+
+# create subnet
+hammer subnet create \
+--name PXEnet \
+--network-type IPv4 \
+--network 192.168.100.0 \
+--mask 255.255.255.0 \
+--dns-primary 192.168.100.100 \
+--domains devopstales.intra \
+--tftp-id 1 \
+--httpboot-id 1 \
+--ipam &#34;Internal DB&#34; \
+--from 192.168.100.101 \
+--to 192.168.100.200 \
+--boot-mode Static
+
+hammer medium create \
+--name &#34;CentOS7_DVD_FTP&#34; \
+--os-family &#34;Redhat&#34; \
+--path &#34;ftp://foreman.devopstales.intra/pub/CentOS_7_x86_64/&#34;
+```
+
+Create a file hardened_ptable.txt with the content below.
+
+```
+&lt;%#
+kind: ptable
+name: Kickstart hardened
+oses:
+- CentOS
+- Fedora
+- RedHat
+%&gt;
+
+# System bootloader configuration
+bootloader --location=mbr --boot-drive=sda --timeout=3
+# Partition clearing information
+clearpart --all --drives=sda
+zerombr
+
+# Disk partitioning information
+part /boot --fstype=&#34;xfs&#34; --ondisk=sda --size=1024 --label=boot --fsoptions=&#34;rw,nodev,noexec,nosuid&#34;
+
+# 30GB physical volume
+part pv.01  --fstype=&#34;lvmpv&#34; --ondisk=sda --size=30720
+volgroup vg_os pv.01
+
+logvol /        --fstype=&#34;xfs&#34;  --size=4096 --vgname=vg_os --name=lv_root
+logvol /home    --fstype=&#34;xfs&#34;  --size=512  --vgname=vg_os --name=lv_home --fsoptions=&#34;rw,nodev,nosuid&#34;
+logvol /tmp     --fstype=&#34;xfs&#34;  --size=1024 --vgname=vg_os --name=lv_tmp  --fsoptions=&#34;rw,nodev,noexec,nosuid&#34;
+logvol /var     --fstype=&#34;xfs&#34;  --size=6144 --vgname=vg_os --name=lv_var  --fsoptions=&#34;rw,nosuid&#34;
+logvol /var/log --fstype=&#34;xfs&#34;  --size=512  --vgname=vg_os --name=lv_log  --fsoptions=&#34;rw,nodev,noexec,nosuid&#34;
+logvol swap     --fstype=&#34;swap&#34; --size=2048 --vgname=vg_os --name=lv_swap --fsoptions=&#34;swap&#34;
+```
+
+```
+hammer partition-table create \
+  --name &#34;Kickstart hardened&#34; \
+  --os-family &#34;Redhat&#34; \
+  --operatingsystems &#34;CentOS 7.4.1708&#34; \
+  --file &#34;hardened_ptable.txt&#34;
+
+hammer os create \
+  --name &#34;CentOS&#34; \
+  --major &#34;7&#34; \
+  --minor &#34;4.1708&#34; \
+  --family &#34;Redhat&#34; \
+  --password-hash &#34;SHA512&#34; \
+  --architectures &#34;x86_64&#34; \
+  --media &#34;CentOS7_DVD_FTP&#34; \
+  --partition-tables &#34;Kickstart hardened&#34;
+
+hammer hostgroup create \
+  --name &#34;el7_group&#34; \
+  --description &#34;Host group for CentOS 7 servers&#34; \
+  --lifecycle-environment &#34;stable&#34; \
+  --content-view &#34;el7_content&#34; \
+  --content-source-id &#34;1&#34; \
+  --environment &#34;homelab&#34; \
+  --puppet-proxy &#34;foreman.devopstales.intra&#34; \
+  --puppet-ca-proxy &#34;foreman.devopstales.intra&#34; \
+  --domain &#34;devopstales.intra&#34; \
+  --subnet &#34;PXEnet&#34; \
+  --architecture &#34;x86_64&#34; \
+  --operatingsystem &#34;CentOS 4.1708&#34; \
+  --medium &#34;CentOS7_DVD_FTP&#34; \
+  --partition-table &#34;Kickstart hardened&#34; \
+  --pxe-loader &#34;PXELinux BIOS&#34; \
+  --root-pass &#34;Password1&#34;
+
+hammer hostgroup set-parameter  \
+  --name &#34;selinux-mode&#34; \
+  --value &#34;disabled&#34; \
+  --hostgroup &#34;el7_group&#34;
+
+hammer hostgroup set-parameter  \
+  --name &#34;disable-firewall&#34; \
+  --value &#34;true&#34; \
+  --hostgroup &#34;el7_group&#34;
+
+hammer hostgroup set-parameter  \
+  --name &#34;bootloader-append&#34; \
+  --value &#34;net.ifnames=0 biosdevname=0&#34; \
+  --hostgroup &#34;el7_group&#34;
+
+hammer host create \
+  --name &#34;pxe-test&#34; \
+  --hostgroup &#34;el7_group&#34; \
+  --interface &#34;type=interface,mac=08:00:27:fb:ad:17,ip=192.168.100.110,managed=true,primary=true,provision=true&#34;
+```
+
+```
+ll /var/lib/tftpboot/pxelinux.cfg/
+cat /var/lib/tftpboot/pxelinux.cfg/01-08-00-27-fb-ad-17
+```
+

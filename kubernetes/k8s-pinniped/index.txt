@@ -1,0 +1,214 @@
+---
+title: Kubernetes Single Sign-on with Pinniped OpenID Connect
+url: https://devopstales.github.io/kubernetes/k8s-pinniped/
+date: 2021-12-29
+keywords: VMware Tanzu, Pinniped, openid, ldap, k8s, kubernetes
+---
+
+
+
+In this tutorial I will setup Pinniped, a Single Sign-on solution from the VMware Tanzu project.
+&lt;!--more--&gt;
+
+### Wtah is Pinniped
+Pinniped gives you a unified login experience across all your clusters, including on-premises and managed cloud environments.
+
+Pinniped consists of two components, Supervisor and Concierge:
+
+* The Pinniped Supervisor is an OIDC server which allows users to authenticate with an external identity provider (IDP), and then issues its own federation ID tokens to be passed on to clusters based on the user information from the IDP.
+
+* The Pinniped Concierge is a credential exchange API which takes as input a credential from an identity source (e.g., Pinniped Supervisor, proprietary IDP), authenticates the user via that credential, and returns another credential which is understood by the host Kubernetes cluster or by an impersonation proxy which acts on behalf of the user.
+
+![Pinniped Architecture](/img/include/pinniped01.svg)
+
+### Install the Pinniped Supervisor
+Run below command to install Supervisor, this will install everything to the pinniped-supervisor namespace.
+
+```bash
+kubectl apply -f https://get.pinniped.dev/latest/install-pinniped-supervisor.yaml
+
+kubens pinniped-supervisor
+kubectl get po
+```
+
+After installing Pinniped, create a secret with the client ID and secret from your identity provider. In below command I have named the secret `oidc-client`:
+
+```bash
+kubectl create secret generic oidc-client \
+  --namespace pinniped-supervisor \
+  --type secrets.pinniped.dev/oidc-client \
+  --from-literal=clientID=&#34;&lt;client-id-goes-here&gt;&#34; \
+  --from-literal=clientSecret=&#34;&lt;secret-goes-here&gt;&#34;
+```
+
+The supervisor needs to be reachable from other clusters, we need to create a service and an ingress resource.
+
+```yaml
+nano pinniped-supervisor-ingress.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: pinniped-supervisor
+  name: pinniped-supervisor
+spec:
+  selector:
+    app: pinniped-supervisor
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pinniped-supervisor
+  namespace: pinniped-supervisor
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: ca-issuer
+spec:
+  tls:
+  - hosts:
+    - supervisor.k8s.intra
+    secretName: supervisor-cert
+  rules:
+  - host: supervisor.k8s.intra
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pinniped-supervisor
+            port:
+              number: 80
+```
+
+Create and apply a `FederationDomain` resource. Give it a name and set the issuer to the URL you will be using for Supervisor.
+
+```yaml
+nano FederationDomain.yaml
+---
+apiVersion: config.supervisor.pinniped.dev/v1alpha1
+kind: FederationDomain
+metadata:
+  name: keycloak
+  namespace: pinniped-supervisor
+spec:
+  issuer: https://supervisor.k8s.intra
+```
+
+Create and apply a `OIDCIdentityProvider` resource.
+
+```yaml
+nano OIDCIdentityProvider.yaml
+---
+apiVersion: idp.supervisor.pinniped.dev/v1alpha1
+kind: OIDCIdentityProvider
+metadata:
+  name: keycloak-idp
+  namespace: pinniped-supervisor
+spec:
+  issuer: https://sso.k8s.intra/auth/realms/k8s
+  claims:
+    username: email
+    groups: groups
+  authorizationConfig:
+    additionalScopes: [&#39;email&#39;, &#39;profile&#39;]
+  client:
+    secretName: oidc-client
+```
+
+### Install the Pinniped Concierge
+
+Install Concierge on any managed or unmanaged cluster you would like to use OIDC login on. This can include the cluster where Supervisor is running.
+
+```bash
+kubectl apply -f https://get.pinniped.dev/latest/install-pinniped-concierge-crds.yaml
+kubectl apply -f https://get.pinniped.dev/latest/install-pinniped-concierge.yaml
+
+kubens pinniped-concierge
+kubectl get po
+```
+
+Create and apply a `JWTAuthenticator` resource, it is cluster scoped so no need for namespaces. Create a random string for the audience property using `openssl rand -base64 24` command.
+
+```bash
+openssl rand -base64 24
+jCIGaxMT5Yw9NvafTTVoXxGLkviPPyg6
+```
+
+&gt; If you ise a self signed certificate for the ingress you need o add the base64 encoded CA pem to the JWTAuthenticator.
+
+```bash
+cat k8s.pem | base64
+LS0tLS1CR...
+```
+
+```yaml
+nano JWTAuthenticator.yaml
+---
+apiVersion: authentication.concierge.pinniped.dev/v1alpha1
+kind: JWTAuthenticator
+metadata:
+   name: supervisor-jwt-authenticator
+   namespace: pinniped-concierge
+spec:
+   issuer: https://supervisor.k8s.intra
+   audience: jCIGaxMT5Yw9NvafTTVoXxGLkviPPyg6
+   claims:
+     username: username
+     groups: groups
+  # tls:
+  #   certificateAuthorityData: LS0tLS1CR... # optional base64 CA data if using a self-signed certificate
+```
+
+&gt; The `supervisor.k8s.intra` domain must be resolwable from the pinniped-concierge.
+&gt; You can add `supervisor.k8s.intra` as like hists file to the coredns [like this](https://devopstales.github.io/home/k8s-custom-host/).
+
+Below is an example of a `ClusterRoleBinding` that binds the role `cluster-admin` to the Keycloak group `devops-team`. (In my case it came from ldap) Create your own role bindings to fit your needs and apply them to the cluster.
+
+```yaml
+nano devops-team_ClusterRoleBinding.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-it-afdeling
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: devops-team
+```
+
+### Install the Pinniped command-line tool
+
+For osx you can use `brew` to install the command-line tool:
+
+```bash
+brew install vmware-tanzu/pinniped/pinniped-cli
+```
+
+Or find the appropriate binary for your platform from the [latest release](https://github.com/vmware-tanzu/pinniped/releases) the put the command-line tool somewhere on your `$PATH`.
+
+Generate the `kubeconfig` file wigh the default admin `kubeconfig` on the cluster&#39;s master node:
+
+```bash
+pinniped get kubeconfig \
+--oidc-ca-bundle /opt/k8s_sec_lab/cert/k8s.pem \
+--output pinniped-kubeconfig
+
+kubectl --kubeconfig pinniped-kubeconfig get pods -n pinniped-concierge
+NAME                                                  READY   STATUS    RESTARTS   AGE
+pinniped-concierge-9bc8bbdc5-qg75p                    1/1     Running   0          16m
+pinniped-concierge-9bc8bbdc5-zxsjj                    1/1     Running   0          16m
+pinniped-concierge-kube-cert-agent-5dcccbbb4b-56jbj   1/1     Running   0          79m
+```
+
+The `k8s.pem` file is containes the  CA certificate from `ca-issuer`. 
+

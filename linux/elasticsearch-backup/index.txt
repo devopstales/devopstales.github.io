@@ -1,0 +1,60 @@
+---
+title: How to backup Graylog logs from elasticsearch
+url: https://devopstales.github.io/linux/elasticsearch-backup/
+date: 2019-09-07
+keywords: graylog, elasticsearch
+---
+
+
+Graylog store the log data in elasticsearch so I will show you how to create and restore snapshot with elasticsearch.
+&lt;!--more--&gt;
+
+### Requirement
+
+* elasticsearch 7.5
+
+First you will need to add the repo.path location to your elasticsearch.yml. This is the local path of the folder where the snapshot files will store.
+
+```
+mkdir -p /mnt/elasticsearch-backup
+chown -R elasticsearch. /mnt/elasticsearch-backup
+
+cat &gt;&gt; /etc/elasticsearch/elasticsearch.yml &lt;&lt; EOF
+path.repo: [&#34;/mnt/elasticsearch-backup&#34;]
+EOF
+
+systemctl restart elasticsearch
+```
+
+
+### Elasticsearch
+Elasticsearch needs to know the backup path by registering a backup repository:
+
+```
+curl -XPUT &#39;http://localhost:9200/_snapshot/my_backup&#39; -d &#39;{
+  &#34;type&#34;: &#34;fs&#34;,
+  &#34;settings&#34;: {
+     &#34;location&#34;: &#34;/mnt/elasticsearch-backup&#34;,
+     &#34;compress&#34;: true
+  }
+}&#39;
+```
+
+### Create Backup
+```
+curl -XPUT &#34;localhost:9200/_snapshot/my_backup/snapshot_1?wait_for_completion=true&#34;
+
+# list snapshots:
+curl -XGET &#39;localhost:9200/_snapshot/my_backup/_all?pretty&#39;
+```
+
+### Restore backup
+```
+curl -XPOST &#34;localhost:9200/_snapshot/my_backup/snapshot_1/_restore?wait_for_completion=true&#34;
+```
+
+### Delete snapshot
+```
+curl -XDELETE &#39;localhost:9200/_snapshot/my_backup/snapshot_1&#39;
+```
+

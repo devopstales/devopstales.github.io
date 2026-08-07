@@ -1,0 +1,220 @@
+---
+title: Install Icinga2 on CentOS/Almlalinux/RockyOS 8
+url: https://devopstales.github.io/monitoring/icinga2_install_centos8/
+date: 2022-12-18
+keywords: icinga, icinga2, nagios
+---
+
+
+In this tutorial I will show you how to install Icinga2 and Icingaweb2 webinterface.
+
+&lt;!--more--&gt;
+Icinga 2 is an open source, scalable and extensible monitoring tool which checks the availability of your network resources, notifies users of outages, and generates performance data for reporting.
+
+### Configure syslinux and Firewall for the install
+
+```bash
+setsebool -P httpd_can_network_connect_db 1
+setsebool -P httpd_can_network_connect 1
+
+firewall-cmd --permanent --add-service=http
+firewall-cmd --permanent --add-service=https
+firewall-cmd --permanent --add-service=postgresql
+firewall-cmd --permanent --add-port=5665/tcp
+firewall-cmd --reload
+```
+
+### Install postgresql
+
+```bash
+yum install epel-release
+yum update --nogpgcheck
+
+yum install postgresql-server postgresql nano
+postgresql-setup initdb
+```
+
+&gt; Icinga config mast be in the beginning of the file.
+
+```bash
+nano /var/lib/pgsql/data/pg_hba.conf
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+# icinga
+local   icinga      icinga                            md5
+host    icinga      icinga      127.0.0.1/32          md5
+host    icinga      icinga      ::1/128               md5
+local   icinga_web  icinga_web                        md5
+host    icinga_web  icinga_web  127.0.0.1/32          md5
+host    icinga_web  icinga_web  ::1/128               md5
+
+# &#34;local&#34; is for Unix domain socket connections only
+local   all         all                               ident
+# IPv4 local connections:
+host    all         all         127.0.0.1/32          ident
+# IPv6 local connections:
+host    all         all         ::1/128               ident
+
+systemctl enable  --now postgresql
+```
+
+### Install Icinga2
+
+```bash
+# Main Centos 8 repo (Not up to date)
+yum install https://packages.icinga.com/epel/icinga-rpm-release-8-latest.noarch.rpm
+```
+
+OR
+
+```bash
+# Community Centos 8 repo
+rpm --import https://packages.freedom-for-icinga.com/free-icinga.key
+
+curl https://packages.freedom-for-icinga.com/epel/FREE-ICINGA-release.repo \
+-o /etc/yum.repos.d/FREE-ICINGA-release.repo
+```
+
+OR
+
+```bash
+# Suse RockyLinux 8 repo
+curl https://download.opensuse.org/repositories/home:/wurzelbro:/icinga/RockyLinux_8/home:wurzelbro:icinga.repo \
+-o /etc/yum.repos.d/suse_wurzelbro_icinga.repo
+```
+
+```bash
+dnf --enablerepo=powertools install nagios-plugins-all
+
+yum install icinga2 icinga2-selinux nano-icinga2 icinga2-ido-pgsql
+```
+
+```bash
+echo &#39;include &#34;/usr/share/nano/icinga2.nanorc&#34;&#39; &gt;&gt; /etc/nanorc
+cp /etc/nanorc ~/.nanorc
+```
+
+```bash
+sudo -u postgres psql -c &#34;CREATE ROLE icinga WITH LOGIN PASSWORD &#39;icinga&#39;&#34;
+sudo -u postgres createdb -O icinga -E UTF8 icinga
+
+export PGPASSWORD=icinga
+psql -U icinga -d icinga &lt; /usr/share/icinga2-ido-pgsql/schema/pgsql.sql
+```
+
+```bash
+cat &lt;&lt; EOF | sudo tee /etc/icinga2/features-enabled/ido-pgsql.conf
+/**
+ * The db_ido_pgsql library implements IDO functionality
+ * for PostgreSQL.
+ */
+
+library &#34;db_ido_pgsql&#34;
+
+object IdoPgsqlConnection &#34;ido-pgsql&#34; {
+  user = &#34;icinga&#34;,
+  password = &#34;icinga&#34;,
+  host = &#34;localhost&#34;,
+  database = &#34;icinga&#34;
+}
+EOF
+```
+
+```bash
+icinga2 feature enable ido-pgsql
+icinga2 feature enable command
+icinga2 api setup
+
+
+echo &#39;
+object ApiUser &#34;icingaweb2&#34; {
+  password = &#34;Wijsn8Z9eRs5E25d&#34;
+  permissions = [ &#34;status/query&#34;, &#34;actions/*&#34;, &#34;objects/modify/*&#34;, &#34;objects/query/*&#34; ]
+}&#39; &gt;&gt; /etc/icinga2/conf.d/api-users.conf
+```
+
+```bash
+icinga2 node wizard
+Welcome to the Icinga 2 Setup Wizard!
+
+We will guide you through all required configuration details.
+
+Please specify if this is an agent/satellite setup (&#39;n&#39; installs a master setup) [Y/n]: n
+
+Starting the Master setup routine...
+
+Please specify the common name (CN) [alma8.mydomain.intra]: icinga.mydomain.intra
+Reconfiguring Icinga...
+Checking for existing certificates for common name &#39;icinga.mydomain.intra&#39;...
+Certificates not yet generated. Running &#39;api setup&#39; now.
+Generating master configuration for Icinga 2.
+&#39;api&#39; feature already enabled.
+
+Master zone name [master]:
+
+Default global zones: global-templates director-global
+Do you want to specify additional global zones? [y/N]:
+Please specify the API bind host/port (optional):
+Bind Host []:
+Bind Port []:
+
+Do you want to disable the inclusion of the conf.d directory [Y/n]: n
+
+Done.
+
+Now restart your Icinga 2 daemon to finish the installation!
+
+systemctl restart icinga2
+```
+
+### Install IcingaWeb2
+
+```bash
+yum install nginx icingaweb2 icingacli icingaweb2-selinux
+
+systemctl enable php-fpm.service --now
+
+## config
+icingacli setup config webserver --fpm-uri=unix:/var/run/php-fpm/www.sock nginx &gt; /etc/nginx/default.d/icinga.conf
+systemctl enable --now nginx
+
+sudo -u postgres psql -c &#34;CREATE ROLE icinga_web WITH LOGIN PASSWORD &#39;icinga_web&#39;&#34;
+sudo -u postgres createdb -O icinga_web -E UTF8 icinga_web
+
+icingacli setup token create
+
+# go to
+https://icinga.devopstales.intra/icingaweb2/
+```
+
+![Example image](/img/include/icingaweb1.webp)
+
+![Example image](/img/include/icingaweb2.webp)
+
+![Example image](/img/include/icingaweb3.webp)
+
+![Example image](/img/include/icingaweb4.webp)
+
+![Example image](/img/include/icingaweb5.webp)
+
+![Example image](/img/include/icingaweb6.webp)
+
+![Example image](/img/include/icingaweb7.webp)
+
+![Example image](/img/include/icingaweb8.webp)
+
+![Example image](/img/include/icingaweb9.webp)
+
+![Example image](/img/include/icingaweb10.webp)
+
+![Example image](/img/include/icingaweb11.webp)
+
+![Example image](/img/include/icingaweb12.webp)
+
+![Example image](/img/include/icingaweb13.webp)
+
+![Example image](/img/include/icingaweb14.webp)
+
+![Example image](/img/include/icingaweb15.webp)
+
+![Example image](/img/include/icingaweb16.webp)
+

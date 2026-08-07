@@ -1,0 +1,64 @@
+---
+title: Openshift Letsencrypt certificates
+url: https://devopstales.github.io/kubernetes/openshift-letsencrypt/
+date: 2019-05-28
+keywords: ansible, openshift 3.11, openshift okd, openshift tutorial, openshift container platform, rad hat openshift, openshift 3.11 letsencrypt, openshift letsencrypt router
+---
+
+
+Thanks to Tomáš Nožička developed openshift-acme as an ACME Controller for OpenShift and Kubernetes clusters. &lt;br&gt;
+It automatically provision certficates
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/openshift.html&#34; &gt;}}
+
+### Environment
+```
+192.168.1.40    deployer
+192.168.1.41    openshift01 # master node
+192.168.1.42    openshift02 # infra node
+192.168.1.43    openshift03 # worker node
+```
+
+### Deploy route
+```
+oc project default
+
+oc label node openshift02.devopstales.intra &#34;router=letsencrypt&#34;
+oc get node --show-labels
+
+oc adm policy add-scc-to-user hostnetwork -z router
+oc adm router router-letsencrypt --replicas=0 --ports=&#34;8080:8080,8443:8443&#34; --stats-port=1937 --selector=&#34;router=letsencrypt&#34; --labels=&#34;router=letsencrypt&#34;
+
+oc set env dc/router-letsencrypt \
+NAMESPACE_LABELS=&#34;router=letsencrypt&#34; \
+ROUTER_ALLOW_WILDCARD_ROUTES=true \
+ROUTER_SERVICE_HTTP_PORT=8080 \
+ROUTER_SERVICE_HTTPS_PORT=8443 \
+ROUTER_TCP_BALANCE_SCHEME=roundrobin
+
+oc set env dc/router NAMESPACE_LABELS=&#34;router != letsencrypt&#34;
+
+oc scale dc/router-letsencrypt --replicas=3
+```
+
+### Deploy letsencrypt
+```
+GIT_REPO=https://raw.githubusercontent.com/devopstales/openshift-examples
+GIT_PATH=/master/letsencrypt
+oc new-project letsencrypt
+oc create -f$GIT_REPO/$GIT_PATH/{clusterrole,serviceaccount,imagestream,deployment}.yaml
+oc adm policy add-cluster-role-to-user openshift-acme -z openshift-acme
+```
+
+# Demo
+```
+oc new-project test
+oc label namespace test router=letsencrypt
+oc new-app centos/ruby-25-centos7~https://github.com/sclorg/ruby-ex.git
+oc expose svc/ruby-ex
+
+oc patch route ruby-ex \
+    -p &#39;{&#34;metadata&#34;:{&#34;annotations&#34;:{  &#34;kubernetes.io/tls-acme&#34; : &#34;true&#34;   }}}&#39;
+```
+

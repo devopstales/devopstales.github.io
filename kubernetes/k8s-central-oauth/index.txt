@@ -1,0 +1,102 @@
+---
+title: Central authentication with oauth2-proxy
+url: https://devopstales.github.io/kubernetes/k8s-central-oauth/
+date: 2021-11-05
+keywords: Keycloak, Kubernetes, dasboard, oauth2, SSO, OIDC
+---
+
+
+In this post I will show you how to use one central OAuth2 Proxy for multiple services inside your Kubernetes Cluster.
+
+&lt;!--more--&gt;
+
+The default example on how to secure a service with Nginx and OAuth2 Proxy shows you how to secure only one service. With this setup you need to create one oauth2-proxy for every service. . Another problem of this setup is that it is not supported by most Helm charts. 
+
+
+First we need an oauth2-proxy to authenticate all of the requests:
+
+```bash
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: auth-proxy
+  namespace: ingress-system
+spec:
+  repo: &#34;https://oauth2-proxy.github.io/manifests&#34;
+  chart: oauth2-proxy
+  targetNamespace: ingress-system
+  valuesContent: |-
+    config:
+      clientID: &#34;&lt;client-id&gt;&#34;
+      clientSecret: &#34;&lt;clinet-secret&gt;&#34;
+      cookieSecret: &#34;bkJnQW1ua2xGa2tCV2pGTlZDdHJWS0t4SWJ2MFFSOWY=&#34;
+    extraArgs:
+      email-domain: &#39;*&#39;
+      provider: keycloak
+      login-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/auth
+      redeem-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/token
+      profile-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/userinfo
+      validate-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;/protocol/openid-connect/userinfo
+      scope: email
+      skip-provider-button: &#39;true&#39;
+      force-https: &#39;false&#39;
+      cookie-secure: &#39;false&#39;
+      pass-authorization-header: &#39;true&#39;
+      pass-basic-auth: &#39;false&#39;
+      skip-jwt-bearer-tokens: &#39;true&#39;
+      whitelist-domain: .k8s.intra
+      cookie-domain: .k8s.intra
+      oidc-issuer-url: https://&lt;keycloak-url&gt;/auth/realms/&lt;keycloak-relm&gt;
+    ingress:
+      enabled: true
+      path: /oauth2
+      hosts:
+        - oauth.k8s.intra
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        cert-manager.io/cluster-issuer: ca-issuer
+        nginx.ingress.kubernetes.io/proxy-buffer-size: &#34;16k&#34;
+      tls:
+      - secretName: oauth2-proxy-tls-cert
+        hosts:
+          - oauth.k8s.intra
+    metrics:
+      enabled: true
+#      servicemonitor:
+#        enabled: true
+#        namespace: &#34;ingress-system&#34;
+```
+
+For the service you want to secure, add the below annotations to the Ingress:
+
+```bash
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: ca-issuer
+    nginx.ingress.kubernetes.io/force-ssl-redirect: &#34;true&#34;
+    nginx.ingress.kubernetes.io/auth-url: &#34;http://auth-proxy-oauth2-proxy.ingress-system.svc.cluster.local/oauth2/auth&#34;
+    nginx.ingress.kubernetes.io/auth-signin: &#34;https://oauth.k8s.intra/oauth2/start?rd=https%3A%2F%2F$host$request_uri&#34;
+  name: alertmanager
+spec:
+  rules:
+  - host: alertmanager.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: alertmanager
+          servicePort: 9093
+        path: /
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - alertmanager.example.com
+    secretName: tls-cert
+```
+
+The `auth-sigin` redirects any needed login to the OAuth2 Proxy Ingress.
+The `auth-url` annotation can access the OAuth2 Proxy internally via its service to verify a submitted token.
+
+The OAuth2 Proxy will handle the authentication and later redirect you to the protected service again.

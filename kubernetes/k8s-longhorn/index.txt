@@ -1,0 +1,67 @@
+---
+title: Kubernetes project longhorn
+url: https://devopstales.github.io/kubernetes/k8s-longhorn/
+date: 2020-01-18
+keywords: Kubernetes, k8s, project longhorn, Rancher
+---
+
+
+Longhorn is lightweight, reliable, and powerful distributed block storage system for Kubernetes..
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kubernetes.html&#34; &gt;}}
+
+You can install Longhorn on an existing Kubernetes cluster with one `kubectl apply` command or using Helm charts. Once Longhorn is installed, it adds persistent volume support to the Kubernetes cluster.
+
+
+### Install dependency
+```
+yum install iscsi-initiator-utils
+
+modprobe iscsi_tcp
+echo &#34;iscsi_tcp&#34; &gt;/etc/modules-load.d/iscsi-tcp.conf
+```
+
+### Deploy Longhorn and storageclass
+```
+kubectl apply -f https://raw.githubusercontent.com/rancher/longhorn/master/deploy/longhorn.yaml
+kubectl apply -f https://raw.githubusercontent.com/rancher/longhorn/master/examples/storageclass.yaml
+
+kubectl get storageclass
+NAME       PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn   driver.longhorn.io   Delete          Immediate           false                  11m
+```
+
+Patch longhorn storageclass to be the default storageclass.
+
+```
+kubectl patch storageclass longhorn -p \
+  &#39;{&#34;metadata&#34;: {&#34;annotations&#34;:{&#34;storageclass.kubernetes.io/is-default-class&#34;:&#34;true&#34;}}}&#39;
+
+kubectl get storageclass
+NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn (default)   driver.longhorn.io   Delete          Immediate           false                  12m
+```
+
+### Deploy admin gui
+```
+kubectl -n longhorn-system get svc
+
+cat minio-sec.yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: longhorn-system
+  name: longhorn-minio
+type: Opaque
+data:
+  AWS_ACCESS_KEY_ID: bWluaW8=
+  AWS_SECRET_ACCESS_KEY: bWluaW8xMjM=
+  AWS_ENDPOINTS: aHR0cDovL21pbmlvLmxvbmdob3JuLXN5c3RlbTo5MDAw
+```
+
+![Example image](/img/include/longhorn0.webp)&lt;/br&gt;
+![Example image](/img/include/longhorn2.webp)&lt;/br&gt;
+![Example image](/img/include/longhorn1.webp)&lt;/br&gt;
+

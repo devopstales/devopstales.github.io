@@ -1,0 +1,353 @@
+---
+title: Install Ingress to GKE
+url: https://devopstales.github.io/cloud/gke-ingress-controller/
+date: 2023-09-06
+keywords: GCP, GKE, streaming
+---
+
+
+In this pos I will show you how you can Install Ingress to GKE (Google Kubernetes Engine) Cluster.
+&lt;!--more--&gt;
+
+The default Nginx Ingress creates a Network Load balancer. In order to set up an HTTP/HTTPS Load balancer with Nginx ingress, we need to change the type: LoadBalancer on the Nginx Ingress Controller service to ClusterIP instead and add the NEG annotation to it. We will manually create an HTTP(S) LoadBalancer and bind it to the `ingress-nginx-controller` through its NEG annotation.  This binding will happen later when we set our Nginx Ingress Controller deployment as the Backend Service of our HTTPS LoadBalancer.
+
+```yaml
+nano values.yaml
+---
+controller:
+  service:
+    type: ClusterIP
+    annotations:
+      cloud.google.com/neg: &#39;{&#34;exposed_ports&#34;: {&#34;80&#34;:{&#34;name&#34;: &#34;ingress-nginx-80-neg-http&#34;}}}&#39;
+```
+
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm upgrade ingress-nginx ingress-nginx \
+--install -f values.yaml \
+--repo https://kubernetes.github.io/ingress-nginx \
+--namespace ingress-nginx --create-namespace
+```
+
+Now we can see in the Google cloud console that our NEG is created successfully.
+
+![NEG Config](/img/incude/GKE-ingress-neg.webp)
+
+Let’s create the HTTP/HTTPS Loadbalancer &amp; add NEG in the backend of the load balancer.
+
+```bash
+# Create an Static IP Address via using this command
+gcloud compute addresses create loadbalancer-ip-1 --global --ip-version IPV4
+
+# Create a firewall rule allowing the L7 Https Loadbalencer to access our cluster
+gcloud compute firewall-rules create allow-tcp-loadbalancer \
+    --allow tcp:80 \
+    --source-ranges 130.211.0.0/22,35.191.0.0/16 \
+    --network default 
+
+#Create a Health Check for Backend Service
+gcloud compute health-checks create http lb-nginx-health-check \
+  --port 80 \
+  --check-interval 60 \
+  --unhealthy-threshold 3 \
+  --healthy-threshold 1 \
+  --timeout 5 \
+  --request-path /healthz
+  
+# Create a Backend Service which is used to inform the LoadBalancer how to connect and distribute trafic to the pods.
+gcloud compute backend-services create lb-backend-service \
+    --load-balancing-scheme=EXTERNAL \
+    --protocol=HTTP \
+    --port-name=http \
+    --health-checks=lb-nginx-health-check \
+    --global  
+ 
+# Now it&#39;s the time we add the Nginx NEG service (the one annotated earlier) to the back end service created on the previous step:
+gcloud compute backend-services add-backend lb-backend-service \
+  --network-endpoint-group=ingress-nginx-80-neg-http \
+  --network-endpoint-group-zone=us-central1-c \
+  --balancing-mode=RATE \
+  --capacity-scaler=1.0 \
+  --max-rate-per-endpoint=100 \
+  --global
+
+# Create the load balancer itself (URL MAPS)
+gcloud compute url-maps create nginx-public-loadbalancer \
+    --default-service lb-backend-service
+
+# Create a target HTTP proxy to route requests to your URL map.
+  gcloud compute target-http-proxies create http-lb-proxy \
+      --url-map=nginx-public-loadbalancer
+      
+# Create a global forwarding rule to route incoming requests to the proxy
+gcloud compute forwarding-rules create forwarding-rule-01 \
+      --load-balancing-scheme=EXTERNAL \
+      --address=loadbalancer-ip-1 \
+      --global \
+      --target-http-proxy=http-lb-proxy \
+      --ports=80
+```
+
+![LoadBalancer Config](/img/incude/GKE-ingress-neg.webp)
+
+Let’s deploy Sample httpd webserver to test if our load balancer is working as expected.
+
+```yaml
+nano httpd.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpd-deployment
+  labels:
+    app: httpd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpd
+  template:
+    metadata:
+      labels:
+        app: httpd
+    spec:
+      containers:
+      - name: httpd
+        image: httpd
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: httpd-service
+spec:
+  selector:
+    app: httpd
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: testing-ingress-01
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: httpd-service
+            port:
+              number: 80
+```
+
+```bash
+kubectl apply -f httpd.yaml
+```
+
+### Create an ingress controller to an internal virtual network in
+
+```yaml
+nano values.yaml
+---
+controller:
+  service:
+    type: ClusterIP
+    annotations:
+      cloud.google.com/neg: &#39;{&#34;exposed_ports&#34;: {&#34;80&#34;:{&#34;name&#34;: &#34;ingress-nginx-internal-80-neg-http&#34;}}}&#39;
+  electionID: ingress-controller-leader
+  ingressClassResource:
+    name: internal-nginx  # default: nginx
+    enabled: true
+    default: false
+    controllerValue: &#34;k8s.io/internal-ingress-nginx&#34;  # default: k8s.io/ingress-nginx
+```
+
+```bash
+helm upgrade ingress-nginx-internal ingress-nginx \
+--install -f values.yaml  \
+--repo https://kubernetes.github.io/ingress-nginx \
+--namespace ingress-nginx-internal --create-namespace
+```
+
+Let’s create a regional private HTTP/HTTPS Loadbalancer &amp; add NEG in the backend of the load balancer we need a proxy-only subnet for creating a regional private HTTP/HTTPS load balancer.
+
+Create a proxy-only subnet:
+
+```bash
+gcloud compute networks subnets create proxy-only-subnet-01 \
+  --purpose=REGIONAL_MANAGED_PROXY \
+  --role=ACTIVE \
+  --region=us-central1 \
+  --network=default \
+  --range=10.129.0.0/23
+```
+
+```bash
+# Create an Static Private IP Address 
+gcloud compute addresses create lb-ip-01 --region us-central1 --subnet default
+
+# Create the fw-allow-health-check rule to allow Google Cloud health checks. This example allows all TCP traffic from health check probers.    
+gcloud compute firewall-rules create fw-allow-health-check-01 \
+    --network=default \
+    --action=allow \
+    --direction=ingress \
+    --source-ranges=130.211.0.0/22,35.191.0.0/16 \
+    --rules=tcp
+
+# Create the fw-allow-proxies rule to allow the regional external HTTP(S) load balancer&#39;s proxies to connect to your backends. Set source-ranges to the allocated ranges of your proxy-only subnet, for example, 10.129.0.0/23.
+gcloud compute firewall-rules create fw-allow-proxies-01 \
+  --network=default \
+  --action=allow \
+  --direction=ingress \
+  --source-ranges=10.129.0.0/23 \
+  --target-tags=load-balanced-backend \
+  --rules=tcp:80,tcp:443,tcp:8080
+
+# Create a Health Check for Backend Service
+gcloud compute health-checks create http nginx-internal-lb-health-check \
+  --port 80 \
+  --check-interval 60 \
+  --unhealthy-threshold 3 \
+  --healthy-threshold 1 \
+  --timeout 5 \
+  --region=us-central1 \
+  --request-path /healthz 
+ 
+# Create the backend service for the lb 
+gcloud compute backend-services create internal-lb-backend-service \
+  --load-balancing-scheme=INTERNAL_MANAGED \
+  --protocol=HTTP \
+  --health-checks=nginx-internal-lb-health-check \
+  --health-checks-region=us-central1 \
+  --region=us-central1
+  
+# Add the backend to backend service   
+gcloud compute backend-services add-backend internal-lb-backend-service \
+  --balancing-mode=RATE \
+  --network-endpoint-group=ingress-nginx-internal-80-neg-http \
+  --network-endpoint-group-zone=us-central1-c \
+  --capacity-scaler=1.0 \
+  --max-rate-per-endpoint=100 \
+  --region=us-central1
+  
+# Create the URL map
+gcloud compute url-maps create internal-nginx-lb-01 \
+  --default-service=internal-lb-backend-service \
+  --region=us-central1
+  
+# Create the target proxy
+gcloud compute target-http-proxies create target-http-proxy \
+  --url-map=internal-nginx-lb-01 \
+  --url-map-region=us-central1 \
+  --region=us-central1
+  
+# Create the forwarding rule.  
+gcloud compute forwarding-rules create internal-forwarding-01 \
+    --load-balancing-scheme=INTERNAL_MANAGED \
+    --network=default \
+    --subnet=default \
+    --address=lb-ip-01 \
+    --ports=80 \
+    --region=us-central1 \
+    --target-http-proxy=target-http-proxy \
+    --target-http-proxy-region=us-central1
+```
+
+Let’s deploy Sample Hello-Worldapp to test if our LB is working fine or not?
+
+```yaml
+nano test.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: us-docker.pkg.dev/google-samples/containers/gke/hello-app:1.0
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: testing-internal-ingress-01
+spec:
+  ingressClassName: internal-nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: test-service
+            port:
+              number: 80
+```
+
+```bash
+kubectl apply -f test.yaml
+kubectl get ingress testing-internal-ingress-01
+```
+
+Our setup is successfully done. So we can access this application from the same network itself as the load balancer is private, let’s create one private vm and access the app from this.
+
+```bash
+gcloud compute instances create testing-vm-01 \
+    --project=your-project-id \
+    --zone=us-central1-c \
+    --machine-type=e2-medium \
+    --network-interface=subnet=default,no-address \
+    --maintenance-policy=MIGRATE \
+    --provisioning-model=STANDARD \
+    --service-account=serviceaccount-compute@developer.gserviceaccount.com \
+    --scopes=https://www.googleapis.com/auth/cloud-platform \
+    --create-disk=auto-delete=yes,boot=yes,device-name=testing-vm-01,image=projects/ubuntu-os-cloud/global/images/ubuntu-1804-bionic-v20230324,mode=rw,size=10,type=projects/your-project/zones/us-central1-c/diskTypes/pd-balanced \
+    --no-shielded-secure-boot \
+    --shielded-vtpm \
+    --shielded-integrity-monitoring \
+    --labels=ec-src=vm_add-gcloud \
+    --reservation-affinity=any
+```
+
+```bash
+gcloud compute ssh --zone &#34;us-central1-c&#34; &#34;testing-vm-01&#34;  \
+--tunnel-through-iap --project &#34;your-project&#34;
+
+curl -v http://loadbalancer_ip/
+```
+

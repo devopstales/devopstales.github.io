@@ -1,0 +1,779 @@
+---
+title: Kilo Code: Understanding Modes and the Orchestrator
+url: https://devopstales.github.io/ai/kilo-code-series-04-modes/
+date: 2026-03-28
+---
+
+
+In our previous post, we unlocked massive power by integrating Qwen Code CLI. But with great power comes the need for great management.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/kilo-code-series.html&#34; &gt;}}
+
+Kilo Code isn&#39;t just a single AI assistant; it is a team of specialized personas. In this post, we&#39;ll explore the different **Modes** that Kilo uses to break down and execute complex software engineering tasks.
+
+## Why Modes Matter
+
+When you ask a general-purpose AI to &#34;build a REST API,&#34; it might jump straight into writing code without considering:
+
+- What&#39;s the overall architecture?
+- Which database should we use?
+- How do we handle authentication?
+- What about error handling and logging?
+
+This is where **Modes** come in. Kilo Code separates concerns by using specialized agents for different phases of development:
+
+| Mode | Purpose | When to Use |
+|------|---------|-------------|
+| **Orchestrator** | Task coordination and planning | Starting new features, complex multi-step tasks |
+| **Architect** | System design and architecture | New projects, major refactors, technical decisions |
+| **Code** | Implementation and refactoring | Writing code, fixing bugs, adding features |
+| **Debug** | Troubleshooting and error resolution | Build failures, runtime errors, test failures |
+
+Think of it like a software development team: the Orchestrator is your project manager, the Architect is your tech lead, the Code mode is your senior developer, and Debug is your dedicated SRE.
+
+---
+
+## Orchestrator Mode: The Conductor
+
+**Orchestrator Mode** is the default mode in Kilo Code. It&#39;s designed to handle complex, multi-step tasks by breaking them down and delegating to specialized modes when needed.
+
+### How It Works
+
+When you give the Orchestrator a task, it follows this workflow:
+
+```bash
+1. Understand the request
+2. Analyze the codebase context
+3. Create a step-by-step plan
+4. Execute each step (using appropriate modes)
+5. Verify the results
+6. Report completion
+```
+
+### Example: Building a User Authentication System
+
+Let&#39;s see the Orchestrator in action:
+
+```bash
+User: &#34;Add user authentication to our Express.js app&#34;
+
+Orchestrator Response:
+I&#39;ll help you add user authentication. Here&#39;s my plan:
+
+Phase 1: Architecture (Architect Mode)
+- Design the authentication flow
+- Choose between JWT vs sessions
+- Plan database schema for users
+
+Phase 2: Implementation (Code Mode)
+- Install required dependencies (jsonwebtoken, bcrypt)
+- Create user model with password hashing
+- Build registration endpoint
+- Build login endpoint
+- Create authentication middleware
+
+Phase 3: Testing (Debug Mode)
+- Write unit tests for auth functions
+- Test login/logout flow
+- Verify token validation
+
+Shall I proceed with this plan?
+```
+
+### Orchestrator Configuration
+
+You can customize Orchestrator behavior in your `.kilocode/config.json`:
+
+```json
+{
+  &#34;orchestrator&#34;: {
+    &#34;autoPlan&#34;: true,
+    &#34;requireApproval&#34;: false,
+    &#34;maxSteps&#34;: 10,
+    &#34;delegateToSpecialists&#34;: true,
+    &#34;verboseLogging&#34;: false
+  }
+}
+```
+
+**Key Settings:**
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `autoPlan` | Automatically create execution plans | `true` |
+| `requireApproval` | Ask before each major step | `false` |
+| `maxSteps` | Maximum steps before asking for guidance | `10` |
+| `delegateToSpecialists` | Switch to Architect/Code/Debug modes | `true` |
+
+### When to Use Orchestrator Mode
+
+- **Complex features** requiring multiple files and steps
+- **New project setup** with multiple components
+- **Refactoring projects** that span the codebase
+- **Integration tasks** connecting multiple services
+
+**Command:**
+```bash
+# CLI
+kilo-code --mode orchestrator &#34;Migrate our database from MongoDB to PostgreSQL&#34;
+
+# In IDE, use the mode selector or type:
+/mode orchestrator
+```
+
+---
+
+## Architect Mode: The Designer
+
+**Architect Mode** focuses on high-level system design without writing implementation code. It&#39;s perfect for planning before you build.
+
+### Key Capabilities
+
+1. **System Design**: Creates architecture diagrams and component relationships
+2. **Technology Selection**: Recommends libraries, frameworks, and tools
+3. **API Design**: Designs REST/GraphQL schemas and contracts
+4. **Database Modeling**: Plans schemas, indexes, and relationships
+5. **Security Review**: Identifies potential security concerns
+
+### Example: Designing a Microservices Architecture
+
+```bash
+User: &#34;Design a microservices architecture for our e-commerce platform&#34;
+
+Architect Response:
+## Proposed Architecture
+
+### Services
+1. **API Gateway** (Kong/Express)
+   - Route requests to appropriate services
+   - Handle authentication and rate limiting
+
+2. **Product Service** (Node.js &#43; PostgreSQL)
+   - Product catalog management
+   - Search and filtering
+   - Inventory tracking
+
+3. **Order Service** (Node.js &#43; PostgreSQL)
+   - Order creation and management
+   - Order status tracking
+   - Integration with payment service
+
+4. **Payment Service** (Python &#43; Stripe API)
+   - Payment processing
+   - Refund handling
+   - Webhook management
+
+5. **User Service** (Node.js &#43; Redis)
+   - User authentication (JWT)
+   - Session management
+   - Profile management
+
+### Communication Pattern
+- Synchronous: REST APIs for user-facing operations
+- Asynchronous: RabbitMQ for order processing events
+
+### Data Flow
+[Client] → [API Gateway] → [Services] → [Databases]
+                      ↓
+                 [RabbitMQ]
+                      ↓
+            [Analytics Service]
+
+### Technology Recommendations
+- Container orchestration: Kubernetes
+- Service mesh: Istio (for production)
+- Monitoring: Prometheus &#43; Grafana
+- Logging: ELK Stack
+
+Shall I create detailed API specifications for each service?
+```
+
+### Architect Mode Output Formats
+
+Architect mode can generate various output formats:
+
+```bash
+# Generate architecture diagram (Mermaid format)
+/architect --output mermaid &#34;Design a CI/CD pipeline&#34;
+
+# Generate API specification (OpenAPI/Swagger)
+/architect --output openapi &#34;Design REST API for blog posts&#34;
+
+# Generate database schema (SQL)
+/architect --output sql &#34;Design schema for social media app&#34;
+
+# Generate decision document (Markdown)
+/architect --output markdown &#34;Choose between Redis and Memcached&#34;
+```
+
+### Architect Configuration
+
+```json
+{
+  &#34;architect&#34;: {
+    &#34;defaultOutputFormat&#34;: &#34;markdown&#34;,
+    &#34;includeDiagrams&#34;: true,
+    &#34;considerSecurity&#34;: true,
+    &#34;considerScalability&#34;: true,
+    &#34;maxServices&#34;: 10
+  }
+}
+```
+
+### When to Use Architect Mode
+
+- **New project planning** before writing any code
+- **Major refactoring** decisions
+- **Technology evaluation** and selection
+- **System design reviews**
+- **API contract design**
+
+**Command:**
+
+```bash
+# CLI
+kilo-code --mode architect &#34;Design the database schema for a task management app&#34;
+
+# In IDE
+/mode architect
+/design our new feature flag system
+```
+
+---
+
+## Code Mode: The Builder
+
+**Code Mode** is where the actual implementation happens. This mode focuses on writing, modifying, and refactoring code with precision.
+
+### Key Capabilities
+
+1. **Multi-file Editing**: Edits multiple files in a single operation
+2. **Code Generation**: Creates new files and functions from specifications
+3. **Refactoring**: Improves code structure without changing behavior
+4. **Test Generation**: Creates unit and integration tests
+5. **Documentation**: Adds comments and generates documentation
+
+### Example: Implementing a Feature
+
+```bash
+User: &#34;Implement the user registration endpoint we designed&#34;
+
+Code Mode Response:
+I&#39;ll implement the user registration endpoint based on the architecture.
+
+## Files to Create/Modify
+
+### 1. models/User.js (NEW)
+```javascript
+const mongoose = require(&#39;mongoose&#39;);
+const bcrypt = require(&#39;bcrypt&#39;);
+
+const userSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  password: {
+    type: String,
+    required: true,
+    minlength: 8
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Hash password before saving
+userSchema.pre(&#39;save&#39;, async function(next) {
+  if (!this.isModified(&#39;password&#39;)) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
+
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+module.exports = mongoose.model(&#39;User&#39;, userSchema);
+```
+
+### 2. routes/auth.js (NEW)
+
+```javascript
+const express = require(&#39;express&#39;);
+const router = express.Router();
+const User = require(&#39;../models/User&#39;);
+const jwt = require(&#39;jsonwebtoken&#39;);
+
+router.post(&#39;/register&#39;, async (req, res) =&gt; {
+  try {
+    const { email, password, name } = req.body;
+    
+    // Check if user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: &#39;Email already registered&#39; });
+    }
+    
+    // Create user
+    const user = new User({ email, password, name });
+    await user.save();
+    
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: &#39;7d&#39; }
+    );
+    
+    res.status(201).json({
+      message: &#39;User registered successfully&#39;,
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: &#39;Server error&#39; });
+  }
+});
+
+module.exports = router;
+```
+
+### 3. app.js (MODIFY)
+
+```javascript
+// Add this import
+const authRoutes = require(&#39;./routes/auth&#39;);
+
+// Add this route registration
+app.use(&#39;/api/auth&#39;, authRoutes);
+```
+
+## Tests Generated
+
+I&#39;ve also created `tests/auth.test.js` with:
+- Registration success test
+- Duplicate email test
+- Password hashing verification
+- JWT token validation
+
+Ready to apply these changes?
+
+```bash
+
+### Code Mode Features
+
+**Smart Diff Preview:**
+Before applying changes, Code Mode shows a diff:
+
+```diff
+--- a/app.js
+&#43;&#43;&#43; b/app.js
+@@ -5,6 &#43;5,8 @@ const express = require(&#39;express&#39;);
+ const cors = require(&#39;cors&#39;);
+ const mongoose = require(&#39;mongoose&#39;);
+ 
+&#43;const authRoutes = require(&#39;./routes/auth&#39;);
+&#43;
+ const app = express();
+ 
+ app.use(cors());
+@@ -15,6 &#43;17,8 @@ app.use(express.json());
+ // Routes
+ app.use(&#39;/api/users&#39;, userRoutes);
+ 
+&#43;app.use(&#39;/api/auth&#39;, authRoutes);
+&#43;
+ // Error handling
+ app.use((err, req, res, next) =&gt; {
+   console.error(err.stack);
+```
+
+**Apply Options:**
+- `y` - Apply all changes
+- `n` - Reject all changes
+- `d` - Show detailed diff
+- `s` - Apply selected changes only
+
+### Code Mode Configuration
+
+```json
+{
+  &#34;code&#34;: {
+    &#34;autoFormat&#34;: true,
+    &#34;generateTests&#34;: true,
+    &#34;addComments&#34;: true,
+    &#34;preferFunctional&#34;: false,
+    &#34;maxFilesPerRequest&#34;: 10,
+    &#34;backupBeforeModify&#34;: true
+  }
+}
+```
+
+### When to Use Code Mode
+
+- **Implementing features** from specifications
+- **Refactoring existing code**
+- **Adding tests** to existing functionality
+- **Fixing bugs** with known solutions
+- **Writing documentation**
+
+**Command:**
+
+```bash
+# CLI
+kilo-code --mode code &#34;Implement the password reset functionality&#34;
+
+# In IDE
+/mode code
+/create the user profile component
+```
+
+---
+
+## Debug Mode: The Detective
+
+**Debug Mode** specializes in finding and fixing bugs. It analyzes error messages, stack traces, and test failures to identify root causes.
+
+### Key Capabilities
+
+1. **Error Analysis**: Parses and explains error messages
+2. **Log Analysis**: Reviews application logs for anomalies
+3. **Test Failure Investigation**: Diagnoses why tests fail
+4. **Performance Profiling**: Identifies bottlenecks
+5. **Security Scanning**: Finds potential vulnerabilities
+
+### Example: Debugging a Production Issue
+
+`````bash
+User: &#34;Our API is returning 500 errors on the /checkout endpoint&#34;
+
+Debug Mode Response:
+I&#39;ll investigate the /checkout endpoint issue.
+
+## Step 1: Analyze Error Logs
+
+Found these errors in the last hour:
+
+```
+Error: Cannot read properties of undefined (reading &#39;price&#39;)
+    at calculateTotal (/app/services/order.js:45:23)
+    at checkoutHandler (/app/routes/checkout.js:28:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+```
+
+## Step 2: Examine the Code
+
+**File: /app/services/order.js:45**
+```javascript
+function calculateTotal(items) {
+  let total = 0;
+  for (const item of items) {
+    total &#43;= item.price * item.quantity;  // Line 45 - error here
+  }
+  return total;
+}
+```
+
+## Root Cause
+
+The `items` array contains products where `price` is sometimes `undefined`.
+This happens when products are loaded without their pricing information.
+
+## Step 3: Check Related Code
+
+**File: /app/routes/checkout.js**
+```javascript
+async function checkoutHandler(req, res) {
+  const cart = await getCart(req.user.id);
+  const items = await getProducts(cart.itemIds);  // Missing price join
+  const total = calculateTotal(items);
+  // ...
+}
+```
+
+## Proposed Fix
+
+```diff
+--- a/app/services/order.js
+&#43;&#43;&#43; b/app/services/order.js
+@@ -1,8 &#43;1,12 @@
+ function calculateTotal(items) {
+   let total = 0;
+   for (const item of items) {
+-    total &#43;= item.price * item.quantity;
+&#43;    if (!item.price) {
+&#43;      throw new Error(`Product ${item.id} has no price`);
+&#43;    }
+&#43;    total &#43;= item.price * item.quantity;
+   }
+   return total;
+ }
+```
+
+```diff
+--- a/app/routes/checkout.js
+&#43;&#43;&#43; b/app/routes/checkout.js
+@@ -5,7 &#43;5,7 @@ async function checkoutHandler(req, res) {
+   const cart = await getCart(req.user.id);
+-  const items = await getProducts(cart.itemIds);
+&#43;  const items = await getProducts(cart.itemIds, { include: &#39;pricing&#39; });
+   const total = calculateTotal(items);
+   // ...
+ }
+```
+
+## Verification
+
+I&#39;ll run the checkout tests to verify the fix:
+
+```bash
+$ npm test -- checkout
+✓ checkout should calculate total correctly
+✓ checkout should handle missing prices
+✓ checkout should create order
+
+All tests passed!
+```
+
+Apply these fixes?
+`````
+
+### Debug Mode Tools
+
+Debug mode can use various diagnostic tools:
+
+```bash
+# Run with specific debugger
+/debug --tool lldb &#34;Investigate the segmentation fault&#34;
+
+# Analyze logs
+/debug --tool logs &#34;Find errors in the last hour&#34;
+
+# Profile performance
+/debug --tool profiler &#34;Find slow database queries&#34;
+
+# Check memory leaks
+/debug --tool heap &#34;Analyze memory usage&#34;
+```
+
+### Debug Mode Configuration
+
+```json
+{
+  &#34;debug&#34;: {
+    &#34;autoRunTests&#34;: true,
+    &#34;collectLogs&#34;: true,
+    &#34;maxLogLines&#34;: 500,
+    &#34;enableProfiling&#34;: false,
+    &#34;breakOnFirstError&#34;: false
+  }
+}
+```
+
+### When to Use Debug Mode
+
+- **Build failures** and compilation errors
+- **Runtime errors** and crashes
+- **Test failures** in CI/CD
+- **Performance issues** and slow queries
+- **Memory leaks** and resource exhaustion
+
+**Command:**
+
+```bash
+# CLI
+kilo-code --mode debug &#34;The tests are failing with TypeError&#34;
+
+# In IDE
+/mode debug
+/fix the build error
+```
+
+---
+
+## Switching Between Modes
+
+### In Kilo Code IDE
+
+**Method 1: Mode Selector**
+1. Look for the mode dropdown in the chat panel
+2. Select your desired mode
+3. Continue the conversation
+
+**Method 2: Slash Commands**
+
+```bash
+/mode orchestrator
+/mode architect
+/mode code
+/mode debug
+```
+
+**Method 3: Contextual Switching**
+The Orchestrator automatically switches modes based on task needs:
+
+```bash
+User: &#34;Build a complete authentication system&#34;
+Orchestrator: &#34;I&#39;ll plan this (Architect), then implement (Code), then test (Debug)&#34;
+```
+
+### In Kilo Code CLI
+
+```bash
+# Set mode for session
+kilo-code --mode architect
+
+# One-time mode switch
+kilo-code &#34;/mode code Implement the login function&#34;
+
+# Mode with specific options
+kilo-code --mode debug --tool logs &#34;Find the error&#34;
+```
+
+### Mode Persistence
+
+Modes persist within a session but reset between sessions. To set a default:
+
+```json
+// .kilocode/config.json
+{
+  &#34;defaultMode&#34;: &#34;orchestrator&#34;,
+  &#34;modeByTask&#34;: {
+    &#34;design&#34;: &#34;architect&#34;,
+    &#34;implement&#34;: &#34;code&#34;,
+    &#34;fix&#34;: &#34;debug&#34;,
+    &#34;plan&#34;: &#34;orchestrator&#34;
+  }
+}
+```
+
+---
+
+## Advanced: Custom Modes
+
+You can create custom modes for your team&#39;s specific needs:
+
+```json
+// .kilocode/modes/security-review.json
+{
+  &#34;name&#34;: &#34;security-review&#34;,
+  &#34;baseMode&#34;: &#34;architect&#34;,
+  &#34;systemPrompt&#34;: &#34;You are a security expert reviewing code for vulnerabilities.&#34;,
+  &#34;tools&#34;: [&#34;code-scanner&#34;, &#34;dependency-checker&#34;, &#34;secret-detector&#34;],
+  &#34;restrictions&#34;: {
+    &#34;cannotModifyFiles&#34;: true,
+    &#34;mustCiteOWASP&#34;: true
+  }
+}
+```
+
+**Using Custom Mode:**
+
+```bash
+kilo-code --mode security-review &#34;Audit our authentication code&#34;
+```
+
+---
+
+## Mode Comparison Table
+
+| Feature | Orchestrator | Architect | Code | Debug |
+|---------|-------------|-----------|------|-------|
+| **Planning** | ✓✓✓ | ✓✓✓ | ✓ | ✓ |
+| **Design** | ✓ | ✓✓✓ | - | - |
+| **Implementation** | ✓ | - | ✓✓✓ | ✓ |
+| **Testing** | ✓ | - | ✓ | ✓✓✓ |
+| **File Modification** | ✓ | - | ✓✓✓ | ✓ |
+| **Tool Access** | All | Limited | All | Diagnostic |
+| **Best For** | Complex tasks | Design decisions | Writing code | Fixing bugs |
+
+---
+
+## Best Practices
+
+### 1. Start with Orchestrator for Complex Tasks
+
+```bash
+Good: &#34;Build a complete blog platform with user authentication&#34;
+(The Orchestrator will plan and delegate appropriately)
+```
+
+### 2. Use Architect for Major Decisions
+
+```bash
+Good: &#34;Should we use MongoDB or PostgreSQL for our analytics platform?&#34;
+(The Architect will provide a detailed comparison)
+```
+
+### 3. Use Code for Implementation
+
+```bash
+Good: &#34;Implement the blog post CRUD endpoints based on our design&#34;
+(Code mode will write the actual implementation)
+```
+
+### 4. Use Debug for Problems
+
+```bash
+Good: &#34;The login endpoint returns 401 for valid credentials&#34;
+(Debug mode will investigate and fix)
+```
+
+### 5. Don&#39;t Fight the Modes
+
+```bash
+Bad: Asking Code mode to design architecture
+Bad: Asking Architect mode to write implementation
+```
+
+---
+
+## Real-World Example: Full Feature Development
+
+Here&#39;s how modes work together for a complete feature:
+
+```bash
+Session: Add password reset functionality
+
+1. [Orchestrator] Receives request, creates plan
+   &#34;I&#39;ll design (Architect), implement (Code), and test (Debug)&#34;
+
+2. [Architect] Designs the flow
+   - Email template design
+   - Token generation strategy
+   - API endpoint design
+   - Security considerations
+
+3. [Code] Implements the design
+   - Creates reset token model
+   - Builds email service integration
+   - Implements /forgot-password endpoint
+   - Implements /reset-password endpoint
+
+4. [Debug] Tests and verifies
+   - Runs unit tests
+   - Tests email delivery (mocked)
+   - Verifies token expiration
+   - Checks for security issues
+
+5. [Orchestrator] Reports completion
+   &#34;Password reset feature complete. All tests passing.&#34;
+```
+

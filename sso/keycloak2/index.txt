@@ -1,0 +1,169 @@
+---
+title: Install keycloak with postgresql
+url: https://devopstales.github.io/sso/keycloak2/
+date: 2019-04-05
+keywords: Keycloak, oauth2, SSO, OIDC
+---
+
+
+Keycloak is an open source identity and access management solution.
+
+&lt;!--more--&gt;
+
+### Install dependencies
+```
+yum install -y epel-release
+yum install -y java-1.8.0-openjdk-headless tmux nano mariadb-server unzip httpd
+
+cd /opt
+# https://jdbc.postgresql.org/download.html
+wget https://jdbc.postgresql.org/download/postgresql-42.2.5.jar
+```
+
+### Install and configure database
+In a previous post I wrote about how to [Install PostgreSQL 10]({{&lt; relref &#34;/linux/install-postgresql.md#install-postgresql-10-on-centos-7&#34; &gt;}})
+
+```
+nano /var/lib/pgsql/10/data/pg_hba.conf
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+local   all             keycloak                                md5
+
+su - postgres
+createuser keycloak
+psql
+ALTER USER keycloak WITH ENCRYPTED password &#39;Password1&#39;;
+CREATE DATABASE keycloak WITH ENCODING=&#39;UTF8&#39; OWNER=keycloak;
+\q
+```
+
+### Install keycloak
+```
+groupadd -r keycloak
+useradd -m -d /var/lib/keycloak -s /sbin/nologin -r -g keycloak keycloak
+
+mkdir -p /opt/keycloak/
+cd /opt/keycloak/
+
+# https://www.keycloak.org/downloads.html
+wget https://downloads.jboss.org/keycloak/4.8.2.Final/keycloak-4.8.2.Final.tar.gz
+
+tar -xzf keycloak-4.8.2.Final.tar.gz
+ln -s /opt/keycloak/keycloak-4.8.2.Final /opt/keycloak/current
+chown keycloak: -R /opt/keycloak
+sudo -u keycloak chmod 700 /opt/keycloak/current/standalone
+
+mkdir /var/log/keycloak
+chown keycloak: -R /var/log/keycloak
+
+chown keycloak: -R /opt/keycloak
+sudo -u keycloak chmod 700 /opt/keycloak/current/standalone
+```
+
+```
+echo &#39;[Unit]
+Description=Keycloak
+After=network.target syslog.target
+
+[Service]
+Type=idle
+User=keycloak
+Group=keycloak
+ExecStart=/opt/keycloak/current/bin/standalone.sh -b 0.0.0.0
+TimeoutStartSec=600
+TimeoutStopSec=600
+
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=keycloak
+
+[Install]
+WantedBy=multi-user.target
+&#39; &gt; /etc/systemd/system/keycloak.service
+```
+
+```
+echo &#39;if $programname == &#34;keycloak&#34; then /var/log/keycloak/jboss.log
+&amp; stop
+&#39;&gt;/etc/rsyslog.d/keycloak.conf
+
+systemctl daemon-reload
+service rsyslog restart
+systemctl start keycloak.service
+```
+
+### Configure wildfly
+```
+cd /opt/keycloak/current/modules
+mkdir -p org/postgresql/main
+cp /opt/postgresql-42.2.5.jar .
+
+echo &#39;&lt;?xml version=&#34;1.0&#34; ?&gt;
+&lt;module xmlns=&#34;urn:jboss:module:1.3&#34; name=&#34;org.postgresql&#34;&gt;
+
+    &lt;resources&gt;
+        &lt;resource-root path=&#34;postgresql-42.2.5.jar&#34;/&gt;
+	&lt;/resources&gt;
+
+	&lt;dependencies&gt;
+		&lt;module name=&#34;javax.api&#34;/&gt;
+		&lt;module name=&#34;javax.transaction.api&#34;/&gt;
+	&lt;/dependencies&gt;
+&lt;/module&gt;&#39; &gt; org/postgresql/main/module.xml
+```
+
+```
+cd /opt/keycloak/current/standalone/configuration/
+nano standalone.xml
+...
+        &lt;datasources&gt;
+				&lt;datasource jndi-name=&#34;java:jboss/datasources/KeycloakDS&#34; pool-name=&#34;KeycloakDS&#34; enabled=&#34;true&#34; use-java-context=&#34;true&#34;&gt;
+					&lt;connection-url&gt;jdbc:postgresql://localhost:5432/keycloak&lt;/connection-url&gt;
+					&lt;driver&gt;postgresql&lt;/driver&gt;
+					&lt;pool&gt;
+						&lt;max-pool-size&gt;20&lt;/max-pool-size&gt;
+					&lt;/pool&gt;
+					&lt;security&gt;
+						&lt;user-name&gt;keycloak&lt;/user-name&gt;
+						&lt;password&gt;Password1&lt;/password&gt;
+					&lt;/security&gt;
+				&lt;/datasource&gt;
+...
+        &lt;drivers&gt;
+					&lt;driver name=&#34;postgresql&#34; module=&#34;org.postgresql&#34;&gt;
+						&lt;xa-datasource-class&gt;org.postgresql.xa.PGXADataSource&lt;/xa-datasource-class&gt;
+				&lt;/driver&gt;
+...
+&lt;default-bindings context-service=&#34;java:jboss/ee/concurrency/context/default&#34; datasource=&#34;java:jboss/datasources/KeycloakDS&#34;
+```
+
+```
+cd /opt/keycloak/current
+./bin/add-user-keycloak.sh -u admin -p Password1 -r master
+systemctl restart keycloak.service
+```
+
+### Configurate proxy
+```
+echo &#39;&lt;VirtualHost *:80&gt;
+    ServerName sso.devopstales.intra
+
+    ProxyPreserveHost On
+#    SSLProxyEngine On
+#    SSLProxyCheckPeerCN on
+#    SSLProxyCheckPeerExpire on
+    RequestHeader set X-Forwarded-Proto &#34;https&#34;
+    RequestHeader set X-Forwarded-Port &#34;80&#34; #443
+    ProxyPass / http://127.0.0.1:8080/
+    ProxyPassReverse / http://127.0.0.1:8080/
+&lt;/VirtualHost&gt;&#39; &gt; /etc/apache2/sites-available/keycloak.conf
+
+sudo a2enmod headers
+a2enmod proxy
+a2enmod rewrite
+a2ensite keycloak.confcd
+service httpd restart
+
+# go to sso.devopstales.intra
+# login admin / Password1
+```
+

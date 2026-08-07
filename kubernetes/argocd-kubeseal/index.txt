@@ -1,0 +1,230 @@
+---
+title: ArgoCD and kubeseal to encrypt secrets
+url: https://devopstales.github.io/kubernetes/argocd-kubeseal/
+date: 2021-04-10
+keywords: kubernetes deployment, gitops, Argo CD, kubeseal
+---
+
+
+In this post I will show you how you can use kubeseal with ArgoCD to protect secrets.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/k8s-gitops.html&#34; &gt;}}
+
+## Install Argocd
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f \
+https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# or in ha
+kubectl apply -n argocd -f \
+https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/ha/install.yaml
+```
+
+### Install Argocd cli
+
+```bash
+VERSION=$(curl --silent &#34;https://api.github.com/repos/argoproj/argo-cd/releases/latest&#34; | grep &#39;&#34;tag_name&#34;&#39; | sed -E &#39;s/.*&#34;([^&#34;]&#43;)&#34;.*/\1/&#39;)
+
+curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/$VERSION/argocd-linux-amd64
+
+chmod &#43;x /usr/local/bin/argocd
+
+argocd version
+```
+
+### Connect without ingress
+
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+
+### Create ingress for server
+
+```yaml
+---
+piVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: argocd-server-http-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.class: &#34;nginx&#34;
+    nginx.ingress.kubernetes.io/force-ssl-redirect: &#34;true&#34;
+    nginx.ingress.kubernetes.io/backend-protocol: &#34;HTTPS&#34;
+    cert-manager.io/cluster-issuer: ca-issuer
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: argocd-server
+          servicePort: http
+    host: argocd.k8s.intra
+  tls:
+  - hosts:
+    - argocd.k8s.intra
+    secretName: https-argocd-secret # do not change, this is provided by Argo CD
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: argocd-server-grpc-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.class: &#34;nginx&#34;
+    nginx.ingress.kubernetes.io/backend-protocol: &#34;GRPC&#34;
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: argocd-server
+          servicePort: https
+    host: grpc-argocd.k8s.intra
+  tls:
+  - hosts:
+    - grpc-argocd.k8s.intra
+    secretName: argocd-secret # do not change, this is provided by Argo CD
+```
+
+### Get init password
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath=&#34;{.data.password}&#34; | base64 -d &amp;&amp; echo
+jMnyrjcdocMoqPfC
+
+argocd login argocd.k8s.intra
+WARNING: server certificate had error: x509: certificate signed by unknown authority. Proceed insecurely (y/n)? y
+WARN[0002] Failed to invoke grpc call. Use flag --grpc-web in grpc calls. To avoid this warning message, use flag --grpc-web. 
+Username: admin
+Password: 
+&#39;admin:login&#39; logged in successfully
+Context &#39;argocd.k8s.intra&#39; updated
+
+argocd account update-password
+```
+
+### Register new cluster
+By default Argocd register the cluster where running with a cluster admin service account. You can register different clusters with its kubectl configs. So you can create multiple service accounts with multiple privileges  and register them with its kubectl configs.
+
+```bash
+$ kubectx
+default
+
+$ argocd cluster add default
+INFO[0000] ServiceAccount &#34;argocd-manager&#34; already exists in namespace &#34;kube-system&#34; 
+INFO[0000] ClusterRole &#34;argocd-manager-role&#34; updated    
+INFO[0000] ClusterRoleBinding &#34;argocd-manager-role-binding&#34; updated 
+WARN[0000] Failed to invoke grpc call. Use flag --grpc-web in grpc calls. To avoid this warning message, use flag --grpc-web. 
+Cluster &#39;https://172.17.9.10:6443&#39; added
+```
+
+### Deploy app with Argocd
+
+```bash
+$ kubectl create ns guestbook-demo
+
+$ argocd app create 00-tools --repo https://github.com/devopstales/gitops-repo.git \
+--path 00_argocd/00_tools --dest-server https://kubernetes.default.svc --dest-namespace default
+
+$ argocd app create 01-guestbook --repo https://github.com/devopstales/gitops-repo.git \
+--path 00_argocd/01_guestbook --dest-server https://kubernetes.default.svc --dest-namespace guestbook-demo
+
+$ argocd app get 01-guestbook
+Name:               01-guestbook
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          guestbook-demo
+URL:                https://argocd.k8s.intra/applications/01-guestbook
+Repo:               https://github.com/devopstales/gitops-repo.git
+Target:             
+Path:               00_argocd/01_guestbook
+SyncWindow:         Sync Allowed
+Sync Policy:        &lt;none&gt;
+Sync Status:        OutOfSync from  (e8df0a5)
+Health Status:      Missing
+
+GROUP                      KIND         NAMESPACE       NAME                            STATUS     HEALTH   HOOK  MESSAGE
+                           Service      guestbook-demo  guestbook-ui                    OutOfSync  Missing        
+apps                       Deployment   guestbook-demo  guestbook-ui                    OutOfSync  Missing        
+rbac.authorization.k8s.io  RoleBinding  guestbook-demo  psp-rolebinding-guestbook-demo  OutOfSync  Missing   
+
+$ argocd app sync 01-guestbook
+
+```
+
+## Install kubeseal
+
+```bash
+VERSION=$(curl --silent &#34;https://api.github.com/repos/bitnami-labs/sealed-secrets/releases/latest&#34; | grep &#39;&#34;tag_name&#34;&#39; | sed -E &#39;s/.*&#34;([^&#34;]&#43;)&#34;.*/\1/&#39;)
+
+wget https://github.com/bitnami-labs/sealed-secrets/releases/download/$VERSION/kubeseal-linux-amd64 -O /usr/local/bin/kubeseal
+chmod 755 /usr/local/bin/kubeseal
+kubeseal --version
+```
+
+### Now install the cluster-side controller
+
+```bash
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/$VERSION/controller.yaml
+```
+
+### Create a sealed secret
+
+Create a secret you want to encrypt:
+
+```yaml
+apiVersion: v1
+data:
+  secret: UzNDUjNUCg==
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: mysecret
+  namespace: demo-app
+```
+
+A secret in Kubernetes cluster is encoded in base64 but not encrypted! Theses data are &#34;only&#34; encoded so if a user have access to your secrets, he can simply base64 decode to see your sensitive data:
+
+```base
+echo &#34;UzNDUjNUCg==&#34; | base64 -d
+S3CR3T
+```
+
+Since the secrets aren&#39;t encrypted, it is unsecure to commit them to your Git repository.
+
+### Use kubeseal to Encrypt the secret
+
+```yaml
+kubeseal --format yaml &lt;secret.yaml &gt;sealedsecret.yaml
+
+cat sealedsecret.yaml
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: mysecret
+  namespace: demo-app
+spec:
+  encryptedData:
+    secret: AgCZl5b75Lmr8z7Ppa5tNBPX4zWH2vset0GVKhNfTBRnAANDs9Gycrq5EfueE00PGX&#43;&#43;v4VFKEwi9rNeAAvFkETges31Uhi4&#43;Oym9CkV9rU2pHAvD4iZapt&#43;fHSndMUY8vWT8GCYzrzSOFSRPKB4cdAy3JJ4f48SwxCFYXdJgl/6KiHkrk2AzxHKip3ryVjKY01E8cSpxw1Exv8RnEDD8D9hfb57fEIRRwMrIRUkg/jPOvf4YCHcjHiVLLP&#43;MwutT1Jd65hjAx1WZFSjDRUj3rFfzsO6zAVxgx20WXtc3qMK9jMeeQaNbbAvdv3YuNsuxJIE8SFQFPfGop&#43;QFefiyDGWTjzwHkeU65Ci1Nuj8pSS600ITyGdyNY4F3qjen1eBnMOaub5ZJqEmXyTQwSL/9R7UfoFqJCo4b36g2axacegqHtLL&#43;U4wrHsDB9iQ/JrEAWj4l7s5bhOJbq0N8zLwZvEGXSoPs/4eBUxCuHayOCz6o8BY8Zsv1tDgQ&#43;AXpvudXfzw02zH/DCr7Jg2CVXB8Qk2SUnC5rMzsvqcsYnHP25pxGh9qd3p8QXIjb&#43;AttJUFkPGHlc/rY6sY4QJ6Qjlfv8VXArwrmnfkcZSfLDwyUOGcqZiho3&#43;vGC4mjDcFgbEDbD3Emv/2jHimFBOv2eq9dMqvmZuzk4M4KCLYHqFuX&#43;L/XM&#43;mAnAxlCRrv6q6Hup26HuI84Hn2N
+  template:
+    metadata:
+      creationTimestamp: null
+      name: mysecret
+      namespace: demo-app
+```
+
+`sealedsecret.yaml` is the file you need to store in git.
+
+```bash
+argocd app create 02-secret --repo https://github.com/devopstales/gitops-repo.git \
+--path 00_argocd/02_secret --dest-server https://kubernetes.default.svc --dest-namespace demo-app
+
+kubectl logs -n demo-app demo-app
+S3CR3T
+```
+

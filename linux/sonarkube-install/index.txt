@@ -1,0 +1,100 @@
+---
+title: Sonarqube Install
+url: https://devopstales.github.io/linux/sonarkube-install/
+date: 2019-05-30
+---
+
+
+Sonarqube Repository OSS is an artifact repository with universal support for popular formats.
+&lt;!--more--&gt;
+
+```
+yum install epel-release -y
+yum update -y
+```
+
+### Install Postgresql
+
+In a previous post I wrote about how to [Install PostgreSQL 10]({{&lt; relref &#34;/linux/install-postgresql.md#install-postgresql-9-6-on-centos-7&#34; &gt;}})
+
+```
+su - postgres
+createuser -S sonar
+createdb -O sonar sonar
+psql
+ALTER USER &#34;sonar&#34; WITH PASSWORD &#39;Password1&#39;;
+\q
+exit
+```
+
+### Install Sonarqube
+```
+# https://binaries.sonarsource.com/Distribution/sonarqube/
+cd /opt
+wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-7.6.zip
+unzip sonarqube-7.6.zip
+ln -s /opt/sonarqube-7.6 /opt/sonarqube
+
+nano /opt/sonarqube/conf/sonar.properties
+sonar.jdbc.username=sonar
+sonar.jdbc.password=Password1
+sonar.jdbc.url=jdbc:postgresql://localhost/sonar
+
+/opt/sonarqube/bin/linux-x86-64/sonar.sh
+RUN_AS_USER=sonar
+
+adduser -s /bin/false sonar
+chown -R sonar:sonar /opt/sonarqube/
+
+sysctl -w vm.max_map_count=262144
+sysctl -w fs.file-max=65536
+ulimit -n 65536
+ulimit -u 4096
+```
+
+### Create sistemd serice for Sonarqube
+```
+echo &#39;[Unit]
+Description=Sonar
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+ExecReload=/opt/sonarqube/bin/linux-x86-64/sonar.sh restart
+PIDFile=/opt/sonarqube/bin/linux-x86-64/./SonarQube.pid
+Type=forking
+User=sonar
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target&#39; &gt; /etc/systemd/system/sonar.service
+```
+
+### Start Sonarqube
+```
+sudo systemctl daemon-reload
+sudo systemctl enable sonar.service
+sudo systemctl start sonar.service
+
+tailf /opt/sonarqube/logs/es.log
+### To check, point your browser to http://localhost:9000. Default username is admin with password admin.
+```
+
+### Apache proxy
+```
+echo &#39;ProxyRequests Off
+ProxyPreserveHost On
+&lt;VirtualHost *:80&gt;
+  ServerName sonar.devopstales.intra
+  ServerAdmin admin@somecompany.com
+  ProxyPass / http://localhost:9000/
+  ProxyPassReverse / http://localhost:9000/
+  ErrorLog /var/log/sonar-error.log
+  CustomLog /var/log/sonar-access.log common
+&lt;/VirtualHost&gt;&#39; &gt; /etc/httpd/conf.d/sonar.conf
+
+systemctl start httpd
+```
+

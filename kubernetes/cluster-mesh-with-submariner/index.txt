@@ -1,0 +1,333 @@
+---
+title: Multicluster Kubernetes with Rancher Submariner Cluster Mesh
+url: https://devopstales.github.io/kubernetes/cluster-mesh-with-submariner/
+date: 2023-08-23
+keywords: Kubernetes, k8s, Load Balancer, kubernetes deployment, kubernetes ingress, rancher, rancher submariner, submariner, Cluster Mesh, Multi-Cluster, clustermesh
+---
+
+
+In this tutorial I will show you how to install Rancher Submariner on multiple Kubernetes clusters and connect those clusters with Cluster Mesh.
+
+&lt;!--more--&gt;
+
+### Bootstrap kind clusters
+
+```yaml
+nano kind-c1-config.yaml 
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+networking:
+  disableDefaultCNI: true
+  apiServerAddress: 192.168.0.15 # PUT YOUR IP ADDRESSS OF YOUR MACHINE HERE!
+  podSubnet: &#34;10.0.0.0/16&#34;
+  serviceSubnet: &#34;10.1.0.0/16&#34;
+```
+
+```yaml
+nano kind-c2-config.yaml 
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+networking:
+  disableDefaultCNI: true
+  apiServerAddress: 192.168.0.15 # PUT YOUR IP ADDRESSS OF YOUR MACHINE HERE!
+  podSubnet: &#34;10.2.0.0/16&#34;
+  serviceSubnet: &#34;10.3.0.0/16&#34;
+```
+
+```bash
+kind create cluster --name c1 --config kind-c1-config.yaml 
+kind create cluster --name c2 --config kind-c2-config.yaml
+```
+
+### Inctall Calico CNI
+
+```yaml
+nano tigera-c1.yaml
+---
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+      - blockSize: 26
+        cidr: 10.0.0.0/16
+        encapsulation: VXLANCrossSubnet
+        natOutgoing: Enabled
+        nodeSelector: all()
+---
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
+```
+
+```yaml
+nano tigera-c2.yaml
+---
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+      - blockSize: 26
+        cidr: 10.2.0.0/16
+        encapsulation: VXLANCrossSubnet
+        natOutgoing: Enabled
+        nodeSelector: all()
+---
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
+```
+
+```bash
+kubectx kind-c1
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+kubectl apply -f tigera-c1.yaml
+watch kubectl get pods -n calico-system
+
+kubectx kind-c2
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+kubectl apply -f tigera-c2.yaml
+watch kubectl get pods -n calico-system
+```
+
+### Install submariner
+
+```bash
+kubectx kind-c1
+kubectl label node c1-worker submariner.io/gateway=true 
+
+kubectx kind-c2
+kubectl label node c2-worker submariner.io/gateway=true
+```
+
+```bash
+kubectx kind-c1
+subctl deploy-broker
+subctl join broker-info.subm --natt=false --clusterid kind-c1
+
+kubectx kind-c2
+subctl join broker-info.subm --natt=false --clusterid kind-c2
+```
+
+```bash
+kubectl get pod -n submariner-operator
+
+NAME                                             READY   STATUS    RESTARTS   AGE
+submariner-gateway-xc7ql                         1/1     Running   0          96s
+submariner-lighthouse-agent-7dd644569c-cw26l     1/1     Running   0          96s
+submariner-lighthouse-coredns-7567869b57-dhqwk   1/1     Running   0          95s
+submariner-lighthouse-coredns-7567869b57-w4njc   1/1     Running   0          95s
+submariner-metrics-proxy-7pfg2                   1/1     Running   0          96s
+submariner-operator-6bd479d489-cb8h9             1/1     Running   0          18m
+submariner-routeagent-fwbbp                      1/1     Running   0          96s
+submariner-routeagent-w8chv                      1/1     Running   0          96s
+
+exit
+```
+
+From your host you can test the connections:
+
+```bash
+curl -Ls https://get.submariner.io | bash
+export PATH=$PATH:~/.local/bin
+echo export PATH=\$PATH:~/.local/bin &gt;&gt; ~/.profile
+```
+
+```bash
+subctl show gateways
+
+Cluster &#34;kind-c1&#34;
+ ✓ Showing Gateways
+NODE        HA STATUS   SUMMARY                               
+c1-worker   active      All connections (1) are established   
+
+Cluster &#34;kind-c2&#34;
+ ✓ Showing Gateways
+NODE        HA STATUS   SUMMARY                               
+c2-worker   active      All connections (1) are established  
+```
+
+```bash
+subctl show connections
+
+Cluster &#34;kind-c2&#34;
+ ✓ Showing Connections
+GATEWAY     CLUSTER   REMOTE IP    NAT   CABLE DRIVER   SUBNETS                    STATUS      RTT avg.     
+c1-worker   kind-c1   172.18.0.3   no    libreswan      10.1.0.0/16, 10.0.0.0/16   connected   568.195µs    
+
+Cluster &#34;kind-c1&#34;
+ ✓ Showing Connections
+GATEWAY     CLUSTER   REMOTE IP    NAT   CABLE DRIVER   SUBNETS                    STATUS      RTT avg.     
+c2-worker   kind-c2   172.18.0.4   no    libreswan      10.3.0.0/16, 10.2.0.0/16   connected   424.481µs
+
+
+subctl verify --context kind-c1 --tocontext kind-c2 --only service-discovery,connectivity --verbose
+```
+
+### Run connectivity test:
+
+```yaml
+cat deployment.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rebel-base
+spec:
+  selector:
+    matchLabels:
+      name: rebel-base
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        name: rebel-base
+    spec:
+      containers:
+      - name: rebel-base
+        image: docker.io/nginx:1.15.8
+        volumeMounts:
+          - name: html
+            mountPath: /usr/share/nginx/html/
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 1
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+      volumes:
+        - name: html
+          configMap:
+            name: rebel-base-response
+            items:
+              - key: message
+                path: index.html
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: x-wing
+spec:
+  selector:
+    matchLabels:
+      name: x-wing
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        name: x-wing
+    spec:
+      containers:
+      - name: x-wing-container
+        image: docker.io/cilium/json-mock:1.2
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - -sS
+            - -o
+            - /dev/null
+            - localhost
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - -sS
+            - -o
+            - /dev/null
+            - localhost
+```
+
+```bash
+kubectl --context kind-c1 apply -f deployment.yaml
+kubectl --context kind-c2 apply -f deployment.yaml
+```
+
+```yaml
+nano configmap_c1.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rebel-base-response
+data:
+  message: &#34;{\&#34;Cluster\&#34;: \&#34;c1\&#34;, \&#34;Planet\&#34;: \&#34;N&#39;Zoth\&#34;}\n&#34;
+
+nano configmap_c2.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rebel-base-response
+data:
+  message: &#34;{\&#34;Cluster\&#34;: \&#34;c2\&#34;, \&#34;Planet\&#34;: \&#34;Foran Tutha\&#34;}\n&#34;
+```
+
+```bash
+kubectl --context kind-c1 apply -f configmap_c1.yaml
+kubectl --context kind-c2 apply -f configmap_c2.yaml
+```
+
+```yaml
+cat service1.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rebel-base
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+  selector:
+    name: rebel-base
+```
+
+```bash
+kubectl --context kind-c1 apply -f service1.yaml
+```
+
+### Deploy applications on Kubernetes
+
+```bash
+kubectx kind-c1
+subctl export service --namespace default rebel-base
+
+kubectl get ServiceExport
+NAME             AGE
+rebel-base       2m22s
+
+kubectl get svc
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.1.0.1       &lt;none&gt;        443/TCP   41m
+rebel-base   ClusterIP   10.1.125.152   &lt;none&gt;        80/TCP    5s
+```
+
+```bash
+kubectx kind-c2
+
+kubectl get ServiceImport -n submariner-operator
+NAME                         TYPE           IP                AGE
+rebel-base-default-kind-c1   ClusterSetIP   [&#34;10.1.125.152&#34;]   12s
+```
+

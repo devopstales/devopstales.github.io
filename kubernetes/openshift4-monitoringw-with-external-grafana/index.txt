@@ -1,0 +1,84 @@
+---
+title: Integrating OpenShift 4 with External Grafana
+url: https://devopstales.github.io/kubernetes/openshift4-monitoringw-with-external-grafana/
+date: 2024-02-20
+keywords: openshift 4.2, openshift okd4, openshift container platform, rad hat openshift, prometheus, grafana
+---
+
+
+
+In this Post I will show you how you how you can integrate an external Grafana with OpenShift 4 Prometheus.
+&lt;!--more--&gt;
+
+OpenShift already has its built-in monitoring stack with Prometheus, Grafana, and Alertmanager. It’s useful for monitoring a single cluster, but in the case of multiple clusters, you may want to get a single point of view. So I will configure an external VM based installed Grafana to get graphs from all the clusters.
+
+### Configuring OpenShift Prometheus
+
+First we will create a a secret in Openshift for the authentication based in the name of the monitoring service account:
+
+```yaml
+oc apply -f - &lt;&lt;EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prometheus-robot-secret
+  namespace: openshift-monitoring
+  annotations:
+    kubernetes.io/service-account.name: prometheus-k8s
+type: kubernetes.io/service-account-token
+EOF
+```
+
+Check the token string and Try to query the OpenShift Prometheus using that token
+
+```bash
+TOKEN=`oc -n openshift-monitoring extract secret/prometheus-robot-secret --to=- --keys=token`
+
+PROMETHEUS_URL=$(oc get route -n openshift-monitoring prometheus-k8s -o jsonpath=&#34;{.status.ingress[0].host}&#34;)
+
+curl -sk -H &#34;Authorization: Bearer $TOKEN&#34; https://$PROMETHEUS_URL/api/v1/alerts
+```
+
+The result will end up with something like this:
+
+```json
+{&#34;status&#34;:&#34;success&#34;,&#34;data&#34;:{&#34;alerts&#34;:[{&#34;labels&#34;:{&#34;alertname&#34;:&#34;PodDisruptionBudgetAtLimit&#34; …
+```
+
+### Integrate Grafana with OpenShift Prometheus
+
+Go back to the Grafana Dashboard, and add &#39;&#39;&#39;data source&#39;&#39;&#39; by go to &#39;&#39;&#39;menu&#39;&#39;&#39; → &#39;&#39;&#39;connection&#39;&#39;&#39; → &#39;&#39;&#39;data source&#39;&#39;&#39; → add &#39;&#39;&#39;new data source&#39;&#39;&#39; and choose &#39;&#39;&#39;Prometheus&#39;&#39;&#39;.
+
+On Authentication:
+
+* Choose Forward OAuth Identity as the authentication method
+* Skip TLS Certificate Validation when using untrusted certificate
+
+![On Authentication](/img/include/openshift-external-grafana01.webp)
+
+On HTTP Headers, add Header:
+
+* Fill in the Header with &#39;&#39;&#39;Authorization&#39;&#39;&#39;
+* Fill in the value with the output of this following command
+
+```bash
+TOKEN= `oc -n openshift-monitoring extract secret/prometheus-robot-secret — to=- — keys=token`
+echo &#34;Bearer $TOKEN&#34;
+```
+
+![On Authentication](/img/include/openshift-external-grafana02.webp)
+
+Click Save and Test, if there is an error it will be showing the error
+
+![On Authentication](/img/include/openshift-external-grafana03.webp)
+
+If everything goes well, we can start building Grafana dashboard
+
+![On Authentication](/img/include/openshift-external-grafana04.webp)
+
+Click on building the dashboard, and choose the previous data source
+
+![On Authentication](/img/include/openshift-external-grafana05.webp)
+
+![On Authentication](/img/include/openshift-external-grafana06.webp)
+

@@ -1,0 +1,217 @@
+---
+title: trivy-operator 2.5: Patch release for Admisssion controller
+url: https://devopstales.github.io/kubernetes/trivy-operator-2.5/
+date: 2022-10-15
+keywords: Kubernetes, trivy-operator, trivy, operator, Image scan, image security
+---
+
+
+Today I am happy to announce the release of trivy-operator 2.5. This blog post focuses on the functionality provided by the trivy-operator 2.5 release. 
+
+&lt;!--more--&gt;
+
+### What is trivy-operator?
+
+Trivy-operator is a Kubernetes Operator based on the open-source container vulnerability scanner Trivy. The goal of this project is to provide a vulnerability scanner that continuously scans containers deployed in a Kubernetes cluster. [Built with Kubernetes Operator Pythonic Framework (Kopf)](https://github.com/nolar/kopf) There are a few solution for checking the images when you deploy them to the Kubernetes cluster, but fighting against vulnerabilities is a day to day task. Check once is not enough when every day is a new das for frats. That is why I created trivy-operator so you can create scheduled image scans on your running pods.
+
+## What is new?
+
+With the release of trivy-operator 2.5 ther is the fallowin new features:
+
+* air-gap install
+* Kubernetes CIS Benchmark with kube-bench-scnner
+* defectdojo integration
+* use insecure registry
+* add new dashboard
+
+### Air-Gapped Install
+
+To run trivy-operator in an air-gapped environment you need to provide the security database for trivy. You can do that by uploading tha database to an OCI compatible registry.
+
+```bash
+oras pull ghcr.io/aquasecurity/trivy-db:2
+
+oras push docker.mydomain.intra/trivy-db:2 \
+db.tar.gz:application/vnd.aquasec.trivy.db.layer.v1.tar&#43;gzip
+
+curl -X GET https://docker.mydomain.intra/v2/_catalog
+{&#34;repositories&#34;:[&#34;nginx&#34;,&#34;trivy-db&#34;]}
+
+curl -X GET https://docker.mydomain.intra/v2/trivy-db/tags/list
+{&#34;name&#34;:&#34;trivy-db&#34;,&#34;tags&#34;:[&#34;2&#34;]}
+```
+
+In the helm chart you need to specify the url of your OCI registry with the `db_repository` option.
+
+```bash
+# Don&#39;t try to download trivy db, run in air-gapped env:
+offline:
+  enabled: true
+  db_repository: docker.mydomain.intra/trivy-db
+```
+
+### Kubernetes CIS Benchmark
+
+CIS Benchmark best practices are an important first step to securing Kubernetes in production by hardening Kubernetes environments. Trivy-operator use kube-bench to scan the kubernetes cluster and create CIS Benchmark reports. To enable the CIS Benchmark scanning function you need to create a ClusterScanner.
+
+The following example object is configured to:
+
+* run the vulnerability scan every hour (`crontab: &#39;00 * * * *&#39;`)
+* use the `cis-1.23` scan profile
+* enable integration to defectdojo
+
+
+```yaml
+apiVersion: trivy-operator.devopstales.io/v1
+kind: ClusterScanner
+metadata:
+  name: main-config
+spec:
+  crontab: &#34;00 * * * *&#34;
+  scanProfileName: &#34;cis-1.23&#34;
+  integrations:
+    defectdojo:
+      host: &#34;http://defectdojo.rancher-desktop.intra&#34;
+      api_key: &#34;3880d84590915e5c96cec075444f22285ff3659c&#34;
+      k8s-cluster-name: &#34;eks-prod&#34;
+```
+
+The following list show the ClusterScanner objects listed by the kubectl cli:
+
+```bash
+kubectl get cs-scan
+NAME          CLUSTERSCANPROFILE   CRONTAB
+main-config   cis-1.23             00 * * * *
+```
+
+### Enable DefectDojo integration for trivy-operator
+
+To enable the DefectDojo integration for trivy-operator you need to enable it in the `NamespaceScanner` object:
+
+```yaml
+  integrations:
+    policyreport: True
+    defectdojo:
+      host: &#34;https://defectdojo.mydomain.intra&#34;
+      api_key: &#34;xyz456ucdssd67sd67dsg&#34;
+```
+
+## Usage
+
+To ease deployment I created a helm chart for trivy-operator.
+
+```bash
+helm repo add devopstales https://devopstales.github.io/helm-charts
+helm repo update
+```
+
+Create a value file for deploy:
+
+```yaml
+cat &lt;&lt;&#39;EOF&#39;&gt; values.yaml
+image:
+  repository: devopstales/trivy-operator
+  pullPolicy: Always
+  tag: &#34;2.3&#34;
+
+imagePullSecrets: []
+podSecurityContext:
+  fsGroup: 10001
+  fsGroupChangePolicy: &#34;OnRootMismatch&#34;
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: &#34;trivy-operator&#34;
+
+monitoring:
+  port: &#34;9115&#34;
+
+serviceMonitor:
+  enabled: false
+  namespace: &#34;kube-system&#34;
+
+storage:
+  enabled: true
+  size: 1Gi
+
+NamespaceScanner:
+  crontab: &#34;*/5 * * * *&#34;
+  namespaceSelector: &#34;trivy-scan&#34;
+
+registryAuth:
+  enabled: false
+  registry:
+  - name: docker.io
+    user: &#34;user&#34;
+    password: &#34;password&#34;
+
+githubToken:
+  enabled: false
+  token: &#34;&#34;
+EOF
+```
+
+When the trivy in the container want to scan an image first download the vulnerability database from github. If you test many images you need a  `githubToken` overcome the github rate limit and dockerhub username and password for overcome the dockerhub rate limit. If your store you images in a private repository you need to add an username and password for authentication.
+
+The following tables lists configurable parameters of the trivy-operator chart and their default values.
+
+## Values
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| TimeZone | string | `&#34;UTC&#34;` | Time Zone in container |
+| admissionController.enabled | bool | `false` | enable adission controller |
+| affinity | object | `{}` | Set the affinity for the pod. |
+| cache.enabled | bool | `false` | enable redis cache |
+| clusterScanner.crontab | string | `&#34;*/1 * * * *&#34;` | crontab for scheduled scan |
+| clusterScanner.enabled | bool | `false` | enable clusterScanner cr creation |
+| clusterScanner.integrations | object | `{}` | configure defectdojo integration |
+| clusterScanner.scanProfileName | string | `&#34;cis-1.23&#34;` | kube-hunter scan profile |
+| githubToken.enabled | bool | `false` | enable github authentiation token |
+| githubToken.token | string | `&#34;&#34;` | github authentiation token value |
+| grafana.dashboards.enabled | bool | `true` | Enable the deployment of grafana dashboards |
+| grafana.dashboards.label | string | `&#34;grafana_dashboard&#34;` | Label to find dashboards using the k8s sidecar |
+| grafana.dashboards.value | string | `&#34;1&#34;` | Label value to find dashboards using the k8s sidecar |
+| grafana.folder.annotation | string | `&#34;grafana_folder&#34;` | Annotation to enable folder storage using the k8s sidecar |
+| grafana.folder.name | string | `&#34;Policy Reporter&#34;` | Grafana folder in which to store the dashboards |
+| grafana.namespace | string | `nil` | namespace for configMap of grafana dashboards |
+| image.pullPolicy | string | `&#34;Always&#34;` | The docker image pull policy |
+| image.repository | string | `&#34;devopstales/trivy-operator&#34;` | The docker image repository to use |
+| image.tag | string | `&#34;2.5.0&#34;` | The docker image tag to use |
+| imagePullSecrets | list | `[]` | list of secrets to use for imae pull |
+| kube_bench_scnner.image.pullPolicy | string | `&#34;Always&#34;` | The docker image pull policy |
+| kube_bench_scnner.image.repository | string | `&#34;devopstales/kube-bench-scnner&#34;` | The docker image repository to use |
+| kube_bench_scnner.image.tag | string | `&#34;2.5&#34;` | The docker image tag to use |
+| log_level | string | `&#34;INFO&#34;` | Log level |
+| monitoring.port | string | `&#34;9115&#34;` | configure prometheus monitoring port |
+| namespaceScanner.clusterWide | bool | `false` |  |
+| namespaceScanner.crontab | string | `&#34;*/5 * * * *&#34;` |  |
+| namespaceScanner.integrations.policyreport | bool | `false` |  |
+| namespaceScanner.namespaceSelector | string | `&#34;trivy-scan&#34;` |  |
+| nodeSelector | object | `{}` | Set the node selector for the pod. |
+| offline.db_repository | string | `&#34;localhost:5000/trivy-db&#34;` | repository to use for download trivy vuln db |
+| offline.db_repository_insecure | bool | `false` | insecure repository |
+| offline.enabled | bool | `false` | enable air-gapped mode |
+| persistence.accessMode | string | `&#34;ReadWriteOnce&#34;` | Volumes mode |
+| persistence.annotations | object | `{}` | Volumes annotations |
+| persistence.enabled | bool | `true` | Volumes for the pod |
+| persistence.size | string | `&#34;1Gi&#34;` | Volumes size |
+| podSecurityContext | object | `{&#34;fsGroup&#34;:10001,&#34;fsGroupChangePolicy&#34;:&#34;OnRootMismatch&#34;}` | security options for the pod |
+| registryAuth.enabled | bool | `false` | enable registry authentication |
+| registryAuth.image_pull_secrets | list | `[&#34;regcred&#34;]` | list of image pull secrets for authentication |
+| serviceAccount.annotations | object | `{}` | serviceAccount annotations |
+| serviceAccount.create | bool | `true` | Enable serviceAccount creation |
+| serviceAccount.name | string | `&#34;trivy-operator&#34;` | Name of the serviceAccount |
+| serviceMonitor.enabled | bool | `false` | allow to override the namespace for serviceMonitor |
+| serviceMonitor.labels.release | string | `&#34;prometheus&#34;` | labels to match the serviceMonitorSelector of the Prometheus Resource |
+| serviceMonitor.metricRelabelings | list | `[]` | metricRelabeling config for serviceMonitor |
+| serviceMonitor.namespace | object | `{}` | Name of the namespace for serviceMonitor |
+| serviceMonitor.relabelings | list | `[]` | relabel config for serviceMonitor |
+| tolerations | list | `[]` | Set the tolerations for the pod. |
+
+```bash
+kubectl create ns trivy-operator
+kubens trivy-operator
+helm upgrade --install trivy devopstales/trivy-operator -f values.yaml
+```

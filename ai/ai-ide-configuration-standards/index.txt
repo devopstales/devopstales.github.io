@@ -1,0 +1,958 @@
+---
+title: AI IDE Configuration Standards: From .vscode to AGENTS.md
+url: https://devopstales.github.io/ai/ai-ide-configuration-standards/
+date: 2026-03-21
+---
+
+
+As AI tools become more integrated into our development workflows, the way we configure our projects is changing. We&#39;ve moved beyond simple `.gitignore` and `.env` files into a world where we need to provide specific &#34;instructions&#34; and &#34;context&#34; to our AI assistants.
+
+&lt;!--more--&gt;
+
+In this post, we&#39;ll explore the different IDE configuration standards, from the classic `.vscode` folder to emerging open-source standards like `AGENTS.md`.
+
+---
+
+## 1. .vscode (The Industry Standard)
+
+Visual Studio Code popularized the idea of project-specific configuration folders. While not AI-specific, it remains the foundation for many AI-native IDEs that are forks of VS Code.
+
+### Directory Structure
+
+```bash
+project/
+├── .vscode/
+│   ├── settings.json      # Editor settings
+│   ├── tasks.json         # Build tasks
+│   ├── launch.json        # Debug configurations
+│   ├── extensions.json    # Recommended extensions
+│   └── snippets/          # Code snippets
+│       ├── javascript.json
+│       └── typescript.json
+└── src/
+```
+
+### Key Files
+
+#### settings.json
+
+Project-specific editor settings:
+
+```json
+{
+  &#34;editor.tabSize&#34;: 2,
+  &#34;editor.insertSpaces&#34;: true,
+  &#34;editor.formatOnSave&#34;: true,
+  &#34;editor.defaultFormatter&#34;: &#34;esbenp.prettier-vscode&#34;,
+  &#34;editor.codeActionsOnSave&#34;: {
+    &#34;source.fixAll.eslint&#34;: &#34;explicit&#34;
+  },
+  &#34;files.exclude&#34;: {
+    &#34;**/node_modules&#34;: true,
+    &#34;**/dist&#34;: true,
+    &#34;**/.git&#34;: true
+  },
+  &#34;search.exclude&#34;: {
+    &#34;**/node_modules&#34;: true,
+    &#34;**/bower_components&#34;: true,
+    &#34;**/*.code-search&#34;: true
+  },
+  &#34;typescript.tsdk&#34;: &#34;node_modules/typescript/lib&#34;,
+  &#34;typescript.enablePromptUseWorkspaceTsdk&#34;: true,
+  &#34;eslint.validate&#34;: [
+    &#34;javascript&#34;,
+    &#34;javascriptreact&#34;,
+    &#34;typescript&#34;,
+    &#34;typescriptreact&#34;
+  ],
+  &#34;[typescript]&#34;: {
+    &#34;editor.defaultFormatter&#34;: &#34;esbenp.prettier-vscode&#34;
+  },
+  &#34;[typescriptreact]&#34;: {
+    &#34;editor.defaultFormatter&#34;: &#34;esbenp.prettier-vscode&#34;
+  },
+  &#34;editor.rulers&#34;: [80, 100, 120],
+  &#34;workbench.editorAssociations&#34;: {
+    &#34;*.md&#34;: &#34;vscode.markdown.preview.editor&#34;
+  }
+}
+```
+
+#### tasks.json
+
+Build, test, and deployment scripts:
+
+```json
+{
+  &#34;version&#34;: &#34;2.0.0&#34;,
+  &#34;tasks&#34;: [
+    {
+      &#34;label&#34;: &#34;Build&#34;,
+      &#34;type&#34;: &#34;npm&#34;,
+      &#34;script&#34;: &#34;build&#34;,
+      &#34;group&#34;: &#34;build&#34;,
+      &#34;presentation&#34;: {
+        &#34;reveal&#34;: &#34;never&#34;
+      },
+      &#34;problemMatcher&#34;: [&#34;$tsc&#34;]
+    },
+    {
+      &#34;label&#34;: &#34;Test&#34;,
+      &#34;type&#34;: &#34;npm&#34;,
+      &#34;script&#34;: &#34;test&#34;,
+      &#34;group&#34;: &#34;test&#34;,
+      &#34;presentation&#34;: {
+        &#34;reveal&#34;: &#34;never&#34;
+      }
+    },
+    {
+      &#34;label&#34;: &#34;Start Dev Server&#34;,
+      &#34;type&#34;: &#34;npm&#34;,
+      &#34;script&#34;: &#34;dev&#34;,
+      &#34;group&#34;: {
+        &#34;kind&#34;: &#34;build&#34;,
+        &#34;isDefault&#34;: true
+      },
+      &#34;isBackground&#34;: true,
+      &#34;problemMatcher&#34;: {
+        &#34;pattern&#34;: {
+          &#34;regexp&#34;: &#34;^.*ready in.*$&#34;,
+          &#34;file&#34;: 1
+        },
+        &#34;background&#34;: {
+          &#34;activeOnStart&#34;: true,
+          &#34;beginsPattern&#34;: &#34;starting&#34;,
+          &#34;endsPattern&#34;: &#34;ready&#34;
+        }
+      }
+    },
+    {
+      &#34;label&#34;: &#34;Lint&#34;,
+      &#34;type&#34;: &#34;npm&#34;,
+      &#34;script&#34;: &#34;lint&#34;,
+      &#34;group&#34;: &#34;test&#34;,
+      &#34;problemMatcher&#34;: [&#34;$eslint-stylish&#34;]
+    }
+  ]
+}
+```
+
+#### launch.json
+
+Debugger configurations:
+
+```json
+{
+  &#34;version&#34;: &#34;0.2.0&#34;,
+  &#34;configurations&#34;: [
+    {
+      &#34;type&#34;: &#34;node&#34;,
+      &#34;request&#34;: &#34;launch&#34;,
+      &#34;name&#34;: &#34;Debug Current File&#34;,
+      &#34;skipFiles&#34;: [&#34;&lt;node_internals&gt;/**&#34;],
+      &#34;program&#34;: &#34;${file}&#34;,
+      &#34;cwd&#34;: &#34;${workspaceFolder}&#34;,
+      &#34;console&#34;: &#34;integratedTerminal&#34;,
+      &#34;internalConsoleOptions&#34;: &#34;neverOpen&#34;
+    },
+    {
+      &#34;type&#34;: &#34;node&#34;,
+      &#34;request&#34;: &#34;launch&#34;,
+      &#34;name&#34;: &#34;Debug All Tests&#34;,
+      &#34;skipFiles&#34;: [&#34;&lt;node_internals&gt;/**&#34;],
+      &#34;program&#34;: &#34;${workspaceFolder}/node_modules/.bin/jest&#34;,
+      &#34;args&#34;: [&#34;--runInBand&#34;],
+      &#34;cwd&#34;: &#34;${workspaceFolder}&#34;,
+      &#34;console&#34;: &#34;integratedTerminal&#34;
+    },
+    {
+      &#34;type&#34;: &#34;chrome&#34;,
+      &#34;request&#34;: &#34;launch&#34;,
+      &#34;name&#34;: &#34;Launch Chrome&#34;,
+      &#34;url&#34;: &#34;http://localhost:3000&#34;,
+      &#34;webRoot&#34;: &#34;${workspaceFolder}/src&#34;,
+      &#34;runtimeArgs&#34;: [&#34;--disable-dev-shm-usage&#34;]
+    }
+  ]
+}
+```
+
+#### extensions.json
+
+Recommended extensions for the project:
+
+```json
+{
+  &#34;recommendations&#34;: [
+    &#34;dbaeumer.vscode-eslint&#34;,
+    &#34;esbenp.prettier-vscode&#34;,
+    &#34;bradlc.vscode-tailwindcss&#34;,
+    &#34;formulahendry.auto-rename-tag&#34;,
+    &#34;christian-kohler.path-intellisense&#34;,
+    &#34;streetsidesoftware.code-spell-checker&#34;,
+    &#34;GitHub.copilot&#34;,
+    &#34;GitHub.copilot-chat&#34;
+  ],
+  &#34;unwantedRecommendations&#34;: [
+    &#34;eg2.vscode-npm-script&#34;
+  ]
+}
+```
+
+### Purpose
+
+- Ensure every developer on a team has a consistent editor experience
+- Provide access to the same build/debug tools
+- Standardize code formatting and linting
+- Recommend useful extensions
+
+### AI Integration
+
+While `.vscode` wasn&#39;t designed for AI, AI extensions use it:
+
+```json
+// settings.json - AI-specific settings
+{
+  &#34;github.copilot.enable&#34;: true,
+  &#34;github.copilot.editor.enableAutoCompletions&#34;: true,
+  &#34;continue.enableTabAutocomplete&#34;: true,
+  &#34;kiloCode.provider&#34;: &#34;qwen-code&#34;,
+  &#34;kiloCode.model&#34;: &#34;qwen-coder-plus&#34;
+}
+```
+
+---
+
+## 2. .cursor (The AI-Native Fork)
+
+[Cursor](https://cursor.com/) has introduced its own set of standards to help its AI engine understand your codebase better.
+
+### Directory Structure
+
+```bash
+project/
+├── .cursor/
+│   ├── rules/              # AI rules directory
+│   │   ├── coding-standards.md
+│   │   ├── testing.md
+│   │   └── security.md
+│   ├── config.json         # Cursor-specific config
+│   └── prompts/            # Custom prompts
+│       └── code-review.md
+└── src/
+```
+
+### Key Features
+
+#### .cursorrules
+
+A file (or directory) where you can define specific rules for the AI:
+
+```markdown
+# .cursor/rules/coding-standards.md
+
+## Code Style
+- Always use TypeScript for new code
+- Use functional components in React
+- Prefer composition over inheritance
+- Use async/await, not Promise chains
+
+## Naming Conventions
+- Components: PascalCase (UserProfile)
+- Functions: camelCase (getUserById)
+- Constants: UPPER_SNAKE_CASE (MAX_RETRY_COUNT)
+- Files: kebab-case (user-profile.tsx)
+
+## Imports
+- Group imports: React, third-party, internal, relative
+- Use absolute imports from @/
+- No circular dependencies
+
+## Error Handling
+- Always handle errors explicitly
+- Use custom error classes
+- Log errors with context
+- Never swallow errors silently
+
+## Testing
+- Write tests for all public functions
+- Use describe/it/test pattern
+- Mock external dependencies
+- Aim for 80%&#43; coverage
+```
+
+#### config.json
+
+Cursor-specific configuration:
+
+```json
+{
+  &#34;ai&#34;: {
+    &#34;model&#34;: &#34;claude-3-5-sonnet-20241022&#34;,
+    &#34;temperature&#34;: 0.3,
+    &#34;maxTokens&#34;: 8192
+  },
+  &#34;indexing&#34;: {
+    &#34;enabled&#34;: true,
+    &#34;ignorePatterns&#34;: [
+      &#34;node_modules/**&#34;,
+      &#34;dist/**&#34;,
+      &#34;build/**&#34;,
+      &#34;*.min.js&#34;,
+      &#34;coverage/**&#34;
+    ],
+    &#34;maxFileSize&#34;: &#34;1MB&#34;
+  },
+  &#34;composer&#34;: {
+    &#34;autoApprove&#34;: false,
+    &#34;requireConfirmation&#34;: true
+  },
+  &#34;privacy&#34;: {
+    &#34;mode&#34;: &#34;local&#34;,
+    &#34;sendTelemetry&#34;: false
+  }
+}
+```
+
+#### Custom Prompts
+
+`.cursor/prompts/code-review.md`:
+
+```markdown
+# Code Review Prompt
+
+When reviewing code, follow this checklist:
+
+## Security
+- [ ] No hardcoded secrets
+- [ ] Input validation present
+- [ ] SQL injection prevented
+- [ ] XSS prevention in place
+
+## Performance
+- [ ] No N&#43;1 queries
+- [ ] Proper indexing
+- [ ] Caching where appropriate
+- [ ] No memory leaks
+
+## Code Quality
+- [ ] Follows style guide
+- [ ] Functions are small
+- [ ] Clear variable names
+- [ ] Comments explain why, not what
+
+## Testing
+- [ ] Tests cover edge cases
+- [ ] Mocks used appropriately
+- [ ] Test names are descriptive
+
+Provide feedback in this format:
+1. Summary
+2. Critical issues (blocking)
+3. Suggestions (non-blocking)
+4. Questions
+```
+
+### Purpose
+
+- Provide the AI with project-specific &#34;tribal knowledge&#34;
+- Define coding standards for AI to follow
+- Customize AI behavior for the project
+- Create reusable prompt templates
+
+---
+
+## 3. .kilocode (Kiro.dev / Kilo Code)
+
+[Kiro.dev](https://kiro.dev) and the Kilo Code ecosystem use a structured approach to manage &#34;agents&#34; and &#34;modes&#34; within your repository.
+
+### Directory Structure
+
+```bash
+project/
+├── .kilocode/
+│   ├── config.json         # Main configuration
+│   ├── mcp.json            # MCP server config
+│   ├── agents.json         # Agent definitions
+│   ├── skills.json         # Skills configuration
+│   ├── rules/              # Steering rules
+│   │   ├── coding-standards.md
+│   │   ├── security.md
+│   │   ├── testing.md
+│   │   └── documentation.md
+│   ├── agents/             # Custom agents
+│   │   ├── security-reviewer.md
+│   │   ├── code-reviewer.md
+│   │   └── tech-writer.md
+│   ├── skills/             # Custom skills
+│   │   ├── docker-expert/
+│   │   │   ├── skill.json
+│   │   │   └── prompt.md
+│   │   └── aws-helper/
+│   ├── specs/              # Specifications
+│   │   ├── feature-auth.md
+│   │   └── feature-api.md
+│   ├── tasks/              # Task definitions
+│   │   └── phase-1/
+│   └── index/              # Indexing data
+│       └── qdrant/
+├── .kilocodemodes          # Mode definitions
+├── .kilocodeignore         # Indexing exclusions
+└── src/
+```
+
+### Key Files
+
+#### config.json
+
+Main Kilo Code configuration:
+
+```json
+{
+  &#34;provider&#34;: &#34;qwen-code&#34;,
+  &#34;model&#34;: &#34;qwen-coder-plus&#34;,
+  &#34;mode&#34;: &#34;orchestrator&#34;,
+  &#34;indexing&#34;: {
+    &#34;enabled&#34;: true,
+    &#34;provider&#34;: &#34;qdrant&#34;,
+    &#34;embedding&#34;: {
+      &#34;model&#34;: &#34;nomic-embed-text&#34;,
+      &#34;provider&#34;: &#34;ollama&#34;,
+      &#34;endpoint&#34;: &#34;http://localhost:11434&#34;
+    },
+    &#34;vectorStore&#34;: {
+      &#34;provider&#34;: &#34;qdrant&#34;,
+      &#34;endpoint&#34;: &#34;http://localhost:6333&#34;,
+      &#34;collectionName&#34;: &#34;my-project&#34;
+    },
+    &#34;chunking&#34;: {
+      &#34;strategy&#34;: &#34;code-aware&#34;,
+      &#34;chunkSize&#34;: 512,
+      &#34;overlap&#34;: 64
+    }
+  },
+  &#34;steering&#34;: {
+    &#34;rules&#34;: [&#34;coding-standards&#34;, &#34;security&#34;, &#34;testing&#34;]
+  },
+  &#34;mcpServers&#34;: {
+    &#34;github&#34;: {
+      &#34;command&#34;: &#34;npx&#34;,
+      &#34;args&#34;: [&#34;-y&#34;, &#34;@modelcontextprotocol/server-github&#34;],
+      &#34;env&#34;: {
+        &#34;GITHUB_TOKEN&#34;: &#34;${GITHUB_TOKEN}&#34;
+      }
+    }
+  },
+  &#34;agentManager&#34;: {
+    &#34;enabled&#34;: true,
+    &#34;maxParallelAgents&#34;: 4,
+    &#34;worktreeBasePath&#34;: &#34;../worktrees&#34;
+  }
+}
+```
+
+#### .kilocode/rules/
+
+Steering rules in Markdown format:
+
+```markdown
+# .kilocode/rules/coding-standards.md
+
+## TypeScript Standards
+
+### Always Use TypeScript
+- All new code must be TypeScript (.ts, .tsx)
+- Never use `any` type
+- Define interfaces for all objects
+
+### Code Style
+- Use functional components
+- Use async/await
+- Prefer const over let
+
+### Libraries
+- Use Zod for validation
+- Use date-fns for dates
+- Use axios for HTTP
+```
+
+#### .kilocodemodes
+
+Custom mode definitions:
+
+```json
+{
+  &#34;modes&#34;: {
+    &#34;security-review&#34;: {
+      &#34;baseMode&#34;: &#34;architect&#34;,
+      &#34;systemPrompt&#34;: &#34;You are a security expert reviewing code.&#34;,
+      &#34;tools&#34;: [&#34;code-scanner&#34;, &#34;dependency-checker&#34;],
+      &#34;restrictions&#34;: {
+        &#34;cannotModifyFiles&#34;: true
+      }
+    },
+    &#34;documentation&#34;: {
+      &#34;baseMode&#34;: &#34;code&#34;,
+      &#34;systemPrompt&#34;: &#34;You are a technical writer.&#34;,
+      &#34;tools&#34;: [&#34;file-reader&#34;, &#34;markdown-generator&#34;]
+    }
+  }
+}
+```
+
+#### .kilocodeignore
+
+Prevents the AI from indexing sensitive files:
+
+```bash
+# .kilocodeignore
+node_modules/
+dist/
+build/
+*.min.js
+coverage/
+.env
+*.log
+.secrets/
+```
+
+### Purpose
+
+- Create a highly disciplined and specialized AI agent
+- Follow strict operational modes
+- Enable parallel agent execution
+- Integrate with external tools via MCP
+
+---
+
+## 4. .qwen/ (Qwen Code CLI)
+
+As the Qwen ecosystem (from Alibaba Cloud) grows, it has introduced its own configuration standards for its CLI tools and agents.
+
+### Directory Structure
+
+```bash
+project/
+├── .qwen/
+│   ├── config.json         # Qwen configuration
+│   ├── context/            # Context files
+│   │   └── project-context.md
+│   └── cache/              # Cached data
+└── src/
+```
+
+### Key Files
+
+#### config.json
+
+Qwen-specific configuration:
+
+```json
+{
+  &#34;model&#34;: {
+    &#34;name&#34;: &#34;qwen-coder-plus&#34;,
+    &#34;temperature&#34;: 0.3,
+    &#34;maxTokens&#34;: 100000,
+    &#34;topP&#34;: 0.9
+  },
+  &#34;context&#34;: {
+    &#34;maxTokens&#34;: 1000000,
+    &#34;smartTrimming&#34;: true,
+    &#34;priorityFiles&#34;: [
+      &#34;README.md&#34;,
+      &#34;package.json&#34;,
+      &#34;tsconfig.json&#34;
+    ]
+  },
+  &#34;indexing&#34;: {
+    &#34;enabled&#34;: true,
+    &#34;strategy&#34;: &#34;semantic&#34;,
+    &#34;chunkSize&#34;: 4096,
+    &#34;overlapSize&#34;: 512
+  },
+  &#34;caching&#34;: {
+    &#34;enabled&#34;: true,
+    &#34;directory&#34;: &#34;~/.cache/qwen-code&#34;,
+    &#34;ttl&#34;: 3600
+  }
+}
+```
+
+#### project-context.md
+
+Project-specific context for the AI:
+
+```markdown
+# Project Context
+
+## Overview
+This is a Node.js REST API for an e-commerce platform.
+
+## Tech Stack
+- Runtime: Node.js 20
+- Framework: Express.js
+- Database: PostgreSQL with Prisma ORM
+- Authentication: JWT with refresh tokens
+
+## Key Directories
+- src/controllers/ - Request handlers
+- src/services/ - Business logic
+- src/models/ - Database models
+- src/middleware/ - Express middleware
+
+## Important Commands
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm test` - Run tests
+- `npm run db:migrate` - Run database migrations
+
+## Architecture Notes
+- All controllers use async/await
+- Services handle business logic
+- Models use Prisma Client
+- Middleware handles auth and validation
+```
+
+### Purpose
+
+- Configure which specific version of the Qwen-Coder model to use
+- Manage the temporary files and context windows
+- Optimize performance and cost-efficiency
+
+---
+
+## 5. AGENTS.md / CLAUDE.md (The &#34;README for Machines&#34;)
+
+A new emerging standard is the `AGENTS.md` or `CLAUDE.md` file—a human and machine-readable document that explains how to work with the codebase.
+
+### Purpose
+
+This is the &#34;README for machines&#34;—a document specifically designed to help AI assistants understand your project quickly.
+
+### Example: AGENTS.md
+
+`````markdown
+# Agent Instructions
+
+## Quick Start
+
+To work on this project, an AI agent should:
+
+1. Understand the project structure (see below)
+2. Follow the coding standards
+3. Run tests before committing
+4. Update documentation for new features
+
+## Project Structure
+
+```
+project/
+├── src/
+│   ├── controllers/    # HTTP request handlers
+│   ├── services/       # Business logic
+│   ├── models/         # Database models
+│   ├── middleware/     # Express middleware
+│   └── utils/          # Utility functions
+├── tests/
+│   ├── unit/           # Unit tests
+│   ├── integration/    # Integration tests
+│   └── e2e/            # End-to-end tests
+├── docs/               # Documentation
+└── scripts/            # Build/deploy scripts
+```
+
+## Coding Standards
+
+### TypeScript
+- Use strict mode
+- No `any` types
+- Define interfaces for objects
+
+### Testing
+- Jest for unit tests
+- Supertest for API tests
+- Playwright for E2E
+
+### Code Style
+- Prettier for formatting
+- ESLint for linting
+- 2-space indentation
+
+## Common Tasks
+
+### Adding a New API Endpoint
+
+1. Create controller in `src/controllers/`
+2. Create service in `src/services/`
+3. Add route in `src/routes/`
+4. Write tests in `tests/`
+5. Update API documentation
+
+### Fixing a Bug
+
+1. Reproduce the bug
+2. Write a failing test
+3. Fix the code
+4. Verify test passes
+5. Run full test suite
+
+## Testing Commands
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test file
+npm test -- path/to/test.ts
+
+# Run with coverage
+npm run test:coverage
+
+# Run E2E tests
+npm run test:e2e
+```
+
+## Deployment
+
+```bash
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Deploy to staging
+npm run deploy:staging
+
+# Deploy to production
+npm run deploy:prod
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Database Connection Failed**
+- Check DATABASE_URL environment variable
+- Ensure database is running
+- Run migrations: `npm run db:migrate`
+
+**Tests Failing**
+- Clear Jest cache: `npm run test:clear`
+- Check for uncommitted changes
+- Verify environment variables
+
+## Contact
+
+For questions about this project, contact the team via Slack #dev-channel.
+`````
+
+### Example: CLAUDE.md
+
+`````markdown
+# Claude Instructions
+
+## How to Help
+
+When assisting with this codebase:
+
+1. **Read this file first** for context
+2. **Check existing code** before suggesting changes
+3. **Follow patterns** already established
+4. **Write tests** for any new code
+5. **Update docs** for new features
+
+## What NOT to Do
+
+- ❌ Don&#39;t use `any` types
+- ❌ Don&#39;t skip error handling
+- ❌ Don&#39;t add new dependencies without approval
+- ❌ Don&#39;t modify config files without explanation
+- ❌ Don&#39;t commit without running tests
+
+## Preferred Patterns
+
+### API Response Format
+```typescript
+{
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+```
+
+### Error Handling
+```typescript
+try {
+  await someOperation();
+} catch (error) {
+  logger.error(&#39;Operation failed&#39;, { error, context });
+  throw new AppError(&#39;OPERATION_FAILED&#39;, &#39;Human readable message&#39;);
+}
+```
+
+### Logging
+```typescript
+import { logger } from &#39;@/utils/logger&#39;;
+
+logger.info(&#39;User logged in&#39;, { userId });
+logger.warn(&#39;Rate limit approaching&#39;, { current: 90, max: 100 });
+logger.error(&#39;Database connection failed&#39;, { error });
+```
+
+## Review Checklist
+
+Before suggesting code changes, verify:
+- [ ] TypeScript types are correct
+- [ ] Error handling is present
+- [ ] Tests are included
+- [ ] No console.log in production code
+- [ ] Follows existing patterns
+`````
+
+### Benefits
+
+- **Fast Context**: AI gets up to speed quickly
+- **Consistent Output**: AI follows your patterns
+- **Reduced Tokens**: Less back-and-forth needed
+- **Team Alignment**: Humans also benefit from the documentation
+
+---
+
+## Configuration Comparison Table
+
+| Standard | Primary Use | AI-Specific | File Format | Complexity |
+|----------|-------------|-------------|-------------|------------|
+| **.vscode** | Editor config | No | JSON | Medium |
+| **.cursor** | AI rules | Yes | MD &#43; JSON | Low |
+| **.kilocode** | Agent config | Yes | JSON &#43; MD | High |
+| **.qwen** | Model config | Yes | JSON | Medium |
+| **AGENTS.md** | Documentation | Yes | Markdown | Low |
+
+---
+
+## Best Practices
+
+### 1. Keep Configuration Versioned
+
+```bash
+# Always commit configuration
+git add .vscode/ .kilocode/ AGENTS.md
+git commit -m &#34;Add AI configuration&#34;
+```
+
+### 2. Use Templates
+
+Create templates for new projects:
+
+```bash
+templates/
+├── .kilocode/
+│   └── config.template.json
+├── AGENTS.md.template
+└── .cursorrules.template
+```
+
+### 3. Document Your Configuration
+
+```markdown
+# .kilocode/README.md
+
+## Configuration Overview
+
+This directory contains Kilo Code configuration:
+
+- `config.json` - Main configuration
+- `rules/` - Steering rules for AI behavior
+- `agents/` - Custom agent definitions
+- `skills/` - Specialized skill packages
+
+## Adding New Rules
+
+1. Create file in `rules/`
+2. Add to `config.json` steering array
+3. Test with: `kiro rules check`
+```
+
+### 4. Separate Secrets
+
+```json
+// Good: Reference environment variables
+{
+  &#34;apiKey&#34;: &#34;${GITHUB_TOKEN}&#34;
+}
+
+// Bad: Hardcoded secrets
+{
+  &#34;apiKey&#34;: &#34;ghp_xxxxxxxxxxxx&#34;  // Never do this!
+}
+```
+
+### 5. Validate Configuration
+
+```bash
+# Validate Kilo Code config
+kiro config validate
+
+# Validate Cursor rules
+cursor rules check
+
+# Validate AGENTS.md
+kiro agents validate AGENTS.md
+```
+
+---
+
+## Conclusion
+
+The evolution of IDE configuration reflects the evolution of development itself:
+
+| Era | Configuration Focus |
+|-----|---------------------|
+| **Pre-2015** | Build tools, compilers |
+| **2015-2020** | Editor settings, extensions |
+| **2020-2025** | AI assistants, code completion |
+| **2025&#43;** | Agentic AI, autonomous workflows |
+
+**Recommendations:**
+
+1. **Start with AGENTS.md** - Easy to create, immediate value
+2. **Add .cursor or .kilocode** - Depending on your AI tool
+3. **Maintain .vscode** - For editor consistency
+4. **Document everything** - Future you will thank you
+
+---
+
+## Quick Reference
+
+### Configuration Files Summary
+
+| File | Purpose | Tool |
+|------|---------|------|
+| `.vscode/settings.json` | Editor settings | VS Code |
+| `.cursor/rules/` | AI rules | Cursor |
+| `.kilocode/config.json` | Agent config | Kilo Code |
+| `.qwen/config.json` | Model config | Qwen |
+| `AGENTS.md` | Project documentation | All AI tools |
+| `CLAUDE.md` | Claude instructions | Claude |
+| `.stbt.conf` | Test configuration | stb-tester |
+
+### Useful Commands
+
+```bash
+# Kilo Code
+kiro config validate
+kiro rules list
+kiro agents list
+
+# Cursor
+cursor rules check
+
+# Qwen
+qwen-code config show
+qwen-code context status
+```
+

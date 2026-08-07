@@ -1,0 +1,102 @@
+---
+title: GKE cluster’s egress traffic via Cloud NAT
+url: https://devopstales.github.io/cloud/gke-egress/
+date: 2021-07-01
+keywords: Google Cloud Platform, Google Kubernetes Engine, google, GCP
+---
+
+
+In this post I will show you how you can can reroute the GKE egress traffic via cloud NAT.
+&lt;!--more--&gt;
+
+In Public GKE cluster wach node has it&#39;s own external IP address and the nodes route all egress traffic through there external IP. This external IPs can change over time. In the case of a private GKE cluster, all the nodes will have an internal ip address and you can define a cloud NAT for all your egress traffic from the cluster. So public cluster is not a ideal solutinon if you need a static ip list for source ip whtelistink, but here is a solution.
+
+### Create a cloud NAT gateway
+We will use a daemon set in GKE , that will rewrite the ip-table rules in the GKE Nodes to masquerade the outbound traffic.
+
+Select the VPC in which you have deployed your public GKE cluster and create a new cloud router. Create it manualli to configure the NAT gateway’s ip. This will be the ip-address that you will give to your third party vendor for whitelisting your incoming connection.
+
+Create the config map and the daemon-set:
+
+```yaml
+nano config.yaml
+---
+nonMasqueradeCIDRs:
+  - 0.0.0.0/0
+masqLinkLocal: true
+resyncInterval: 60s
+```
+
+```bash
+kubectl create configmap ip-masq-agent --from-file config.yaml --namespace kube-system
+```
+
+Deploy the masq-agent:
+
+```yaml
+nano ip-masq-agent.yaml
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ip-masq-agent
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      k8s-app: ip-masq-agent
+  template:
+    metadata:
+      labels:
+        k8s-app: ip-masq-agent
+    spec:
+      hostNetwork: true
+      containers:
+      - name: ip-masq-agent
+        image: gcr.io/google-containers/ip-masq-agent-amd64:v2.4.1
+        args:
+            - --masq-chain=IP-MASQ
+            # To non-masquerade reserved IP ranges by default, uncomment the line below.
+            # - --nomasq-all-reserved-ranges
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - name: config
+            mountPath: /etc/config
+      volumes:
+        - name: config
+          configMap:
+            # Note this ConfigMap must be created in the same namespace as the
+            # daemon pods - this spec uses kube-system
+            name: ip-masq-agent
+            optional: true
+            items:
+              # The daemon looks for its config in a YAML file at /etc/config/ip-masq-agent
+              - key: config
+                path: ip-masq-agent
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      - key: &#34;CriticalAddonsOnly&#34;
+        operator: &#34;Exists&#34;
+```
+
+```bash
+kubectl apply -f ip-masq-agent.yaml
+```
+
+After the creation ogthe ip-masq-agent check the firewall rules of the GKE nodes:
+
+```bash
+sudo iptables -t NAT -L IP-MASQ
+
+Chain IP-MASQ (2 references)
+target     prot opt cource      destination
+RETURN     all  --  anywhere    anywhere      /* ip-masq-agent: local traffic is not subject to MASQUERADE */
+MASQUERADE  all  --  anywhere    anywhere      /* ip-masq-agent: outbound traffic is subject to MASQUERADE (must be last in chain) */
+```
+
+So the egress traffic from GKE to internet will go via the cloud NAT’s gateway ip address.
+

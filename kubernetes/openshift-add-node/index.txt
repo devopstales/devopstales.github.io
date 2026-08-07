@@ -1,0 +1,117 @@
+---
+title: Openshift: Add Nodes to a Cluster
+url: https://devopstales.github.io/kubernetes/openshift-add-node/
+date: 2019-06-27
+keywords: ansible, openshift 3.11, openshift okd, openshift tutorial, openshift container platform, rad hat openshift
+---
+
+
+
+Add Nodes to an existing Cluster.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/openshift.html&#34; &gt;}}
+
+In the last post I used the basic htpasswd authentication method for the installatipn.&lt;br&gt;
+But I can use Ansible-openshift to configure an LDAP backed at the install for the authentication.
+
+### Environment
+```
+192.168.1.40    deployer
+192.168.1.41    openshift01 # master node
+192.168.1.42    openshift02 # infra node
+192.168.1.43    openshift03 # worker node
+192.168.1.44    openshift04 # new-worker node
+192.168.1.45    openshift00 # new-master node
+```
+
+###
+```
+useradd origin
+passwd origin
+echo -e &#39;Defaults:origin !requiretty\norigin ALL = (root) NOPASSWD:ALL&#39; | tee /etc/sudoers.d/openshift
+chmod 440 /etc/sudoers.d/openshift
+
+# if Firewalld is running, allow SSH
+
+firewall-cmd --add-service=ssh --permanent
+firewall-cmd --reload
+
+yum -y install centos-release-openshift-origin36 docker
+vgcreate vg_origin01 /dev/sdb1
+
+Volume group &#34;vg_origin01&#34; successfully created
+echo VG=vg_origin01 &gt;&gt; /etc/sysconfig/docker-storage-setup
+systemctl start docker
+systemctl enable docker
+```
+
+### Configurate Installer
+```
+nano /etc/ansible/hosts
+# add into OSEv3 section
+
+[OSEv3:children]
+masters
+nodes
+new_nodes
+new_masters
+new_etcd
+
+[new_nodes]
+openshift04.devopstales.intra openshift_node_group_name=&#39;node-config-compute&#39;
+openshift00.devopstales.intra openshift_node_group_name=&#39;node-config-master&#39;
+
+[new_masters]
+openshift00.devopstales.intra openshift_node_group_name=&#39;node-config-master&#39;
+
+[new_etcd]
+openshift00.devopstales.intra containerized=true
+```
+
+### Run the Installer
+Run Ansible Playbook for scaleout the Cluster.
+```
+# deployer
+cd /usr/share/ansible/openshift-ansible/
+
+ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/byo/openshift-node/scaleup.yml
+ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/byo/openshift-master/scaleup.yml
+ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/openshift-etcd/scaleup.yml
+```
+
+### Configurate Installer
+After finishing to add new Nodes, Open [/etc/ansible/hosts] again and move new definitions to existing [nodes] section like follows.
+```
+nano /etc/ansible/hosts
+# add into OSEv3 section
+
+[OSEv3:children]
+masters
+nodes
+new_nodes
+new_masters
+
+[nodes]
+openshift00.devopstales.intra openshift_node_group_name=&#39;node-config-master&#39;
+openshift01.devopstales.intra openshift_node_group_name=&#39;node-config-master&#39;
+openshift02.devopstales.intra openshift_node_group_name=&#39;node-config-infra&#39;
+openshift03.devopstales.intra openshift_node_group_name=&#39;node-config-compute&#39;
+openshift04.devopstales.intra openshift_node_group_name=&#39;node-config-compute
+
+[new_nodes]
+
+[masters]
+openshift00.devopstales.intra openshift_node_group_name=&#39;node-config-master&#39;
+openshift01.devopstales.intra openshift_node_group_name=&#39;node-config-master&#39;
+
+[new_masters]
+
+[etcd]
+openshift01.devopstales.intra containerized=true
+openshift00.devopstales.intra containerized=true
+
+[new_etcd]
+```
+

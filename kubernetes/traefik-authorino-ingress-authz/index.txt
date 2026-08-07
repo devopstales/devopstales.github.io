@@ -1,0 +1,955 @@
+---
+title: Zero-Trust Ingress with Traefik &#43; Authorino - Group-Based Authorization
+url: https://devopstales.github.io/kubernetes/traefik-authorino-ingress-authz/
+date: 2026-04-22
+keywords: Traefik authorization, Authorino Kubernetes, ingress-based AuthZ, group-based access, zero-trust ingress, OIDC authorization, Kubernetes security
+---
+
+
+Implementing group-based authorization at the ingress level ensures that sensitive applications are only accessible to authorized user groups. This post covers implementing zero-trust ingress with **Traefik &#43; Authorino** where different ingress routes are only visible to specific user groups.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/egress-gateway-series.html&#34; &gt;}}
+
+## Architecture Overview
+
+```bash
+┌─────────────────────────────────────────────────────────────────┐
+│                        User Request                             │
+│                    (with OIDC Token)                            │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Traefik Ingress                              │
+│  ┌─────────────────┐         ┌─────────────────┐               │
+│  │  Ingress 1      │         │  Ingress 2      │               │
+│  │  (admin-app)    │         │  (dev-app)      │               │
+│  │                 │         │                 │               │
+│  │  Group: admin   │         │  Group: dev     │               │
+│  └────────┬────────┘         └────────┬────────┘               │
+└───────────┼───────────────────────────┼────────────────────────┘
+            │                           │
+            ▼                           ▼
+    ┌───────────────────────────────────────────────────┐
+    │              Authorino (AuthZ)                    │
+    │                                                   │
+    │  ┌─────────────────┐     ┌─────────────────┐     │
+    │  │  Policy 1       │     │  Policy 2       │     │
+    │  │  group:admin    │     │  group:dev      │     │
+    │  │  → Allow        │     │  → Allow        │     │
+    │  └─────────────────┘     └─────────────────┘     │
+    └───────────────────────────────────────────────────┘
+                         │
+                         ▼
+            ┌────────────────────────┐
+            │   OIDC Provider        │
+            │   (Keycloak/Auth0)     │
+            │   - User Groups        │
+            │   - JWT Validation     │
+            └────────────────────────┘
+```
+
+## Why Traefik &#43; Authorino?
+
+| Feature | Traefik &#43; Authorino | Alternatives |
+|---------|---------------------|--------------|
+| **External AuthZ** | ✅ Native support | ⚠️ Custom middleware |
+| **Group-Based AuthZ** | ✅ Built-in | ⚠️ Manual implementation |
+| **OIDC Integration** | ✅ Multiple providers | ✅ Similar |
+| **Performance** | ✅ External service | ⚠️ Inline processing |
+| **Flexibility** | ✅ Policy per route | ⚠️ Global policies |
+| **Kubernetes Native** | ✅ CRD-based | ⚠️ ConfigMap-based |
+
+## Prerequisites
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| **Kubernetes** | 1.26&#43; | Tested on 1.28, 1.29 |
+| **Traefik** | 2.10&#43; | With Middleware support |
+| **Authorino** | 0.18&#43; | Authorization service |
+| **OIDC Provider** | Any | Keycloak, Auth0, Okta |
+| **cert-manager** | 1.13&#43; | For TLS certificates |
+
+## Step 1: Install Traefik Ingress Controller
+
+### Install Traefik via Helm
+
+```bash
+# Add Traefik Helm repository
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+
+# Install Traefik with external auth middleware enabled
+helm install traefik traefik/traefik \
+  --namespace traefik-system \
+  --create-namespace \
+  --set ingressClass.enabled=true \
+  --set ingressClass.isDefaultClass=true \
+  --set providers.kubernetesIngress.enabled=true \
+  --set providers.kubernetesCRD.enabled=true \
+  --set providers.kubernetesGateway.enabled=true \
+  --set ports.web.redirectTo.port=websecure \
+  --set ports.websecure.http3.enabled=true \
+  --wait
+```
+
+### Verify Traefik Installation
+
+```bash
+# Check Traefik pods
+kubectl get pods -n traefik-system
+
+# Expected output:
+# NAME                      READY   STATUS
+# traefik-xxxxxxxxxx-xxxxx  1/1     Running
+
+# Get Traefik dashboard URL
+kubectl get svc -n traefik-system traefik-dashboard
+```
+
+## Step 2: Install Authorino
+
+### Install Authorino via Helm
+
+```bash
+# Add Authorino Helm repository
+helm repo add authorino https://kuadrant.github.io/authorino/helm-charts
+helm repo update
+
+# Install Authorino
+helm install authorino authorino/authorino \
+  --namespace authorino-system \
+  --create-namespace \
+  --set config.authConfigLabelSelectors=&#34;security.kuadrant.io/protected-by=authorino&#34; \
+  --set listener.watchingNamespaces=&#34;*&#34; \
+  --wait
+```
+
+### Verify Authorino Installation
+
+```bash
+# Check Authorino pods
+kubectl get pods -n authorino-system
+
+# Expected output:
+# NAME                        READY   STATUS
+# authorino-xxxxxxxxxx-xxxxx  1/1     Running
+
+# Check Authorino service
+kubectl get svc -n authorino-system authorino-service
+```
+
+## Step 3: Configure OIDC Provider
+
+### Keycloak Realm Setup
+
+```bash
+# Create realm (via Keycloak admin or CLI)
+kcadm.sh create realms -s realm=production -s enabled=true
+
+# Create groups
+kcadm.sh create groups -r production -s name=admin
+kcadm.sh create groups -r production -s name=dev
+
+# Create users and assign to groups
+kcadm.sh create users -r production -s username=admin1 -s enabled=true
+kcadm.sh add-roles -r production --uusername admin1 --gname admin
+
+kcadm.sh create users -r production -s username=dev1 -s enabled=true
+kcadm.sh add-roles -r production --uusername dev1 --gname dev
+```
+
+### Create OIDC Client
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oidc-client-secret
+  namespace: default
+type: Opaque
+stringData:
+  client-id: &#34;traefik-ingress&#34;
+  client-secret: &#34;your-client-secret-here&#34;
+  issuer: &#34;https://keycloak.mydomain.intra/realms/production&#34;
+  jwks-url: &#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;
+```
+
+## Step 4: Create Authorino AuthConfig
+
+### Admin Group Authorization Policy
+
+```yaml
+apiVersion: authorino.kuadrant.io/v1beta2
+kind: AuthConfig
+metadata:
+  name: admin-ingress-authz
+  namespace: default
+  labels:
+    security.kuadrant.io/protected-by: authorino
+spec:
+  hosts:
+    - &#34;admin.mydomain.intra&#34;
+  
+  authentication:
+    &#34;oidc-jwt&#34;:
+      jwt:
+        issuer: &#34;https://keycloak.mydomain.intra/realms/production&#34;
+        jwksUrl: &#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;
+        ttl: 3600
+        secretRef:
+          name: oidc-client-secret
+  
+  authorization:
+    &#34;admin-group-check&#34;:
+      patternMatching:
+        patterns:
+          - any:
+              - selector: auth.identity.groups
+                operator: incl
+                value: &#34;admin&#34;
+              - selector: auth.identity.realm_access.roles
+                operator: incl
+                value: &#34;admin&#34;
+  
+  response:
+    successHeaders:
+      &#34;x-authenticated-user&#34;:
+        selector: auth.identity.preferred_username
+      &#34;x-authenticated-groups&#34;:
+        selector: auth.identity.groups
+```
+
+### Developer Group Authorization Policy
+
+```yaml
+apiVersion: authorino.kuadrant.io/v1beta2
+kind: AuthConfig
+metadata:
+  name: dev-ingress-authz
+  namespace: default
+  labels:
+    security.kuadrant.io/protected-by: authorino
+spec:
+  hosts:
+    - &#34;dev.mydomain.intra&#34;
+  
+  authentication:
+    &#34;oidc-jwt&#34;:
+      jwt:
+        issuer: &#34;https://keycloak.mydomain.intra/realms/production&#34;
+        jwksUrl: &#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;
+        ttl: 3600
+        secretRef:
+          name: oidc-client-secret
+  
+  authorization:
+    &#34;dev-group-check&#34;:
+      patternMatching:
+        patterns:
+          - any:
+              - selector: auth.identity.groups
+                operator: incl
+                value: &#34;dev&#34;
+              - selector: auth.identity.realm_access.roles
+                operator: incl
+                value: &#34;dev&#34;
+  
+  response:
+    successHeaders:
+      &#34;x-authenticated-user&#34;:
+        selector: auth.identity.preferred_username
+      &#34;x-authenticated-groups&#34;:
+        selector: auth.identity.groups
+```
+
+### Apply AuthConfig Resources
+
+```bash
+kubectl apply -f admin-authz.yaml
+kubectl apply -f dev-authz.yaml
+
+# Verify AuthConfig status
+kubectl get authconfig -n default
+
+# Expected output:
+# NAME                  READY   REASON
+# admin-ingress-authz   True    AuthorinoReady
+# dev-ingress-authz     True    AuthorinoReady
+```
+
+## Step 5: Create Traefik Middleware
+
+### External Auth Middleware for Admin
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: admin-authz-middleware
+  namespace: default
+spec:
+  forwardAuth:
+    address: &#34;http://authorino-service.authorino-system.svc.cluster.local:80&#34;
+    trustForwardHeader: true
+    authResponseHeaders:
+      - &#34;x-authenticated-user&#34;
+      - &#34;x-authenticated-groups&#34;
+    authRequestHeaders:
+      - &#34;authorization&#34;
+      - &#34;cookie&#34;
+```
+
+### External Auth Middleware for Dev
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dev-authz-middleware
+  namespace: default
+spec:
+  forwardAuth:
+    address: &#34;http://authorino-service.authorino-system.svc.cluster.local:80&#34;
+    trustForwardHeader: true
+    authResponseHeaders:
+      - &#34;x-authenticated-user&#34;
+      - &#34;x-authenticated-groups&#34;
+    authRequestHeaders:
+      - &#34;authorization&#34;
+      - &#34;cookie&#34;
+```
+
+### Apply Middleware Resources
+
+```bash
+kubectl apply -f admin-middleware.yaml
+kubectl apply -f dev-middleware.yaml
+
+# Verify middleware
+kubectl get middleware -n default
+
+# Expected output:
+# NAME                   AGE
+# admin-authz-middleware  5m
+# dev-authz-middleware    5m
+```
+
+## Step 6: Create Ingress Routes
+
+### Admin Ingress (Group: admin only)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: admin-app-ingress
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: &#34;default-admin-authz-middleware@kubernetescrd&#34;
+    traefik.ingress.kubernetes.io/router.entrypoints: &#34;websecure&#34;
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - &#34;admin.mydomain.intra&#34;
+      secretName: admin-tls-secret
+  rules:
+    - host: &#34;admin.mydomain.intra&#34;
+      http:
+        paths:
+          - path: &#34;/&#34;
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-app
+                port:
+                  number: 8080
+```
+
+### Developer Ingress (Group: dev only)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dev-app-ingress
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: &#34;default-dev-authz-middleware@kubernetescrd&#34;
+    traefik.ingress.kubernetes.io/router.entrypoints: &#34;websecure&#34;
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - &#34;dev.mydomain.intra&#34;
+      secretName: dev-tls-secret
+  rules:
+    - host: &#34;dev.mydomain.intra&#34;
+      http:
+        paths:
+          - path: &#34;/&#34;
+            pathType: Prefix
+            backend:
+              service:
+                name: dev-app
+                port:
+                  number: 8080
+```
+
+### Apply Ingress Resources
+
+```bash
+kubectl apply -f admin-ingress.yaml
+kubectl apply -f dev-ingress.yaml
+
+# Verify ingress
+kubectl get ingress -n default
+
+# Expected output:
+# NAME               CLASS    HOSTS                  ADDRESS        PORTS     AGE
+# admin-app-ingress  traefik  admin.mydomain.intra   192.168.1.10   80, 443   5m
+# dev-app-ingress    traefik  dev.mydomain.intra     192.168.1.10   80, 443   5m
+```
+
+## Step 7: Deploy Test Applications
+
+### Admin Application
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-app
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: admin-app
+  template:
+    metadata:
+      labels:
+        app: admin-app
+    spec:
+      containers:
+        - name: admin-app
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          env:
+            - name: APP_NAME
+              value: &#34;Admin Application&#34;
+            - name: REQUIRED_GROUP
+              value: &#34;admin&#34;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-app
+  namespace: default
+spec:
+  selector:
+    app: admin-app
+  ports:
+    - port: 8080
+      targetPort: 80
+  type: ClusterIP
+```
+
+### Developer Application
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dev-app
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dev-app
+  template:
+    metadata:
+      labels:
+        app: dev-app
+    spec:
+      containers:
+        - name: dev-app
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          env:
+            - name: APP_NAME
+              value: &#34;Developer Application&#34;
+            - name: REQUIRED_GROUP
+              value: &#34;dev&#34;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dev-app
+  namespace: default
+spec:
+  selector:
+    app: dev-app
+  ports:
+    - port: 8080
+      targetPort: 80
+  type: ClusterIP
+```
+
+### Apply Test Applications
+
+```bash
+kubectl apply -f admin-app.yaml
+kubectl apply -f dev-app.yaml
+
+# Verify deployments
+kubectl get deployments -n default
+
+# Verify services
+kubectl get svc -n default
+```
+
+## Testing Authorization
+
+### Test 1: Admin User Accessing Admin App
+
+```bash
+# Get admin user token
+ADMIN_TOKEN=$(curl -X POST \
+  https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/token \
+  -H &#34;Content-Type: application/x-www-form-urlencoded&#34; \
+  -d &#34;grant_type=password&#34; \
+  -d &#34;client_id=traefik-ingress&#34; \
+  -d &#34;client_secret=your-client-secret&#34; \
+  -d &#34;username=admin1&#34; \
+  -d &#34;password=admin1password&#34; \
+  | jq -r &#39;.access_token&#39;)
+
+# Access admin app with admin token
+curl -v https://admin.mydomain.intra \
+  -H &#34;Authorization: Bearer $ADMIN_TOKEN&#34; \
+  -H &#34;Host: admin.mydomain.intra&#34;
+
+# Expected: 200 OK with x-authenticated-user header
+```
+
+### Test 2: Admin User Accessing Dev App (Should Fail)
+
+```bash
+# Access dev app with admin token
+curl -v https://dev.mydomain.intra \
+  -H &#34;Authorization: Bearer $ADMIN_TOKEN&#34; \
+  -H &#34;Host: dev.mydomain.intra&#34;
+
+# Expected: 403 Forbidden
+# Response: {&#34;error&#34;: &#34;authorization failed&#34;, &#34;reason&#34;: &#34;group check failed&#34;}
+```
+
+### Test 3: Dev User Accessing Dev App
+
+```bash
+# Get dev user token
+DEV_TOKEN=$(curl -X POST \
+  https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/token \
+  -H &#34;Content-Type: application/x-www-form-urlencoded&#34; \
+  -d &#34;grant_type=password&#34; \
+  -d &#34;client_id=traefik-ingress&#34; \
+  -d &#34;client_secret=your-client-secret&#34; \
+  -d &#34;username=dev1&#34; \
+  -d &#34;password=dev1password&#34; \
+  | jq -r &#39;.access_token&#39;)
+
+# Access dev app with dev token
+curl -v https://dev.mydomain.intra \
+  -H &#34;Authorization: Bearer $DEV_TOKEN&#34; \
+  -H &#34;Host: dev.mydomain.intra&#34;
+
+# Expected: 200 OK with x-authenticated-user header
+```
+
+### Test 4: Dev User Accessing Admin App (Should Fail)
+
+```bash
+# Access admin app with dev token
+curl -v https://admin.mydomain.intra \
+  -H &#34;Authorization: Bearer $DEV_TOKEN&#34; \
+  -H &#34;Host: admin.mydomain.intra&#34;
+
+# Expected: 403 Forbidden
+# Response: {&#34;error&#34;: &#34;authorization failed&#34;, &#34;reason&#34;: &#34;group check failed&#34;}
+```
+
+### Test 5: Unauthenticated Access (Should Fail)
+
+```bash
+# Access without token
+curl -v https://admin.mydomain.intra \
+  -H &#34;Host: admin.mydomain.intra&#34;
+
+# Expected: 401 Unauthorized
+# Response: {&#34;error&#34;: &#34;unauthenticated&#34;, &#34;reason&#34;: &#34;missing authorization header&#34;}
+```
+
+## Advanced Configuration
+
+### Multiple Groups per Ingress
+
+```yaml
+apiVersion: authorino.kuadrant.io/v1beta2
+kind: AuthConfig
+metadata:
+  name: multi-group-authz
+  namespace: default
+spec:
+  hosts:
+    - &#34;shared.mydomain.intra&#34;
+  
+  authentication:
+    &#34;oidc-jwt&#34;:
+      jwt:
+        issuer: &#34;https://keycloak.mydomain.intra/realms/production&#34;
+        jwksUrl: &#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;
+  
+  authorization:
+    &#34;multi-group-check&#34;:
+      patternMatching:
+        patterns:
+          - any:
+              - selector: auth.identity.groups
+                operator: incl
+                value: &#34;admin&#34;
+              - selector: auth.identity.groups
+                operator: incl
+                value: &#34;dev&#34;
+              - selector: auth.identity.groups
+                operator: incl
+                value: &#34;ops&#34;
+```
+
+### Role-Based &#43; Group-Based Authorization
+
+```yaml
+authorization:
+  &#34;role-and-group-check&#34;:
+    patternMatching:
+      patterns:
+        - all:
+            - selector: auth.identity.groups
+              operator: incl
+              value: &#34;admin&#34;
+            - any:
+                - selector: auth.identity.realm_access.roles
+                  operator: incl
+                  value: &#34;admin.read&#34;
+                - selector: auth.identity.realm_access.roles
+                  operator: incl
+                  value: &#34;admin.write&#34;
+```
+
+### Rate Limiting per User Group
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit-by-group
+  namespace: default
+spec:
+  rateLimit:
+    average: 100
+    burst: 50
+    headerField: &#34;x-authenticated-groups&#34;
+```
+
+### Logging and Audit
+
+```yaml
+apiVersion: authorino.kuadrant.io/v1beta2
+kind: AuthConfig
+metadata:
+  name: audited-authz
+  namespace: default
+spec:
+  hosts:
+    - &#34;secure.mydomain.intra&#34;
+  
+  authentication:
+    &#34;oidc-jwt&#34;:
+      jwt:
+        issuer: &#34;https://keycloak.mydomain.intra/realms/production&#34;
+        jwksUrl: &#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;
+  
+  authorization:
+    &#34;group-check&#34;:
+      patternMatching:
+        patterns:
+          - selector: auth.identity.groups
+            operator: incl
+            value: &#34;admin&#34;
+  
+  # Audit logging
+  callbacks:
+    &#34;audit-log&#34;:
+      http:
+        url: &#34;http://audit-service.audit-system.svc.cluster.local:8080/log&#34;
+        method: &#34;POST&#34;
+        body:
+          selector: auth
+```
+
+## Monitoring and Observability
+
+### Authorino Metrics
+
+```bash
+# Enable Authorino metrics
+helm upgrade authorino authorino/authorino \
+  --namespace authorino-system \
+  --set metrics.enabled=true \
+  --set metrics.port=8080
+
+# Access metrics
+kubectl port-forward -n authorino-system svc/authorino-service 8080:8080
+```
+
+### Key Metrics
+
+| Metric | Description |
+|--------|-------------|
+| `authorino_auth_request_total` | Total auth requests |
+| `authorino_auth_request_allowed` | Allowed requests |
+| `authorino_auth_request_denied` | Denied requests |
+| `authorino_auth_latency_seconds` | Authorization latency |
+
+### Grafana Dashboard
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authorino-dashboard
+  namespace: monitoring
+data:
+  authorino.json: |
+    {
+      &#34;dashboard&#34;: {
+        &#34;title&#34;: &#34;Authorino Authorization&#34;,
+        &#34;panels&#34;: [
+          {
+            &#34;title&#34;: &#34;Auth Requests&#34;,
+            &#34;targets&#34;: [
+              {
+                &#34;expr&#34;: &#34;rate(authorino_auth_request_total[5m])&#34;
+              }
+            ]
+          },
+          {
+            &#34;title&#34;: &#34;Allowed vs Denied&#34;,
+            &#34;targets&#34;: [
+              {
+                &#34;expr&#34;: &#34;rate(authorino_auth_request_allowed[5m])&#34;
+              },
+              {
+                &#34;expr&#34;: &#34;rate(authorino_auth_request_denied[5m])&#34;
+              }
+            ]
+          },
+          {
+            &#34;title&#34;: &#34;Auth Latency (p99)&#34;,
+            &#34;targets&#34;: [
+              {
+                &#34;expr&#34;: &#34;histogram_quantile(0.99, rate(authorino_auth_latency_seconds_bucket[5m]))&#34;
+              }
+            ]
+          }
+        ]
+      }
+    }
+```
+
+### Traefik Access Logs
+
+```yaml
+# Enable access logs in Traefik
+helm upgrade traefik traefik/traefik \
+  --namespace traefik-system \
+  --set logs.access.enabled=true \
+  --set logs.access.format=json \
+  --set logs.access.filters.statuscodes=[&#34;200-299&#34;,&#34;exclude&#34;]
+```
+
+## Troubleshooting
+
+### Issue: 401 Unauthorized
+
+```bash
+# Check token validity
+curl -X POST \
+  https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/token/introspect \
+  -H &#34;Content-Type: application/x-www-form-urlencoded&#34; \
+  -d &#34;token=YOUR_TOKEN&#34; \
+  -d &#34;client_id=traefik-ingress&#34; \
+  -d &#34;client_secret=your-client-secret&#34;
+
+# Check Authorino logs
+kubectl logs -n authorino-system -l app.kubernetes.io/name=authorino
+
+# Check Traefik logs
+kubectl logs -n traefik-system -l app.kubernetes.io/name=traefik
+```
+
+### Issue: 403 Forbidden (Unexpected)
+
+```bash
+# Verify user groups in token
+echo $TOKEN | jq -R &#39;split(&#34;.&#34;) | .[1] | @base64d | fromjson&#39; | jq &#39;.groups&#39;
+
+# Check AuthConfig status
+kubectl get authconfig admin-ingress-authz -n default -o yaml
+
+# Verify pattern matching
+kubectl logs -n authorino-system -l app.kubernetes.io/name=authorino | grep &#34;admin-ingress-authz&#34;
+```
+
+### Issue: Authorino Not Responding
+
+```bash
+# Check Authorino service
+kubectl get svc -n authorino-system authorino-service
+
+# Test connectivity from Traefik
+kubectl exec -n traefik-system traefik-xxxxxxxxxx -- \
+  curl -v http://authorino-service.authorino-system.svc.cluster.local:80/healthz
+
+# Check Authorino pod status
+kubectl get pods -n authorino-system
+kubectl describe pod -n authorino-system authorino-xxxxxxxxxx
+```
+
+### Common Problems and Solutions
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| 401 Unauthorized | Missing/invalid token | Verify OIDC configuration |
+| 403 Forbidden | Group mismatch | Check user groups in Keycloak |
+| 503 Service Unavailable | Authorino down | Check Authorino pod status |
+| Timeout | Network issue | Verify service connectivity |
+| JWKS fetch failed | Network/Cert issue | Check issuer URL accessibility |
+
+## Security Best Practices
+
+### 1. Token Validation
+
+```yaml
+authentication:
+  &#34;oidc-jwt&#34;:
+    jwt:
+      issuer: &#34;https://keycloak.mydomain.intra/realms/production&#34;
+      jwksUrl: &#34;https://keycloak.mydomain.intra/realms/production/protocol/openid-connect/certs&#34;
+      ttl: 3600  # Cache JWKS for 1 hour
+      refreshInterval: 300  # Refresh every 5 minutes
+```
+
+### 2. Least Privilege Groups
+
+```yaml
+authorization:
+  &#34;least-privilege-check&#34;:
+    patternMatching:
+      patterns:
+        - all:  # Require ALL conditions
+            - selector: auth.identity.groups
+              operator: incl
+              value: &#34;admin&#34;
+            - selector: auth.identity.realm_access.roles
+              operator: incl
+              value: &#34;admin.read&#34;
+```
+
+### 3. Audit Logging
+
+```yaml
+callbacks:
+  &#34;audit-log&#34;:
+    http:
+      url: &#34;http://audit-service.audit-system.svc.cluster.local:8080/log&#34;
+      method: &#34;POST&#34;
+      body:
+        selector: auth
+      headers:
+        &#34;Content-Type&#34;: &#34;application/json&#34;
+```
+
+### 4. Rate Limiting
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: auth-rate-limit
+  namespace: default
+spec:
+  rateLimit:
+    average: 100
+    burst: 50
+    sourceCriterion:
+      requestHeaderName: &#34;x-authenticated-user&#34;
+```
+
+## Comparison with Alternatives
+
+| Feature | Traefik&#43;Authorino | Istio | OPA Gatekeeper |
+|---------|-------------------|-------|----------------|
+| **External AuthZ** | ✅ Native | ⚠️ Custom | ❌ No |
+| **Group-Based** | ✅ Built-in | ✅ Yes | ⚠️ Manual |
+| **OIDC Integration** | ✅ Multiple | ✅ Yes | ⚠️ Manual |
+| **Performance** | ✅ External | ⚠️ Sidecar | ✅ External |
+| **Complexity** | 🟡 Medium | 🔴 High | 🟡 Medium |
+| **Kubernetes Native** | ✅ CRD | ✅ CRD | ✅ CRD |
+
+## When to Use This Approach
+
+**Choose Traefik &#43; Authorino when:**
+- ✅ Need group-based authorization at ingress
+- ✅ Want external authorization service
+- ✅ Using OIDC for authentication
+- ✅ Need fine-grained policy control
+- ✅ Want Kubernetes-native CRD approach
+
+**Consider alternatives when:**
+- 📋 Need service mesh features (choose Istio)
+- 📋 Want policy-as-code (choose OPA)
+- 📋 Need L7 traffic management only (choose Traefik alone)
+- 📋 Running on managed Kubernetes with cloud auth (use cloud-native)
+
+## Conclusion
+
+Traefik &#43; Authorino provides:
+
+**Advantages:**
+- ✅ Native external authorization support
+- ✅ Group-based access control
+- ✅ OIDC integration out-of-box
+- ✅ Kubernetes CRD-based configuration
+- ✅ Fine-grained policy per ingress
+- ✅ Audit logging capabilities
+- ✅ Rate limiting integration
+
+**Considerations:**
+- 📋 Additional service to manage (Authorino)
+- 📋 Network latency for auth checks
+- 📋 OIDC provider required
+- 📋 Policy syntax learning curve
+
+For organizations needing **zero-trust ingress with group-based authorization**, Traefik &#43; Authorino provides a robust, Kubernetes-native solution that integrates seamlessly with existing OIDC providers.
+
+---
+
+*For more Kubernetes security guides, check out our [K8s Security Best Practices](/kubernetes/k8s-security/) and [RBAC Guide](/kubernetes/k8s-rbac/).*
+

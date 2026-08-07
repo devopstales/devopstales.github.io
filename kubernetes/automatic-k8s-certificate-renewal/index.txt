@@ -1,0 +1,73 @@
+---
+title: Automatic Kubernetes Certificate Renewal
+url: https://devopstales.github.io/kubernetes/automatic-k8s-certificate-renewal/
+date: 2024-12-20
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Secuity, best Practices
+---
+
+
+In this post I will show you how you can automate the Kubernetes Certificate renewal.
+&lt;!--more--&gt;
+
+Create a Bash script for renewing the certificates:
+
+```bash
+nano /usr/local/bin/k8s-certs-renew.sh
+
+echo &#34;## Expiration before renewal ##&#34;
+/usr/local/bin/kubeadm certs check-expiration
+
+echo &#34;## Renewing certificates managed by kubeadm ##&#34;
+/usr/local/bin/kubeadm certs renew all
+
+echo &#34;## Restarting control plane pods managed by kubeadm ##&#34;
+/usr/local/bin/crictl pods --namespace kube-system --name &#39;kube-scheduler-*|kube-controller-manager-*|kube-apiserver-*|etcd-*&#39; -q | /usr/bin/xargs /usr/local/bin/crictl rmp -f
+
+echo &#34;## Updating /root/.kube/config ##&#34;
+cp /etc/kubernetes/admin.conf /root/.kube/config
+
+echo &#34;## Waiting for apiserver to be up again ##&#34;
+until printf &#34;&#34; 2&gt;&gt;/dev/null &gt;&gt;/dev/tcp/127.0.0.1/6443; do sleep 1; done
+
+echo &#34;## Expiration after renewal ##&#34;
+/usr/local/bin/kubeadm certs check-expiration
+```
+
+Create a systemd service to call the script:
+
+```bash
+/etc/systemd/system/k8s-certs-renew.service
+
+[Unit]
+Description=Renew K8S control plane certificates
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/k8s-certs-renew.sh
+```
+
+Create a systemd timer to trigger the service at regular intervals:
+
+```bash
+cat /etc/systemd/system/k8s-certs-renew.timer
+
+[Unit]
+Description=Timer to renew K8S control plane certificates
+
+[Timer]
+OnCalendar=Fri *-*-1,2,3,4,5,6,7 03:10:00
+RandomizedDelaySec=30min
+Persistent=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Execute the following commands to complete the process:
+
+```bash
+systemctl daemon-reload
+
+systemctl restart k8s-certs-renew.timer
+```
+

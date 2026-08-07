@@ -1,0 +1,90 @@
+---
+title: Free sso for Mattermost Teams Edition
+url: https://devopstales.github.io/sso/mattermost-keycloak-sso/
+date: 2020-02-16
+keywords: Keycloak, oauth2, SSO, OIDC, gitlab mattermost, mattermost vs slack, mattermost client
+---
+
+
+In this article I will show you how to use Keycloak as an authentication provider for  Mattermost Teams Edition.
+
+&lt;!--more--&gt;
+
+Slack and Mattermost are very similar products. With Mattermost Teams Edition you can get almost all the functionality of the payed Slack. The only problem is sso. In Mattermost you can use google sso login in the E20 licensing what is more costly the Slack. (Slack: 8$/user Mattermost E20: 8.5$/user) In  Mattermost Teams Edition (the free edition of Mattermost) the only authentication provider you can use is gitlab, but thanks to [wadahiro](https://qiita.com/wadahiro/items/8b118c34aae904353865) we can use Keycloak instead of gitlab.
+
+
+### Configurate MAttermost
+```
+nano /etc/mattermost/config.json
+...
+&#34;GitLabSettings&#34;: {
+    &#34;Enable&#34;: false,
+    &#34;Secret&#34;: &#34;&lt;secret&gt;&#34;,
+    &#34;Id&#34;: &#34;mattermost&#34;,
+    &#34;Scope&#34;: &#34;&#34;,
+    &#34;AuthEndpoint&#34;: &#34;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/auth&#34;,
+    &#34;TokenEndpoint&#34;: &#34;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/token&#34;,
+    &#34;UserApiEndpoint&#34;: &#34;https://keycloak.mydomain.intra/auth/realms/mydomain/protocol/openid-connect/userinfo&#34;
+},
+```
+
+### Create Client on Keycloak
+
+In keycloak go to `Configure &gt; Clients` and create a new client for Mattermostw With the fallowing data:
+
+* Standard Flow Enabled: `ON`
+* Access Type: `confidential`
+* Valid Redirect URIs: `http://&lt;Mattermost-FQDN&gt;/signup/gitlab/complete`
+
+![image](/img/include/mattermost_sso1.webp) &lt;br&gt;
+
+### Create mapper for correct data
+Mattermost [want](https://github.com/mattermost/mattermost-server/blob/v4.10.0/model/gitlab/gitlab.go#L19-L25) the fallowing data from the authentication provider:
+
+```
+type GitLabUser struct {
+	Id       int64  `json:&#34;id&#34;`
+	Username string `json:&#34;username&#34;`
+	Login    string `json:&#34;login&#34;`
+	Email    string `json:&#34;email&#34;`
+	Name     string `json:&#34;name&#34;`
+}
+```
+
+Create mapping for username:
+
+![image](/img/include/mattermost_sso2.webp) &lt;br&gt;
+
+The only problematic data is the ID. For the test run you can use a self generated id like this:
+
+![image](/img/include/mattermost_sso3.webp) &lt;br&gt;
+
+### Create user for test
+For testing purposes we’re going to create a local user in Keycloak.
+
+![image](/img/include/mattermost_sso4.webp) &lt;br&gt;
+
+Now we need to create an attribute for this user with the mattermost id and the value should be an integer between 1 and 9999999999999999999.
+
+![image](/img/include/mattermost_sso5.webp) &lt;br&gt;
+
+If you have many users you didn&#39;t want to create id for them manually. If you use LDAP for users the best fit for this need was the employeeNumber or EmployeeId ldap attribute.
+
+![image](/img/include/mattermost_sso6.webp) &lt;br&gt;
+
+If you use ActiveDirectory this attribute maybe null so we need to generate it with a powershell script.
+```
+ForEach ($User in ((Get-ADUser -Filter * -Properties SamAccountName,EmployeeId)))
+{
+if ( ([string]::IsNullOrEmpty($User.EmployeeId)))
+{
+$DATE = (Get-ADuser $User.SamAccountName -Properties whencreated).whencreated.ToString(&#39;yyMMddHHmmss&#39;)
+$RANDOM = (Get-Random -Maximum 9999)
+$DATA = -join ($DATE, $RANDOM)
+$User.SamAccountName
+$DATA
+Set-ADUser $User.SamAccountName -employeeID $DATA
+}
+}
+```
+

@@ -1,0 +1,129 @@
+---
+title: Install Ceph cluster
+url: https://devopstales.github.io/linux/install-ceph/
+date: 2019-03-12
+keywords: rook, ceph
+---
+
+
+Ceph is free and open source distributed objectstorage solution. With Ceph we can easily provide and manage block storage, object storage and file storage.
+
+&lt;!--more--&gt;
+
+### Base Components
+* Monitors (ceph-mon) : As the name suggests a ceph monitor nodes keep an eye on cluster state, OSD Map and Crush map
+* OSD ( Ceph-osd): These are the nodes which are part of cluster and provides data store, data replication and recovery functionalities. OSD also provides information to monitor nodes.
+* MDS (Ceph-mds) : It is a ceph meta-data server and stores the meta data of ceph file systems like block storage.
+* Ceph Deployment Node : It is used to deploy the Ceph cluster, it is also called as Ceph-admin or Ceph-utility node.
+
+### Environment
+```
+192.168.1.31    ceph01
+192.168.1.32    ceph02
+192.168.1.33    ceph03
+```
+
+### Install Requirements
+```
+# all hosts
+yum install ntp ntpdate ntp-doc epel-release -y
+ntpdate europe.pool.ntp.org
+systemctl start ntpd
+systemctl enable ntpd
+
+useradd cephuser &amp;&amp; echo &#34;Password1&#34; | passwd --stdin cephuser
+echo &#34;cephuser ALL = (root) NOPASSWD:ALL&#34; | sudo tee /etc/sudoers.d/cephuser
+chmod 0440 /etc/sudoers.d/cephuser
+
+sed -i --follow-symlinks &#39;s/SELINUX=enforcing/SELINUX=disabled/g&#39; /etc/sysconfig/selinux
+systemctl mask firewalld
+
+reboot
+```
+
+```
+# cep01
+ssh-keygen
+ssh-copy-it ceph02
+ssh-copy-it ceph03
+
+nano ~/.ssh/config
+Host ceph01
+   Hostname ceph01
+   User cephuser
+Host ceph02
+   Hostname ceph02
+   User cephuser
+Host ceph03
+   Hostname ceph03
+   User cephuser
+
+chmod 644 ~/.ssh/config
+```
+
+### Install ceph-deployer
+```
+# cep01
+sudo rpm -Uvh https://download.ceph.com/rpm-mimic/el7/noarch/ceph-release-1-1.el7.noarch.rpm
+
+yum update
+yum install -y ceph-deploy
+
+mkdir /home/ceph/cluster1
+cd ~/cluster1
+```
+
+### Delete ceph config if exists
+```
+# cep01
+ceph-deploy purge ceph01 ceph02 ceph03
+# unmount if not working
+ceph-deploy purgedata ceph01 ceph02 ceph03
+ceph-deploy forgetkeys
+```
+
+### Install ceph
+```
+ceph-deploy install ceph01 ceph02 ceph03
+ceph-deploy --cluster &lt;cluster-name&gt; new ceph01 ceph02 ceph03
+
+# edit before pupulate config
+nano &lt;cluster-name&gt;.conf
+osd_max_object_name_len = 256
+osd_max_object_namespace_len = 64
+
+ceph-deploy --cluster &lt;cluster-name&gt; mon create ceph01 ceph02 ceph03
+ceph-deploy --cluster &lt;cluster-name&gt; gatherkeys ceph01 ceph02 ceph03
+```
+
+```
+ceph-deploy disk list ceph01
+ceph-deploy disk list ceph02
+ceph-deploy disk list ceph03
+
+
+ceph-deploy disk zap ceph01:sdb
+ceph-deploy disk zap ceph02:sdb
+ceph-deploy disk zap ceph03:sdb
+
+ceph-deploy osd create ceph01:sdb
+ceph-deploy osd create ceph02:sdb
+ceph-deploy osd create ceph03:sdb
+
+ceph-deploy osd create ceph01:sdc
+ceph-deploy osd create ceph02:sdc
+ceph-deploy osd create ceph03:sdc
+```
+
+### Test cluster
+```
+sudo ceph health
+sudo ceph -s
+sudo ceph osd tree
+
+# install adminkey-ring
+ceph-deploy admin ceph01 ceph02 ceph03
+ssh ceph node01 sudo ceph osd lspools
+ssh ceph node01 sudo ceph osd create mycorp 128
+```
+

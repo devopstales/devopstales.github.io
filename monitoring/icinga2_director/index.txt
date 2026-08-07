@@ -1,0 +1,143 @@
+---
+title: Install icinga director modules to Icingaweb2
+url: https://devopstales.github.io/monitoring/icinga2_director/
+date: 2019-12-13
+keywords: icinga, icinga2, nagios
+---
+
+
+In this tutorial I will show you how to install Icingaweb2 module director.
+
+&lt;!--more--&gt;
+Icinga irector is designed for those who want to automate their configuration deployment and those who want to grant easy access for there users to the Icinga2 configuration.
+
+### Install dependency
+```
+yum install git -y
+yum install rh-php71-php-curl rh-php71-php-pcntl rh-php71-php-posix rh-php71-php-sockets rh-php71-php-xml rh-php71-php-zip -y
+```
+
+```
+nano
+local   director      director                        md5
+host    director      director      127.0.0.1/32      md5
+host    director      director      ::1/128           md5
+
+systemctl restart postgresql-10
+```
+
+### Install Icingaweb2 modules
+```
+MODULE_NAME=ipl
+MODULE_VERSION=v0.4.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+
+MODULE_NAME=incubator
+MODULE_VERSION=v0.5.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+
+MODULE_NAME=reactbundle
+MODULE_VERSION=v0.7.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+
+ICINGAWEB_MODULEPATH=&#34;/usr/share/icingaweb2/modules&#34;
+REPO_URL=&#34;https://github.com/icinga/icingaweb2-module-director&#34;
+TARGET_DIR=&#34;${ICINGAWEB_MODULEPATH}/director&#34;
+MODULE_VERSION=&#34;1.7.2&#34;
+git clone &#34;${REPO_URL}&#34; &#34;${TARGET_DIR}&#34;
+cd &#34;${TARGET_DIR}&#34;
+git fetch &amp;&amp; git fetch --tags
+git checkout &#34;{MODULE_VERSION}&#34;
+restorecon -R &#34;${TARGET_DIR}&#34;
+
+MODULE_NAME=fileshipper
+MODULE_VERSION=v1.1.0
+REPO=&#34;https://github.com/Icinga/icingaweb2-module-${MODULE_NAME}&#34;
+MODULES_PATH=&#34;/usr/share/icingaweb2/modules&#34;
+git clone ${REPO} &#34;${MODULES_PATH}/${MODULE_NAME}&#34; --branch &#34;${MODULE_VERSION}&#34;
+icingacli module enable &#34;${MODULE_NAME}&#34;
+```
+
+### Create db for director
+```
+sudo -u postgres psql -c &#34;CREATE DATABASE director WITH ENCODING &#39;utf8&#39;;&#34;
+sudo -u postgres psql director -q -c &#34;CREATE USER director WITH PASSWORD &#39;director&#39;;
+GRANT ALL PRIVILEGES ON DATABASE director TO director;
+CREATE EXTENSION pgcrypto;&#34;
+sudo -u postgres psql director &lt; /usr/share/icingaweb2/modules/director/schema/pgsql.sql
+```
+
+### Edit director configuration
+```
+cat &lt;&lt;EOF &gt;&gt; /etc/icinga2/zones.conf
+
+object Zone &#34;director-global&#34; {
+  global = true
+}
+EOF
+
+cat &lt;&lt;EOF &gt;&gt; /etc/icinga2/conf.d/api-users.conf
+
+object ApiUser &#34;director&#34; {
+        password = &#34;director&#34;
+        permissions = [ &#34;*&#34; ]
+}
+EOF
+
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/resources.ini
+
+[icinga_director]
+type = &#34;db&#34;
+db = &#34;pgsql&#34;
+host = &#34;localhost&#34;
+port = &#34;5432&#34;
+dbname = &#34;director&#34;
+username = &#34;director&#34;
+password = &#34;director&#34;
+charset = &#34;utf8&#34;
+use_ssl = &#34;0&#34;
+EOF
+
+mkdir /etc/icingaweb2/modules/director/
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/director/config.ini
+[db]
+resource = &#34;icinga_director&#34;
+EOF
+
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/director/kickstart.ini
+[config]
+endpoint = icinga.devopstales.intra
+host = 127.0.0.1
+port = 5665
+username = director
+password = director
+EOF
+```
+
+```
+icingacli module enable director
+icingacli director kickstart run
+icingacli director migration run --verbose
+icingacli director migration pending --verbose
+```
+
+```
+mkdir /etc/icingaweb2/modules/fileshipper
+cat &lt;&lt;EOF &gt;&gt; /etc/icingaweb2/modules/fileshipper/imports.ini
+[icinga2 - groups]
+basedir = &#34;/etc/icinga2/conf.d/groups/
+
+[icinga2 - hosts]
+basedir = &#34;/etc/icinga2/conf.d/hosts/
+EOF
+```
+

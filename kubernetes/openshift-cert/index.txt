@@ -1,0 +1,44 @@
+---
+title: Change Certificates in Openshift
+url: https://devopstales.github.io/kubernetes/openshift-cert/
+date: 2019-04-17
+keywords: ansible, openshift 3.11, openshift okd, openshift tutorial, openshift container platform, rad hat openshift
+---
+
+
+In this post I will show you how can you chnage certificate in Openshift.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/openshift.html&#34; &gt;}}
+
+### Configure certs:
+If you want to configure your Openshift cluster to use your own certificate you can do that wit this configuration.&lt;br&gt;
+In my case the certificate files is MyCert.crt MyCert.key and the root CA is ccca.pem.
+
+```
+nano /ec/ansible/hosts
+openshift_master_overwrite_named_certificates=true
+openshift_hosted_router_certificate={&#34;certfile&#34;: &#34;/root/cert/MyCert.crt&#34;, &#34;keyfile&#34;: &#34;/root/cert/MyCert.key&#34;, &#34;cafile&#34;: &#34;/root/cert/ccca.pem&#34;}
+openshift_master_named_certificates=[{&#34;names&#34;: [&#34;master.openshit.devopstales.intra&#34;],&#34;certfile&#34;: &#34;/root/cert/MyCert.crt&#34;, &#34;keyfile&#34;: &#34;/root/cert/MyCert.key&#34;, &#34;cafile&#34;: &#34;/root/cert/ccca.pem&#34;}]
+
+openshift_redeploy_openshift_ca=true
+openshift_certificate_expiry_fail_on_warn=false
+
+# registry
+openshift_hosted_registry_routecertificates={&#34;certfile&#34;: &#34;/root/cert/MyCert.crt&#34;, &#34;keyfile&#34;: &#34;/root/cert/MyCert.key&#34;, &#34;cafile&#34;: &#34;/root/cert/ccca.pem&#34;}
+openshift_hosted_registry_routetermination=reencrypt
+```
+
+### Run the Installer
+If your certificate is renewd you can cahge the certificate in the cluster with this playbooks.
+
+```
+oc get csr | grep Pending | awk &#39;{print $1}&#39; | xargs oc adm certificate approve
+
+ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/redeploy-certificates.yml
+
+ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/openshift-master/redeploy-openshift-ca.yml
+ansible-playbook -i hosts /usr/share/ansible/openshift-ansible/playbooks/openshift-etcd/redeploy-ca.yml
+```
+

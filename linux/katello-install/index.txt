@@ -1,0 +1,272 @@
+---
+title: Install Katello
+url: https://devopstales.github.io/linux/katello-install/
+date: 2019-04-29
+---
+
+
+Katello brings the full power of content management alongside the provisioning and configuration capabilities of Foreman. Katello is the upstream community project from which the Red Hat Satellite product is derived after Red Hat Satellite Server 6.
+&lt;!--more--&gt;
+
+### Base komponents
+
+
+* Foreman: provisioning on new clients.
+* Pulp: patch and content (package repository) management.
+* Candlepin: subscription and entitlement management.
+* Puppet: configuration management (actual running of modules assigned in Foreman).
+* Katello: unified workflow and WebUI for content (Pulp) and subscriptions (Candlepin).
+
+
+### Hardware Requirements
+
+* Two Logical CPUs
+* 8 GB of memory (12 GB highly recommended)
+* The filesystem holding /var/lib/pulp needs to be large
+
+
+### Required Repositories
+```
+# hostnevet beállítani !!!
+
+yum -y localinstall https://fedorapeople.org/groups/katello/releases/yum/3.11/katello/el7/x86_64/katello-repos-latest.rpm
+yum -y localinstall https://yum.theforeman.org/releases/1.21/el7/x86_64/foreman-release.rpm
+yum -y localinstall https://yum.puppetlabs.com/puppetlabs-release-pc1-el-7.noarch.rpm
+yum -y localinstall https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+```
+
+### Installation
+```bash
+yum -y install foreman-release-scl python-django
+yum -y update
+yum -y install katello
+
+
+foreman-installer \
+--scenario &#34;katello&#34; \
+--foreman-initial-organization &#34;mydomain&#34; \
+--foreman-initial-location &#34;office&#34; \
+--enable-foreman-plugin-ansible \
+--enable-foreman-proxy-plugin-ansible \
+--enable-foreman-plugin-remote-execution \
+--enable-foreman-proxy-plugin-remote-execution-ssh
+
+# reset/gen Password
+foreman-rake permissions:reset
+```
+
+### Configure hammer-cli
+```
+nano ~/.hammer/cli.modules.d/foreman.yml
+:foreman:
+ :host: &#39;https://katello.devopstales.intra/&#39;
+ :username: &#39;admin&#39;
+ :password: &#39;**********&#39;
+
+hammer defaults add --param-name organization --param-value &#34;mydomain&#34;
+hammer defaults add --param-name location --param-value &#34;office&#34;
+hammer defaults list
+```
+
+### Configure gpg keys
+```
+hammer product create \
+--name &#34;el7_repos&#34; \
+--description &#34;Various repositories to use with CentOS 7&#34;
+
+mkdir /etc/pki/rpm-gpg/import/
+cd /etc/pki/rpm-gpg/import/
+wget https://repo.mysql.com/RPM-GPG-KEY-mysql
+wget http://mirror.centos.org/centos/7/os/x86_64/RPM-GPG-KEY-CentOS-7
+wget https://archive.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-7Server
+wget https://rpms.remirepo.net/RPM-GPG-KEY-remi
+wget https://packages.cisofy.com/keys/cisofy-software-rpms-public.key
+
+hammer gpg create \
+--key &#34;RPM-GPG-KEY-CentOS-7&#34; \
+--name &#34;RPM-GPG-KEY-CentOS-7&#34;
+
+hammer gpg create \
+--key &#34;RPM-GPG-KEY-mysql&#34; \
+--name &#34;RPM-GPG-KEY-mysql&#34;
+
+hammer gpg create \
+--key &#34;RPM-GPG-KEY-EPEL-7Server&#34; \
+--name &#34;RPM-GPG-KEY-EPEL-7Server&#34;
+
+hammer gpg create \
+--key &#34;RPM-GPG-KEY-remi&#34; \
+--name &#34;RPM-GPG-KEY-remi&#34;
+
+hammer gpg create \
+--key &#34;cisofy-software-rpms-public.key&#34; \
+--name &#34;RPM-GPG-KEY-cisofy&#34;
+```
+
+### Create yum repositories
+```
+hammer gpg list
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;base_x86_64&#34; \
+--label &#34;base_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-CentOS-7&#34; \
+--url &#34;http://mirror.centos.org/centos/7/os/x86_64/&#34; \
+--mirror-on-sync &#34;no&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;extras_x86_64&#34; \
+--label &#34;extras_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-CentOS-7&#34; \
+--url &#34;http://mirror.centos.org/centos/7/extras/x86_64/&#34; \
+--mirror-on-sync &#34;no&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;updates_x86_64&#34; \
+--label &#34;updates_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-CentOS-7&#34; \
+--url &#34;http://mirror.centos.org/centos/7/updates/x86_64/&#34; \
+--mirror-on-sync &#34;no&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;epel_x86_64&#34; \
+--label &#34;epel_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-EPEL-7Server&#34; \
+--url &#34;https://dl.fedoraproject.org/pub/epel/7Server/x86_64/&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;lynis&#34; \
+--label &#34;lynis&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-cisofy&#34; \
+--url &#34;https://packages.cisofy.com/community/lynis/rpm/&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;mysql_57_x86_64&#34; \
+--label &#34;mysql_57_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-mysql&#34; \
+--url &#34;https://repo.mysql.com/yum/mysql-5.7-community/el/7/x86_64/&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;katello_agent_x86_64&#34; \
+--label &#34;katello_agent_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--url &#34;https://fedorapeople.org/groups/katello/releases/yum/latest/client/el7/x86_64/&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;remi_php_56_x86_64&#34; \
+--label &#34;remi_php_56_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-remi&#34; \
+--url &#34;https://mirrors.ukfast.co.uk/sites/remi/enterprise/7/php56/x86_64/&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;remi_php_72_x86_64&#34; \
+--label &#34;remi_php_72_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-remi&#34; \
+--url &#34;https://mirrors.ukfast.co.uk/sites/remi/enterprise/7/php72/x86_64/&#34;
+
+hammer repository create \
+--product &#34;el7_repos&#34; \
+--name &#34;remi_safe_x86_64&#34; \
+--label &#34;remi_safe_x86_64&#34; \
+--content-type &#34;yum&#34; \
+--download-policy &#34;on_demand&#34; \
+--gpg-key &#34;RPM-GPG-KEY-remi&#34; \
+--url &#34;https://mirrors.ukfast.co.uk/sites/remi/enterprise/7/safe/x86_64/&#34;
+```
+
+### Sync repos
+```
+hammer repository list
+
+for i in $(seq 1 12); do \
+hammer repository synchronize \
+--product &#34;el7_repos&#34; \
+--id &#34;$i&#34;; \
+done
+
+# Create a Content View
+hammer content-view create \
+--name &#34;el7_content&#34; \
+--description &#34;Content view for CentOS 7&#34;
+
+hammer product list
+
+# Add Repositories to Content View
+for i in $(seq 1 12); do \
+hammer content-view add-repository \
+--name &#34;el7_content&#34; \
+--product &#34;el7_repos&#34; \
+--repository-id &#34;$i&#34;; \
+done
+
+# Create a Lifecycle Environment
+hammer lifecycle-environment create \
+--name &#34;stable&#34; \
+--label &#34;stable&#34; \
+--prior &#34;Library&#34;
+
+hammer lifecycle-environment list
+
+# Publish a Content View
+hammer content-view publish \
+--name &#34;el7_content&#34; \
+--description &#34;Publishing repositories&#34;
+
+hammer content-view version list
+
+# Promote Version to Lifecycle Environment
+hammer content-view version promote \
+--content-view &#34;el7_content&#34; \
+--version &#34;1.0&#34; \
+--to-lifecycle-environment &#34;stable&#34;
+
+hammer content-view version list
+
+# Create an Activation Key
+hammer activation-key create \
+--name &#34;el7-key&#34; \
+--description &#34;Key to use with CentOS7&#34; \
+--lifecycle-environment &#34;stable&#34; \
+--content-view &#34;el7_content&#34; \
+--unlimited-hosts
+
+hammer activation-key list
+
+# Add Subscription to Activation Key
+hammer subscription list
+
+hammer activation-key add-subscription \
+--name &#34;el7-key&#34; \
+--quantity &#34;1&#34; \
+--subscription-id &#34;1&#34;
+
+# Backup Katello Configuration
+foreman-maintain backup snapshot -y /mnt/backup/
+```
+

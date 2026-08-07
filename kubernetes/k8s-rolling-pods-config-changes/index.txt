@@ -1,0 +1,82 @@
+---
+title: Kubernetes Rolling Update Configuration
+url: https://devopstales.github.io/kubernetes/k8s-rolling-pods-config-changes/
+date: 2023-05-25
+keywords: Kubernetes Scheduler, Deployment controller, Rolling Update, Rolling Upgrade
+---
+
+
+In this post I will show you how you can influence the Deployment controller to perform a rolling upgrade.
+&lt;!--more--&gt;
+
+### Deployment controllers
+
+Deployment controllers are a type of Pod controller in Kubernetes. They provide fine-grained control over how its pods are configured, how updates are performed, how many pods should run, and when pods should be terminated. To understand how this controller do its job first we need to understand the Deployments.
+
+### Kubernetes Deployment Overview
+
+Kubernetes deployments are essentially just a wrapper around ReplicaSets. The ReplicaSet manages the number of running pods, and the Deployment implements features on top of that to allow rolling updates, health checks on pods, and easy roll-back of updates.
+
+During normal operations, the Deployment will just manage a single ReplicaSet which ensures that desired number of pods are running:
+
+![Deployment Overview](/img/include/deployment_overview01.webp)
+
+Here are some example kubectl commands for commonly performed operations on a Deployment:
+
+```bash
+# List deployments:
+kubectl get deploy
+
+# Update a deployment with a manifest file:
+kubectl apply -f test.yaml
+
+# Scale a deployment “test” to 3 replicas:
+kubectl scale deploy/test --replicas=3
+
+# Watch update status for deployment “test”:
+kubectl rollout status deploy/test
+
+# Pause deployment on “test”:
+kubectl rollout pause deploy/test
+
+# Resume deployment on “test”:
+kubectl rollout resume deploy/test
+
+# View rollout history on “test”:
+kubectl rollout history deploy/test
+
+# Undo most recent update on “test”:
+kubectl rollout undo deploy/test
+
+# Rollback to specific revision on “test”:
+kubectl rollout undo deploy/test --to-revision=1
+```
+
+### Kubernetes Rolling Updates
+
+One of the primary benefits of using a Deployment to control your pods is the ability to perform rolling updates. Rolling updates allow you to update the configuration of your pods gradually, for this Deployment offers multiple options to control this process.
+
+```yaml
+replicas: 3  
+strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+```
+
+For a working rolling update the first precondition in a Deployment is the `replicas`. To seamlessly upgrade between versions you need multiple running pods. 
+
+The nex important configuration is the update strategy in `strategy.type`. it can be *RollingUpdate* (New pods are added gradually, and old pods are terminated gradually) or *Recreate* (All old pods are terminated before any new pods are added).
+
+When using the RollingUpdate strategy, there are two more options that let you fine-tune the update process:
+
+* *maxSurge*: The number of pods that can be created above the desired amount of pods during an update
+* *maxUnavailable*: The number of pods that can be unavailable during the update process
+
+Both maxSurge and maxUnavailable can be specified as either an integer (e.g. 2) or a percentage (e.g. 50%), and they cannot both be zero. When specified as an integer, it represents the actual number of pods; when specifying a percentage, that percentage of the desired number of pods is used, rounded down. For example, If you were using the default values of 25% for both maxSurge and maxUnavailable, and applied an update to a Deployment with 8 pods, then maxSurge would be 2 pods, and maxUnavailable would also be 2 pods. 
+
+This strategy says that we want to add pods one at a time, and that there must always be 3 pods ready in the deployment. The following gif will illustrate what happens in every step of the rolling update. 
+
+![Rolling Upgrades](/img/include/deployment_overview02.webp)
+

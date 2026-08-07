@@ -1,0 +1,137 @@
+---
+title: How to create your first Chef Cookbook
+url: https://devopstales.github.io/linux/chef-first-cookbook/
+date: 2020-05-07
+keywords: chef-server, configuration management
+---
+
+I this post I will show you how you can create a basic chef structure.
+&lt;!--more--&gt;
+
+### Create environments
+```
+cd ~/chef-repo
+
+mkdir environments
+nano environments/production.json
+{
+  &#34;name&#34;: &#34;Production&#34;,
+  &#34;description&#34;: &#34;&#34;,
+  &#34;cookbook_versions&#34;: {
+
+  },
+  &#34;json_class&#34;: &#34;Chef::Environment&#34;,
+  &#34;chef_type&#34;: &#34;environment&#34;,
+  &#34;default_attributes&#34;: {
+
+  },
+  &#34;override_attributes&#34;: {
+
+  }
+}
+
+nano environments/development.json
+{
+  &#34;name&#34;: &#34;Development&#34;,
+  &#34;description&#34;: &#34;&#34;,
+  &#34;cookbook_versions&#34;: {
+
+  },
+  &#34;json_class&#34;: &#34;Chef::Environment&#34;,
+  &#34;chef_type&#34;: &#34;environment&#34;,
+  &#34;default_attributes&#34;: {
+
+  },
+  &#34;override_attributes&#34;: {
+
+  }
+}
+```
+
+```
+knife environment from file environments/production.json
+knife environment from file environments/development.json
+```
+
+### Create roles
+```
+mkdir roles
+nano roles/base.json
+{
+
+  &#34;name&#34;: &#34;base&#34;,
+  &#34;description&#34;: &#34;Default operation role&#34;,
+  &#34;json_class&#34;: &#34;Chef::Role&#34;,
+
+  &#34;override_attributes&#34;: {
+    &#34;chef_client&#34;: {
+      &#34;config&#34;: {
+        &#34;interval&#34;: 900,
+        &#34;splay&#34;: 30
+      }
+    }
+  },
+
+  &#34;chef_type&#34;: &#34;role&#34;,
+
+  &#34;run_list&#34;: [
+    &#34;recipe[operation]&#34;
+  ],
+
+  &#34;env_run_lists&#34;: {
+  }
+
+}
+```
+
+```
+knife role from file roles/base.json
+```
+
+### Create node config
+```
+mkdir nodes
+nano nodes/test.mydomain.intra.json
+{
+  &#34;name&#34;: &#34;test.mydomain.intra&#34;,
+  &#34;chef_environment&#34;: &#34;Production&#34;,
+  &#34;normal&#34;: {
+  	&#34;tags&#34;: [
+
+    ]
+  },
+  &#34;run_list&#34;: [
+	&#34;role[base]&#34;
+]
+
+}
+```
+
+```
+knife node from file nodes/test.mydomain.intra.json
+```
+
+### Create cookbook
+```
+cd chef-repo/cookbooks
+chef generate cookbook operation
+nano operation/recipes/default.rb
+include_recipe &#39;operation::packages&#39;
+
+nano operation/recipes/packages.rb
+package &#34;nano&#34; do
+  action :install
+end
+```
+
+```
+cd ..
+knife cookbook upload operation
+knife cookbook list
+```
+
+### Test cookbook
+```
+knife ssh &#39;name:test.mydomain.intra&#39; &#39;sudo chef-client&#39; -x root
+```
+

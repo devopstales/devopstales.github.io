@@ -1,0 +1,879 @@
+---
+title: Kubernetes Egress Gateway with Kube-OVN
+url: https://devopstales.github.io/kubernetes/kube-ovn-egress-gateway/
+date: 2026-04-08
+keywords: Kube-OVN egress, Kubernetes egress gateway, Kube-OVN CNI, Open vSwitch, egress NAT, subnet gateway, floating IP
+---
+
+
+Kube-OVN is an open source Kubernetes CNI based on Open vSwitch that provides enterprise-grade networking features including **Egress Gateway** and **Floating IP** - completely free and open source. This post explores Kube-OVN&#39;s egress capabilities as another robust open source alternative.
+
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/egress-gateway-series.html&#34; &gt;}}
+
+## Why Kube-OVN for Egress?
+
+Kube-OVN brings Open Virtual Network (OVN) to Kubernetes, providing **advanced networking features typically found in enterprise solutions** - all in an open source package.
+
+### Kube-OVN vs Other Open Source Solutions
+
+| Feature | Kube-OVN | Antrea | Cilium | Calico OSS |
+|---------|----------|--------|--------|------------|
+| **Egress Gateway** | ✅ Included | ✅ Included | ✅ Included | ❌ Enterprise only |
+| **Floating IP** | ✅ Included | ❌ No | ❌ No | ❌ Enterprise only |
+| **Subnet Gateway** | ✅ Distributed | ✅ Centralized | ✅ Centralized | N/A |
+| **Network Policy** | ✅ OVN ACLs | ✅ Enhanced NP | ✅ Cilium NP | ✅ Standard NP |
+| **QoS** | ✅ Built-in | ⚠️ Limited | ✅ eBPF-based | ⚠️ Limited |
+| **Encryption** | ✅ IPsec | ✅ IPsec/WireGuard | ❌ No | ✅ WireGuard |
+| **Dual Stack** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **Cost** | Free | Free | Free | Free |
+
+### Kube-OVN Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                           │
+│                                                                 │
+│   ┌──────────┐    ┌──────────┐         ┌──────────┐            │
+│   │ Pod A    │    │ Pod C    │         │ Pod B    │            │
+│   │Subnet A  │    │Subnet B  │         │Subnet A  │            │
+│   └────┬─────┘    └────┬─────┘         └────┬─────┘            │
+│        │               │                    │                   │
+│        └───────┬───────┘                    │                   │
+│                ▼                            ▼                   │
+│        ┌───────────────┐           ┌───────────────┐           │
+│        │ OVS Bridge    │           │ OVS Bridge    │           │
+│        │   br-int      │           │   br-int      │           │
+│        └───────┬───────┘           └───────┬───────┘           │
+│                │                           │                    │
+│                └───────────┬───────────────┘                    │
+│                            ▼                                    │
+│                   ┌─────────────────┐                           │
+│                   │ OVN Controller  │                           │
+│                   └────────┬────────┘                           │
+│                            │                                    │
+│                            ▼                                    │
+│                   ┌─────────────────┐      ┌───────────────┐    │
+│                   │  Gateway Node   │─────&gt;│External Network│   │
+│                   └────────┬────────┘      └───────────────┘    │
+│                            │                                    │
+│                   ┌────────┴────────┐                           │
+│                   │ Floating IP Pool│                           │
+│                   └─────────────────┘                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| **kube-ovn-controller** | Centralized network management |
+| **kube-ovn-cni** | Per-node CNI plugin |
+| **OVN Controller** | OVN northbound/southbound database |
+| **OVS Bridge** | Open vSwitch for packet forwarding |
+| **Subnet Gateway** | Distributed or centralized NAT |
+| **Floating IP** | 1:1 NAT for external access |
+
+## Prerequisites
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| **Kubernetes** | 1.21&#43; | Tested on 1.28, 1.29 |
+| **Kube-OVN** | 1.12&#43; | Egress Gateway GA |
+| **Open vSwitch** | 2.15&#43; | Included with Kube-OVN |
+| **OVN** | 22.03&#43; | Included with Kube-OVN |
+| **Nodes** | 3&#43; | Recommended for HA |
+
+### Verify Kube-OVN Installation
+
+```bash
+# Check Kube-OVN version
+kubectl get pods -n kube-system -l app=kube-ovn -o jsonpath=&#39;{.items[0].spec.containers[0].image}&#39;
+
+# Verify Kube-OVN components
+kubectl get pods -n kube-system -l app=kube-ovn
+
+# Expected output:
+# NAME                          READY   STATUS
+# kube-ovn-controller-xxxxx     1/1     Running
+# kube-ovn-cni-xxxxx            1/1     Running
+# ovs-ovn-xxxxx                 1/1     Running
+
+# Check OVN status
+kubectl ko nbctl show
+kubectl ko sbctl show
+```
+
+## Step 1: Enable Egress Gateway Feature
+
+### Check Current Configuration
+
+```bash
+# View Kube-OVN configuration
+kubectl get configmap kube-ovn-config -n kube-system -o yaml
+```
+
+### Enable Egress Gateway
+
+Kube-OVN has egress gateway enabled by default. Verify configuration:
+
+```bash
+# Using Helm (for new installations)
+helm install kube-ovn kube-ovn/kube-ovn \
+  -n kube-system \
+  --create-namespace \
+  --set enableEgressGateway=true \
+  --set enableFloatingIP=true \
+  --wait
+```
+
+### Verify Feature is Enabled
+
+```bash
+# Check controller logs for egress gateway
+kubectl logs -n kube-system -l app=kube-ovn-controller | grep -i egress
+
+# Verify OVN configuration
+kubectl ko nbctl list Logical_Router
+```
+
+## Step 2: Create Subnet with Gateway
+
+Kube-OVN uses subnet-based egress configuration:
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: Subnet
+metadata:
+  name: production-subnet
+spec:
+  # Subnet CIDR
+  protocol: IPv4
+  cidrBlock: 10.16.0.0/16
+  
+  # Gateway configuration
+  gateway: 10.16.0.1
+  gatewayType: distributed  # or &#39;centralized&#39;
+  
+  # NAT configuration
+  natOutgoing: true
+  
+  # External egress gateway IPs
+  externalEgressGateway:
+    - 192.168.100.10  # Primary egress IP
+    - 192.168.100.11  # Secondary egress IP (HA)
+  
+  # Gateway node selection
+  gatewayNode: 
+    - worker-node-1
+    - worker-node-2
+  
+  # Exclude IPs from allocation
+  excludeIps:
+    - 10.16.0.1..10.16.0.10
+```
+
+### Apply Subnet
+
+```bash
+kubectl apply -f subnet.yaml
+```
+
+### Verify Subnet
+
+```bash
+# List subnets
+kubectl get subnet
+
+# Get detailed status
+kubectl describe subnet production-subnet
+
+# Check allocated IPs
+kubectl get ip -l subnet=production-subnet
+```
+
+## Step 3: Create Provider Network
+
+For external connectivity, create a provider network:
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: ProviderNetwork
+metadata:
+  name: external-network
+spec:
+  # Physical interface on nodes
+  defaultInterface: eth1
+  
+  # Custom interface per node (optional)
+  customInterfaces:
+    - nodes:
+        - worker-node-1
+        - worker-node-2
+      interface: eth1
+  
+  # Nodes participating in provider network
+  nodes:
+    - worker-node-1
+    - worker-node-2
+    - worker-node-3
+```
+
+### Apply Provider Network
+
+```bash
+kubectl apply -f provider-network.yaml
+```
+
+### Verify Provider Network
+
+```bash
+# List provider networks
+kubectl get providernetwork
+
+# Check status
+kubectl describe providernetwork external-network
+
+# Verify OVN bridge mapping
+kubectl ko nbctl get Open_vSwitch . external_ids:ovn-bridge-mappings
+```
+
+## Step 4: Configure Egress Gateway
+
+### Create Egress Gateway Subnet
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: Subnet
+metadata:
+  name: egress-gateway-subnet
+spec:
+  protocol: IPv4
+  cidrBlock: 192.168.100.0/24
+  gateway: 192.168.100.1
+  gatewayType: centralized
+  natOutgoing: true
+  
+  # Link to provider network
+  providerNetwork: external-network
+  
+  # Gateway nodes
+  gatewayNode:
+    - worker-node-1
+    - worker-node-2
+  
+  # High availability
+  enableEcmp: true  # Equal-cost multi-path routing
+```
+
+### Apply Egress Configuration
+
+```bash
+kubectl apply -f egress-gateway-subnet.yaml
+```
+
+### Verify Egress Gateway
+
+```bash
+# Check gateway status
+kubectl get subnet egress-gateway-subnet -o yaml
+
+# Verify OVN logical router
+kubectl ko nbctl list Logical_Router
+
+# Check NAT rules
+kubectl ko nbctl list NAT
+```
+
+## Step 5: Assign Subnet to Namespace
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  annotations:
+    kubeovn.io/subnet: production-subnet
+```
+
+### Apply Namespace
+
+```bash
+kubectl apply -f namespace.yaml
+```
+
+### Verify Namespace Network
+
+```bash
+# Check namespace annotation
+kubectl get namespace production -o yaml
+
+# Create test pod and verify IP
+kubectl run test-pod -n production --image=curlimages/curl --restart=Never -- sleep infinity
+kubectl get pod test-pod -n production -o wide
+# Should show IP from production-subnet (10.16.x.x)
+```
+
+## Step 6: Test Egress Gateway
+
+### Test Source IP
+
+```bash
+# Test egress from pod
+kubectl exec -it test-pod -n production -- curl -s ifconfig.me
+# Should show egress gateway IP (192.168.100.10)
+
+# Compare with default namespace
+kubectl run test-default --image=curlimages/curl --restart=Never -- curl -s ifconfig.me
+# Should show different IP (node IP or default gateway)
+```
+
+### Verify NAT Rules
+
+```bash
+# Check OVN NAT rules
+kubectl ko nbctl list NAT | grep -A5 &#34;192.168.100&#34;
+
+# Check connection tracking
+kubectl ko nbctl list Conntrack | head -20
+```
+
+## Advanced Configuration
+
+### Floating IP for External Access
+
+Kube-OVN supports floating IPs for 1:1 NAT:
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: IptablesEIP
+metadata:
+  name: floating-ip-1
+spec:
+  # External floating IP
+  v4ip: 192.168.100.100
+  # Type: fip (floating IP), dnat, snat
+  type: fip
+  
+  # Associated subnet
+  subnet: production-subnet
+
+---
+apiVersion: kubeovn.io/v1
+kind: IptablesFIP
+metadata:
+  name: fip-binding-1
+spec:
+  # Reference to EIP
+  eip: floating-ip-1
+  # Internal pod/IP to bind
+  internalName: api-server-xxxxx
+  internalType: pod
+```
+
+### Apply Floating IP
+
+```bash
+kubectl apply -f floating-ip.yaml
+
+# Verify floating IP
+kubectl get iptableseip
+kubectl get iptablesfip
+
+# Test external access to floating IP
+curl -v http://192.168.100.100
+```
+
+### Multiple Egress Gateways (ECMP)
+
+For load balancing across multiple gateways:
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: Subnet
+metadata:
+  name: ecmp-subnet
+spec:
+  protocol: IPv4
+  cidrBlock: 10.17.0.0/16
+  gateway: 10.17.0.1
+  gatewayType: centralized
+  
+  # Multiple egress IPs for ECMP
+  externalEgressGateway:
+    - 192.168.100.10
+    - 192.168.100.11
+    - 192.168.100.12
+  
+  # Multiple gateway nodes
+  gatewayNode:
+    - worker-node-1
+    - worker-node-2
+    - worker-node-3
+  
+  # Enable ECMP
+  enableEcmp: true
+```
+
+### Static Routes for Egress
+
+Add custom routes for specific destinations:
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: Subnet
+metadata:
+  name: routed-subnet
+spec:
+  protocol: IPv4
+  cidrBlock: 10.18.0.0/16
+  gateway: 10.18.0.1
+  gatewayType: centralized
+  
+  # Static routes
+  routes:
+    - destination: 10.100.0.0/16
+      nexthop: 192.168.1.1
+    - destination: 10.200.0.0/16
+      nexthop: 192.168.1.2
+  
+  # Egress gateway
+  externalEgressGateway:
+    - 192.168.100.10
+```
+
+### Policy-Based Routing
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: IpSubnet
+metadata:
+  name: policy-subnet
+spec:
+  protocol: IPv4
+  cidrBlock: 10.19.0.0/16
+  gateway: 10.19.0.1
+  
+  # Policy-based routing
+  policyRoutingPriority: 100
+  policyRoutingTable: 100
+  
+  # Different egress for different pods
+  externalEgressGateway:
+    - 192.168.100.10  # Default egress
+```
+
+## Network Policy Integration
+
+### OVN ACL-Based Policies
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-egress
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: api-server
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    
+    # Allow specific external services
+    - to:
+        - ipBlock:
+            cidr: 52.0.0.0/8  # AWS
+      ports:
+        - protocol: TCP
+          port: 443
+    
+    # All other traffic uses egress gateway
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+```
+
+### Kube-OVN Security Group
+
+```yaml
+apiVersion: kubeovn.io/v1
+kind: SecurityGroup
+metadata:
+  name: production-sg
+spec:
+  # Ingress rules
+  ingressRules:
+    - remoteIPPrefix: 10.0.0.0/8
+      protocol: TCP
+      portRangeMin: 80
+      portRangeMax: 8080
+      priority: 100
+  
+  # Egress rules
+  egressRules:
+    - remoteIPPrefix: 0.0.0.0/0
+      protocol: TCP
+      portRangeMin: 443
+      portRangeMax: 443
+      priority: 100
+    - remoteIPPrefix: 0.0.0.0/0
+      protocol: UDP
+      portRangeMin: 53
+      portRangeMax: 53
+      priority: 110
+  
+  # Apply to pods
+  associatedPorts:
+    - portName: eth0
+```
+
+## Monitoring and Observability
+
+### Kube-OVN Metrics
+
+```bash
+# Enable Prometheus metrics
+kubectl edit configmap kube-ovn-config -n kube-system
+
+# Add metrics configuration:
+# metrics:
+#   enabled: true
+#   port: 9090
+
+# Access metrics
+kubectl port-forward -n kube-system svc/kube-ovn-controller 9090:9090
+```
+
+### Key Metrics
+
+| Metric | Description |
+|--------|-------------|
+| `kubeovn_subnet_allocated_ips` | IPs allocated per subnet |
+| `kubeovn_egress_gateway_packets` | Packets through egress gateway |
+| `kubeovn_egress_gateway_bytes` | Bytes through egress gateway |
+| `kubeovn_floating_ip_bindings` | Active floating IP bindings |
+| `kubeovn_nat_rules` | NAT rule count |
+
+### Grafana Dashboard
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-ovn-egress-dashboard
+  namespace: monitoring
+data:
+  kube-ovn-egress.json: |
+    {
+      &#34;dashboard&#34;: {
+        &#34;title&#34;: &#34;Kube-OVN Egress Gateway&#34;,
+        &#34;panels&#34;: [
+          {
+            &#34;title&#34;: &#34;Egress Gateway Traffic&#34;,
+            &#34;targets&#34;: [
+              {
+                &#34;expr&#34;: &#34;rate(kubeovn_egress_gateway_bytes[5m])&#34;
+              }
+            ]
+          },
+          {
+            &#34;title&#34;: &#34;Subnet IP Usage&#34;,
+            &#34;targets&#34;: [
+              {
+                &#34;expr&#34;: &#34;kubeovn_subnet_allocated_ips / kubeovn_subnet_total_ips * 100&#34;
+              }
+            ]
+          },
+          {
+            &#34;title&#34;: &#34;Floating IP Bindings&#34;,
+            &#34;targets&#34;: [
+              {
+                &#34;expr&#34;: &#34;kubeovn_floating_ip_bindings&#34;
+              }
+            ]
+          }
+        ]
+      }
+    }
+```
+
+### OVN Tracing
+
+```bash
+# Trace packet flow through OVN
+kubectl ko nbctl --trace Logical_Switch production-subnet \
+  inport=port1 eth.src=00:00:00:00:00:01 ip4.src=10.16.0.100 \
+  ip4.dst=8.8.8.8
+
+# Check logical flow
+kubectl ko nbctl list Logical_Flow | grep -A5 &#34;10.16.0.0/16&#34;
+```
+
+## Troubleshooting
+
+### Issue: Egress Gateway Not Working
+
+```bash
+# Check subnet status
+kubectl get subnet production-subnet -o yaml
+
+# Verify gateway nodes
+kubectl get nodes --show-labels
+
+# Check OVN logical router
+kubectl ko nbctl list Logical_Router
+
+# Verify NAT rules exist
+kubectl ko nbctl list NAT
+
+# Check controller logs
+kubectl logs -n kube-system -l app=kube-ovn-controller | grep -i egress
+```
+
+### Issue: Floating IP Not Accessible
+
+```bash
+# Check EIP status
+kubectl get iptableseip
+
+# Check FIP binding
+kubectl get iptablesfip
+
+# Verify OVN NAT rules
+kubectl ko nbctl list NAT | grep floating
+
+# Test from outside cluster
+curl -v http://&lt;floating-ip&gt;
+```
+
+### Issue: Subnet Gateway Failover
+
+```bash
+# Check gateway node status
+kubectl get nodes
+
+# Verify ECMP configuration
+kubectl get subnet ecmp-subnet -o jsonpath=&#39;{.spec.enableEcmp}&#39;
+
+# Check OVN routing
+kubectl ko nbctl list Logical_Router_Static_Route
+
+# View failover events
+kubectl get events -n kube-system | grep -i gateway
+```
+
+### Common Problems and Solutions
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| Egress IP not working | Gateway node not ready | Verify gateway nodes are labeled and ready |
+| Floating IP unreachable | FIP not bound correctly | Check iptablesfip binding |
+| Subnet IPs exhausted | CIDR too small | Expand subnet CIDR |
+| NAT rules missing | OVN sync issue | Restart kube-ovn-controller |
+| ECMP not balancing | Routing table issue | Verify enableEcmp: true |
+
+## Performance Considerations
+
+### Gateway Node Sizing
+
+| Workload | CPU | Memory | Network |
+|----------|-----|--------|---------|
+| Small (&lt; 50 pods) | 2 cores | 4GB | 1Gbps |
+| Medium (50-200 pods) | 4 cores | 8GB | 10Gbps |
+| Large (200&#43; pods) | 8 cores | 16GB | 10Gbps&#43; |
+
+### Optimization Tips
+
+1. **Use distributed gateway** - For better performance, use `gatewayType: distributed`
+2. **Enable ECMP** - Load balance across multiple gateway nodes
+3. **Tune OVN parameters** - Adjust flow cache sizes
+4. **Monitor connection tracking** - Prevent conntrack exhaustion
+
+```bash
+# Check connection tracking usage
+kubectl ko nbctl list Conntrack | wc -l
+
+# Check OVS flow statistics
+kubectl ko ovs-ofctl dump-flows br-int | head -20
+```
+
+## Security Best Practices
+
+### 1. Isolate Sensitive Workloads
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secure
+  annotations:
+    kubeovn.io/subnet: secure-subnet
+---
+apiVersion: kubeovn.io/v1
+kind: Subnet
+metadata:
+  name: secure-subnet
+spec:
+  protocol: IPv4
+  cidrBlock: 10.20.0.0/16
+  gateway: 10.20.0.1
+  gatewayType: centralized
+  
+  # Dedicated egress IP for audit
+  externalEgressGateway:
+    - 192.168.100.50
+  
+  # Strict NAT
+  natOutgoing: true
+```
+
+### 2. Use Floating IP for Ingress Control
+
+```yaml
+# Only expose specific services via floating IP
+apiVersion: kubeovn.io/v1
+kind: IptablesEIP
+metadata:
+  name: api-floating-ip
+spec:
+  v4ip: 192.168.100.200
+  type: fip
+
+---
+apiVersion: kubeovn.io/v1
+kind: IptablesFIP
+metadata:
+  name: api-fip-binding
+spec:
+  eip: api-floating-ip
+  internalName: api-service
+  internalType: service
+```
+
+### 3. Audit Egress Traffic
+
+```bash
+# Enable OVN ACL logging
+kubectl ko nbctl set Logical_Router_Policy &lt;policy-uuid&gt; log=true
+
+# Monitor with flow exporter
+kubectl logs -n kube-system -l app=kube-ovn-controller | grep -i flow
+```
+
+## Comparison with Other Solutions
+
+| Feature | Kube-OVN | Antrea | Cilium | Istio |
+|---------|----------|--------|--------|-------|
+| **Egress Gateway** | ✅ Open source | ✅ Open source | ✅ Open source | ✅ Open source |
+| **Floating IP** | ✅ Included | ❌ No | ❌ No | ⚠️ Complex |
+| **CNI Type** | OVN/OVS | OVS | eBPF | Sidecar |
+| **Gateway Type** | Distributed/Centralized | Centralized | Centralized | Centralized |
+| **Network Policy** | ✅ OVN ACLs | ✅ Enhanced NP | ✅ Cilium NP | ✅ Authorization |
+| **Encryption** | ✅ IPsec | ✅ IPsec/WireGuard | ❌ No | ✅ mTLS |
+| **QoS** | ✅ Built-in | ⚠️ Limited | ✅ eBPF | ⚠️ Limited |
+| **Complexity** | Medium-High | Medium | Medium | High |
+| **Resource Usage** | Medium | Low | Low | High |
+
+### When to Choose Kube-OVN
+
+**Choose Kube-OVN when:**
+- ✅ You need floating IP support (1:1 NAT)
+- ✅ Distributed gateway architecture preferred
+- ✅ Advanced OVN features needed (ACLs, QoS)
+- ✅ Full OpenStack networking compatibility
+- ✅ Enterprise features in open source
+
+**Consider alternatives when:**
+- 📋 You need simplest setup (consider Cilium)
+- 📋 eBPF performance is critical (choose Cilium)
+- 📋 You want service mesh (choose Istio)
+- 📋 Minimal resource usage needed (choose Antrea)
+
+## Migration from Other CNIs
+
+### From Calico to Kube-OVN
+
+```bash
+# 1. Install Kube-OVN alongside Calico
+git clone https://github.com/kubeovn/kube-ovn.git
+cd kube-ovn
+./dist/images/install.sh
+
+# 2. Configure egress gateway
+kubectl apply -f egress-gateway-subnet.yaml
+
+# 3. Test egress functionality
+kubectl run test --image=curlimages/curl -- curl ifconfig.me
+
+# 4. Migrate workloads to Kube-OVN subnets
+kubectl annotate namespace default kubeovn.io/subnet=production-subnet
+
+# 5. Remove Calico (after validation)
+kubectl delete -f calico.yaml
+```
+
+### From Flannel to Kube-OVN
+
+```bash
+# Note: Requires careful migration
+# 1. Backup all resources
+kubectl get all -A -o yaml &gt; backup.yaml
+
+# 2. Install Kube-OVN
+./dist/images/install.sh
+
+# 3. Configure default subnet
+kubectl apply -f default-subnet.yaml
+
+# 4. Remove Flannel
+kubectl delete -f flannel.yaml
+
+# 5. Restore workloads
+kubectl apply -f backup.yaml
+```
+
+## Next Steps
+
+In the next post of this series:
+
+- **Cloud NAT Solutions** - AWS NAT Gateway, GCP Cloud NAT, Azure Firewall
+- Managed services comparison
+- Cost analysis
+
+## Conclusion
+
+Kube-OVN Egress Gateway provides:
+
+**Advantages:**
+- ✅ Fully open source with enterprise features
+- ✅ Floating IP support (1:1 NAT)
+- ✅ Distributed or centralized gateway architecture
+- ✅ OVN-based advanced networking (ACLs, QoS)
+- ✅ IPsec encryption
+- ✅ ECMP load balancing
+- ✅ OpenStack networking compatibility
+
+**Considerations:**
+- 📋 Higher complexity than basic CNI
+- 📋 OVN/OVS learning curve
+- 📋 More components to manage
+- 📋 Resource usage higher than eBPF
+
+For organizations needing **advanced networking features** like floating IPs, distributed gateways, and OVN-based policies in an open source package, Kube-OVN is an excellent choice that rivals enterprise solutions.
+

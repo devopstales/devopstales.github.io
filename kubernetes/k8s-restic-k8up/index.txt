@@ -1,0 +1,266 @@
+---
+title: Bulletproof Kubernetes Backups: K8up, Self-Hosted REST Server, and Full Prometheus Observability
+url: https://devopstales.github.io/kubernetes/k8s-restic-k8up/
+date: 2026-08-06
+keywords: kubernetes, backup, K8up, restic, devops, prometheus
+---
+
+
+Managing persistent storage backups in a dynamic cloud-native environment can scale out of control rapidly. While tools like [Restic](https://restic.net) provide incredible speed, encryption, and deduplication, orchestrating backups container by container with custom shell scripts is fragile. 
+
+**K8up** elegantly solves this by transforming Restic into a native Kubernetes automation system. In this comprehensive guide, we will break down how K8up works, deploy a self-hosted Restic REST backend with a production-grade Web UI via Docker, and configure enterprise monitoring using Prometheus, Grafana, and Alertmanager.
+
+---
+
+## 1. What is K8up?
+
+[K8up](https://k8up.io) is an open-source, CNCF Sandbox **Kubernetes backup operator built entirely on top of Restic**. It replaces localized snapshot infrastructure with Kubernetes Custom Resource Definitions (CRDs). 
+
+Instead of configuring isolated jobs, developers submit YAML declarations for operations like `Schedule`, `Backup`, `Check`, and `Restore`. K8up intercepts these manifests, monitors the relevant namespaces, provisions temporary worker pods to mount targeting PersistentVolumeClaims (PVCs) as read-only, and directly pipelines data to your remote destination.
+
+---
+
+## 2. Supported Storage Backends
+
+Because K8up relies on Restic under the hood, it shares Restic&#39;s universal backend engine. Supported options include:
+
+* **S3-Compatible Object Storage:** AWS S3, MinIO, Wasabi, Google Cloud Storage, or Backblaze B2.
+* **Network Encrypted Storage:** SFTP (Secure File Transfer Protocol).
+* **The Restic REST Protocol:** A specialized, high-velocity append-only HTTP protocol engineered explicitly for processing high-frequency Restic client streams.
+
+We will use the **REST protocol** because it offers extreme performance advantages over SFTP and is vastly simpler to host than an enterprise object storage array.
+
+---
+
+## 3. Deploy a simple app
+
+We’re going to deploy a sample application written in Go using the deployment.yaml file shown below. This deployment doesn’t need neither a Service nor an Ingress:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fortune-go
+spec:
+  template:
+    spec:
+      containers:
+      - image: registry.gitlab.com/vshn/applications/fortune-go:latest
+        imagePullPolicy: Always
+        name: fortune-container
+        ports:
+        - containerPort: 8080
+    metadata:
+      labels:
+        app: fortune-go
+      annotations:
+        k8up.io/backupcommand: fortune
+        k8up.io/file-extension: .txt
+  selector:
+    matchLabels:
+      app: fortune-go
+  strategy:
+    type: Recreate
+```
+
+Apply the deployment:
+
+```bash
+kubectl apply -f deployment.yaml
+```
+
+## 4. Deploying the Restic REST Server via Docker
+
+Docker provides the absolute fastest implementation path for setting up a dedicated remote repository target.
+
+### The Docker Compose Core
+Create a local working directory and drop the following code block inside a file named `docker-compose.yml`. This exposes the core REST service and maps local server paths for cold storage.
+
+```yaml
+services:
+  rest-server:
+    image: restic/rest-server:latest
+    container_name: restic-backend
+    restart: unless-stopped
+    ports:
+      - &#34;8000:8000&#34;
+    volumes:
+      - ./backups:/data
+    environment:
+      # Isolation configuration: Ensures users can only access their specific explicitly assigned directories
+      - OPTIONS=--private-repos --prometheus
+```
+
+### Forcing User Authentication via htpasswd
+The core image intercepts authentication requests natively by verifying incoming Basic Auth details against a localized `.htpasswd` asset. Run these quick terminal entries before triggering the stack:
+
+```bash
+# Provision storage layout
+mkdir -p ./backups
+
+# Pull a temporary htpasswd generator to cleanly hash security strings
+docker run --rm -ti trantor/htpasswd -B -c ./backups/.htpasswd cluster-backup-user
+```
+*(Provide a strong, robust password when prompted to anchor this user account securely).*
+
+Launch the backend instance immediately:
+```bash
+docker compose up -d rest-server
+```
+
+---
+
+## 5. Deploying a Web UI with Built-In Authentication
+
+The base REST server has no graphical state engine. To visualize repositories, audit snapshots, and observe raw disk footprint metrics visually, we will link it to **[Backrest](https://github.com)**—a secure, multi-repo Web UI wrapper natively featuring built-in application-layer user authentication.
+
+Append the Backrest service directly to your existing `docker-compose.yml` payload:
+
+```yaml
+  backrest-ui:
+    image: ghcr.io/garethgeorge/backrest:latest
+    container_name: restic-webui
+    restart: unless-stopped
+    ports:
+      - &#34;8080:8080&#34;
+    volumes:
+      - ./backups:/data
+      - ./backrest-config:/config
+    environment:
+      # Declares rigid instance credentials required for first-load browser access
+      - BACKREST_AUTH_USER=admin
+      - BACKREST_AUTH_PASS=YourComplexVisualPasswordHere!
+```
+
+Reload your container configurations:
+```bash
+docker compose up -d
+```
+You can now immediately route your desktop browser to `http://&lt;your-server-ip&gt;:8080` to interact with your data.
+
+---
+
+## 6. Installing and Configuring K8up
+
+Now that your visual target storage engine is operational, install the K8up engine on your target cluster.
+
+### Helm Deployment
+Map the official project charts and install the operator into an isolated administrative namespace:
+
+```bash
+helm repo add k8up-io https://k8up.iohelm-charts
+helm repo update
+
+helm install k8up k8up-io/k8up \
+  --namespace k8up-system \
+  --create-namespace \
+  --set metrics.serviceMonitor.enabled=true # Automatically exposes endpoints to Prometheus Operator
+```
+
+### Storage Vault Mapping
+Create a secure credentials profile inside the target workspace containing the microservices you intend to protect (e.g., `production-services`):
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backup-vault-auth
+  namespace: production-services
+type: Opaque
+stringData:
+  # The explicit symmetric key utilized to perform client-side encryption on your blocks
+  repo-password: SuperStrongEncryptionKey321!
+  # Basic Authentication configurations matching your Docker htpasswd container
+  username: cluster-backup-user
+  password: DockerHtpasswdPasswordCreatedEarlier
+```
+
+### Automation Schedule
+Apply a standard `Schedule` manifest to run automated snapshots every night at 3:00 AM:
+
+```yaml
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: fortune-go-application-backup
+  namespace: production-services # Ensure this matches your deployment&#39;s namespace
+spec:
+  backend:
+    rest:
+      # Reuses the Docker rest-server credentials established earlier
+      url: http://cluster-backup-user:DockerHtpasswdPasswordCreatedEarlier@your-server-ip:8000/k8s-production-repo
+    repoPasswordSecretRef:
+      name: backup-vault-auth
+      key: repo-password
+  backup:
+    # Triggers the backup every day at 3:15 AM
+    schedule: &#34;15 3 * * *&#34; 
+    failedJobsHistoryLimit: 3
+    successfulJobsHistoryLimit: 3
+```
+`kubectl apply -f schedule.yaml` binds this configuration. K8up will handle volume parsing completely automatically moving forward.
+
+---
+
+## 7. Configuring Prometheus Monitoring &amp; Grafana
+
+Unmonitored backups are effectively non-existent. K8up exposes real-time Prometheus time-series metrics (`k8up_jobs_total`, `k8up_backups_total`).
+
+If your monitoring solution utilizes the standard [Kube-Prometheus-Stack](https://github.com) pattern, configure a `PodMonitor` object inside your operator namespace to capture operational states:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: k8up-operator-monitor
+  namespace: k8up-system
+  labels:
+    release: prometheus # Changes based on your specific helm release name
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8up
+  podMetricsEndpoints:
+  - port: metrics
+    interval: 30s
+```
+
+### Importing the Grafana Dashboard
+To observe success ratios and compression statistics without writing raw queries, import the pre-configured [Official K8up Dashboard from Grafana Labs](https://grafana.com):
+
+1. Log into your active Grafana panel dashboard interface.
+2. Choose **Dashboards** -&gt; **New** -&gt; **Import**.
+3. Provide the official Community Dashboard ID: **`24597`** (or **`20166`** depending on older schema variations).
+4. Map the dropdown connection to your underlying Prometheus data source and click **Import**.
+
+---
+
+## 8. Creating Alerting Rules for Failed Backups
+
+To ensure immediate awareness if an incremental backup script terminates with error states, apply a native `PrometheusRule` layout. This configuration hooks straight into Alertmanager to route alerts to targets like Slack, PagerDuty, or Webhooks:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: k8up-backup-alerts
+  namespace: k8up-system
+  labels:
+    role: alert-rules
+    release: prometheus
+spec:
+  groups:
+  - name: k8up.rules
+    rules:
+    - alert: K8upBackupJobFailed
+      expr: k8up_jobs_total{condition=&#34;failed&#34;, type=&#34;backup&#34;} &gt; 0
+      for: 2m
+      labels:
+        severity: critical
+        tier: platform
+      annotations:
+        summary: &#34;Kubernetes backup job failed in namespace {{ \$labels.namespace }}&#34;
+        description: &#34;A scheduled K8up Restic execution failed to process completely. Inspect the operator logs immediately via &#39;kubectl logs -n k8up-system&#39; to prevent loss of target application context.&#34;
+```
+
+Apply via `kubectl apply -f alerts.yaml`. Your backup topology is now fully automated, visual, secure, and observable at scale.

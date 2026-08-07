@@ -1,0 +1,135 @@
+---
+title: Install recording fot Jitsi
+url: https://devopstales.github.io/linux/jitsi-jibri/
+date: 2020-10-21
+keywords: jitsi
+---
+
+
+In this post I will show you my productivity tips with kubectlyo can install Jibri the recording component of Jitsi.
+&lt;!--more--&gt;
+
+### Install requirements
+```
+sudo apt install ffmpeg curl unzip software-properties-common
+```
+
+Enable the ALSA loopback module to start on boot,
+```
+echo &#34;snd_aloop&#34; &gt;&gt; /etc/modules
+modprobe snd_aloop
+```
+
+### Install Google Chrome:
+```
+curl -o - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add
+echo &#34;deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main&#34; &gt; /etc/apt/sources.list.d/google-chrome.list
+apt update
+apt install google-chrome-stable
+
+# install headless browser driver
+CHROME_DRIVER_VERSION=`curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE`
+wget -N http://chromedriver.storage.googleapis.com/$CHROME_DRIVER_VERSION/chromedriver_linux64.zip -P ~/
+unzip ~/chromedriver_linux64.zip -d ~/
+rm ~/chromedriver_linux64.zip
+sudo mv -f ~/chromedriver /usr/local/bin/chromedriver
+sudo chmod 0755 /usr/local/bin/chromedriver
+
+# disable warnings
+mkdir -p /etc/opt/chrome/policies/managed
+echo &#39;{ &#34;CommandLineFlagSecurityWarningsEnabled&#34;: false }&#39; &gt;&gt;/etc/opt/chrome/policies/managed/managed_policies.json
+```
+
+### Install jibri
+```
+apt install jibri
+usermod -aG adm,audio,video,plugdev jibri
+
+nano /etc/prosody/prosody.cfg.lua
+...
+Component &#34;conference.jitsi.mydomain.intra&#34; &#34;muc&#34;
+modules_enabled = { &#34;muc_mam&#34; }
+...
+Component &#34;internal.auth.jitsi.mydomain.intra&#34; &#34;muc&#34;
+modules_enabled = {
+&#34;ping&#34;;
+}
+storage = &#34;internal&#34;
+muc_room_cache_size = 1000
+...
+VirtualHost &#34;recorder.jitsi.mydomain.intra&#34;
+modules_enabled = {
+&#34;ping&#34;;
+}
+authentication = &#34;internal_plain&#34;
+```
+
+Create accounts:
+```
+prosodyctl register jibri auth.jitsi.mydomain.intra Password1
+prosodyctl register recorder recorder.jitsi.mydomain.intra Password1
+```
+
+```
+sudo nano /etc/jitsi/jicofo/sip-communicator.properties
+...
+org.jitsi.jicofo.jibri.BREWERY=JibriBrewery@internal.auth.jitsi.mydomain.intra
+org.jitsi.jicofo.jibri.PENDING_TIMEOUT=90
+
+sudo nano /etc/jitsi/meet/jitsi.mydomain.intra-config.js
+...
+fileRecordingsEnabled: true,
+liveStreamingEnabled: true,
+hiddenDomain: &#39;recorder.jitsi.mydomain.intra&#39;,
+```
+
+Configure storage:
+```
+mkdir /recordings
+chown jibri:jibri /recordings
+
+sudo nano /etc/jitsi/jibri/config.json
+&#34;recording_directory&#34;: &#34;/recordings&#34;,
+&#34;finalize_recording_script_path&#34;: &#34;&#34;,
+&#34;xmpp_server_hosts&#34;: [
+&#34;jitsi.mydomain.intra&#34;
+],
+&#34;xmpp_domain&#34;: &#34;jitsi.mydomain.intra&#34;,
+&#34;control_login&#34;: {
+&#34;domain&#34;: &#34;auth.jitsi.mydomain.intra&#34;,
+&#34;username&#34;: &#34;jibri&#34;,
+&#34;password&#34;: &#34;Password1d&#34;
+},
+&#34;control_muc&#34;: {
+&#34;domain&#34;: &#34;internal.auth.jitsi.mydomain.intra&#34;,
+&#34;room_name&#34;: &#34;JibriBrewery&#34;,
+&#34;nickname&#34;: &#34;jibri&#34;
+},
+&#34;call_login&#34;: {
+&#34;domain&#34;: &#34;recorder.jitsi.mydomain.intra&#34;,
+&#34;username&#34;: &#34;recorder&#34;,
+&#34;password&#34;: &#34;Password1&#34;
+},
+```
+
+### Install Java 8
+Jibri only works with java 1.8 so we need to install and configure Jibri to use it:
+```
+wget -O - https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public | sudo apt-key add -
+add-apt-repository https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/
+apt update
+apt install adoptopenjdk-8-hotspot
+
+# the systemd sript use this script so we edit it
+nano /opt/jitsi/jibri/launch.sh
+# change this:
+# exec java ...
+# tho this:
+exec /usr/lib/jvm/adoptopenjdk-8-hotspot-amd64/bin/java ...
+```
+
+```
+systemctl restart prosody jicofo jitsi-videobridge2 jibri
+systemctl enable jibri
+```
+

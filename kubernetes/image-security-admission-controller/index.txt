@@ -1,0 +1,176 @@
+---
+title: RKE2 Image security Admission Controller
+url: https://devopstales.github.io/kubernetes/image-security-admission-controller/
+date: 2020-12-13
+keywords: kubernetes deployment, kubernetes vs docker, Kubernetes Secuity, best Practices, rancher, Admission Controller, anchore
+---
+
+
+In a previous post we talked about [Admission Controllers](https://devopstales.github.io/home/admission-controllers/). In this post I will show you how to use an Admission Controller to test image vulnerabilities.
+&lt;!--more--&gt;
+
+{{&lt; content &#34;/filedir/k8s-sec.html&#34; &gt;}}
+
+There is multiple tools to scan vulnerabilities, but less Admission Controller to use them. I found multiple solution for Anchore Engine so the first step is to deploy with its helm chart. In RKE2 I will use Rancher&#39;s [Helm controller](https://devopstales.github.io/cloud/k3s-helm-controller/) what is preinstalled.
+
+Then we can Deploy an Admission Controller to us this tool to automaticle scann any image deploy in the cluster and reject if is vulnerable. As I sad before there is multiple solution for this. One is Anchore&#39;s own Admission Controller but I will use Banzaicloud&#39;s solution because this easier to deploy. Sadly anchore-image-validator run as root so we need to use [my predifinde PSP](https://devopstales.github.io/home/rke2-pod-security-policy/) to allow this.
+
+```yaml
+nano /var/lib/rancher/rke2/server/manifests/10_image-security.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: securty-system
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: anchore-enginn
+  namespace: kube-system
+spec:
+  repo: &#34;https://charts.anchore.io&#34;
+  chart: anchore-engine
+  targetNamespace: securty-system
+  valuesContent: |-
+     postgresql:
+       postgresPassword: Password1
+       persistence:
+         size: 10Gi
+     anchoreGlobal:
+       defaultAdminPassword: Password1
+       defaultAdminEmail: devopstales@mydomain.intra
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: psp-rolebinding-securty-system
+  namespace: securty-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system-unrestricted-psp-role
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:serviceaccounts
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: anchore-policy-validator
+  namespace: kube-system
+spec:
+  repo: &#34;https://kubernetes-charts.banzaicloud.com&#34;
+  chart: anchore-policy-validator
+  targetNamespace: securty-system
+  valuesContent: |-
+    externalAnchore:
+      anchoreHost: &#34;http://anchore-enginn-anchore-engine-api:8228/v1/&#34;
+      anchoreUser: admin
+      anchorePass: Password1
+    rbac:
+      psp:
+        enabled: true
+    createPolicies: true
+```
+
+During deploying this chart, it&#39;s creating predefined policy bundles and activates `AllowAll` by default if `createPolicies` flag is set.
+
+| Bundle Name | Description |
+|-------------|-------------|
+| Allow all and warn bundle | Allow all images and warn if vulnerabilities are found |
+| Reject critical bundle | Reject deploying images that contain `critical` vulnerabiliy |
+| Reject high bundle | Reject deploying images that contain `high` vulnerabiliy |
+| Block root bundle | Block deploying images that using `root` as effective user |
+| Deny all images | Deny all imagest to deploy |
+
+### Test the Admission Controller
+
+```bash
+kubectl run --image=busybox -- sleep 3600
+Error from server: admission webhook &#34;pods.anchore-policy-validator.admission.banzaicloud.com&#34; denied the request: Image failed policy check: busybox
+```
+
+```yaml
+kubectl describe audits busybox1
+Name:         busybox1
+Namespace:    
+Labels:       fakerelease=true
+Annotations:  &lt;none&gt;
+API Version:  security.banzaicloud.com/v1alpha1
+Kind:         Audit
+Metadata:
+  Creation Timestamp:  2020-11-29T10:20:41Z
+  Generation:          1
+  Managed Fields:
+    API Version:  security.banzaicloud.com/v1alpha1
+    Fields Type:  FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:labels:
+          .:
+          f:fakerelease:
+      f:spec:
+        .:
+        f:action:
+        f:image:
+        f:releaseName:
+        f:resource:
+        f:result:
+      f:status:
+        .:
+        f:state:
+    Manager:         anchore-image-validator
+    Operation:       Update
+    Time:            2020-11-29T10:20:41Z
+  Resource Version:  39174
+  Self Link:         /apis/security.banzaicloud.com/v1alpha1/audits/busybox1
+  UID:               1e90c8b0-fffa-45f6-a986-d9fd269f0a83
+Spec:
+  Action:  reject
+  Image:
+    Image Digest:  
+    Image Name:    
+    Image Tag:     
+    Last Updated:  
+  Release Name:    busybox1
+  Resource:        Pod
+  Result:
+    Image failed policy check: busybox
+Status:
+  State:  
+Events:   &lt;none&gt;
+```
+
+The default policy is deny All Image theat failed on policy check but we can white list a specific image or set `createPolicies` to `true` in Banzaicloud&#39;s Helm chart to create default AllowAll Policy.
+
+```bash
+kubectl apply -f - &lt;&lt; EOF
+apiVersion: security.banzaicloud.com/v1alpha1
+kind:  WhiteListItem
+metadata:
+  name: busybox1
+spec:
+  reason: testing
+  creator: devopstales-sa
+EOF
+```
+
+```bash
+kubectl run busybox1 --image=busybox -- sleep 3600
+pod/busybox1 created
+```
+
+```bash
+kubectl get whitelistitems -o wide -o=custom-columns=NAME:.metadata.name,CREATOR:.spec.creator,REASON:.spec.reason
+NAME       CREATOR          REASON
+busybox1   devopstales-sa   testing
+
+kubectl get audits -o wide -o=custom-columns=NAME:.metadata.name,RELEASE:.spec.releaseName,IMAGES:.spec.image,RESULT:.spec.result
+NAME       RELEASE    IMAGES                                                  RESULT
+busybox1   busybox1   [map[imageDigest: imageName: imageTag: lastUpdated:]]   [Image failed policy check: busybox]
+```
+
+You can find the config files in my github repo: https://github.com/devopstales/k8s_sec_lab
+

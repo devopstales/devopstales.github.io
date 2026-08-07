@@ -1,0 +1,126 @@
+---
+title: Install Fedora CoreOS as a VM
+url: https://devopstales.github.io/cloud/fcos-install/
+date: 2020-08-30
+keywords: Fedora CoreOS, FCOS
+---
+
+
+In this post I will show you how you can Install Fedora CoreOS(FCOS) in virtualization environment.
+
+&lt;!--more--&gt;
+
+* First you need Fedora CoreOS Config (FCC) - This is a YAML file that specifies the configuration of a machine.
+* Fedora CoreOS Config Transpiler to validate your FCC and convert it to an Ignition config.
+* Finally launch a Fedora CoreOS machine and use Ignition config to perform the installation.
+
+### Create FCC
+Create password hash for default user
+```
+$ mkpasswd --method=yescrypt
+Password:
+$y$j9T$A0Y3wwVOKP69S.1K/zYGN.$S596l11UGH3XjN...
+```
+
+```
+nano fcos01.fcc
+---
+variant: fcos
+version: 1.0.0
+passwd:
+  users:
+    - name: core
+      password_hash: &#34;$y$j9T$A0Y3wwVOKP69S.1K/zYGN.$S596l11UGH3XjN...&#34;
+      groups:
+        - docker
+systemd:
+  units:
+    - name: install-rpms.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Install packages
+        ConditionFirstBoot=yes
+        Wants=network-online.target
+        After=network-online.target
+        After=multi-user.target
+        [Service]
+        Type=oneshot
+        ExecStart=rpm-ostree install nano git docker-compose htop --reboot
+        [Install]
+        WantedBy=multi-user.target
+storage:
+  files:
+    - path: /etc/ssh/sshd_config.d/20-enable-passwords.conf
+      mode: 0644
+      contents:
+        inline: |
+          # Fedora CoreOS disables SSH password login by default.
+          # Enable it.
+          # This file must sort before 40-disable-passwords.conf.
+          PasswordAuthentication yes
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: fcos01.mydomain.intra
+```
+
+### Convert FCC to Ignition
+```
+docker run -i --rm quay.io/coreos/fcct --pretty --strict &lt;fcos01.fcc &gt; fcos01.ign
+
+# validate config
+docker run --rm -i quay.io/coreos/ignition-validate - &lt; fcos01.ign
+```
+
+### Install Fedora CoreOS
+At the install stap you need to boot from the Fedora CoreOS ISO and use the Ignition config to install.  So you need a solution to share this files with the running LiveOS. You can use an usb pendrive or a web-server for that. I will use a webserver for thet now.
+
+```
+apt install nginx
+
+mkdir /var/www/html/fcos
+cp fcos01.ign /var/www/html/fcos
+cd /var/www/html/fcos
+
+systemct start nginx
+```
+
+```
+cd ~/
+wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/32.20200726.3.1/x86_64/fedora-coreos-32.20200726.3.1-live.x86_64.iso
+```
+
+### 3 2 1 ... Ignition
+After the live OS bootid star Fedora CoreOS install:
+
+```
+sudo su -
+coreos-installer install /dev/sda \
+--ignition-url http://example.com/fcos/fcos01.ign \
+--insecure-ignition
+
+init 6
+```
+
+
+You need `--insecure-ignition` for insecure http connection.
+
+### Set static IP
+```
+nmcli connection show
+NAME              UUID                                  TYPE      DEVICE
+Wired Connection  f36f48e0-f75f-4925-ac78-de6119a2fcbb  ethernet  enp0s3
+
+nmcli connection mod &#39;Wired Connection&#39; \
+  ipv4.method manual \
+  ipv4.addresses 192.168.0.16/24 \
+  ipv4.gateway 192.168.0.0 \
+  ipv4.dns 8.8.8.8 \
+  &#43;ipv4.dns 8.8.4.4 \
+  connection.autoconnect yes
+
+nmcli connection show &#39;Wired Connection&#39;
+systemctl restart NetworkManager
+```
+

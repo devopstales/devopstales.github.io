@@ -1,0 +1,78 @@
+---
+title: Running and Building ARM Docker Containers on x86
+url: https://devopstales.github.io/linux/running_and_building_multi_arch_containers/
+date: 2022-03-20
+keywords: docker, image, arm, multi arch
+---
+
+
+I this post I will show you how you can run AMD Docker Containers on x86 environment adn build multi CPU architecture images.
+
+&lt;!--more--&gt;
+
+### Running
+
+To run ARM based image on doncker we need to setup QEMU and Docker to set up our emulated environment. We’ll be using QEMU and Docker to set up our emulated environment. QEMU is an open source machine emulator and virtualizer. It allows users to to build ARM CUDA binaries on your x86 machine without needing a cross compiler.
+
+![QEMU](/img/include/emulation_workflow2.webp)
+
+```bash
+# Install the qemu packages
+sudo apt-get install qemu binfmt-support qemu-user-static
+
+# This step will execute the registering scripts
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+# Testing the emulation environment
+docker run --rm -t arm64v8/ubuntu uname -m
+```
+
+### How to build image:
+
+There are two ways to use Docker to build a multiarch image: using `docker manifest` or using `docker buildx`. I will use the first option.
+
+First we need to prepare the docker file to use multiple type base images. The base images for debian in different architectures are:
+
+* debian:buster-slim
+* amd64/debian:buster-slim
+* arm32v7/debian:buster-slim
+* arm64v8/debian:buster-slim
+
+As you can see there is a prefix before the standard image for the different architectures. We can use an argument to leverage this.
+
+```bash
+$ nano Dockerfile
+
+ARG ARCH=
+FROM ${ARCH}debian:buster-slim
+
+RUN apt-get update &amp;&amp; \
+    apt-get install curl -y &amp;&amp; \
+    rm -rf /var/lib/apt/list/*
+
+ENRYPOINT [ &#34;curl&#34; ]
+```
+
+Now give the architecture as argument at build:
+
+```bash
+docker build -t devopstales/curl:1.0-amd64 --build-arg ARCH=amd64/ .
+docker pus devopstales/curl:1.0-amd64
+
+docker build -t devopstales/curl:1.0-arm32v7 --build-arg ARCH=arm32v7/ .
+docker pus devopstales/curl:1.0-arm32v7
+
+docker build -t devopstales/curl:1.0-arm64v8 --build-arg ARCH=arm64v8/ .
+docker pus devopstales/curl:1.0-arm64v8
+```
+
+Now the hard part to push it as a single image. With `docker manifest` we can create the meta data theat points to the other images an push it to the registry.
+
+```bash
+docker manifest create devopstales/curl:1.0
+    --amend devopstales/curl:1.0-amd64
+    --amend devopstales/curl:1.0-arm32v7
+    --amend devopstales/curl:1.0-arm64v8
+
+docker manifest push devopstales/curl:1.0
+```

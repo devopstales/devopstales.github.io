@@ -1,0 +1,315 @@
+---
+title: Installing GitLab on OpenShift
+url: https://devopstales.github.io/devops/openshift-gitlab-helm/
+date: 2019-11-18
+---
+
+
+I  had to install Gitlab to Openshift recently. Turned out getting GitLab up and running on OpenShift is not so easy.
+
+&lt;!--more--&gt;
+
+### Create new project
+```
+oc new-project gitlab-devopstales.intra
+```
+
+### Deploy helm
+```yaml
+nano helm-namespace-account.yaml
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: tiller-gitlab-devopstales.intra
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tiller-gitlab-devopstales.intra
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: tiller-gitlab-devopstales.intra
+    namespace: kube-system
+```
+
+Now set up Helm, install the Tiller plugin and add the GitLab repository.
+
+```bash
+oc apply -f helm-namespace-account.yaml
+oc get sa
+
+helm init --service-account tiller-gitlab-devopstales.intra --tiller-namespace gitlab-mydomain-intra
+oc get po -n kube-system
+
+export TILLER_NAMESPACE=kube-system
+echo $TILLER_NAMESPACE
+helm version
+```
+
+## Get helmchart
+```bash
+helm repo add gitlab https://charts.gitlab.io/
+helm repo update
+
+oc adm policy add-scc-to-user anyuid -z default -n gitlab-devopstales.intra
+oc adm policy add-scc-to-user anyuid -z gitlab-runner -n gitlab-devopstales.intra
+
+# gitlab-tst is the name of the helm deployment
+oc adm policy add-scc-to-user anyuid -z gitlab-tst-shared-secrets
+oc adm policy add-scc-to-user anyuid -z gitlab-tst-gitlab-runner
+oc adm policy add-scc-to-user anyuid -z gitlab-tst-prometheus-server
+oc adm policy add-scc-to-user anyuid -z default
+```
+
+### Create chart values
+```yaml
+nano gitlab-values.yml
+certmanager:
+  install: false
+global:
+  appConfig:
+    enableUsagePing: true
+    enableImpersonation: true
+    defaultCanCreateGroup: true
+    usernameChangingEnabled: true
+    issueClosingPattern:
+    defaultTheme:
+    defaultProjectsFeatures:
+      issues: true
+      mergeRequests: true
+      wiki: true
+      snippets: true
+      builds: true
+      containerRegistry: true
+    ldap:
+      servers:
+        main:
+          base: dc=mydomain,dc=intra
+          user_filter: (&amp;(objectClass=user)(memberof=cn=Users,dc=mydomain,dc=intra))
+          bind_dn: Administrator@devopstales.intra
+          host: 192.168.10.4
+          label: devopstales.intra
+          password:
+            key: password
+            secret: gitlab-ldap-secret
+          port: 636
+          encryption: simple_tls
+          uid: sAMAccountName
+          active_directory: true
+          verify_certificates: false
+          allow_username_or_email_login: true
+    omniauth:
+      enabled: true
+      blockAutoCreatedUsers: false
+      allowSingleSignOn: [&#39;oauth2_generic&#39;]
+      providers:
+        - secret: gitlab-sso
+          key: provider
+    backups:
+      bucket: gitlab-devopstales.intra
+      tmpBucket: gitlab-devopstales.intra
+      objectStorage:
+        backend: s3
+    lfs:
+      bucket: gitlab-devopstales.intra
+      connection:
+        secret: ceph-storage
+        key: gitlab
+    artifacts:
+      bucket: gitlab-devopstales.intra
+      connection:
+        secret: ceph-storage
+        key: gitlab
+    uploads:
+      bucket: gitlab-devopstales.intra
+      connection:
+        secret: ceph-storage
+        key: gitlab
+    packages:
+      bucket: gitlab-devopstales.intra
+      connection:
+        secret: ceph-storage
+        key: gitlab
+    externalDiffs:
+      bucket: gitlab-devopstales.intra
+      connection:
+        secret: ceph-storage
+        key: gitlab
+    pseudonymizer:
+      bucket: gitlab-devopstales.intra
+      connection:
+        secret: ceph-storage
+        key: gitlab
+  edition: ce
+  email:
+    from: gitlab@devopstales.intra
+  hosts:
+    domain: devopstales.intra
+    externalIP: gitlab.devopstales.intra
+    gitlab:
+      name: gitlab.devopstales.intra
+      https: false
+    registry:
+      name: gitlab-registry.devopstales.intra
+      https: false
+  ingress:
+    enabled: false
+    configureCertmanager: false
+    tls:
+      secretName: gitlab-certs
+  smtp:
+    address: mail.active.hu
+    authentication: &#34;&#34;
+    domain: devopstales.intra
+    enabled: true
+    port: 25
+  gitlab-exporter:
+    enabled: false
+  registry:
+    bucket: gitlab-registry
+  minio:
+    enabled: false
+nginx-ingress:
+  enabled: false
+gitlab-runner:
+  rbac:
+    create: true
+registry:
+  enabled: true
+  storage:
+    secret: ceph-storage
+    key: registry
+  image:
+    repository: docker.io/registry
+    tag: 2.6.0
+gitlab:
+  task-runner:
+    backups:
+      objectStorage:
+        config:
+          secret: storage-config
+          key: config
+```
+
+### Create secrets for deployment
+```yaml
+nano ceph.gitlab-data.yaml
+---
+provider: AWS
+region: default
+aws_access_key_id: W3MNDO373H6LQUNCG4SG
+aws_secret_access_key: vVFEWx3hqbcrGJyaZVie9YoFG6rPoRYmqnDzRwrn
+endpoint: &#34;https://s3.devopstales.intra&#34;
+enable_signature_v4_streaming: false
+
+# admin jog kell a cephez
+nano ceph.gitlab-registry.yaml
+cache:
+  blobdescriptor: inmemory
+s3:
+  region: default
+  bucket: gitlab-registry
+  accesskey: PZIOIH63CENHPG15XY42
+  secretkey: K6K1lWO7Jtyp5rZiCwj77JC5BFMEAZ4a2PAkg9fB
+  regionendpoint: https://s3.devopstales.intra
+  rootdirectory: /
+  secure: true
+  v4auth: false
+  encrypt: false
+  chunksize: 5242880
+redirect:
+  disable: true
+```
+
+```bash
+nano ceph.backup.config
+[default]
+access_key = W3MNDO373H8LQUNCJ8QV
+access_token = vVFEWx8hqbcrGJyaZVie8YoER8rPoRYmqnDzRwrn
+host_base = s3.devopstales.intra
+host_bucket = %(bucket)s.s3.devopstales.intra
+bucket_location = US
+use_https = True
+check_ssl_certificate = False
+```
+
+```yaml
+nano keycloak.sso.yaml
+---
+name: &#39;oauth2_generic&#39;
+label: &#39;mydomain&#39;
+app_id: &#39;gitlab&#39;
+app_secret: &#39;f2514bd4-92e4-40fa-bec4-382838db25f0&#39;
+args:
+  client_options:
+    site: &#39;https://sso.devopstales.intra&#39;
+    user_info_url: &#39;/auth/realms/mydomain/protocol/openid-connect/userinfo&#39;
+    authorize_url: &#39;/auth/realms/mydomain/protocol/openid-connect/auth&#39;
+    token_url: &#39;/auth/realms/mydomain/protocol/openid-connect/token&#39;
+  user_response_structure:
+    attributes:
+      email: &#39;email&#39;
+      first_name: &#39;given_name&#39;
+      last_name: &#39;family_name&#39;
+      name: &#39;name&#39;
+      nickname: &#39;preferred_username&#39;
+    id_path: &#39;preferred_username&#39;
+```
+
+### Deploy secrets
+```bash
+# https ssl cert
+oc create secret tls gitlab-certs --cert=tls.crt --key=tls.key
+
+oc create secret generic storage-config --from-file=config=ceph.backup.config
+
+oc create secret generic ceph-storage --from-file=registry=ceph.gitlab-registry.yaml --from-file=gitlab=ceph.gitlab-data.yaml
+
+oc create secret generic gitlab-sso --from-file=provider=keycloak.sso.yaml
+oc create secret generic gitlab-ldap-secret --from-literal=password=
+```
+
+
+### Deploy application with helm
+```bash 
+helm upgrade --install -f gitlab-values.yml gitlab-tst gitlab/gitlab --debug --dry-run
+helm upgrade --install -f gitlab-values.yml gitlab-tst gitlab/gitlab --timeout 600
+helm upgrade -f gitlab-values.yml gitlab-tst gitlab/gitlab --timeout 600
+
+# https://docs.gitlab.com/charts/installation/version_mappings.html
+helm upgrade -f gitlab-values.yml gitlab-tst gitlab/gitlab --version 2.3.5 --timeout 600
+
+# gitlab-tst
+oc get secret gitlab-tst-gitlab-initial-root-password -o jsonpath=&#39;{.data.password}&#39; | base64 -d
+```
+
+```yaml
+nano gitlab-ssh-nodeport-svc.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitlab-shell-nodeport
+  labels:
+    app: gitlab-shell
+    name: gitlab-shell-nodeport
+spec:
+  type: NodePort
+  ports:
+    - port: 2222
+      nodePort: 32222
+      name: ssh
+  selector:
+    app: gitlab-shell
+
+```
+
+```bash
+oc create -f gitlab-ssh-nodeport-svc.yaml
+```
+

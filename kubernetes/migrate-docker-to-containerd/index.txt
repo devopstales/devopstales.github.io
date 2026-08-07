@@ -1,0 +1,152 @@
+---
+title: kubernetes 1.24: Migrate from docker to containerd
+url: https://devopstales.github.io/kubernetes/migrate-docker-to-containerd/
+date: 2022-05-05
+keywords: kubernetes deployment, kubernetes vs docker, docker, containerd, migrate, switch
+---
+
+
+With the new Kubernetes 1.24 and deprecation of dockershim, in this post I will show you how you can migrate your kubernetes cluster from docker to containerd.
+
+&lt;!--more--&gt;
+
+### How to migrate
+
+You have to be careful if you are on a single master node configuration. The cluster will be unavailable under the upgrade.
+
+```bash
+kubectl get nodes -o wide
+NAME    STATUS   ROLES                  AGE     VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION                             CONTAINER-RUNTIME
+k8s01   Ready    control-plane,master   78m     v1.20.4   10.65.79.164   &lt;none&gt;        CentOS Linux 8       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+k8s02   Ready    control-plane,master   64m     v1.20.4   10.65.79.131   &lt;none&gt;        CentOS Linux 8       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+k8s03   Ready    control-plane,master   4m16s   v1.20.4   10.65.79.244   &lt;none&gt;        CentOS Linux 8       4.18.0-240.15.1.el8_3.centos.plus.x86_64   docker://20.10.5
+```
+
+First we will cordon and drain the node:
+
+```bash
+kubectl cordon k8s01
+kubectl drain k8s01 --ignore-daemonsets
+```
+
+```bash
+kubectl get nodes
+NAME    STATUS                      ROLES                  AGE    VERSION
+k8s01   Ready,SchedulingDisabled    control-plane,master   83m    v1.20.4
+k8s02   Ready                       control-plane,master   69m    v1.20.4
+k8s03   Ready                       control-plane,master   9m30s  v1.20.4
+```
+
+Stop the kubelet sevice and remove docker:
+
+```bash
+sudo systemctl stop kubelet
+sudo systemctl status kubelet
+```
+
+```bash
+apt purge docker-ce docker-ce-cli
+OR
+yum remove docker-ce docker-ce-cli
+```
+
+### Install and configure containerd:
+
+```bash
+## Install containerd
+sudo yum update -y &amp;&amp; sudo yum install -y containerd.io
+
+## Configure containerd
+sudo mkdir -p /etc/containerd
+sudo containerd config default &gt; /etc/containerd/config.toml
+```
+
+To use the `systemd` cgroup driver in `/etc/containerd/config.toml` with `runc`, set
+```bash
+nano /etc/containerd/config.toml
+...
+          [plugins.&#34;io.containerd.grpc.v1.cri&#34;.containerd.runtimes.runc.options]
+            SystemdCgroup = true
+```
+
+Prepare the system for containerd:
+```bash
+cat &lt;&lt;EOF | sudo tee /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+kvm-intel
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+cat &lt;&lt;EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+
+sysctl --system
+```
+
+```bash
+echo &#34;runtime-endpoint: unix:///run/containerd/containerd.sock&#34; &gt; /etc/crictl.yaml
+crictl ps
+
+# Start containerd
+systemctl enable --now containerd
+```
+
+Change runtime in kubeadm config:
+
+```bash
+nano /etc/sysconfig/kubelet
+# add the following flags to KUBELET_KUBEADM_ARGS variable
+KUBELET_KUBEADM_ARGS=&#34;... --container-runtime=remote --container-runtime-endpoint=/run/containerd/containerd.sock&#34;
+```
+
+Start kubelet:
+
+```bash
+sudo systemctl start kubelet
+```
+
+Check if the new runtime on the node:
+
+```bash
+kubectl describe node k8s01
+System Info:
+  Machine ID:                 21a5dd31f86c4
+  System UUID:                4227EF55-BA3BCCB57BCE
+  Boot ID:                    77229747-9ea581ec6773
+  Kernel Version:             4.18.0-240.15.1.el8_3.centos.plus.x86_64
+  OS Image:                   CentOS Linux 8
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  containerd://1.4.3
+  Kubelet Version:            v1.20.4
+  Kube-Proxy Version:         v1.20.4
+```
+
+Uncordon the node to mark it schedulable agen:
+
+```bash
+kubectl uncordon k8s01
+```
+
+Once you changed the runetime on all the nodes you are done.
+
+### Debugging tipps
+
+Here are some usefull conmmands to debug:
+
+```bash
+journalctl -u kubelet
+
+journalctl -u containerd
+
+crictl --runtime-endpoint /run/containerd/containerd.sock ps
+
+kubectl describe node &lt;master_node_name&gt;
+```
+

@@ -1,0 +1,184 @@
+---
+title: What is RBAC in Kubernetes?
+url: https://devopstales.github.io/kubernetes/k8s-rbac/
+date: 2026-03-05
+keywords: Kubernetes, K8S, RBAC, Security
+---
+
+
+
+In this post I will show you how you can use RBAC in kubernetes.
+
+&lt;!--more--&gt;
+
+### What is RBAC?
+
+RBAC stands for Role-Based Access Control. It is an approach that is used for restricting access to resources for users based on roles. Kubernetes uses RBAC for authorization, for example to give access to users and groups to certain Kubernetes resources. It uses roles to add or remove permissions. For Kubernetes, RBAC is the way to restrict who can access what within the cluster.
+
+### Why RBAC?
+
+A Kubernetes cluster is being used by multiple users. These users can be different types of users, for example developers, testers, application administrators, and cluster administrators. These groups of users need different permissions to do their jobs. That is where the notion of RBAC or Role-Based Access Control comes into play. You can create different roles for these groups and associate the roles with the users or groups.
+
+![RBAC](/img/include/rbac01.webp)
+
+### Role
+
+A role defines what you can do to a specific Kubernetes resource. The role contains two main parts: one representing what permissions you have and another representing the Kubernetes resource in the Kubernetes API structure.
+
+Here is a simple example for Roles, where the user has permission to just get and list the pods:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: elasticsearch
+  namespace: default
+rules:
+  - apiGroups: [&#34;&#34;]
+    resources: [&#34;pods&#34;]
+    verbs: [&#34;get&#34;, &#34;list&#34;]
+```
+
+### ClusterRole
+
+Roles are used to assigning resources for a namespace, but if you need to assign resources on a cluster level, you need to use ClusterRole. It is similar to Roles, but it can grant permissions that are cluster-scoped such as giving resource permissions across all namespaces in the cluster.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: &#34;true&#34;
+    creationTimestamp: null
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+  name: cluster-admin
+rules:
+  - apiGroups:
+    - &#34;*&#34;
+  resources:
+    - &#34;*&#34;
+      verbs:
+        - &#34;*&#34;
+```
+
+### RoleBinding
+
+RoleBinding is used for granting permission to a Subject in a Kubernetes cluster. Subjects can be users, service accounts or groups trying to access Kubernetes API.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: elasticsearch
+  namespace: default
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: elasticsearch
+subjects:
+- kind: User
+  name: John
+  namespace: default
+```
+
+Below is an example of RoleBinding where `roleRef` is being used to bind user `John` with the previously created `elasticsearch` role in the `default` namespace.
+
+### ClusterRoleBinding
+
+ClusterRoleBinding is used to grant permission to a subject on a cluster-level in all the namespaces.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+   name: cluster-admin
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: cluster-admin
+subjects:
+ - apiGroup: rbac.authorization.k8s.io
+   kind: Group
+   name: masters
+```
+
+### What can I bind with what?
+
+Usually you use RoleBinding to bind Role and ClusterRoleBinding to bind ClusterRole, but you can use RoleBinding to bind ClusterRole to a specific namespace. It is a best practice to create global ClusterRoles for specific tasks and bind them to namespaces with RoleBinding.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-binding-to-default
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: template-namespaced-resources---developer
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: developer-team
+  namespace: default
+```
+
+### Aggregated ClusterRoles 
+
+You can aggregate several ClusterRoles into one combined ClusterRole.  If you create a ClusterRole with aggregationRule the controller in the Kubernetes cluster will search fo the ClusterRoles with the matching labels and combines ther roles into the Aggregated ClusterRole.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: monitoring
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.example.com/aggregate-to-monitoring: &#34;true&#34;
+rules: [] # The control plane automatically fills in the rules
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: monitoring-endpoints
+  labels:
+    rbac.example.com/aggregate-to-monitoring: &#34;true&#34;
+# When you create the &#34;monitoring-endpoints&#34; ClusterRole,
+# the rules below will be added to the &#34;monitoring&#34; ClusterRole.
+rules:
+- apiGroups: [&#34;&#34;]
+  resources: [&#34;services&#34;, &#34;endpointslices&#34;, &#34;pods&#34;]
+  verbs: [&#34;get&#34;, &#34;list&#34;, &#34;watch&#34;]
+```
+
+The default ClusterRoles are using ClusterRole aggregation. This lets you include rules for custom resources defined by CustomResourceDefinition to extend the default roles.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aggregate-cron-tabs-edit
+  labels:
+    # Add these permissions to the &#34;admin&#34; and &#34;edit&#34; default roles.
+    rbac.authorization.k8s.io/aggregate-to-admin: &#34;true&#34;
+    rbac.authorization.k8s.io/aggregate-to-edit: &#34;true&#34;
+rules:
+- apiGroups: [&#34;stable.example.com&#34;]
+  resources: [&#34;crontabs&#34;]
+  verbs: [&#34;get&#34;, &#34;list&#34;, &#34;watch&#34;, &#34;create&#34;, &#34;update&#34;, &#34;patch&#34;, &#34;delete&#34;]
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: aggregate-cron-tabs-view
+  labels:
+    # Add these permissions to the &#34;view&#34; default role.
+    rbac.authorization.k8s.io/aggregate-to-view: &#34;true&#34;
+rules:
+- apiGroups: [&#34;stable.example.com&#34;]
+  resources: [&#34;crontabs&#34;]
+  verbs: [&#34;get&#34;, &#34;list&#34;, &#34;watch&#34;]
+```
+
