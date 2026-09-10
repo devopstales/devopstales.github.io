@@ -1,0 +1,1414 @@
+<?xml version="1.0" encoding="utf-8"?> <feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US">
+    <generator uri="https://gohugo.io/" version="0.163.3">Hugo</generator><title type="html"><![CDATA[Hugoes on DevOpsTales]]></title>
+    
+        <subtitle type="html"><![CDATA[Kubernetes, Cloud & Infrastructure Guides]]></subtitle>
+    
+    
+    
+            <link href="https://devopstales.github.io/hugo/" rel="alternate" type="text/html" title="html" />
+            <link href="https://devopstales.github.io/hugo/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
+            <link href="https://devopstales.github.io/hugo/atom.xml" rel="self" type="application/atom+xml" title="atom" />
+    <updated>2026-09-10T12:05:14+00:00</updated>
+    
+    
+        <author>
+            <name>Balázs Páldi</name>
+            </author>
+    
+        <id>https://devopstales.github.io/hugo/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GFM vs CommonMark vs Pandoc Markdown: Which Syntax Travels?]]></title>
+            <link href="https://devopstales.github.io/hugo/markdown-dialects-compared/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/hugo/markdown-dialects-compared/</id>
+            
+            
+            <published>2026-09-10T00:00:00+00:00</published>
+            <updated>2026-09-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>The same Markdown file renders differently on GitHub, Hugo, Obsidian, and Pandoc — not because Markdown is unreliable, but because &ldquo;Markdown&rdquo; names a family of syntaxes, parsers, and platform features. CommonMark defines the portable core, GFM adds software-collaboration extensions, and Pandoc Markdown expands into a full document language.</p>
+<p><img src="/img/markdown-dialects-compared.webp" alt="Markdown dialects compared across platforms"  loading="lazy" decoding="async" class="zoomable" />
+<em>CommonMark core, GFM extensions, Pandoc documents: pick by destination, not habit</em></p>
+<h2 id="one-family-three-dialects">One Family, Three Dialects</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  Markdown family
+</span></span><span style="display:flex;"><span>    +-- CommonMark core
+</span></span><span style="display:flex;"><span>    |     +-- GitHub Flavored Markdown --&gt; GitHub platform features
+</span></span><span style="display:flex;"><span>    |     +-- Other CommonMark renderers --&gt; Hugo/Goldmark, GitLab
+</span></span><span style="display:flex;"><span>    +-- Pandoc Markdown --&gt; PDF, DOCX, EPUB, LaTeX, slides
+</span></span></code></pre></div><p>Useful, not exact: every renderer enables, disables, or adds syntax independently. Short version: CommonMark when portability matters most, GFM for README and GitHub-targeted docs, Pandoc Markdown when the source must become PDF, DOCX, or an academic paper. For a Hugo blog, CommonMark plus explicitly enabled Goldmark extensions — never assume GitHub-visible features work just because Hugo is called GFM-compatible.</p>
+<h2 id="commonmark-the-portable-core">CommonMark: The Portable Core</h2>
+<p>CommonMark&rsquo;s contribution is consistent parsing, not features: paragraphs, ATX/Setext headings, block quotes, lists, fenced and indented code, emphasis, links and images, reference links, inline code, thematic breaks, raw HTML blocks, line breaks. Presentation — CSS, highlighting, anchors, sanitization — stays outside the spec, so treat it as a structural baseline, not identical-page promise:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span># Service Deployment
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>The service exposes a small HTTP API.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">## Requirements
+</span></span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Linux
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Docker
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> 8 GB of memory
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">## Start the service
+</span></span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#e6db74">```bash
+</span></span></span><span style="display:flex;"><span>docker compose up -d
+</span></span><span style="display:flex;"><span><span style="color:#e6db74">```</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>See the [<span style="color:#f92672">configuration guide</span>](<span style="color:#a6e22e">configuration.md</span>) for details.
+</span></span></code></pre></div><p>Headings, paragraphs, lists, fences, plain links: renders almost everywhere with no dialect extensions.</p>
+<h2 id="gfm-commonmark-for-software-projects">GFM: CommonMark for Software Projects</h2>
+<p>Formal GFM keeps CommonMark parsing and adds pipe tables, task lists, strikethrough, extended autolinks, plus some raw-HTML restrictions. So common they feel standard — they aren&rsquo;t core:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>| Backend | Best use |
+</span></span><span style="display:flex;"><span>|---|---|
+</span></span><span style="display:flex;"><span>| Ollama | Local experiments |
+</span></span><span style="display:flex;"><span>| vLLM | Shared inference |
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">- [x]</span> Install Docker
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">- [ ]</span> Add monitoring
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Use the <span style="color:#f92672">~~old endpoint~~</span> new endpoint.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Visit https://example.com/docs for details.
+</span></span></code></pre></div><p>Strict CommonMark may read tables as paragraph text and task items as literal brackets. Prefer explicit angle-bracket autolinks (<code>&lt;https://example.com/docs&gt;</code>) when files travel through unknown processors.</p>
+<h2 id="githubcom-is-more-than-formal-gfm">GitHub.com Is More Than Formal GFM</h2>
+<p>Much confusion comes from mistaking platform features for spec: math expressions, Mermaid fences, alerts, issue/PR references, mentions, emoji shortcodes, collapsibles. Another GFM-compatible renderer can skip all of them and still be compliant.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span><span style="color:#e6db74">```mermaid
+</span></span></span><span style="display:flex;"><span>flowchart LR
+</span></span><span style="display:flex;"><span>    A[Markdown] --&gt; B[Rendered diagram]
+</span></span><span style="display:flex;"><span><span style="color:#e6db74">```</span>
+</span></span></code></pre></div><p>GitHub renders the diagram; a generic renderer shows highlighted source — valid Markdown, platform-specific transformation. Same for <code>$$...$$</code> math (needs KaTeX/MathJax/Pandoc elsewhere) and alerts:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span><span style="color:#66d9ef">&gt; </span><span style="font-style:italic">[!WARNING]
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">&gt; </span><span style="font-style:italic">Changing this setting clears the cache.
+</span></span></span></code></pre></div><p>Readable as a plain quote elsewhere — graceful degradation, but not portable presentation.</p>
+<h2 id="pandoc-markdown-as-document-language">Pandoc: Markdown as Document Language</h2>
+<p>Pandoc&rsquo;s reader ships citations, footnotes, definition lists, header attributes, fenced divisions, YAML metadata, math, superscript/subscript, and bibliography processing — expressive for publishing, unsafe as interchange:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>PagedAttention improves KV cache management [@kwon2023pagedattention].
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>CommonMark
+</span></span><span style="display:flex;"><span>: A precise specification for core Markdown.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">## Cache Configuration {#cache-config .deployment}
+</span></span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>::: warning
+</span></span><span style="display:flex;"><span>Changing this option restarts the server.
+</span></span><span style="display:flex;"><span>:::
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>pandoc article.md <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --citeproc <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --bibliography references.bib <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --csl ieee.csl <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  -o article.pdf
+</span></span></code></pre></div><p>Citations stay readable without Pandoc but never become formatted references; header attributes and fenced divisions leak literal punctuation into non-Pandoc renderers. Pandoc also reads dialects explicitly (<code>--from=gfm</code>, <code>--from=commonmark</code>, per-extension <code>+</code>/<code>-</code> toggles, <code>--list-extensions</code>), so build commands and defaults files are part of the document contract — commit them beside the source.</p>
+<h2 id="formal-support-matrix">Formal Support Matrix</h2>
+<p>Formal dialects only — platforms add their own extras:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Feature</th>
+					<th>CommonMark</th>
+					<th>Formal GFM</th>
+					<th>Pandoc</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Headings, emphasis, links, quotes, lists, fences</td>
+					<td>Yes</td>
+					<td>Yes</td>
+					<td>Yes</td>
+			</tr>
+			<tr>
+					<td>Raw HTML</td>
+					<td>Yes</td>
+					<td>Restricted contexts</td>
+					<td>Yes</td>
+			</tr>
+			<tr>
+					<td>Pipe tables, task lists, strikethrough, autolinks</td>
+					<td>No</td>
+					<td>Yes</td>
+					<td>Yes</td>
+			</tr>
+			<tr>
+					<td>Footnotes, citations, YAML metadata, def lists</td>
+					<td>No</td>
+					<td>No</td>
+					<td>Yes</td>
+			</tr>
+			<tr>
+					<td>Math, header attributes, fenced divs, raw LaTeX, bibliography</td>
+					<td>No</td>
+					<td>No</td>
+					<td>Yes</td>
+			</tr>
+	</tbody>
+</table>
+<p>&ldquo;No&rdquo; means not guaranteed by the spec — a platform may still support it.</p>
+<h2 id="hugo-and-goldmark-reality">Hugo and Goldmark Reality</h2>
+<p>Hugo renders with Goldmark: CommonMark-conformant plus GFM-compatible extensions (tables, strikethrough, task lists, heading IDs, highlighting), with footnotes, definition lists, and typographic substitutions available when enabled. Around Markdown sit non-traveling Hugo features: front matter, shortcodes, render hooks, page resources, internal refs, templates, site config.</p>
+<p>Three Hugo-specific gotchas. Raw HTML is dropped by default unless rendering is enabled or routed through shortcodes and render hooks — this very blog sets <code>unsafe = true</code> in Goldmark config, a deliberate site-level choice that trades portability for control. A <code>mermaid</code> fence stays a code block without a render hook, shortcode, or JS pipeline — identical source, different mechanism than GitHub. And front matter means different things per consumer: Hugo metadata, Pandoc template variables, GitHub mostly inert text — same syntax, different semantics.</p>
+<h2 id="the-rest-of-the-platforms">The Rest of the Platforms</h2>
+<p>Obsidian stores <code>.md</code> but authors natively: <code>[[wiki links]]</code>, <code>![[embeds]]</code>, callouts, block refs, Dataview. Files aren&rsquo;t portable publications — treat export as compilation. GitLab takes CommonMark plus GFM tables/tasks with its own references, math, and diagrams; conservative GFM usually survives GitHub-to-GitLab moves, integrations don&rsquo;t.</p>
+<h2 id="safe-everywhere-vs-breaks-often">Safe Everywhere vs Breaks Often</h2>
+<p>Safe: <code>#</code> headings, paragraphs, blank-line-separated blocks, <code>-</code> and <code>1.</code> lists, backtick fences and inline code, <code>*</code>/<code>**</code> emphasis, plain links and images, block quotes, thematic breaks, angle-bracket autolinks.</p>
+<p>Breaks: pipe tables on strict CommonMark (degrade to <code>|</code> soup — prefer lists for ultra-portable docs), footnotes (format and placement vary), header attributes (literal braces elsewhere), callouts (one syntax per platform — portable fallback is a plain <code>&gt;</code> quote), wiki links (literal brackets outside the vault — use <code>[text](path.md)</code> for publication), raw HTML (stripped, escaped, or sanitized unpredictably), dollar math (rendered, literal, or mis-emphasized), Mermaid (diagram versus source depending on post-processing).</p>
+<h2 id="three-layers-of-compatibility">Three Layers of Compatibility</h2>
+<p>Parsing (structure recognized?), transformation (Mermaid rendered, citations resolved, shortcodes expanded, TOC generated?), presentation (styling, anchors, fonts?). Identical syntax can pass parsing on two platforms and still present differently. The better portability question names all four inputs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Dialect: CommonMark plus GFM tables
+</span></span><span style="display:flex;"><span>Parser: Goldmark
+</span></span><span style="display:flex;"><span>Extensions: tables, strikethrough, task lists, footnotes
+</span></span><span style="display:flex;"><span>Platform: Hugo, plus render hooks and Mermaid JS
+</span></span></code></pre></div><h2 id="rules-that-prevent-most-failures">Rules That Prevent Most Failures</h2>
+<p>Skeleton in CommonMark; add tables and task lists only where all targets support them; isolate platform syntax (shortcodes, citations, embeds) in findable blocks; prefer graceful degraders (Mermaid source, quote-readable alerts) over punctuation-leakers (fenced divs, attributes); never depend on auto-generated heading IDs across renderers with different slug rules; commit build config (Pandoc defaults, Hugo markup settings, filters, JS) with content. Test every important target directly: <code>pandoc --from=commonmark</code> versus <code>--from=gfm</code> output diffs, production <code>hugo --gc --minify</code> with HTML inspection (not editor preview), and the committed file on the actual host.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Use case</th>
+					<th>Syntax</th>
+					<th>Reason</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Portable plain-text doc</td>
+					<td>CommonMark</td>
+					<td>Smallest reliable baseline</td>
+			</tr>
+			<tr>
+					<td>GitHub README</td>
+					<td>GFM</td>
+					<td>Tables, tasks, repo workflows</td>
+			</tr>
+			<tr>
+					<td>Hugo blog post</td>
+					<td>CommonMark + configured Goldmark</td>
+					<td>Controlled pipeline</td>
+			</tr>
+			<tr>
+					<td>Academic paper</td>
+					<td>Pandoc Markdown</td>
+					<td>Citations, math, metadata, PDF</td>
+			</tr>
+			<tr>
+					<td>Multi-format book</td>
+					<td>Pandoc Markdown</td>
+					<td>Structured multi-output conversion</td>
+			</tr>
+			<tr>
+					<td>Obsidian vault</td>
+					<td>Obsidian Markdown</td>
+					<td>Backlinks, embeds, knowledge flows</td>
+			</tr>
+			<tr>
+					<td>Unknown renderer</td>
+					<td>CommonMark subset</td>
+					<td>Lowest compatibility risk</td>
+			</tr>
+	</tbody>
+</table>
+<p>Convert between dialects with Pandoc (<code>--from</code>/<code>--to</code> pairs) as a build step, never a reversible formatter — references, callouts, complex tables, and attributes may not survive. Lint the portable subset (fenced over indented code, tagged fences, blank lines around blocks, no skipped heading levels), then add per-renderer build tests rather than trusting lint alone.</p>
+<h2 id="summary">Summary</h2>
+<p>CommonMark parses dependably, GFM collaborates practically, Pandoc publishes richly — different problems, not competing versions. Write the smallest dialect satisfying the real destination, name the extensions in the source contract, and test each renderer that matters. Portability comes from knowing the contract, not avoiding extensions.</p>
+<p><em>Which dialect mismatch wasted your afternoon — tables, footnotes, math, or Mermaid? Share the war story in the comments below!</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="markdown" term="markdown" label="markdown" />
+                             
+                                <category scheme="hugo" term="hugo" label="hugo" />
+                             
+                                <category scheme="gfm" term="gfm" label="gfm" />
+                             
+                                <category scheme="commonmark" term="commonmark" label="commonmark" />
+                             
+                                <category scheme="pandoc" term="pandoc" label="pandoc" />
+                             
+                                <category scheme="goldmark" term="goldmark" label="goldmark" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[GitLab CI to GitHub Pages for a Hugo Blog]]></title>
+            <link href="https://devopstales.github.io/hugo/gitlab-ci-to-github-pages-hugo/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-algolia-gitlab-ci/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo Search with Algolia and GitLab CI" />
+                <link href="https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages" />
+                <link href="https://devopstales.github.io/hugo/hugo-image-pipeline-webp-lazy-zoom/?utm_source=atom_feed" rel="related" type="text/html" title="Image Pipeline: WebP, Lazy Load, and Medium Zoom" />
+                <link href="https://devopstales.github.io/hugo/hugo-robots-txt/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo robots.txt Generation" />
+                <link href="https://devopstales.github.io/hugo/hugo-seo/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo SEO on a Multi-Section Blog" />
+            
+                <id>https://devopstales.github.io/hugo/gitlab-ci-to-github-pages-hugo/</id>
+            
+            
+            <published>2026-08-03T00:00:00+00:00</published>
+            <updated>2026-08-03T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>This blog’s source of truth and CI live on GitLab. The public site is served from GitHub Pages at <a href="https://devopstales.github.io/">devopstales.github.io</a>. Hugo builds in a container, the job writes into a separate Pages repository, and readers never see GitLab’s job logs—only the static tree.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="shape-of-the-pipeline">Shape of the pipeline</h2>
+<p>High level:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  GitLab repo (content, layouts, themes)
+</span></span><span style="display:flex;"><span>           |
+</span></span><span style="display:flex;"><span>           v
+</span></span><span style="display:flex;"><span>  hugomods/hugo image  --&gt;  hugo  --&gt;  public/
+</span></span><span style="display:flex;"><span>           |
+</span></span><span style="display:flex;"><span>           v
+</span></span><span style="display:flex;"><span>  clone GitHub Pages repo, replace files, commit, push
+</span></span><span style="display:flex;"><span>           |
+</span></span><span style="display:flex;"><span>           v
+</span></span><span style="display:flex;"><span>  https://devopstales.github.io/
+</span></span></code></pre></div><p>The active job uses the <a href="https://github.com/hugomods/docker">hugomods/hugo</a> image pinned to a Hugo version (for example <code>hugomods/hugo:git-0.148.0</code>) and sets:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">variables</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">GIT_SUBMODULE_STRATEGY</span>: <span style="color:#ae81ff">recursive</span>
+</span></span></code></pre></div><p>Themes such as Roadster and <code>hugo-atom-feed</code> are git submodules. Without recursive checkout, <code>hugo</code> fails or silently falls back to incomplete layouts.</p>
+<h2 id="build-steps-that-matter">Build steps that matter</h2>
+<p>A typical job script:</p>
+<ol>
+<li>Optional content normalization (<code>sed</code> to force <code>toc: true</code> / comment flags on section globs).</li>
+<li><code>mkdir public</code> and copy root files that must be at the site root (for example <code>ads.txt</code>).</li>
+<li>Run <code>hugo</code>.</li>
+<li>Add <code>.nojekyll</code> so GitHub Pages does not run Jekyll on the uploaded tree.</li>
+<li>Clone the Pages repo, replace its contents with <code>public/</code>, commit, push.</li>
+</ol>
+<p><code>.nojekyll</code> is not cosmetic. GitHub Pages enables Jekyll by default. Without the empty marker file, some paths—especially Markdown-looking files—can 404 or be rewritten. If you also publish agent-facing text siblings, read the companion note on <a href="/hugo/hugo-llms-txt-and-plaintext-output/">llms.txt and <code>index.txt</code> on GitHub Pages</a>.</p>
+<p>Locally, <code>build.sh</code> / <code>build-osx.sh</code> mirror the same Hugo invocation for a laptop build without the push step.</p>
+<h2 id="deploy-credentials">Deploy credentials</h2>
+<p>Do <strong>not</strong> hardcode a GitHub personal access token in <code>.gitlab-ci.yml</code>. Store it as a masked/protected CI/CD variable (for example <code>GITHUB_TOKEN</code> or <code>GITHUB_PAGES_TOKEN</code>) and clone with that variable:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>git clone <span style="color:#e6db74">&#34;https://x-access-token:</span><span style="color:#e6db74">${</span>GITHUB_TOKEN<span style="color:#e6db74">}</span><span style="color:#e6db74">@github.com/ORG/PAGES_REPO.git&#34;</span>
+</span></span></code></pre></div><p>Use a fine-scoped token (or deploy key) with write access only to the Pages repository. Rotate anything that was ever committed in plain text.</p>
+<p>Push commits with a bot identity that matches your project norms:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>git config user.name <span style="color:#e6db74">&#34;ci-bot&#34;</span>
+</span></span><span style="display:flex;"><span>git config user.email <span style="color:#e6db74">&#34;ci-bot@users.noreply.github.com&#34;</span>
+</span></span><span style="display:flex;"><span>git add -A
+</span></span><span style="display:flex;"><span>git commit -m <span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">$(</span>date +%Y-%m-%d<span style="color:#66d9ef">)</span><span style="color:#e6db74">&#34;</span> <span style="color:#f92672">||</span> true
+</span></span><span style="display:flex;"><span>git push
+</span></span></code></pre></div><p>Copy with <code>cp -a public/. pages-repo/</code> so dotfiles such as <code>.nojekyll</code> are included. A bare <code>public/*</code> glob skips them.</p>
+<h2 id="keep-section-scripts-in-sync">Keep section scripts in sync</h2>
+<p>If the job rewrites front matter per section with <code>sed</code>, every new content directory must be listed. When <code>content/hugo/</code> was added, the CI globs still targeted older sections only (<code>ai</code>, <code>kubernetes</code>, …). New Hugo posts will not get those toggles until you extend the script:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sed -i <span style="color:#e6db74">&#39;s|toc: false|toc: true|&#39;</span> content/hugo/*.md
+</span></span></code></pre></div><p>Prefer fixing front matter in the source over CI mutation when you can. If you keep the sed approach, treat “new section” as a CI checklist item.</p>
+<h2 id="verify">Verify</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># After a green pipeline</span>
+</span></span><span style="display:flex;"><span>curl -sI https://devopstales.github.io/ | head
+</span></span><span style="display:flex;"><span>curl -sI https://devopstales.github.io/.nojekyll | head
+</span></span><span style="display:flex;"><span>curl -s https://devopstales.github.io/hugo/ | head
+</span></span></code></pre></div><p>Check the Pages repo history for the CI commit, and confirm submodule themes rendered (menu, Atom link, Roadster chrome).</p>
+<h2 id="summary">Summary</h2>
+<p>Pin a Hugo image, fetch themes recursively, build into <code>public/</code>, stamp <code>.nojekyll</code>, and push to a dedicated GitHub Pages repo with a secret token. The split—GitLab for engineering, Pages for hosting—stays simple as long as credentials stay in CI variables and new content sections stay on the deploy checklist.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="devops" term="devops" label="DevOps" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="gitlab" term="gitlab" label="GitLab" />
+                             
+                                <category scheme="github-pages" term="github-pages" label="GitHub Pages" />
+                             
+                                <category scheme="ci" term="ci" label="CI" />
+                             
+                                <category scheme="devops" term="devops" label="DevOps" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Hugo Search with Algolia and GitLab CI]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-algolia-gitlab-ci/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-image-pipeline-webp-lazy-zoom/?utm_source=atom_feed" rel="related" type="text/html" title="Image Pipeline: WebP, Lazy Load, and Medium Zoom" />
+                <link href="https://devopstales.github.io/hugo/hugo-robots-txt/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo robots.txt Generation" />
+                <link href="https://devopstales.github.io/hugo/hugo-seo/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo SEO on a Multi-Section Blog" />
+                <link href="https://devopstales.github.io/hugo/hugo-coffeebox-buy-me-a-coffee/?utm_source=atom_feed" rel="related" type="text/html" title="Coffeebox and Buy Me a Coffee on Hugo" />
+                <link href="https://devopstales.github.io/hugo/hugo-comments-github-issues/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo Comments Using GitHub Issues" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-algolia-gitlab-ci/</id>
+            
+            
+            <published>2026-07-28T00:00:00+00:00</published>
+            <updated>2026-07-28T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Roadster’s default sidebar search sends queries to Google (or DuckDuckGo) with a site filter. That works until the corpus is large and you want typo tolerance, facets by section/tags, and results that stay on your domain. <a href="https://www.algolia.com/">Algolia</a> hosts the index; Hugo emits a JSON dump at build time; <a href="https://www.npmjs.com/package/atomic-algolia">atomic-algolia</a> pushes only the diff from GitLab CI after <code>hugo</code> succeeds.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>This pairs with the <a href="/hugo/gitlab-ci-to-github-pages-hugo/">GitLab CI to GitHub Pages</a> flow: build once, deploy <code>public/</code>, then update the search index with CI secrets—never with keys in git.</p>
+<h2 id="architecture">Architecture</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  content/*.md
+</span></span><span style="display:flex;"><span>       |
+</span></span><span style="display:flex;"><span>       v
+</span></span><span style="display:flex;"><span>  hugo  --&gt;  public/algolia.json   --&gt;  atomic-algolia  --&gt;  Algolia index
+</span></span><span style="display:flex;"><span>       |                                      ^
+</span></span><span style="display:flex;"><span>       +--&gt;  public/*.html  (Pages deploy)    |
+</span></span><span style="display:flex;"><span>                                              |
+</span></span><span style="display:flex;"><span>                                    ALGOLIA_* CI variables
+</span></span></code></pre></div><p>Browser InstantSearch (or Autocomplete) talks to Algolia with the <strong>search-only</strong> API key. The <strong>admin</strong> key stays in GitLab CI/CD variables and is used only by <code>atomic-algolia</code>.</p>
+<h2 id="1-create-the-algolia-app-and-index">1. Create the Algolia app and index</h2>
+<ol>
+<li>Create an application in the Algolia dashboard.</li>
+<li>Create an empty index (for example <code>devopstales</code>).</li>
+<li>Copy <strong>Application ID</strong>, <strong>Admin API key</strong> (write), and <strong>Search-only API key</strong> (public).</li>
+</ol>
+<p>Never commit the admin key. The search-only key is safe to expose in front-end JS.</p>
+<h2 id="2-emit-algoliajson-from-hugo">2. Emit algolia.json from Hugo</h2>
+<p>Add an output format and attach it to the home page:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">outputFormats</span>.<span style="color:#a6e22e">Algolia</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">baseName</span> = <span style="color:#e6db74">&#34;algolia&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">isPlainText</span> = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">mediaType</span> = <span style="color:#e6db74">&#34;application/json&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">notAlternative</span> = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">outputs</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">home</span> = [<span style="color:#e6db74">&#34;HTML&#34;</span>, <span style="color:#e6db74">&#34;RSS&#34;</span>, <span style="color:#e6db74">&#34;ATOM&#34;</span>, <span style="color:#e6db74">&#34;llms&#34;</span>, <span style="color:#e6db74">&#34;WebManifest&#34;</span>, <span style="color:#e6db74">&#34;Algolia&#34;</span>]
+</span></span></code></pre></div><p>Create <code>layouts/index.algolia.json</code> (name follows the format). Index only real sections—skip <code>filedir</code> partials the same way Atom does:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go-html-template" data-lang="go-html-template"><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$pages</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">where</span> <span style="color:#a6e22e">.Site.RegularPages</span> <span style="color:#e6db74">&#34;Type&#34;</span> <span style="color:#e6db74">&#34;in&#34;</span> <span style="color:#a6e22e">.Site.Params.mainSections</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$pages</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">where</span> <span style="color:#a6e22e">$pages</span> <span style="color:#e6db74">&#34;.Params.disable_feed&#34;</span> <span style="color:#e6db74">&#34;!=&#34;</span> <span style="color:#66d9ef">true</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$index</span> <span style="color:#f92672">:=</span> <span style="color:#66d9ef">slice</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">range</span> <span style="color:#a6e22e">$pages</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$index</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">$index</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">append</span> <span style="color:#f92672">(</span><span style="color:#a6e22e">dict</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;objectID&#34;</span> <span style="color:#a6e22e">.File.UniqueID</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;title&#34;</span> <span style="color:#a6e22e">.Title</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;summary&#34;</span> <span style="color:#f92672">(</span><span style="color:#a6e22e">.Summary</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">plainify</span><span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;content&#34;</span> <span style="color:#f92672">(</span><span style="color:#a6e22e">.Plain</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">truncate</span> <span style="color:#a6e22e">5000</span><span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;permalink&#34;</span> <span style="color:#a6e22e">.Permalink</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;section&#34;</span> <span style="color:#a6e22e">.Section</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;date&#34;</span> <span style="color:#f92672">(</span><span style="color:#a6e22e">.Date.Format</span> <span style="color:#e6db74">&#34;2006-01-02&#34;</span><span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;tags&#34;</span> <span style="color:#f92672">(</span><span style="color:#a6e22e">.Params.tags</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">default</span> <span style="color:#66d9ef">slice</span><span style="color:#f92672">)</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">)</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">end</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$index</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">jsonify</span> <span style="color:#75715e">-}}</span>
+</span></span></code></pre></div><p><code>objectID</code> is required for atomic updates. Prefer a stable id (file unique id or permalink) so renames/updates merge correctly.</p>
+<p>Build and inspect:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>hugo
+</span></span><span style="display:flex;"><span>head -c <span style="color:#ae81ff">400</span> public/algolia.json; echo
+</span></span></code></pre></div><h2 id="3-atomic-algolia-locally">3. atomic-algolia locally</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npm init -y
+</span></span><span style="display:flex;"><span>npm install atomic-algolia --save-dev
+</span></span></code></pre></div><p><code>package.json</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;scripts&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;algolia&#34;</span>: <span style="color:#e6db74">&#34;atomic-algolia&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Local env (do not commit):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export ALGOLIA_APP_ID<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;YOUR_APP_ID&#34;</span>
+</span></span><span style="display:flex;"><span>export ALGOLIA_ADMIN_KEY<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;YOUR_ADMIN_KEY&#34;</span>
+</span></span><span style="display:flex;"><span>export ALGOLIA_INDEX_NAME<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devopstales&#34;</span>
+</span></span><span style="display:flex;"><span>export ALGOLIA_INDEX_FILE<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;public/algolia.json&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>npm run algolia
+</span></span></code></pre></div><p>You should see add/update/remove counts in the CLI, then records in the Algolia dashboard. Details on the incremental upload model are in the <a href="https://www.npmjs.com/package/atomic-algolia">atomic-algolia</a> package docs and in writeups such as <a href="https://tisgoud.nl/2020/03/algolia-and-gitlab-ci/cd/">tisgoud’s GitLab CI example</a>.</p>
+<h2 id="4-wire-gitlab-ci">4. Wire GitLab CI</h2>
+<p>Extend the existing Hugo job (same image family that already builds the site). After <code>hugo</code> and before or after the Pages push:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">hugo-build</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">image</span>: <span style="color:#ae81ff">hugomods/hugo:git-0.148.0</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">variables</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">GIT_SUBMODULE_STRATEGY</span>: <span style="color:#ae81ff">recursive</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">before_script</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">apk add --no-cache npm</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">npm ci || npm install</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">script</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">hugo</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">touch public/.nojekyll</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># deploy public/ to GitHub Pages (existing steps)...</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">npm run algolia</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">only</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#ae81ff">master</span>
+</span></span></code></pre></div><p>Set masked/protected CI/CD variables in GitLab:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Variable</th>
+					<th>Purpose</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>ALGOLIA_APP_ID</code></td>
+					<td>Application id</td>
+			</tr>
+			<tr>
+					<td><code>ALGOLIA_ADMIN_KEY</code></td>
+					<td>Admin (write) key</td>
+			</tr>
+			<tr>
+					<td><code>ALGOLIA_INDEX_NAME</code></td>
+					<td>Index name</td>
+			</tr>
+			<tr>
+					<td><code>ALGOLIA_INDEX_FILE</code></td>
+					<td><code>public/algolia.json</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>Run <code>npm run algolia</code> only on the branch that publishes production, so preview pipelines do not overwrite the live index. If you use merge-request builds, gate the step:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span>- <span style="color:#ae81ff">if [ &#34;$CI_COMMIT_BRANCH&#34; = &#34;master&#34; ]; then npm run algolia; fi</span>
+</span></span></code></pre></div><p>Commit <code>package.json</code> and <code>package-lock.json</code> so <code>npm ci</code> is reproducible. Prefer that over <code>npm init</code> inside the job on every run.</p>
+<h2 id="5-front-end-instantsearch-replace-the-sidebar-form">5. Front-end InstantSearch (replace the sidebar form)</h2>
+<p>Keep search-only credentials in site params (public):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">Params</span>.<span style="color:#a6e22e">algolia</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">appId</span> = <span style="color:#e6db74">&#34;YOUR_APP_ID&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">indexName</span> = <span style="color:#e6db74">&#34;devopstales&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">searchKey</span> = <span style="color:#e6db74">&#34;YOUR_SEARCH_ONLY_KEY&#34;</span>
+</span></span></code></pre></div><p>Add a small partial (for example <code>layouts/partials/widgets/algolia-search.html</code>) that loads InstantSearch from a CDN and mounts on a container, then swap <code>&quot;search&quot;</code> in <code>Params.sidebar.widgets</code> for your Algolia widget—or override <code>layouts/partials/widgets/search.html</code>.</p>
+<p>Minimal sketch:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-html" data-lang="html"><span style="display:flex;"><span>&lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;algolia-search&#34;</span>&gt;&lt;/<span style="color:#f92672">div</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">script</span>&gt;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">appId</span>, <span style="color:#a6e22e">indexName</span>, <span style="color:#a6e22e">searchKey</span> } <span style="color:#f92672">=</span> {{ .<span style="color:#a6e22e">Site</span>.<span style="color:#a6e22e">Params</span>.<span style="color:#a6e22e">algolia</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">jsonify</span> }};
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">search</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">instantsearch</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">indexName</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">searchClient</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">algoliasearch</span>(<span style="color:#a6e22e">appId</span>, <span style="color:#a6e22e">searchKey</span>),
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">search</span>.<span style="color:#a6e22e">addWidgets</span>([
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">instantsearch</span>.<span style="color:#a6e22e">widgets</span>.<span style="color:#a6e22e">searchBox</span>({ <span style="color:#a6e22e">container</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;#algolia-search&#39;</span> }),
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">instantsearch</span>.<span style="color:#a6e22e">widgets</span>.<span style="color:#a6e22e">hits</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">container</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;#algolia-hits&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">templates</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">item</span><span style="color:#f92672">:</span> (<span style="color:#a6e22e">hit</span>) =&gt; <span style="color:#e6db74">`&lt;a href=&#34;</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hit</span>.<span style="color:#a6e22e">permalink</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;&gt;&lt;strong&gt;</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hit</span>.<span style="color:#a6e22e">title</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&lt;/strong&gt;&lt;br&gt;</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hit</span>.<span style="color:#a6e22e">summary</span> <span style="color:#f92672">||</span> <span style="color:#e6db74">&#39;&#39;</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&lt;/a&gt;`</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>  }),
+</span></span><span style="display:flex;"><span>]);
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">search</span>.<span style="color:#a6e22e">start</span>();
+</span></span><span style="display:flex;"><span>&lt;/<span style="color:#f92672">script</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;algolia-hits&#34;</span>&gt;&lt;/<span style="color:#f92672">div</span>&gt;
+</span></span></code></pre></div><p>Tune CSS to match Roadster’s sidebar. Facet on <code>section</code> or <code>tags</code> when you want filters for kubernetes vs AI vs Hugo.</p>
+<p>Official UI building blocks are documented under <a href="https://www.algolia.com/doc/guides/building-search-ui/what-is-instantsearch/js/">Algolia InstantSearch</a>.</p>
+<h2 id="6-operational-tips">6. Operational tips</h2>
+<ul>
+<li><strong>Quota:</strong> atomic updates send diffs; full reindex only when you change the record shape.</li>
+<li><strong>Content size:</strong> truncate <code>.Plain</code> so records stay under Algolia record limits.</li>
+<li><strong>Drafts:</strong> production <code>hugo</code> already omits drafts; keep it that way in CI.</li>
+<li><strong>Sections:</strong> filter with <code>mainSections</code> so <code>filedir</code> HTML includes never become hits.</li>
+<li><strong>Secrets:</strong> rotate the admin key if it ever appeared in a job log or commit.</li>
+<li><strong>Fallback:</strong> leave the old Google site-search widget behind a feature flag until InstantSearch is verified.</li>
+</ul>
+<h2 id="verify">Verify</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>hugo
+</span></span><span style="display:flex;"><span>npm run algolia
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>curl -s <span style="color:#e6db74">&#34;https://latency-dsn.algolia.net/1/indexes/devopstales?query=kubernetes&amp;x-algolia-application-id=</span>$ALGOLIA_APP_ID<span style="color:#e6db74">&amp;x-algolia-api-key=</span>$ALGOLIA_SEARCH_KEY<span style="color:#e6db74">&#34;</span> | head
+</span></span></code></pre></div><p>On the live site: open the sidebar, type a known title fragment, confirm permalinks resolve under <code>https://devopstales.github.io/</code>.</p>
+<h2 id="summary">Summary</h2>
+<p>Generate <code>public/algolia.json</code> with a Hugo home output format, push diffs with <code>atomic-algolia</code> from GitLab CI using masked admin credentials, and query with InstantSearch using the search-only key in the theme. You keep the existing GitLab → Pages deploy path and add hosted search without turning Hugo into an application server.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="devops" term="devops" label="DevOps" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="algolia" term="algolia" label="Algolia" />
+                             
+                                <category scheme="gitlab" term="gitlab" label="GitLab" />
+                             
+                                <category scheme="ci" term="ci" label="CI" />
+                             
+                                <category scheme="search" term="search" label="search" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Image Pipeline: WebP, Lazy Load, and Medium Zoom]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-image-pipeline-webp-lazy-zoom/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-robots-txt/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo robots.txt Generation" />
+                <link href="https://devopstales.github.io/hugo/hugo-seo/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo SEO on a Multi-Section Blog" />
+                <link href="https://devopstales.github.io/hugo/hugo-coffeebox-buy-me-a-coffee/?utm_source=atom_feed" rel="related" type="text/html" title="Coffeebox and Buy Me a Coffee on Hugo" />
+                <link href="https://devopstales.github.io/hugo/hugo-comments-github-issues/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo Comments Using GitHub Issues" />
+                <link href="https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo RSS and Atom Feeds" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-image-pipeline-webp-lazy-zoom/</id>
+            
+            
+            <published>2026-07-22T00:00:00+00:00</published>
+            <updated>2026-07-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Images are usually the heaviest part of a technical post. The pipeline on this site is deliberately small: convert assets to WebP, reference them from Markdown, let a Goldmark render hook add lazy-loading attributes, and initialize Medium Zoom for click-to-enlarge.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="authoring-webp-under-staticimg">Authoring: WebP under static/img</h2>
+<ol>
+<li>Prefer official product art or free stock (Unsplash, Pixabay) when you need illustrations.</li>
+<li>Convert to WebP with <code>cwebp</code>:</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cwebp input.png -o static/img/example.webp
+</span></span><span style="display:flex;"><span>cwebp input.jpg -o static/img/example.webp
+</span></span><span style="display:flex;"><span>rm -f input.png input.jpg
+</span></span></code></pre></div><ol start="3">
+<li>Reference from content with a root-absolute static path:</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>![<span style="color:#f92672">Alt text</span>](<span style="color:#a6e22e">/img/example.webp</span>)
+</span></span></code></pre></div><p>Front matter thumbnails use the same files without the leading slash style Hugo expects in params:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">thumbnail</span>: <span style="color:#e6db74">&#34;img/example.webp&#34;</span>
+</span></span></code></pre></div><p>Keep names lowercase and hyphenated. Delete non-WebP originals after conversion so the repo does not accumulate duplicate weight.</p>
+<h2 id="render-hook-lazy-and-zoomable">Render hook: lazy and zoomable</h2>
+<p><code>layouts/_default/_markup/render-image.html</code> replaces the default Markdown image renderer:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go-html-template" data-lang="go-html-template"><span style="display:flex;"><span>&lt;<span style="color:#f92672">img</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#75715e">{{</span> <span style="color:#a6e22e">.Destination</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">safeURL</span> <span style="color:#75715e">}}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>     <span style="color:#a6e22e">alt</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#75715e">{{</span> <span style="color:#a6e22e">.Text</span> <span style="color:#75715e">}}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>     <span style="color:#75715e">{{</span> <span style="color:#66d9ef">with</span> <span style="color:#a6e22e">.Title</span><span style="color:#75715e">}}</span> <span style="color:#a6e22e">title</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#75715e">{{</span> <span style="color:#a6e22e">.</span> <span style="color:#75715e">}}</span><span style="color:#e6db74">&#34;</span><span style="color:#75715e">{{</span> <span style="color:#66d9ef">end</span> <span style="color:#75715e">}}</span>
+</span></span><span style="display:flex;"><span>     <span style="color:#a6e22e">loading</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;lazy&#34;</span>
+</span></span><span style="display:flex;"><span>     <span style="color:#a6e22e">decoding</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;async&#34;</span>
+</span></span><span style="display:flex;"><span>     <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;zoomable&#34;</span> /&gt;
+</span></span></code></pre></div><p>Every content image then gets:</p>
+<ul>
+<li><code>loading=&quot;lazy&quot;</code> — defer offscreen downloads</li>
+<li><code>decoding=&quot;async&quot;</code> — decode without blocking the main thread as aggressively</li>
+<li><code>class=&quot;zoomable&quot;</code> — hook for the zoom library</li>
+</ul>
+<p>Hugo figure shortcodes are separate; if you use <code><figure><img src="">
+</figure>
+</code>, give those templates the same attributes if you want identical behavior.</p>
+<h2 id="medium-zoom">Medium Zoom</h2>
+<p><code>layouts/partials/zoomable.html</code> loads a vendored script from <code>static/js/medium-zoom.js</code> and selects zoom targets:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-html" data-lang="html"><span style="display:flex;"><span>&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/js/medium-zoom.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">script</span>&gt;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">zoomables</span> <span style="color:#f92672">=</span> document.<span style="color:#a6e22e">querySelectorAll</span>(<span style="color:#e6db74">&#39;.zoomable &gt; img, img.zoomable&#39;</span>);
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">zoomables</span>.<span style="color:#a6e22e">length</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">mediumZoom</span>(<span style="color:#a6e22e">zoomables</span>, {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">margin</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">scrollOffset</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">40</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">container</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">null</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">template</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">null</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">background</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;rgba(0, 0, 0, 0.8)&#39;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>);
+</span></span><span style="display:flex;"><span>&lt;/<span style="color:#f92672">script</span>&gt;
+</span></span></code></pre></div><p>Include the partial once from <code>baseof</code> (end of body). The selector covers both <code>img.zoomable</code> from the render hook and images nested under a <code>.zoomable</code> wrapper if you add one later.</p>
+<h2 id="thumbnails-vs-in-body-images">Thumbnails vs in-body images</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Use</th>
+					<th>Mechanism</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>List / OG / Twitter / JSON-LD image</td>
+					<td><code>thumbnail</code> in front matter</td>
+			</tr>
+			<tr>
+					<td>Explaining a concept in the article</td>
+					<td>Markdown <code>![...](/img/....webp)</code> after <code>&lt;!--more--&gt;</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>Social cards read the thumbnail through <code>baseof</code> and <code>seo_schema</code>. In-body images are for readers on the page and for the zoom UI. Using the same WebP for both is fine when it fits.</p>
+<h2 id="verify">Verify</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Asset exists</span>
+</span></span><span style="display:flex;"><span>ls static/img/example.webp
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Rendered HTML has lazy + zoomable</span>
+</span></span><span style="display:flex;"><span>hugo
+</span></span><span style="display:flex;"><span>grep -n <span style="color:#e6db74">&#39;loading=&#34;lazy&#34;&#39;</span> public/hugo/hugo-image-pipeline-webp-lazy-zoom/index.html | head
+</span></span><span style="display:flex;"><span>grep -n <span style="color:#e6db74">&#39;medium-zoom&#39;</span> public/hugo/hugo-image-pipeline-webp-lazy-zoom/index.html | head
+</span></span></code></pre></div><p>In the browser: scroll a long post and confirm below-the-fold images load late; click an image and confirm the zoom overlay opens.</p>
+<h2 id="summary">Summary</h2>
+<p>Convert to WebP, store under <code>static/img/</code>, reference with Markdown, teach Goldmark to emit lazy zoomable <code>&lt;img&gt;</code> tags, and init Medium Zoom once in the site shell. That is the whole image pipeline—no media CDN required for a personal DevOps blog.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="webp" term="webp" label="WebP" />
+                             
+                                <category scheme="images" term="images" label="images" />
+                             
+                                <category scheme="performance" term="performance" label="performance" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Hugo robots.txt Generation]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-robots-txt/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-seo/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo SEO on a Multi-Section Blog" />
+                <link href="https://devopstales.github.io/hugo/hugo-coffeebox-buy-me-a-coffee/?utm_source=atom_feed" rel="related" type="text/html" title="Coffeebox and Buy Me a Coffee on Hugo" />
+                <link href="https://devopstales.github.io/hugo/hugo-comments-github-issues/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo Comments Using GitHub Issues" />
+                <link href="https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo RSS and Atom Feeds" />
+                <link href="https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-robots-txt/</id>
+            
+            
+            <published>2026-07-16T00:00:00+00:00</published>
+            <updated>2026-07-16T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Crawlers still look for <code>/robots.txt</code> before they dig through your tree. Hugo can generate that file at build time from a template, so the Sitemap URL always matches your <code>baseURL</code> and you can add allow/disallow rules without maintaining a hand-copied static file.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>For broader sharing metadata (Open Graph, JSON-LD), see <a href="/hugo/hugo-seo/">Hugo SEO on a Multi-Section Blog</a>. This post focuses on <code>robots.txt</code> itself.</p>
+<h2 id="enable-generation">Enable generation</h2>
+<p>In <code>config.toml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span><span style="color:#a6e22e">enableRobotsTXT</span> = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">baseurl</span> = <span style="color:#e6db74">&#34;https://devopstales.github.io/&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">sitemap</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">changefreq</span> = <span style="color:#e6db74">&#34;daily&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">filename</span> = <span style="color:#e6db74">&#34;sitemap.xml&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">priority</span> = <span style="color:#ae81ff">0.5</span>
+</span></span></code></pre></div><p>With <code>enableRobotsTXT = true</code>, Hugo looks for a <code>robots.txt</code> template and writes <code>public/robots.txt</code> on every build. Without a custom template, you get Hugo’s default (allow all). With a site template, you control every line.</p>
+<h2 id="site-template-layoutsrobotstxt">Site template: layouts/robots.txt</h2>
+<p>DevOpsTales uses a minimal custom file at <code>layouts/robots.txt</code> (site root of layouts, not <code>_default</code>):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>User-agent: *
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Sitemap: {{ .Site.BaseURL }}sitemap.xml
+</span></span></code></pre></div><p>That produces something like:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>User-agent: *
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Sitemap: https://devopstales.github.io/sitemap.xml
+</span></span></code></pre></div><p>Notes:</p>
+<ul>
+<li><code>User-agent: *</code> applies the following rules to all bots (here: no Disallow lines, so everything is allowed by default).</li>
+<li><code>Sitemap:</code> should be an absolute URL. Using <code>{{ .Site.BaseURL }}sitemap.xml</code> keeps staging vs production correct as long as <code>baseurl</code> is set for the build.</li>
+<li>Trailing slash on <code>baseURL</code> matters: with <code>https://example.com/</code> you get <code>.../sitemap.xml</code>; with no slash you can accidentally emit <code>https://example.comsitemap.xml</code>. Prefer a trailing slash in config.</li>
+</ul>
+<h2 id="optional-disallow-rules">Optional disallow rules</h2>
+<p>When you need to hide paths from crawlers (admin stubs, thank-you pages, or a draft-like section you still build), extend the template:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>User-agent: *
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Disallow: /filedir/
+</span></span><span style="display:flex;"><span>Disallow: /tags/
+</span></span><span style="display:flex;"><span>Disallow: /categories/
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Allow: /
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Sitemap: {{ .Site.BaseURL }}sitemap.xml
+</span></span></code></pre></div><p>Be careful: Disallow is a hint, not access control. Anything in <code>public/</code> is still downloadable by URL. For secrets, do not publish the files.</p>
+<p>You can also target a single bot:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>User-agent: GPTBot
+</span></span><span style="display:flex;"><span>Disallow: /
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>User-agent: *
+</span></span><span style="display:flex;"><span>Sitemap: {{ .Site.BaseURL }}sitemap.xml
+</span></span></code></pre></div><p>Whether you block AI crawlers is an editorial choice; the mechanism is the same template.</p>
+<h2 id="robotstxt-vs-sitemapxml">robots.txt vs sitemap.xml</h2>
+<table>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>Role</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>robots.txt</code></td>
+					<td>Policy + pointer to sitemap</td>
+			</tr>
+			<tr>
+					<td><code>sitemap.xml</code></td>
+					<td>List of URLs you want discovered</td>
+			</tr>
+	</tbody>
+</table>
+<p>Hugo’s <code>[sitemap]</code> block and <code>layouts/_default/sitemap.xml</code> build the URL list. <code>robots.txt</code> only advertises where that list lives. Broken <code>Sitemap:</code> lines waste crawl budget; verify both after deploy.</p>
+<h2 id="static-file-alternative">Static file alternative</h2>
+<p>You can put a literal <code>static/robots.txt</code> instead. Hugo copies <code>static/</code> into <code>public/</code> as-is. That works until <code>baseURL</code> changes or you need templating. Prefer <code>layouts/robots.txt</code> when the Sitemap host should follow config.</p>
+<p>If both exist, know your Hugo version’s precedence: keep one source of truth so you do not debug the wrong file.</p>
+<h2 id="verify">Verify</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>hugo
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>cat public/robots.txt
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>curl -s https://devopstales.github.io/robots.txt
+</span></span><span style="display:flex;"><span>curl -sI https://devopstales.github.io/sitemap.xml | head
+</span></span></code></pre></div><p>Confirm the Sitemap URL resolves and matches the host you intend (Pages custom domain vs <code>*.github.io</code>).</p>
+<h2 id="summary">Summary</h2>
+<p>Turn on <code>enableRobotsTXT</code>, add <code>layouts/robots.txt</code>, and point <code>Sitemap:</code> at <code>{{ .Site.BaseURL }}sitemap.xml</code>. Add <code>Disallow</code> only when you have a concrete reason. The file stays tiny, correct across environments, and rebuilds with every Hugo run.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="seo" term="seo" label="SEO" />
+                             
+                                <category scheme="robots.txt" term="robots.txt" label="robots.txt" />
+                             
+                                <category scheme="sitemap" term="sitemap" label="sitemap" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Hugo SEO on a Multi-Section Blog]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-seo/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-coffeebox-buy-me-a-coffee/?utm_source=atom_feed" rel="related" type="text/html" title="Coffeebox and Buy Me a Coffee on Hugo" />
+                <link href="https://devopstales.github.io/hugo/hugo-comments-github-issues/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo Comments Using GitHub Issues" />
+                <link href="https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo RSS and Atom Feeds" />
+                <link href="https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-seo/</id>
+            
+            
+            <published>2026-07-10T00:00:00+00:00</published>
+            <updated>2026-07-10T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Search and social previews on a Hugo blog are mostly template work: consistent titles, a real summary, a thumbnail, Open Graph / Twitter tags, structured data, and a sitemap. DevOpsTales does that in <code>layouts/_default/baseof.html</code> plus a JSON-LD partial—no SEO plugin required.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="front-matter-and-summaries">Front matter and summaries</h2>
+<p>This site does <strong>not</strong> use a <code>description</code> field in post front matter. Listing pages, RSS, and social cards pull the teaser from the body: write one or two short paragraphs, then <code>&lt;!--more--&gt;</code>. Hugo’s <code>.Summary</code> becomes the plain-text blurb.</p>
+<p>Always set:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">title</span>: <span style="color:#e6db74">&#34;Clear, specific title&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">thumbnail</span>: <span style="color:#e6db74">&#34;img/your-image.webp&#34;</span>
+</span></span></code></pre></div><p><code>thumbnail</code> should live under <code>static/</code> (referenced without the <code>static/</code> prefix). Prefer WebP. If a post omits it, <code>baseof</code> falls back to a site default image.</p>
+<p>Optional <code>keywords</code> feed JSON-LD; they are not a substitute for a good summary.</p>
+<h2 id="open-graph-and-twitter-cards">Open Graph and Twitter cards</h2>
+<p><code>config.toml</code> enables the usual flags:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">Params</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">opengraph</span> = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">twitter_cards</span> = <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><p>The site shell also sets explicit tags in <code>layouts/_default/baseof.html</code>: <code>og:title</code>, <code>og:description</code>, <code>og:url</code>, <code>og:image</code>, <code>twitter:card</code> (<code>summary_large_image</code>), and related fields. Description prefers <code>.Description</code> when present, otherwise <code>.Summary | plainify</code>. Image URLs are absolutized from the thumbnail.</p>
+<p>That gives Slack, Mastodon, X, and similar scrapers a stable preview without relying only on Hugo’s internal templates.</p>
+<h2 id="json-ld">JSON-LD</h2>
+<p><code>layouts/partials/seo_schema.html</code> emits <code>application/ld+json</code>:</p>
+<ul>
+<li>Home: <code>WebSite</code> with name, URL, site description</li>
+<li>Posts: <code>BlogPosting</code> with headline, dates, author, section, word count, reading time, keywords, and image</li>
+</ul>
+<p>Include it once from <code>baseof</code> in <code>&lt;head&gt;</code>. Keep author name and logo paths aligned with <code>[Params.author]</code> / site params so the graph stays consistent.</p>
+<h2 id="sitemap-robots-and-canonical-urls">Sitemap, robots, and canonical URLs</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span><span style="color:#a6e22e">enableRobotsTXT</span> = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">canonifyURLs</span> = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">sitemap</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">changefreq</span> = <span style="color:#e6db74">&#34;daily&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">filename</span> = <span style="color:#e6db74">&#34;sitemap.xml&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">priority</span> = <span style="color:#ae81ff">0.5</span>
+</span></span></code></pre></div><p><code>canonifyURLs</code> rewrites links against <code>baseurl</code> (<code>https://devopstales.github.io/</code>), which avoids mixed relative/absolute surprises in feeds and meta tags. Custom <code>layouts/sitemap.xml</code> and <code>layouts/robots.txt</code> let you tune crawler hints if the defaults are not enough.</p>
+<h2 id="webmanifest">WebManifest</h2>
+<p>Home outputs include <code>WebManifest</code>, with a small <code>layouts/index.webmanifest</code> template. It is a light installability / branding signal, not a full PWA, but it belongs in the same “how does the browser see this site” bucket as SEO metadata.</p>
+<h2 id="checklist-for-a-new-post">Checklist for a new post</h2>
+<ol>
+<li>Specific <code>title</code></li>
+<li><code>thumbnail</code> pointing at an existing WebP under <code>static/img/</code></li>
+<li>Teaser paragraphs + <code>&lt;!--more--&gt;</code> (no <code>description:</code> key)</li>
+<li>Sensible <code>tags</code> / <code>categories</code> / optional <code>keywords</code></li>
+<li>After deploy, share the URL in a private Slack/Discord channel or use a debugger to confirm OG tags</li>
+<li>Spot-check <code>/sitemap.xml</code> contains the new permalink</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -s https://devopstales.github.io/hugo/hugo-seo/ | grep -E <span style="color:#e6db74">&#39;og:title|og:image|twitter:card&#39;</span>
+</span></span><span style="display:flex;"><span>curl -s https://devopstales.github.io/sitemap.xml | grep hugo-seo
+</span></span></code></pre></div><h2 id="summary">Summary</h2>
+<p>SEO here is disciplined content fields plus head templates: summary from <code>&lt;!--more--&gt;</code>, thumbnails for images, OG/Twitter tags in <code>baseof</code>, BlogPosting JSON-LD, sitemap/robots, and optional WebManifest. Get those right and most “SEO plugins” become unnecessary for a technical blog.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="seo" term="seo" label="SEO" />
+                             
+                                <category scheme="opengraph" term="opengraph" label="OpenGraph" />
+                             
+                                <category scheme="sitemap" term="sitemap" label="sitemap" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Coffeebox and Buy Me a Coffee on Hugo]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-coffeebox-buy-me-a-coffee/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-comments-github-issues/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo Comments Using GitHub Issues" />
+                <link href="https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo RSS and Atom Feeds" />
+                <link href="https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-coffeebox-buy-me-a-coffee/</id>
+            
+            
+            <published>2026-06-27T00:00:00+00:00</published>
+            <updated>2026-06-27T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Technical blogs rarely need a paywall. A clear, optional support CTA is enough. DevOpsTales uses a per-post <strong>coffeebox</strong> partial plus a floating <a href="https://www.buymeacoffee.com/">Buy Me a Coffee</a> widget in the footer so readers can tip without leaving the page chrome.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>This post covers support widgets only. For GitHub Issues–backed comments (Utterances), see <a href="/hugo/hugo-comments-github-issues/">Hugo Comments Using GitHub Issues</a>.</p>
+<h2 id="per-post-coffeebox">Per-post coffeebox</h2>
+<p>Front matter gate:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">coffeebox</span>: <span style="color:#66d9ef">yes</span>
+</span></span></code></pre></div><p><code>layouts/partials/coffeebox.html</code> renders only when that param is set:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go-html-template" data-lang="go-html-template"><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">.Param</span> <span style="color:#e6db74">&#34;coffeebox&#34;</span> <span style="color:#75715e">}}</span>
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">coffee_box</span>&gt;
+</span></span><span style="display:flex;"><span>  &lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">coffee_box_wrapper</span>&gt;
+</span></span><span style="display:flex;"><span>    &lt;<span style="color:#f92672">h3</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">coffee_box_heading</span>&gt;
+</span></span><span style="display:flex;"><span>      Your support is our everlasting motivation,&lt;<span style="color:#f92672">br</span>&gt;
+</span></span><span style="display:flex;"><span>      that cup of coffee is what keeps us going!
+</span></span><span style="display:flex;"><span>    &lt;/<span style="color:#f92672">h3</span>&gt;
+</span></span><span style="display:flex;"><span>    ...
+</span></span><span style="display:flex;"><span>    &lt;<span style="color:#f92672">a</span> <span style="color:#a6e22e">href</span><span style="color:#f92672">=</span><span style="color:#e6db74">https://www.buymeacoffee.com/devopstales</span> <span style="color:#a6e22e">target</span><span style="color:#f92672">=</span><span style="color:#e6db74">_blank</span>&gt;
+</span></span><span style="display:flex;"><span>      &lt;<span style="color:#f92672">img</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/img/design/coffee-logo.webp&#34;</span> <span style="color:#a6e22e">alt</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Coffee Box&#34;</span> &gt;
+</span></span><span style="display:flex;"><span>    &lt;/<span style="color:#f92672">a</span>&gt;
+</span></span><span style="display:flex;"><span>  &lt;/<span style="color:#f92672">div</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;/<span style="color:#f92672">div</span>&gt;
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">end</span> <span style="color:#75715e">}}</span>
+</span></span></code></pre></div><p>The partial is included from <code>layouts/_default/single.html</code> near the end of the article (after the body, alongside author box and comments). Styling lives in <code>static/css/coffeebox.css</code>, loaded via site <code>customCSS</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">Params</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">customCSS</span> = [<span style="color:#e6db74">&#34;css/coffeebox.css&#34;</span>, <span style="color:#e6db74">&#34;css/cookie.css&#34;</span>, <span style="color:#e6db74">&#34;css/breadcrumbs.css&#34;</span>]
+</span></span></code></pre></div><p>Use a WebP logo under <code>static/img/design/</code> (or your own path) and keep the BMC profile URL in one place inside the partial.</p>
+<h2 id="footer-buy-me-a-coffee-widget">Footer Buy Me a Coffee widget</h2>
+<p>Site-wide floating button comes from the footer partial, not from post front matter:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-html" data-lang="html"><span style="display:flex;"><span>&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">data-name</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;BMC-Widget&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">data-id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devopstales&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">data-description</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Support me on Buy me a coffee!&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">data-message</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Thank you for visiting. You can now buy me a coffee!&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">data-color</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;#FF813F&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">data-position</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;right&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">data-x_margin</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;18&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">data-y_margin</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;48&#34;</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;/<span style="color:#f92672">script</span>&gt;
+</span></span></code></pre></div><p>That script loads on every page that uses the footer. The in-article coffeebox is the louder, post-specific ask; the widget is the persistent shortcut.</p>
+<h2 id="when-to-enable-coffeebox">When to enable coffeebox</h2>
+<ul>
+<li>Long guides where readers got real value</li>
+<li>Posts you are happy to “sign” with a support CTA</li>
+<li>Skip it on thin notes, legal pages, or anything where a tip jar feels off</li>
+</ul>
+<p>Because the gate is front matter, you can leave <code>coffeebox</code> off by default on a section and turn it on only where it fits—or the reverse.</p>
+<h2 id="verify">Verify</h2>
+<ol>
+<li>Open a post with <code>coffeebox: yes</code> and confirm the box and coffee logo render.</li>
+<li>Confirm the footer widget appears and links to your BMC profile.</li>
+<li>Open a post without the param (or with it unset) and confirm the in-article box is absent.</li>
+<li>Check the network tab that <code>coffeebox.css</code> loads (or is bundled via your CSS pipeline).</li>
+</ol>
+<h2 id="summary">Summary</h2>
+<p>Gate an in-article support partial with <code>coffeebox</code>, style it with a small CSS file, point the CTA at Buy Me a Coffee, and optionally keep the official BMC footer widget for site-wide tips. No plugin, no membership stack—just Hugo partials and front matter.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="buy-me-a-coffee" term="buy-me-a-coffee" label="Buy Me a Coffee" />
+                             
+                                <category scheme="monetization" term="monetization" label="monetization" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Hugo Comments Using GitHub Issues]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-comments-github-issues/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo RSS and Atom Feeds" />
+                <link href="https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-comments-github-issues/</id>
+            
+            
+            <published>2026-06-15T00:00:00+00:00</published>
+            <updated>2026-06-15T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Disqus-style comment SaaS is heavy for a static blog. <a href="https://utteranc.es/">Utterances</a> stores each discussion as a GitHub Issue, loads a small client script, and authenticates with GitHub. DevOpsTales wires it through a partial and a per-post <code>disable_comments</code> flag.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ol>
+<li>A public GitHub repository to hold issues (this site uses the Pages repo <code>devopstales/devopstales.github.io</code>).</li>
+<li>Install the <a href="https://github.com/apps/utterances">Utterances GitHub App</a> on that repository.</li>
+<li>Decide how issues are matched to pages. This site uses <code>issue-term=&quot;url&quot;</code> so each permalink maps to one issue.</li>
+</ol>
+<p>Issues are public. Do not enable comments on posts where that would be inappropriate.</p>
+<h2 id="the-utterances-partial">The Utterances partial</h2>
+<p><code>layouts/partials/utteranc.html</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-html" data-lang="html"><span style="display:flex;"><span>&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://utteranc.es/client.js&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">repo</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devopstales/devopstales.github.io&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">issue-term</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;url&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">label</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;utteranc&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">theme</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;github-light&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">crossorigin</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;anonymous&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">async</span>&gt;
+</span></span><span style="display:flex;"><span>&lt;/<span style="color:#f92672">script</span>&gt;
+</span></span></code></pre></div><p>Useful knobs:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Attribute</th>
+					<th>Role</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>repo</code></td>
+					<td><code>owner/name</code> where issues are created</td>
+			</tr>
+			<tr>
+					<td><code>issue-term</code></td>
+					<td><code>url</code>, <code>pathname</code>, <code>title</code>, or a specific issue number strategy</td>
+			</tr>
+			<tr>
+					<td><code>label</code></td>
+					<td>Applied to new issues (create the label in the repo first)</td>
+			</tr>
+			<tr>
+					<td><code>theme</code></td>
+					<td><code>github-light</code>, <code>github-dark</code>, <code>preferred-color-scheme</code>, …</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="gate-comments-in-layouts">Gate comments in layouts</h2>
+<p><code>layouts/partials/comments.html</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go-html-template" data-lang="go-html-template"><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">.IsPage</span> <span style="color:#75715e">}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$disableComments</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">.Params.disable_comments</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">default</span> <span style="color:#66d9ef">false</span> <span style="color:#75715e">}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">not</span> <span style="color:#a6e22e">$disableComments</span> <span style="color:#75715e">}}</span>
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">div</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;comments&#34;</span>&gt;
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">{{-</span> <span style="color:#a6e22e">partial</span> <span style="color:#e6db74">&#34;utteranc.html&#34;</span> <span style="color:#a6e22e">.</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span>&lt;/<span style="color:#f92672">div</span>&gt;
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">end</span> <span style="color:#75715e">}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">end</span> <span style="color:#75715e">}}</span>
+</span></span></code></pre></div><p><code>layouts/_default/single.html</code> includes that partial after the article body (near coffeebox / pager). Front matter on a normal post:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">disable_comments</span>: <span style="color:#66d9ef">false</span>
+</span></span></code></pre></div><p>To turn comments off for one page:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">disable_comments</span>: <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><p>Default in the partial is <code>false</code>, so omitting the key still shows Utterances. Set <code>true</code> explicitly on privacy pages or posts you want locked.</p>
+<h2 id="privacy-and-cookies">Privacy and cookies</h2>
+<p>The Utterances script talks to GitHub. If you run a cookie/consent banner, decide whether comment widgets load only after consent. This site also ships a cookie notice partial; keep the policy text honest about third-party embeds.</p>
+<h2 id="verify">Verify</h2>
+<ol>
+<li>Open a post with comments enabled.</li>
+<li>Sign in via the Utterances UI and post a test comment.</li>
+<li>In the GitHub repo, confirm an issue appears with label <code>utteranc</code> and a title/body tied to the page URL.</li>
+<li>Open a post with <code>disable_comments: true</code> and confirm the script is absent from the HTML.</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -s https://devopstales.github.io/hugo/hugo-comments-github-issues/ <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  | grep -E <span style="color:#e6db74">&#39;utteranc.es|comments&#39;</span>
+</span></span></code></pre></div><h2 id="summary">Summary</h2>
+<p>Install Utterances on your Pages (or docs) repo, drop a small script partial into Hugo, wrap it with <code>disable_comments</code>, and you get issue-backed discussions without a separate comment database. Static site, GitHub as the backend, one label to filter the noise in the issue tracker.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="utterances" term="utterances" label="Utterances" />
+                             
+                                <category scheme="github" term="github" label="GitHub" />
+                             
+                                <category scheme="comments" term="comments" label="comments" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Hugo RSS and Atom Feeds]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/?utm_source=atom_feed" rel="related" type="text/html" title="Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/</id>
+            
+            
+            <published>2026-06-03T00:00:00+00:00</published>
+            <updated>2026-06-03T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>RSS and Atom are still how a lot of readers and tools discover new posts. Hugo can emit both from the same content tree. On DevOpsTales the site ships classic RSS plus Atom via the <a href="https://github.com/kaushalmodi/hugo-atom-feed">hugo-atom-feed</a> component theme, with a custom Atom template that skips the <code>filedir</code> partial section.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="enable-rss-and-atom-outputs">Enable RSS and Atom outputs</h2>
+<p>In <code>config.toml</code>, assign formats per page kind. Home and section pages get both feeds; individual posts stay on HTML (plus any other formats you add):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span><span style="color:#a6e22e">theme</span> = [<span style="color:#e6db74">&#34;hugo-atom-feed&#34;</span>, <span style="color:#e6db74">&#34;hugo-dynamic-tabs&#34;</span>, <span style="color:#e6db74">&#34;roadster&#34;</span>]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">outputs</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">home</span>    = [<span style="color:#e6db74">&#34;HTML&#34;</span>, <span style="color:#e6db74">&#34;RSS&#34;</span>, <span style="color:#e6db74">&#34;ATOM&#34;</span>, <span style="color:#e6db74">&#34;llms&#34;</span>, <span style="color:#e6db74">&#34;WebManifest&#34;</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">section</span> = [<span style="color:#e6db74">&#34;HTML&#34;</span>, <span style="color:#e6db74">&#34;RSS&#34;</span>, <span style="color:#e6db74">&#34;ATOM&#34;</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">page</span>    = [<span style="color:#e6db74">&#34;HTML&#34;</span>, <span style="color:#e6db74">&#34;markdown&#34;</span>]
+</span></span></code></pre></div><p>Putting <code>hugo-atom-feed</code> in the <code>theme</code> list registers the Atom media type and output format. Roadster (or your UI theme) still owns the HTML chrome.</p>
+<p>After <code>hugo</code>, you typically get:</p>
+<ul>
+<li>Site RSS: <code>/index.xml</code> (Hugo’s default RSS basename)</li>
+<li>Site Atom: <code>/atom.xml</code></li>
+<li>Per-section feeds under each section URL</li>
+</ul>
+<p>Exact paths follow your <code>baseURL</code> and pretty-URL settings. On this site that means URLs under <code>https://devopstales.github.io/</code>.</p>
+<h2 id="why-customize-atom">Why customize Atom</h2>
+<p>The stock Atom theme is a good start. This blog also keeps HTML fragments under <code>content/filedir/</code> for series includes. Those files are not articles. They should not pollute <code>/atom.xml</code> or invent a useless section feed.</p>
+<p>Two layers handle that:</p>
+<ol>
+<li>A site param listing sections to treat carefully:</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">Params</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">disable_atom_sections</span> = [<span style="color:#e6db74">&#34;filedir&#34;</span>]
+</span></span></code></pre></div><ol start="2">
+<li>A site override of <code>layouts/_default/list.atom.xml</code> that returns early for that section:</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go-html-template" data-lang="go-html-template"><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">eq</span> <span style="color:#a6e22e">.Section</span> <span style="color:#e6db74">&#34;filedir&#34;</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{/* Skip atom feed for filedir section */}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">else</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">feed</span> <span style="color:#a6e22e">xmlns</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://www.w3.org/2005/Atom&#34;</span><span style="color:#75715e">{{</span> <span style="color:#66d9ef">with</span> <span style="color:#a6e22e">site</span><span style="color:#a6e22e">.Language.Locale</span> <span style="color:#75715e">}}</span> <span style="color:#a6e22e">xml:lang</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#75715e">{{</span> <span style="color:#a6e22e">.</span> <span style="color:#75715e">}}</span><span style="color:#e6db74">&#34;</span><span style="color:#75715e">{{</span> <span style="color:#66d9ef">end</span> <span style="color:#75715e">}}</span>&gt;
+</span></span><span style="display:flex;"><span>  ...
+</span></span><span style="display:flex;"><span>&lt;/<span style="color:#f92672">feed</span>&gt;
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#66d9ef">end</span> <span style="color:#75715e">-}}</span>
+</span></span></code></pre></div><p>Inside the feed, entries are limited to types in <code>mainSections</code> (or <code>feedSections</code> if you set it), and pages with <code>disable_feed: true</code> are dropped:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go-html-template" data-lang="go-html-template"><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$feed_sections</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">site</span><span style="color:#a6e22e">.Params.feedSections</span> <span style="color:#f92672">|</span> <span style="color:#a6e22e">default</span> <span style="color:#a6e22e">site</span><span style="color:#a6e22e">.Params.mainSections</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$pages</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">where</span> <span style="color:#a6e22e">.Pages</span> <span style="color:#e6db74">&#34;Type&#34;</span> <span style="color:#e6db74">&#34;in&#34;</span> <span style="color:#a6e22e">$feed_sections</span> <span style="color:#75715e">-}}</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">{{-</span> <span style="color:#a6e22e">$pages</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">where</span> <span style="color:#a6e22e">$pages</span> <span style="color:#e6db74">&#34;.Params.disable_feed&#34;</span> <span style="color:#e6db74">&#34;!=&#34;</span> <span style="color:#66d9ef">true</span> <span style="color:#75715e">-}}</span>
+</span></span></code></pre></div><p>That keeps Atom aligned with the “real” blog sections (ai, kubernetes, kubernetes, hugo, and so on) instead of every directory under <code>content/</code>.</p>
+<h2 id="rss-override">RSS override</h2>
+<p>RSS uses Hugo’s familiar channel/item shape. This site overrides <code>layouts/_default/rss.xml</code> so summaries prefer the page summary (from the body / <code>&lt;!--more--&gt;</code>) and can attach a thumbnail enclosure when <code>thumbnail</code> is set in front matter.</p>
+<p>Per-post opt-out for RSS:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">rss_ignore</span>: <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><p>Use that sparingly for pages that must exist in HTML but should not show up in feed readers.</p>
+<h2 id="verify">Verify</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>hugo
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>curl -sI https://devopstales.github.io/atom.xml | head
+</span></span><span style="display:flex;"><span>curl -s https://devopstales.github.io/atom.xml | head -n <span style="color:#ae81ff">40</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>curl -sI https://devopstales.github.io/index.xml | head
+</span></span><span style="display:flex;"><span>curl -s https://devopstales.github.io/kubernetes/atom.xml | head -n <span style="color:#ae81ff">20</span>
+</span></span></code></pre></div><p>Confirm <code>filedir</code> does not get a useful Atom listing, and that new sections you care about (including <code>hugo</code>) appear in <code>mainsections</code> so they are eligible for feed entries.</p>
+<p>You can also paste the Atom URL into the <a href="https://validator.w3.org/feed/">W3C Feed Validation Service</a>.</p>
+<h2 id="summary">Summary</h2>
+<p>Enable <code>RSS</code> and <code>ATOM</code> on home and section outputs, add <code>hugo-atom-feed</code> as a component theme, then override Atom (and RSS if needed) so partial content directories like <code>filedir</code> stay out of reader inboxes. The result is boring in the best way: stable feed URLs that track your real posts.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="rss" term="rss" label="RSS" />
+                             
+                                <category scheme="atom" term="atom" label="Atom" />
+                             
+                                <category scheme="feeds" term="feeds" label="Feeds" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages]]></title>
+            <link href="https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/ai/hermes-agent-vs-openclaw/?utm_source=atom_feed" rel="related" type="text/html" title="Hermes Agent vs OpenClaw: The Ultimate AI Agent Showdown" />
+                <link href="https://devopstales.github.io/ai/ai-coding-agents-workflows/?utm_source=atom_feed" rel="related" type="text/html" title="Building with AI Coding Agents: Best Practices for Agent Workflows" />
+                <link href="https://devopstales.github.io/kubernetes/helm-repositoty/?utm_source=atom_feed" rel="related" type="text/html" title="Create a Helm reposirory with GitHub Pages" />
+            
+                <id>https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/</id>
+            
+            
+            <published>2026-05-22T00:00:00+00:00</published>
+            <updated>2026-05-22T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>HTML is fine for humans in a browser. For AI agents it is often a pile of navigation, scripts, sidebars, and chrome wrapped around the few paragraphs that actually matter. If you run a technical Hugo site, you can serve a clean text sibling of every post plus a site-wide <a href="https://llmstxt.org/">llms.txt</a> index so agents skip the HTML tax.</p>
+<p><img src="/img/hugo.webp" alt="Hugo"  loading="lazy" decoding="async" class="zoomable" /></p>
+<p>This post walks through the setup I use on <a href="https://devopstales.github.io/">DevOpsTales</a>, based on the approaches from <a href="https://photostructure.com/coding/hugo-markdown-output/">PhotoStructure</a> and <a href="https://ravichaganti.com/blog/implementing-llms.txt-and-markdown-output-in-hugo/">Ravikanth Chaganti</a>. The important twist for GitHub Pages hosts: <strong>do not ship per-post <code>index.md</code></strong>. Pages does not reliably serve those files. Use <code>index.txt</code> instead.</p>
+<h2 id="why-bother">Why bother</h2>
+<p>When an LLM fetches a documentation page, it often has to dig through headers, menus, footers, and sometimes client-rendered content that never shows up in a simple HTTP GET. A plain-text (or Markdown-shaped) file next to the HTML page gives the model the article body immediately, with fewer tokens and less noise.</p>
+<p>Hugo already knows how to emit multiple output formats from the same content. You do not need a plugin or a post-processing script. You define formats, point page kinds at them, and drop in two small templates.</p>
+<h2 id="define-output-formats">Define output formats</h2>
+<p>In <code>config.toml</code> (or <code>hugo.toml</code>), define a per-page format and a home-page <code>llms</code> format. On this site the per-page format is still named <code>markdown</code> in Hugo, but the on-disk suffix is plain text:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">outputFormats</span>.<span style="color:#a6e22e">markdown</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">name</span>        = <span style="color:#e6db74">&#34;markdown&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">baseName</span>    = <span style="color:#e6db74">&#34;index&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">mediaType</span>   = <span style="color:#e6db74">&#34;text/plain&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">isPlainText</span> = <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">outputFormats</span>.<span style="color:#a6e22e">llms</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">name</span>        = <span style="color:#e6db74">&#34;llms&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">baseName</span>    = <span style="color:#e6db74">&#34;llms&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">mediaType</span>   = <span style="color:#e6db74">&#34;text/plain&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">isPlainText</span> = <span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><p><code>isPlainText = true</code> makes Hugo use Go <code>text/template</code> instead of <code>html/template</code>, so angle brackets and quotes in your source are not HTML-escaped.</p>
+<p>Assign the formats to page kinds:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">outputs</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">page</span> = [<span style="color:#e6db74">&#34;HTML&#34;</span>, <span style="color:#e6db74">&#34;markdown&#34;</span>]
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">home</span> = [<span style="color:#e6db74">&#34;HTML&#34;</span>, <span style="color:#e6db74">&#34;RSS&#34;</span>, <span style="color:#e6db74">&#34;ATOM&#34;</span>, <span style="color:#e6db74">&#34;llms&#34;</span>, <span style="color:#e6db74">&#34;WebManifest&#34;</span>]
+</span></span></code></pre></div><p>After a build you get:</p>
+<ul>
+<li><code>public/llms.txt</code> at the site root</li>
+<li><code>public/&lt;section&gt;/&lt;slug&gt;/index.txt</code> next to each post&rsquo;s <code>index.html</code></li>
+</ul>
+<h2 id="per-page-template">Per-page template</h2>
+<p>Hugo picks the template from the output format. For the <code>markdown</code> format with a <code>.txt</code> suffix (via <code>text/plain</code>), create <code>layouts/_default/single.txt</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>title: {{ .Title }}
+</span></span><span style="display:flex;"><span>url: {{ .Permalink }}
+</span></span><span style="display:flex;"><span>{{- with .Description }}
+</span></span><span style="display:flex;"><span>description: {{ . }}
+</span></span><span style="display:flex;"><span>{{- end }}
+</span></span><span style="display:flex;"><span>{{- with .Date }}
+</span></span><span style="display:flex;"><span>date: {{ .Format &#34;2006-01-02&#34; }}
+</span></span><span style="display:flex;"><span>{{- end }}
+</span></span><span style="display:flex;"><span>{{- with .Params.keywords }}
+</span></span><span style="display:flex;"><span>keywords: {{ delimit . &#34;, &#34; }}
+</span></span><span style="display:flex;"><span>{{- end }}
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>{{ .RawContent }}
+</span></span></code></pre></div><p><code>.RawContent</code> is the original Markdown source. Hugo does not render it to HTML, so headings, fences, and links stay intact for the agent.</p>
+<p>PhotoStructure and Ravikanth both use <code>single.md</code> and <code>text/markdown</code>. That is the cleaner MIME story if your host will serve <code>.md</code>. On GitHub Pages it is the wrong choice for the public URL. Keep the template content the same; only the filename and media type change.</p>
+<h2 id="site-index-llmstxt">Site index: llms.txt</h2>
+<p>Create <code>layouts/_default/index.llms.txt</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span># {{ .Site.Title }}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>&gt; {{ .Site.Params.description }}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>{{ .Site.BaseURL }}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>## Documentation
+</span></span><span style="display:flex;"><span>{{ range .Site.RegularPages }}
+</span></span><span style="display:flex;"><span>- [{{ .Title }}]({{ .Permalink }}index.txt): {{ with .Description }}{{ . | htmlUnescape }}{{ else }}{{ .Summary | plainify | htmlUnescape | truncate 120 }}{{ end }}
+</span></span><span style="display:flex;"><span>{{- end }}
+</span></span></code></pre></div><p>Each list entry should point at the text sibling (<code>index.txt</code>), not the HTML page. That is the whole point of the index: agents discover clean bodies in one hop from <code>/llms.txt</code>.</p>
+<h2 id="discovery-link-in-html">Discovery link in HTML</h2>
+<p>Pretty URLs do not make <code>https://example.com/post.md</code> work. Add an alternate link in the document head so clients that understand <code>rel=&quot;alternate&quot;</code> can find the text version. In <code>layouts/_default/baseof.html</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-html" data-lang="html"><span style="display:flex;"><span>{{- with .OutputFormats.Get &#34;markdown&#34; }}
+</span></span><span style="display:flex;"><span>&lt;<span style="color:#f92672">link</span> <span style="color:#a6e22e">href</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{{ .Permalink }}&#34;</span> <span style="color:#a6e22e">rel</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;alternate&#34;</span> <span style="color:#a6e22e">type</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;text/plain&#34;</span> <span style="color:#a6e22e">title</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{{ $.Title }}&#34;</span> /&gt;
+</span></span><span style="display:flex;"><span>{{- end }}
+</span></span></code></pre></div><p>Use <code>type=&quot;text/plain&quot;</code> when the sibling is <code>.txt</code>. If you ever serve real Markdown on a host that allows it, switch back to <code>type=&quot;text/markdown&quot;</code>.</p>
+<h2 id="the-github-pages-gotcha">The GitHub Pages gotcha</h2>
+<p>The guides above generate <code>index.md</code> per post. That works on many static hosts. On <strong>GitHub Pages</strong> I found that those <code>.md</code> files are not served the way you expect: the HTML page is fine, <code>/llms.txt</code> is fine, but fetching <code>/some-post/index.md</code> fails or is blocked for agent and browser clients.</p>
+<p>The fix that worked here:</p>
+<ol>
+<li>Keep the Hugo output format name as <code>markdown</code> if you want.</li>
+<li>Set <code>mediaType = &quot;text/plain&quot;</code> so the built file is <code>index.txt</code>.</li>
+<li>Rename the template from <code>single.md</code> to <code>single.txt</code>.</li>
+<li>Point <code>llms.txt</code> links at <code>index.txt</code>.</li>
+<li>Advertise <code>type=&quot;text/plain&quot;</code> in the alternate link.</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  &#34;works on many hosts&#34;          &#34;works on GitHub Pages&#34;
+</span></span><span style="display:flex;"><span>  /post/index.html  &lt;------+-----&gt;  /post/index.html
+</span></span><span style="display:flex;"><span>  /post/index.md    &lt;------+       /post/index.txt
+</span></span><span style="display:flex;"><span>  /llms.txt         &lt;------+-----&gt;  /llms.txt
+</span></span></code></pre></div><p>Same content, different extension. Agents do not care that the file ends in <code>.txt</code> as long as the body is clean Markdown-shaped text.</p>
+<h2 id="verify">Verify</h2>
+<p>Rebuild and check the artifacts:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>hugo
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Site index</span>
+</span></span><span style="display:flex;"><span>curl -s https://devopstales.github.io/llms.txt | head
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Per-post text sibling (use a real slug from your site)</span>
+</span></span><span style="display:flex;"><span>curl -sI https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/index.txt
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Alternate link in HTML</span>
+</span></span><span style="display:flex;"><span>curl -s https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/ | grep <span style="color:#e6db74">&#39;rel=&#34;alternate&#34;&#39;</span>
+</span></span></code></pre></div><p>Locally, <code>hugo server</code> and open a post: the head should include the alternate link, and <code>/llms.txt</code> should list pages with <code>index.txt</code> URLs.</p>
+<h2 id="summary">Summary</h2>
+<p>Custom Hugo output formats are enough to ship an agent-friendly surface: <code>/llms.txt</code> as the map, and a plain-text sibling for every article. The published recipes from PhotoStructure and Ravikanth Chaganti get you most of the way. If you host on GitHub Pages, swap <code>index.md</code> for <code>index.txt</code> so the files are actually reachable after deploy.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="hugo" term="hugo" label="Hugo" />
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                             
+                                <category scheme="github-pages" term="github-pages" label="GitHub Pages" />
+                             
+                                <category scheme="llms.txt" term="llms.txt" label="llms.txt" />
+                             
+                                <category scheme="ai-agents" term="ai-agents" label="AI Agents" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+</feed>

@@ -1,0 +1,84 @@
+---
+title: A2A and MCP Agent Security: Identity, Delegation, and Audit Trails
+url: https://devopstales.github.io/ai/a2a-mcp-agent-security/
+date: 2026-08-31
+---
+
+
+Prompt injection gets the attention, but it stops being the whole problem once agents call tools and delegate work. Identity, authorization, delegation limits, and audit trails become first-class architecture — not optional hardening.
+
+&lt;!--more--&gt;
+
+![A2A and MCP agent security with identity, gateway, and audit layers](/img/a2a-mcp-agent-security.webp)
+*Gateways, registries, scoped tokens, and correlated audit: the control plane around agent protocols*
+
+## Three Layers, Three Different Failures
+
+- **LLM guardrails** constrain model input and output: injection patterns, content filtering, JSON shape. They protect the conversation.
+- **Protocol security** constrains agent boundaries: who may call which MCP tool, which agent may delegate to which peer, which scopes attach to a task. It protects the action layer.
+- **Runtime policy** evaluates requests against rules regardless of trigger — natural language or protocol call — requiring approval, blocking unknown egress, denying over-scoped delegation.
+
+Guardrails without protocol security make polite chatbots that still exfiltrate through tool calls. Protocol security without guardrails makes well-authenticated agents that still follow malicious instructions in an artifact. High-risk actions need all three. For the capability-versus-procedure split this builds on, see [Agent Skills vs MCP Servers](/ai/agent-skills-vs-mcp-servers-decision-framework/).
+
+## Threat Model First
+
+Assets: user data in prompts and artifacts, MCP credentials, production reachable through tools, agent reputation, token-tied billing, audit integrity. Adversaries: abusive public-endpoint users, compromised MCP servers returning poisoned results, malicious agents misrepresenting Agent Card skills, over-delegating insiders, supply-chain tampering with tool metadata.
+
+Six patterns to design against:
+
+- **Malicious or compromised MCP tools** — hostile servers misleading descriptions, exfiltrating model-passed arguments, or exceeding intended actions on unscoped execution.
+- **Malicious or impersonated A2A agents** — cards advertise capabilities but prove nothing without verified signatures, TLS, and issuer trust.
+- **Confused deputy** — low-privilege Agent A smuggles a transfer instruction into an artifact for privileged Agent B, which executes on its own credentials unless delegation scope is enforced end to end.
+- **Hidden delegation chains** — one approved step silently fans into three A2A hops and five MCP calls the user never sees.
+- **Injection through artifacts** — PDFs, fetched pages, and cross-agent messages all carry instructions to the next model. Treat all protocol-carried content as untrusted input.
+- **Poisoned Agent Cards** — a card advertising `safe_read_only_analysis` over write-capable backends is social engineering, not a guarantee.
+
+## Identity: Who Proves What
+
+| Identity type | Represents | Typical proof |
+|---|---|---|
+| Human user | Initiator or operator | OIDC session, SSO token |
+| Agent service | Orchestrator or specialist runtime | OAuth client credentials, mTLS |
+| MCP server | Tool provider process | API key, mTLS, scoped service account |
+| Task / session | Unit of work across hops | Task ID, trace ID, delegated scope token |
+
+A2A Agent Cards advertise auth schemes and skills with optional security requirements — discovery metadata, not a trust anchor. Credentials arrive out of band in standard headers; servers validate every call and fail closed with 401/403. Publish split views deliberately: narrow public cards for partners, richer authenticated cards internally — and never let internal skills be reachable on public-card authentication.
+
+## Authorization per Boundary
+
+Per MCP connection, define which hosts may connect, which tools each host gets, which OS identity executes side effects, and whether mutating calls need human approval. Prefer tool allowlists over connect-everything profiles — a coding agent and a public support bot must not share one.
+
+Per A2A peering, define which caller IDs may invoke which skills, maximum delegation depth, permitted artifact types, and whether user context propagates as signed claims. Map OAuth scopes to skills, not blanket admin — least privilege at the token layer beats hope at the prompt layer.
+
+Per-agent policy suffices for one team owning one coordinated graph. Gateway-enforced policy fits shared multi-team, multi-tenant, or vendor networks needing one place for allowlists, rate limits, and audit:
+
+```plaintext
+  User/client --&gt; A2A gateway --&gt; Orchestrator --&gt; Specialist agents
+        |              |                |                |
+        |              &#43;--&gt; Audit log &lt;--&#43;&lt;---------------&#43;
+        |                                                |
+        &#43;--&gt; Specialists --&gt; MCP gateway --&gt; MCP servers |
+                                        |                |
+                                        &#43;--&gt; Audit log &lt;-&#43;
+```
+
+## Delegation Is Where Security Wins or Loses
+
+Every cross-agent task must answer: whose authority is exercised (user, service account, blended delegated token)? What may the downstream agent do with it (read-only analysis or mutating tools)? Who is accountable on scope breach? Pass signed delegation claims — user ID, task ID, allowed skills, expiry, max hops — and have downstream agents reject silent scope expansion, escalating to explicit human approval instead of invisible token upgrades. Keep planning credentials broad-read and execution credentials approval-gated so a model mistake cannot immediately mutate production.
+
+## Audit What Matters
+
+Log at three layers, correlated by trace ID. Gateway: auth result, policy decision, routed agent, task and parent task IDs, rate-limit events. Agent: state transitions, messages, tool invocations (redacted as needed), artifacts, outward delegation. MCP server: tool name, caller, user context, outcome, latency, affected resources. Final answer provenance must reconstruct user, orchestrator task, specialists, tools, influencing artifacts, and fired policy gates — &#34;the model decided&#34; is never an acceptable incident report.
+
+Runtime policy engines (OPA, Cedar, custom rules) evaluate structured tool-call events independently of model behavior. Reserve human approval for irreversible or high-cost actions — payments, external email, production config, privilege grants. Constrain egress so an agent reading secrets cannot POST anywhere, and inject short-lived credentials from a secrets manager at execution time: never in Agent Cards, prompts, or repos.
+
+## Production Checklist
+
+Identity and auth: no anonymous agents in production paths, every call authenticated, scopes mapped to skills and tools, public versus authenticated card views intentional. Delegation and policy: tokens carry user, task, scope, expiry, hop limit; scope expansion needs approval; high-risk tools gated; reasoning and execution credentials separated. Discovery: registry entries owned and versioned, cards refreshed on TTL with signatures verified, partners federated on explicit allowlists. Audit: all three layers emitting, chains logged with parent and child IDs, provenance recorded, trace IDs reaching observability. Resilience: per-user, per-agent, per-tenant rate limits; delegation timeouts; tool egress allowlists; secrets managed, never embedded.
+
+## Summary
+
+Treat Agent Cards as advertisements, delegation as a signed contract, MCP tools as privileged code execution, and audit logs as the 2 a.m. evidence chain. Build the gateway when governance needs a single enforcement point, split credentials before splitting agents, and log every hop. Protocol security is who may act — get that right and the model layer gets to be merely useful instead of load-bearing.
+
+*How do you scope delegation between agents in production? Share the pattern that held up in the comments below!*
+

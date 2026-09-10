@@ -1,0 +1,108 @@
+---
+title: Image Pipeline: WebP, Lazy Load, and Medium Zoom
+url: https://devopstales.github.io/hugo/hugo-image-pipeline-webp-lazy-zoom/
+date: 2026-07-22
+keywords: Hugo, WebP, cwebp, lazy loading, medium zoom, render hook
+---
+
+
+Images are usually the heaviest part of a technical post. The pipeline on this site is deliberately small: convert assets to WebP, reference them from Markdown, let a Goldmark render hook add lazy-loading attributes, and initialize Medium Zoom for click-to-enlarge.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+## Authoring: WebP under static/img
+
+1. Prefer official product art or free stock (Unsplash, Pixabay) when you need illustrations.  
+2. Convert to WebP with `cwebp`:
+
+```bash
+cwebp input.png -o static/img/example.webp
+cwebp input.jpg -o static/img/example.webp
+rm -f input.png input.jpg
+```
+
+3. Reference from content with a root-absolute static path:
+
+```markdown
+![Alt text](/img/example.webp)
+```
+
+Front matter thumbnails use the same files without the leading slash style Hugo expects in params:
+
+```yaml
+thumbnail: &#34;img/example.webp&#34;
+```
+
+Keep names lowercase and hyphenated. Delete non-WebP originals after conversion so the repo does not accumulate duplicate weight.
+
+## Render hook: lazy and zoomable
+
+`layouts/_default/_markup/render-image.html` replaces the default Markdown image renderer:
+
+```go-html-template
+&lt;img src=&#34;{{ .Destination | safeURL }}&#34;
+     alt=&#34;{{ .Text }}&#34;
+     {{ with .Title}} title=&#34;{{ . }}&#34;{{ end }}
+     loading=&#34;lazy&#34;
+     decoding=&#34;async&#34;
+     class=&#34;zoomable&#34; /&gt;
+```
+
+Every content image then gets:
+
+- `loading=&#34;lazy&#34;` — defer offscreen downloads  
+- `decoding=&#34;async&#34;` — decode without blocking the main thread as aggressively  
+- `class=&#34;zoomable&#34;` — hook for the zoom library  
+
+Hugo figure shortcodes are separate; if you use `{{&lt; figure &gt;}}`, give those templates the same attributes if you want identical behavior.
+
+## Medium Zoom
+
+`layouts/partials/zoomable.html` loads a vendored script from `static/js/medium-zoom.js` and selects zoom targets:
+
+```html
+&lt;script src=&#34;/js/medium-zoom.js&#34;&gt;&lt;/script&gt;
+&lt;script&gt;
+var zoomables = document.querySelectorAll(&#39;.zoomable &gt; img, img.zoomable&#39;);
+zoomables.length &amp;&amp; mediumZoom(zoomables, {
+    margin: 0,
+    scrollOffset: 40,
+    container: null,
+    template: null,
+    background: &#39;rgba(0, 0, 0, 0.8)&#39;
+  }
+);
+&lt;/script&gt;
+```
+
+Include the partial once from `baseof` (end of body). The selector covers both `img.zoomable` from the render hook and images nested under a `.zoomable` wrapper if you add one later.
+
+## Thumbnails vs in-body images
+
+| Use | Mechanism |
+|-----|-----------|
+| List / OG / Twitter / JSON-LD image | `thumbnail` in front matter |
+| Explaining a concept in the article | Markdown `![...](/img/....webp)` after `&lt;!--more--&gt;` |
+
+Social cards read the thumbnail through `baseof` and `seo_schema`. In-body images are for readers on the page and for the zoom UI. Using the same WebP for both is fine when it fits.
+
+## Verify
+
+```bash
+# Asset exists
+ls static/img/example.webp
+
+# Rendered HTML has lazy &#43; zoomable
+hugo
+grep -n &#39;loading=&#34;lazy&#34;&#39; public/hugo/hugo-image-pipeline-webp-lazy-zoom/index.html | head
+grep -n &#39;medium-zoom&#39; public/hugo/hugo-image-pipeline-webp-lazy-zoom/index.html | head
+```
+
+In the browser: scroll a long post and confirm below-the-fold images load late; click an image and confirm the zoom overlay opens.
+
+## Summary
+
+Convert to WebP, store under `static/img/`, reference with Markdown, teach Goldmark to emit lazy zoomable `&lt;img&gt;` tags, and init Medium Zoom once in the site shell. That is the whole image pipeline—no media CDN required for a personal DevOps blog.
+

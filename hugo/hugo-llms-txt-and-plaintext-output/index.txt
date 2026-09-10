@@ -1,0 +1,156 @@
+---
+title: Hugo llms.txt and Plain-Text Output for AI Agents on GitHub Pages
+url: https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/
+date: 2026-05-22
+keywords: Hugo, llms.txt, GitHub Pages, Markdown, AI agents, output formats, plain text
+---
+
+
+HTML is fine for humans in a browser. For AI agents it is often a pile of navigation, scripts, sidebars, and chrome wrapped around the few paragraphs that actually matter. If you run a technical Hugo site, you can serve a clean text sibling of every post plus a site-wide [llms.txt](https://llmstxt.org/) index so agents skip the HTML tax.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+This post walks through the setup I use on [DevOpsTales](https://devopstales.github.io/), based on the approaches from [PhotoStructure](https://photostructure.com/coding/hugo-markdown-output/) and [Ravikanth Chaganti](https://ravichaganti.com/blog/implementing-llms.txt-and-markdown-output-in-hugo/). The important twist for GitHub Pages hosts: **do not ship per-post `index.md`**. Pages does not reliably serve those files. Use `index.txt` instead.
+
+## Why bother
+
+When an LLM fetches a documentation page, it often has to dig through headers, menus, footers, and sometimes client-rendered content that never shows up in a simple HTTP GET. A plain-text (or Markdown-shaped) file next to the HTML page gives the model the article body immediately, with fewer tokens and less noise.
+
+Hugo already knows how to emit multiple output formats from the same content. You do not need a plugin or a post-processing script. You define formats, point page kinds at them, and drop in two small templates.
+
+## Define output formats
+
+In `config.toml` (or `hugo.toml`), define a per-page format and a home-page `llms` format. On this site the per-page format is still named `markdown` in Hugo, but the on-disk suffix is plain text:
+
+```toml
+[outputFormats.markdown]
+  name        = &#34;markdown&#34;
+  baseName    = &#34;index&#34;
+  mediaType   = &#34;text/plain&#34;
+  isPlainText = true
+
+[outputFormats.llms]
+  name        = &#34;llms&#34;
+  baseName    = &#34;llms&#34;
+  mediaType   = &#34;text/plain&#34;
+  isPlainText = true
+```
+
+`isPlainText = true` makes Hugo use Go `text/template` instead of `html/template`, so angle brackets and quotes in your source are not HTML-escaped.
+
+Assign the formats to page kinds:
+
+```toml
+[outputs]
+  page = [&#34;HTML&#34;, &#34;markdown&#34;]
+  home = [&#34;HTML&#34;, &#34;RSS&#34;, &#34;ATOM&#34;, &#34;llms&#34;, &#34;WebManifest&#34;]
+```
+
+After a build you get:
+
+- `public/llms.txt` at the site root
+- `public/&lt;section&gt;/&lt;slug&gt;/index.txt` next to each post&#39;s `index.html`
+
+## Per-page template
+
+Hugo picks the template from the output format. For the `markdown` format with a `.txt` suffix (via `text/plain`), create `layouts/_default/single.txt`:
+
+```plaintext
+---
+title: {{ .Title }}
+url: {{ .Permalink }}
+{{- with .Description }}
+description: {{ . }}
+{{- end }}
+{{- with .Date }}
+date: {{ .Format &#34;2006-01-02&#34; }}
+{{- end }}
+{{- with .Params.keywords }}
+keywords: {{ delimit . &#34;, &#34; }}
+{{- end }}
+---
+
+{{ .RawContent }}
+```
+
+`.RawContent` is the original Markdown source. Hugo does not render it to HTML, so headings, fences, and links stay intact for the agent.
+
+PhotoStructure and Ravikanth both use `single.md` and `text/markdown`. That is the cleaner MIME story if your host will serve `.md`. On GitHub Pages it is the wrong choice for the public URL. Keep the template content the same; only the filename and media type change.
+
+## Site index: llms.txt
+
+Create `layouts/_default/index.llms.txt`:
+
+```plaintext
+# {{ .Site.Title }}
+
+&gt; {{ .Site.Params.description }}
+
+{{ .Site.BaseURL }}
+
+## Documentation
+{{ range .Site.RegularPages }}
+- [{{ .Title }}]({{ .Permalink }}index.txt): {{ with .Description }}{{ . | htmlUnescape }}{{ else }}{{ .Summary | plainify | htmlUnescape | truncate 120 }}{{ end }}
+{{- end }}
+```
+
+Each list entry should point at the text sibling (`index.txt`), not the HTML page. That is the whole point of the index: agents discover clean bodies in one hop from `/llms.txt`.
+
+## Discovery link in HTML
+
+Pretty URLs do not make `https://example.com/post.md` work. Add an alternate link in the document head so clients that understand `rel=&#34;alternate&#34;` can find the text version. In `layouts/_default/baseof.html`:
+
+```html
+{{- with .OutputFormats.Get &#34;markdown&#34; }}
+&lt;link href=&#34;{{ .Permalink }}&#34; rel=&#34;alternate&#34; type=&#34;text/plain&#34; title=&#34;{{ $.Title }}&#34; /&gt;
+{{- end }}
+```
+
+Use `type=&#34;text/plain&#34;` when the sibling is `.txt`. If you ever serve real Markdown on a host that allows it, switch back to `type=&#34;text/markdown&#34;`.
+
+## The GitHub Pages gotcha
+
+The guides above generate `index.md` per post. That works on many static hosts. On **GitHub Pages** I found that those `.md` files are not served the way you expect: the HTML page is fine, `/llms.txt` is fine, but fetching `/some-post/index.md` fails or is blocked for agent and browser clients.
+
+The fix that worked here:
+
+1. Keep the Hugo output format name as `markdown` if you want.
+2. Set `mediaType = &#34;text/plain&#34;` so the built file is `index.txt`.
+3. Rename the template from `single.md` to `single.txt`.
+4. Point `llms.txt` links at `index.txt`.
+5. Advertise `type=&#34;text/plain&#34;` in the alternate link.
+
+```plaintext
+  &#34;works on many hosts&#34;          &#34;works on GitHub Pages&#34;
+  /post/index.html  &lt;------&#43;-----&gt;  /post/index.html
+  /post/index.md    &lt;------&#43;       /post/index.txt
+  /llms.txt         &lt;------&#43;-----&gt;  /llms.txt
+```
+
+Same content, different extension. Agents do not care that the file ends in `.txt` as long as the body is clean Markdown-shaped text.
+
+## Verify
+
+Rebuild and check the artifacts:
+
+```bash
+hugo
+
+# Site index
+curl -s https://devopstales.github.io/llms.txt | head
+
+# Per-post text sibling (use a real slug from your site)
+curl -sI https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/index.txt
+
+# Alternate link in HTML
+curl -s https://devopstales.github.io/hugo/hugo-llms-txt-and-plaintext-output/ | grep &#39;rel=&#34;alternate&#34;&#39;
+```
+
+Locally, `hugo server` and open a post: the head should include the alternate link, and `/llms.txt` should list pages with `index.txt` URLs.
+
+## Summary
+
+Custom Hugo output formats are enough to ship an agent-friendly surface: `/llms.txt` as the map, and a plain-text sibling for every article. The published recipes from PhotoStructure and Ravikanth Chaganti get you most of the way. If you host on GitHub Pages, swap `index.md` for `index.txt` so the files are actually reachable after deploy.
+

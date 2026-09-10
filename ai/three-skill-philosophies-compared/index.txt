@@ -1,0 +1,77 @@
+---
+title: Superpowers vs Agent Skills vs Pocock: Three Philosophies, One Measured Bake-Off
+url: https://devopstales.github.io/ai/three-skill-philosophies-compared/
+date: 2026-09-10
+---
+
+
+Three skill frameworks promise to make coding agents write better code: an autonomous pipeline, a full-lifecycle system with adversarial guards, and a requirements-first toolkit. Their repos differ in philosophy — and a measured same-feature bake-off puts numbers on the tradeoffs: 78 minutes and $34 against 148 minutes and $92.
+
+&lt;!--more--&gt;
+
+![Three AI coding workflow philosophies compared with measured results](/img/three-skill-philosophies.webp)
+*Pipeline autonomy, lifecycle coverage, requirements interrogation — plus real measured costs*
+
+## The Shared Problem
+
+Coding agents default to the shortest path: skipped specs, rushed code, missing tests, no security review. Not a model limitation — models optimize for fast output. Senior practice says spec before code, tests before features, review before merge, and no model improvement has taught agents that, because nothing in the objective rewards it. All three frameworks answer by encoding process into skills — structured markdown the agent reads and follows. They differ in which process, how strictly, and at what cost.
+
+## Superpowers: The Autonomous Pipeline
+
+A strict six-stage pipeline that activates on starting work: brainstorming (questions and alternatives into a design document), git-worktree isolation (parallel tasks that can&#39;t clobber each other), plans broken into 2–5-minute tasks with exact paths and verification steps, fresh-subagent-per-task implementation with spec-compliance plus quality review gating progress, strict red-green-refactor TDD (pre-test code gets deleted), and between-task review by severity.
+
+The signature is autonomy: hand off a large chunk, return to a reviewed result, with the main agent managing workers instead of implementing. The price is process weight — the full pipeline overwhelms one-line fixes. Enforcement-first versions of this loop are covered in [Superpowers](/ai/superpowers-enforced-sdd-skills/).
+
+## Agent Skills: The Full Lifecycle System
+
+Breadth instead of depth: 24 skills across define, plan, build, verify, review, and ship — from interviews and specs through TDD, debugging, security hardening, performance, git workflow, CI/CD, deprecation, observability, and launch — driven by eight slash commands with a whole-plan auto mode. Two mechanisms stand out.
+
+Anti-rationalization tables assume the agent will dodge steps and preempt each excuse inside the skill itself: tests-later tests implementation not behavior, simple code still needs its behavior documented, manual testing doesn&#39;t persist, prototypes become production. Parallel review personas fan four specialists (code, security, tests, performance) into a merged go/no-go instead of one opinion. Plus the only shipped eval framework of the three — routing, description vocabulary, and skill collisions checked in CI rather than discovered silently later. The cost is interconnection: 24 skills plus personas plus evals form a system you adopt whole, since custom extensions risk routing conflicts. How this layer compares to portable and IDE-integrated alternatives is mapped in [Spec Kit vs Kiro vs Claude Code](/ai/spec-kit-kiro-claude-code-sdd/).
+
+## Pocock&#39;s Skills: Requirements First, Composable Always
+
+The deliberate opposite of process ownership: small, adaptable, composable modules that refuse to own your workflow. The signature primitive is grilling — one question at a time down the design tree, dependencies resolved in order, codebase preferred over interrogation, no proceeding without confirmed shared understanding. Its TDD splits from both rivals by exiling refactoring to code review instead of the loop. And it budgets context explicitly, separating user-invoked from model-invoked skills rather than keeping everything loaded.
+
+## The Real Divide: Composable vs Opinionated, Autonomy vs Control
+
+```plaintext
+  composable                              opinionated
+  Superpowers, Pocock skills              Agent Skills (24 &#43; personas &#43; evals)
+  cherry-pick modules                     adopt the system whole
+
+  autonomy                                control
+  Superpowers (walk away)                 Agent Skills (checkpoint every phase)
+  Pocock (interrogate, then release)
+```
+
+Running two meta-skills as simultaneous routers breaks — command names collide, routing logic competes, TDD philosophies clash. Pick one primary router; borrow modules from the others.
+
+## Measured: Same Frozen Feature, Four Runs
+
+A same-codebase bake-off ran Superpowers v6 against a lean requirements-first route on one frozen feature (plus corrected priors), same model tier, timed in active minutes with API-rate costs:
+
+| Run | Active minutes | Tokens (M) | Cost | Result |
+|---|---|---|---|---|
+| Superpowers v6 | 78 | 55.9 | $34.04 | Working user flow, no visible defect |
+| Requirements-first retry | 148–156 | 119.7 | ~$92–94 | More built, editor unreachable until repair |
+| Prior requirements-first | 198 | ~94–120 | $96.01 | Review queue rendered empty |
+| Prior full-lifecycle route | 290 | ~94–120 | $96.01 | Needed a run-button fix |
+
+Version six cut review overhead (one reviewer covering requirements plus quality, file-based task handoffs instead of repeated prose, per-task model selection, fix-focused re-reviews) to roughly half the tokens at twice the speed by its own tests — and the independent run confirmed the direction: 53% fewer tokens, ~63% cheaper, ~70 minutes faster.
+
+But the numbers need their caveats. The lean route built substantially more (861 versus 236 production lines, editable saved script, extra recovery options) — unreachable until a repair pass fixed the editor, after which an eight-minute replay of known fixes closed it. Delivery partially failed for mechanical reasons: only three of eight workers received full implement instructions because that skill&#39;s frontmatter disables model invocation — a configuration trap worth checking before any run. Corrected priors also landed both older routes at essentially identical cost (~$96), and the whole comparison is one feature with one imperfect retry: no universal winner, just evidence.
+
+## When to Use What
+
+Ambiguous problems needing architectural reasoning, large handoffs you want reviewed on return, workflows worth cherry-picking into → the autonomous pipeline. Spec-to-security-to-deploy coverage, team-wide shared vocabulary with checkpoints, breadth over depth → the lifecycle system. Requirements clarity as the bottleneck, lightweight composable tooling, interrogation before code → the requirements-first kit. Small well-defined tasks → none of them; plain prompting, since process overhead hurts more than it helps. All three are MIT-licensed and install across major agent tools — trial cost is a week, not a migration.
+
+## The Untested Baseline
+
+Every comparison pits frameworks against each other while skipping the control: same model, same prompt, same repo, framework versus nothing, scored on quality, coverage, and bugs. Skills inject instructions, routing, and process into context — overhead that may degrade simple tasks while rescuing complex ones. Until someone runs that baseline, &#34;best framework&#34; debates float above the foundational question. Skill mechanics that survive real work regardless of camp are covered in [Claude Skills for developers](/ai/claude-skills-for-developers/).
+
+## Summary
+
+Pipeline autonomy, lifecycle coverage, or requirements interrogation — pick the philosophy matching the bottleneck, router singularity respected, baseline skepticism intact. Measured evidence beats star counts; one measured feature beats ten opinions.
+
+*Which philosophy runs your agent workflow — pipeline, lifecycle system, or composable kit? Share the setup in the comments below!*
+

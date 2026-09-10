@@ -1,0 +1,118 @@
+---
+title: Hugo robots.txt Generation
+url: https://devopstales.github.io/hugo/hugo-robots-txt/
+date: 2026-07-16
+keywords: Hugo, robots.txt, enableRobotsTXT, sitemap, crawlers
+---
+
+
+Crawlers still look for `/robots.txt` before they dig through your tree. Hugo can generate that file at build time from a template, so the Sitemap URL always matches your `baseURL` and you can add allow/disallow rules without maintaining a hand-copied static file.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+For broader sharing metadata (Open Graph, JSON-LD), see [Hugo SEO on a Multi-Section Blog](/hugo/hugo-seo/). This post focuses on `robots.txt` itself.
+
+## Enable generation
+
+In `config.toml`:
+
+```toml
+enableRobotsTXT = true
+baseurl = &#34;https://devopstales.github.io/&#34;
+
+[sitemap]
+  changefreq = &#34;daily&#34;
+  filename = &#34;sitemap.xml&#34;
+  priority = 0.5
+```
+
+With `enableRobotsTXT = true`, Hugo looks for a `robots.txt` template and writes `public/robots.txt` on every build. Without a custom template, you get Hugo’s default (allow all). With a site template, you control every line.
+
+## Site template: layouts/robots.txt
+
+DevOpsTales uses a minimal custom file at `layouts/robots.txt` (site root of layouts, not `_default`):
+
+```plaintext
+User-agent: *
+
+Sitemap: {{ .Site.BaseURL }}sitemap.xml
+```
+
+That produces something like:
+
+```plaintext
+User-agent: *
+
+Sitemap: https://devopstales.github.io/sitemap.xml
+```
+
+Notes:
+
+- `User-agent: *` applies the following rules to all bots (here: no Disallow lines, so everything is allowed by default).
+- `Sitemap:` should be an absolute URL. Using `{{ .Site.BaseURL }}sitemap.xml` keeps staging vs production correct as long as `baseurl` is set for the build.
+- Trailing slash on `baseURL` matters: with `https://example.com/` you get `.../sitemap.xml`; with no slash you can accidentally emit `https://example.comsitemap.xml`. Prefer a trailing slash in config.
+
+## Optional disallow rules
+
+When you need to hide paths from crawlers (admin stubs, thank-you pages, or a draft-like section you still build), extend the template:
+
+```plaintext
+User-agent: *
+
+Disallow: /filedir/
+Disallow: /tags/
+Disallow: /categories/
+
+Allow: /
+
+Sitemap: {{ .Site.BaseURL }}sitemap.xml
+```
+
+Be careful: Disallow is a hint, not access control. Anything in `public/` is still downloadable by URL. For secrets, do not publish the files.
+
+You can also target a single bot:
+
+```plaintext
+User-agent: GPTBot
+Disallow: /
+
+User-agent: *
+Sitemap: {{ .Site.BaseURL }}sitemap.xml
+```
+
+Whether you block AI crawlers is an editorial choice; the mechanism is the same template.
+
+## robots.txt vs sitemap.xml
+
+| File | Role |
+|------|------|
+| `robots.txt` | Policy &#43; pointer to sitemap |
+| `sitemap.xml` | List of URLs you want discovered |
+
+Hugo’s `[sitemap]` block and `layouts/_default/sitemap.xml` build the URL list. `robots.txt` only advertises where that list lives. Broken `Sitemap:` lines waste crawl budget; verify both after deploy.
+
+## Static file alternative
+
+You can put a literal `static/robots.txt` instead. Hugo copies `static/` into `public/` as-is. That works until `baseURL` changes or you need templating. Prefer `layouts/robots.txt` when the Sitemap host should follow config.
+
+If both exist, know your Hugo version’s precedence: keep one source of truth so you do not debug the wrong file.
+
+## Verify
+
+```bash
+hugo
+
+cat public/robots.txt
+
+curl -s https://devopstales.github.io/robots.txt
+curl -sI https://devopstales.github.io/sitemap.xml | head
+```
+
+Confirm the Sitemap URL resolves and matches the host you intend (Pages custom domain vs `*.github.io`).
+
+## Summary
+
+Turn on `enableRobotsTXT`, add `layouts/robots.txt`, and point `Sitemap:` at `{{ .Site.BaseURL }}sitemap.xml`. Add `Disallow` only when you have a concrete reason. The file stays tiny, correct across environments, and rebuilds with every Hugo run.
+

@@ -1,0 +1,110 @@
+---
+title: Keeping Specs, Tests, and Code in Sync When Agents Write Fast
+url: https://devopstales.github.io/ai/spec-test-code-traceability/
+date: 2026-08-27
+---
+
+
+A spec nobody re-checks against the running system is worse than no spec: reviewers trust the document instead of the diff while the agent follows whatever the code actually does. Agents regenerate code fast, and each regeneration is a fresh chance for spec and implementation to diverge. The fix is a small enforceable link between requirement, design decision, tests, and the commits that changed them.
+
+&lt;!--more--&gt;
+
+![Traceability links connecting specs, tests, and code](/img/spec-test-code-traceability.webp)
+*Requirement, decision, task, test, and commit linked as queryable data — not shared understanding*
+
+## Four Shapes of Drift
+
+- **Spec changes, code doesn&#39;t.** A requirement clarified in a comment thread never reaches implementation.
+- **Code changes, spec doesn&#39;t.** A refactor lands; the spec still describes old behavior as current.
+- **Tests cover implementation, not intent.** Tests assert what code does — circular by construction, passing even against the wrong requirement.
+- **PRs reference no requirements.** Reviewers approve on &#34;looks reasonable&#34; with no claim to check against.
+
+## Six Identifiers, One Graph
+
+Most repos already hold three or four of these; the missing ones are usually the design decision ID and the explicit link back from tests and commits:
+
+| Identifier | Lives in | Example |
+|---|---|---|
+| Requirement ID | `requirements.md` or spec tool | `REQ-014` |
+| Design decision ID | ADR / decision record | `ADR-0032` |
+| Task ID | Breakdown or tracker | `TASK-014-3` |
+| Test ID | Test file or name | `test_req_014_password_reset` |
+| Commit / PR link | Git history | `PR #482` |
+| Changed files | Git diff | `auth/reset.go`, `auth/reset_test.go` |
+
+```plaintext
+  REQ-014 --&gt; ADR-0032 --&gt; TASK-014-3 &#43;--&gt; CODE (auth/reset.go) --&gt; PR #482
+                                            |                         ^
+                                            &#43;--&gt; TEST ----------------&#43;
+                                                 (test_req_014_...)   |
+                                                                      v
+                                                              Commit history
+```
+
+Stored as structured data — literal `REQ-XXX` tokens in specs and tests — this graph becomes queryable: which requirements lack tests, which tests map to nothing, which files changed with no requirement attached. Deterministic text matching beats fuzzy guessing that produces silent false positives.
+
+## Spec to Test: Acceptance Criteria Are Test Cases
+
+Every acceptance criterion is already a behavioral assertion — given this state, when the actor does this, the system responds that way. Strong workflows generate tests from the same criteria that generate code instead of letting the coding agent invent its own tests afterward. Writing criteria in EARS form (&#34;When &lt;trigger&gt;, the system shall &lt;response&gt;&#34;) maps onto four test categories per requirement:
+
+| Requirement type | Test category | Common miss |
+|---|---|---|
+| &#34;System shall reject X&#34; | Negative | Only the accept path tested |
+| &#34;Limit is N items&#34; | Boundary | N-1, N, N&#43;1 not all covered |
+| &#34;New field replaces old&#34; | Migration | Old records crash silently |
+| &#34;Within 60 seconds&#34; | Boundary &#43; timing | Logic asserted, budget not |
+
+A literal stable requirement token in the test name or comment lets a later query prove coverage instead of assuming it.
+
+## Spec to Code: Prove Scope, Not Just Behavior
+
+Which files were supposed to change, and did the diff stay inside that boundary? A design plan listing affected files up front gives something to diff the PR against. A generated trace table makes scope review instant:
+
+| Requirement | Decision | Files changed | Tests | Status |
+|---|---|---|---|---|
+| REQ-014 | ADR-0032 | `auth/reset.go`, `auth/reset_test.go` | `test_req_014_*` (4) | Covered |
+| REQ-015 | ADR-0032 | `auth/reset.go` | none | **Gap** |
+| REQ-016 | — | `auth/notify.go` | `test_notify_basic` | **Orphan spec link** |
+
+Two classic failures surface at a glance: code changed with zero matching tests, and a test referencing no requirement ID — missing spec or misfiled test. Reference requirement IDs in code comments only when they add reviewer-invisible information (`// enforces REQ-014: max 5 resets/hour`); verbatim repetition is noise.
+
+## Review Three Diffs, Not One
+
+A traceability PR reviews spec, code, and test diffs together. The question sharpens from &#34;does this look right?&#34; to &#34;which requirement does this satisfy, and does the evidence prove it?&#34;:
+
+```plaintext
+  Developer/Agent --&gt; PR (spec &#43; code &#43; test diffs) --&gt; CI checks
+       CI: REQ-ID in description? coverage? file scope?
+       CI --&gt; trace report as PR comment --&gt; Reviewer decides
+```
+
+A short reviewer checklist beats a long one — long ones get skipped under pressure:
+
+1. Does the PR description name the requirement IDs?
+2. Is every changed file in the plan&#39;s affected list, or is extra scope explained?
+3. Does at least one test reference each touched requirement ID?
+4. If the spec changed, did code and tests change alongside, or is follow-up tracked?
+
+## Automate in CI, Starting Cheap
+
+Manual review catches drift only when reviewers remember to look. Wire checks into the pipeline in effort order: require `REQ-\d&#43;` in PR titles or descriptions (one regex, blocks unnamed merges), fail builds on spec edits without matching code/test changes and vice versa, generate the trace table from token scans instead of hand-maintained spreadsheets, measure coverage per acceptance criterion rather than per line, and warn on specs untouched across N commits to their linked files — long-silent specs rot first. Agent-generated trace summaries help as a reviewer&#39;s starting point, never as ground truth: agents misread tokens and declare superficial coverage with confidence.
+
+A minimal checked-in template covers the essentials:
+
+```text
+docs/
+  requirements.md     # REQ-IDs with EARS-style acceptance criteria
+  design.md           # ADR-IDs, affected files, architecture decisions
+  tasks.md            # TASK-IDs mapped to REQ-IDs
+  tests.md            # test files/functions per REQ-ID (generated)
+  traceability.md     # generated table: REQ -&gt; ADR -&gt; TASK -&gt; files -&gt; tests -&gt; PR
+```
+
+Write the first three by hand; generate the last two, even if the generator is a short script grepping `REQ-\d&#43;`. Hand-maintained trace tables are themselves drift risk.
+
+## Summary
+
+SDD finishes not when code comes out of an agent but when code, tests, and specs keep each other honest across PRs, refactors, and late requirement changes. Six identifiers, a generated table, a four-question PR checklist, and one cheap CI regex deliver most of the benefit without compliance-framework overhead. Pair this with [decision records](/ai/decision-records-ai-development/) for the &#34;why&#34; behind each requirement, and the [SDD vs vibe coding](/ai/sdd-vs-vibe-coding/) guide for deciding how much spec a task deserves in the first place.
+
+*How do you catch spec drift in agent-generated PRs today? Share the check that actually works in the comments below!*
+

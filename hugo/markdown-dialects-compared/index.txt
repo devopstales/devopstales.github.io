@@ -1,0 +1,182 @@
+---
+title: GFM vs CommonMark vs Pandoc Markdown: Which Syntax Travels?
+url: https://devopstales.github.io/hugo/markdown-dialects-compared/
+date: 2026-09-10
+---
+
+
+The same Markdown file renders differently on GitHub, Hugo, Obsidian, and Pandoc — not because Markdown is unreliable, but because &#34;Markdown&#34; names a family of syntaxes, parsers, and platform features. CommonMark defines the portable core, GFM adds software-collaboration extensions, and Pandoc Markdown expands into a full document language.
+
+&lt;!--more--&gt;
+
+![Markdown dialects compared across platforms](/img/markdown-dialects-compared.webp)
+*CommonMark core, GFM extensions, Pandoc documents: pick by destination, not habit*
+
+## One Family, Three Dialects
+
+```plaintext
+  Markdown family
+    &#43;-- CommonMark core
+    |     &#43;-- GitHub Flavored Markdown --&gt; GitHub platform features
+    |     &#43;-- Other CommonMark renderers --&gt; Hugo/Goldmark, GitLab
+    &#43;-- Pandoc Markdown --&gt; PDF, DOCX, EPUB, LaTeX, slides
+```
+
+Useful, not exact: every renderer enables, disables, or adds syntax independently. Short version: CommonMark when portability matters most, GFM for README and GitHub-targeted docs, Pandoc Markdown when the source must become PDF, DOCX, or an academic paper. For a Hugo blog, CommonMark plus explicitly enabled Goldmark extensions — never assume GitHub-visible features work just because Hugo is called GFM-compatible.
+
+## CommonMark: The Portable Core
+
+CommonMark&#39;s contribution is consistent parsing, not features: paragraphs, ATX/Setext headings, block quotes, lists, fenced and indented code, emphasis, links and images, reference links, inline code, thematic breaks, raw HTML blocks, line breaks. Presentation — CSS, highlighting, anchors, sanitization — stays outside the spec, so treat it as a structural baseline, not identical-page promise:
+
+````markdown
+# Service Deployment
+
+The service exposes a small HTTP API.
+
+## Requirements
+
+- Linux
+- Docker
+- 8 GB of memory
+
+## Start the service
+
+```bash
+docker compose up -d
+```
+
+See the [configuration guide](configuration.md) for details.
+````
+
+Headings, paragraphs, lists, fences, plain links: renders almost everywhere with no dialect extensions.
+
+## GFM: CommonMark for Software Projects
+
+Formal GFM keeps CommonMark parsing and adds pipe tables, task lists, strikethrough, extended autolinks, plus some raw-HTML restrictions. So common they feel standard — they aren&#39;t core:
+
+````markdown
+| Backend | Best use |
+|---|---|
+| Ollama | Local experiments |
+| vLLM | Shared inference |
+
+- [x] Install Docker
+- [ ] Add monitoring
+
+Use the ~~old endpoint~~ new endpoint.
+
+Visit https://example.com/docs for details.
+````
+
+Strict CommonMark may read tables as paragraph text and task items as literal brackets. Prefer explicit angle-bracket autolinks (`&lt;https://example.com/docs&gt;`) when files travel through unknown processors.
+
+## GitHub.com Is More Than Formal GFM
+
+Much confusion comes from mistaking platform features for spec: math expressions, Mermaid fences, alerts, issue/PR references, mentions, emoji shortcodes, collapsibles. Another GFM-compatible renderer can skip all of them and still be compliant.
+
+````markdown
+```mermaid
+flowchart LR
+    A[Markdown] --&gt; B[Rendered diagram]
+```
+````
+
+GitHub renders the diagram; a generic renderer shows highlighted source — valid Markdown, platform-specific transformation. Same for `$$...$$` math (needs KaTeX/MathJax/Pandoc elsewhere) and alerts:
+
+```markdown
+&gt; [!WARNING]
+&gt; Changing this setting clears the cache.
+```
+
+Readable as a plain quote elsewhere — graceful degradation, but not portable presentation.
+
+## Pandoc: Markdown as Document Language
+
+Pandoc&#39;s reader ships citations, footnotes, definition lists, header attributes, fenced divisions, YAML metadata, math, superscript/subscript, and bibliography processing — expressive for publishing, unsafe as interchange:
+
+```markdown
+PagedAttention improves KV cache management [@kwon2023pagedattention].
+
+CommonMark
+: A precise specification for core Markdown.
+
+## Cache Configuration {#cache-config .deployment}
+
+::: warning
+Changing this option restarts the server.
+:::
+```
+
+```bash
+pandoc article.md \
+  --citeproc \
+  --bibliography references.bib \
+  --csl ieee.csl \
+  -o article.pdf
+```
+
+Citations stay readable without Pandoc but never become formatted references; header attributes and fenced divisions leak literal punctuation into non-Pandoc renderers. Pandoc also reads dialects explicitly (`--from=gfm`, `--from=commonmark`, per-extension `&#43;`/`-` toggles, `--list-extensions`), so build commands and defaults files are part of the document contract — commit them beside the source.
+
+## Formal Support Matrix
+
+Formal dialects only — platforms add their own extras:
+
+| Feature | CommonMark | Formal GFM | Pandoc |
+|---|---|---|---|
+| Headings, emphasis, links, quotes, lists, fences | Yes | Yes | Yes |
+| Raw HTML | Yes | Restricted contexts | Yes |
+| Pipe tables, task lists, strikethrough, autolinks | No | Yes | Yes |
+| Footnotes, citations, YAML metadata, def lists | No | No | Yes |
+| Math, header attributes, fenced divs, raw LaTeX, bibliography | No | No | Yes |
+
+&#34;No&#34; means not guaranteed by the spec — a platform may still support it.
+
+## Hugo and Goldmark Reality
+
+Hugo renders with Goldmark: CommonMark-conformant plus GFM-compatible extensions (tables, strikethrough, task lists, heading IDs, highlighting), with footnotes, definition lists, and typographic substitutions available when enabled. Around Markdown sit non-traveling Hugo features: front matter, shortcodes, render hooks, page resources, internal refs, templates, site config.
+
+Three Hugo-specific gotchas. Raw HTML is dropped by default unless rendering is enabled or routed through shortcodes and render hooks — this very blog sets `unsafe = true` in Goldmark config, a deliberate site-level choice that trades portability for control. A `mermaid` fence stays a code block without a render hook, shortcode, or JS pipeline — identical source, different mechanism than GitHub. And front matter means different things per consumer: Hugo metadata, Pandoc template variables, GitHub mostly inert text — same syntax, different semantics.
+
+## The Rest of the Platforms
+
+Obsidian stores `.md` but authors natively: `[[wiki links]]`, `![[embeds]]`, callouts, block refs, Dataview. Files aren&#39;t portable publications — treat export as compilation. GitLab takes CommonMark plus GFM tables/tasks with its own references, math, and diagrams; conservative GFM usually survives GitHub-to-GitLab moves, integrations don&#39;t.
+
+## Safe Everywhere vs Breaks Often
+
+Safe: `#` headings, paragraphs, blank-line-separated blocks, `-` and `1.` lists, backtick fences and inline code, `*`/`**` emphasis, plain links and images, block quotes, thematic breaks, angle-bracket autolinks.
+
+Breaks: pipe tables on strict CommonMark (degrade to `|` soup — prefer lists for ultra-portable docs), footnotes (format and placement vary), header attributes (literal braces elsewhere), callouts (one syntax per platform — portable fallback is a plain `&gt;` quote), wiki links (literal brackets outside the vault — use `[text](path.md)` for publication), raw HTML (stripped, escaped, or sanitized unpredictably), dollar math (rendered, literal, or mis-emphasized), Mermaid (diagram versus source depending on post-processing).
+
+## Three Layers of Compatibility
+
+Parsing (structure recognized?), transformation (Mermaid rendered, citations resolved, shortcodes expanded, TOC generated?), presentation (styling, anchors, fonts?). Identical syntax can pass parsing on two platforms and still present differently. The better portability question names all four inputs:
+
+```text
+Dialect: CommonMark plus GFM tables
+Parser: Goldmark
+Extensions: tables, strikethrough, task lists, footnotes
+Platform: Hugo, plus render hooks and Mermaid JS
+```
+
+## Rules That Prevent Most Failures
+
+Skeleton in CommonMark; add tables and task lists only where all targets support them; isolate platform syntax (shortcodes, citations, embeds) in findable blocks; prefer graceful degraders (Mermaid source, quote-readable alerts) over punctuation-leakers (fenced divs, attributes); never depend on auto-generated heading IDs across renderers with different slug rules; commit build config (Pandoc defaults, Hugo markup settings, filters, JS) with content. Test every important target directly: `pandoc --from=commonmark` versus `--from=gfm` output diffs, production `hugo --gc --minify` with HTML inspection (not editor preview), and the committed file on the actual host.
+
+| Use case | Syntax | Reason |
+|---|---|---|
+| Portable plain-text doc | CommonMark | Smallest reliable baseline |
+| GitHub README | GFM | Tables, tasks, repo workflows |
+| Hugo blog post | CommonMark &#43; configured Goldmark | Controlled pipeline |
+| Academic paper | Pandoc Markdown | Citations, math, metadata, PDF |
+| Multi-format book | Pandoc Markdown | Structured multi-output conversion |
+| Obsidian vault | Obsidian Markdown | Backlinks, embeds, knowledge flows |
+| Unknown renderer | CommonMark subset | Lowest compatibility risk |
+
+Convert between dialects with Pandoc (`--from`/`--to` pairs) as a build step, never a reversible formatter — references, callouts, complex tables, and attributes may not survive. Lint the portable subset (fenced over indented code, tagged fences, blank lines around blocks, no skipped heading levels), then add per-renderer build tests rather than trusting lint alone.
+
+## Summary
+
+CommonMark parses dependably, GFM collaborates practically, Pandoc publishes richly — different problems, not competing versions. Write the smallest dialect satisfying the real destination, name the extensions in the source contract, and test each renderer that matters. Portability comes from knowing the contract, not avoiding extensions.
+
+*Which dialect mismatch wasted your afternoon — tables, footnotes, math, or Mermaid? Share the war story in the comments below!*
+

@@ -1,0 +1,88 @@
+---
+title: Hugo SEO on a Multi-Section Blog
+url: https://devopstales.github.io/hugo/hugo-seo/
+date: 2026-07-10
+keywords: Hugo, SEO, Open Graph, Twitter, JSON-LD, sitemap, WebManifest
+---
+
+
+Search and social previews on a Hugo blog are mostly template work: consistent titles, a real summary, a thumbnail, Open Graph / Twitter tags, structured data, and a sitemap. DevOpsTales does that in `layouts/_default/baseof.html` plus a JSON-LD partial—no SEO plugin required.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+## Front matter and summaries
+
+This site does **not** use a `description` field in post front matter. Listing pages, RSS, and social cards pull the teaser from the body: write one or two short paragraphs, then `&lt;!--more--&gt;`. Hugo’s `.Summary` becomes the plain-text blurb.
+
+Always set:
+
+```yaml
+title: &#34;Clear, specific title&#34;
+thumbnail: &#34;img/your-image.webp&#34;
+```
+
+`thumbnail` should live under `static/` (referenced without the `static/` prefix). Prefer WebP. If a post omits it, `baseof` falls back to a site default image.
+
+Optional `keywords` feed JSON-LD; they are not a substitute for a good summary.
+
+## Open Graph and Twitter cards
+
+`config.toml` enables the usual flags:
+
+```toml
+[Params]
+  opengraph = true
+  twitter_cards = true
+```
+
+The site shell also sets explicit tags in `layouts/_default/baseof.html`: `og:title`, `og:description`, `og:url`, `og:image`, `twitter:card` (`summary_large_image`), and related fields. Description prefers `.Description` when present, otherwise `.Summary | plainify`. Image URLs are absolutized from the thumbnail.
+
+That gives Slack, Mastodon, X, and similar scrapers a stable preview without relying only on Hugo’s internal templates.
+
+## JSON-LD
+
+`layouts/partials/seo_schema.html` emits `application/ld&#43;json`:
+
+- Home: `WebSite` with name, URL, site description
+- Posts: `BlogPosting` with headline, dates, author, section, word count, reading time, keywords, and image
+
+Include it once from `baseof` in `&lt;head&gt;`. Keep author name and logo paths aligned with `[Params.author]` / site params so the graph stays consistent.
+
+## Sitemap, robots, and canonical URLs
+
+```toml
+enableRobotsTXT = true
+canonifyURLs = true
+
+[sitemap]
+  changefreq = &#34;daily&#34;
+  filename = &#34;sitemap.xml&#34;
+  priority = 0.5
+```
+
+`canonifyURLs` rewrites links against `baseurl` (`https://devopstales.github.io/`), which avoids mixed relative/absolute surprises in feeds and meta tags. Custom `layouts/sitemap.xml` and `layouts/robots.txt` let you tune crawler hints if the defaults are not enough.
+
+## WebManifest
+
+Home outputs include `WebManifest`, with a small `layouts/index.webmanifest` template. It is a light installability / branding signal, not a full PWA, but it belongs in the same “how does the browser see this site” bucket as SEO metadata.
+
+## Checklist for a new post
+
+1. Specific `title`  
+2. `thumbnail` pointing at an existing WebP under `static/img/`  
+3. Teaser paragraphs &#43; `&lt;!--more--&gt;` (no `description:` key)  
+4. Sensible `tags` / `categories` / optional `keywords`  
+5. After deploy, share the URL in a private Slack/Discord channel or use a debugger to confirm OG tags  
+6. Spot-check `/sitemap.xml` contains the new permalink  
+
+```bash
+curl -s https://devopstales.github.io/hugo/hugo-seo/ | grep -E &#39;og:title|og:image|twitter:card&#39;
+curl -s https://devopstales.github.io/sitemap.xml | grep hugo-seo
+```
+
+## Summary
+
+SEO here is disciplined content fields plus head templates: summary from `&lt;!--more--&gt;`, thumbnails for images, OG/Twitter tags in `baseof`, BlogPosting JSON-LD, sitemap/robots, and optional WebManifest. Get those right and most “SEO plugins” become unnecessary for a technical blog.
+

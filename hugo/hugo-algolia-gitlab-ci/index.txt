@@ -1,0 +1,219 @@
+---
+title: Hugo Search with Algolia and GitLab CI
+url: https://devopstales.github.io/hugo/hugo-algolia-gitlab-ci/
+date: 2026-07-28
+keywords: Hugo, Algolia, atomic-algolia, GitLab CI, InstantSearch, search index
+---
+
+
+Roadster’s default sidebar search sends queries to Google (or DuckDuckGo) with a site filter. That works until the corpus is large and you want typo tolerance, facets by section/tags, and results that stay on your domain. [Algolia](https://www.algolia.com/) hosts the index; Hugo emits a JSON dump at build time; [atomic-algolia](https://www.npmjs.com/package/atomic-algolia) pushes only the diff from GitLab CI after `hugo` succeeds.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+This pairs with the [GitLab CI to GitHub Pages](/hugo/gitlab-ci-to-github-pages-hugo/) flow: build once, deploy `public/`, then update the search index with CI secrets—never with keys in git.
+
+## Architecture
+
+```plaintext
+  content/*.md
+       |
+       v
+  hugo  --&gt;  public/algolia.json   --&gt;  atomic-algolia  --&gt;  Algolia index
+       |                                      ^
+       &#43;--&gt;  public/*.html  (Pages deploy)    |
+                                              |
+                                    ALGOLIA_* CI variables
+```
+
+Browser InstantSearch (or Autocomplete) talks to Algolia with the **search-only** API key. The **admin** key stays in GitLab CI/CD variables and is used only by `atomic-algolia`.
+
+## 1. Create the Algolia app and index
+
+1. Create an application in the Algolia dashboard.  
+2. Create an empty index (for example `devopstales`).  
+3. Copy **Application ID**, **Admin API key** (write), and **Search-only API key** (public).  
+
+Never commit the admin key. The search-only key is safe to expose in front-end JS.
+
+## 2. Emit algolia.json from Hugo
+
+Add an output format and attach it to the home page:
+
+```toml
+[outputFormats.Algolia]
+  baseName = &#34;algolia&#34;
+  isPlainText = true
+  mediaType = &#34;application/json&#34;
+  notAlternative = true
+
+[outputs]
+  home = [&#34;HTML&#34;, &#34;RSS&#34;, &#34;ATOM&#34;, &#34;llms&#34;, &#34;WebManifest&#34;, &#34;Algolia&#34;]
+```
+
+Create `layouts/index.algolia.json` (name follows the format). Index only real sections—skip `filedir` partials the same way Atom does:
+
+```go-html-template
+{{- $pages := where .Site.RegularPages &#34;Type&#34; &#34;in&#34; .Site.Params.mainSections -}}
+{{- $pages = where $pages &#34;.Params.disable_feed&#34; &#34;!=&#34; true -}}
+{{- $index := slice -}}
+{{- range $pages -}}
+  {{- $index = $index | append (dict
+    &#34;objectID&#34; .File.UniqueID
+    &#34;title&#34; .Title
+    &#34;summary&#34; (.Summary | plainify)
+    &#34;content&#34; (.Plain | truncate 5000)
+    &#34;permalink&#34; .Permalink
+    &#34;section&#34; .Section
+    &#34;date&#34; (.Date.Format &#34;2006-01-02&#34;)
+    &#34;tags&#34; (.Params.tags | default slice)
+  ) -}}
+{{- end -}}
+{{- $index | jsonify -}}
+```
+
+`objectID` is required for atomic updates. Prefer a stable id (file unique id or permalink) so renames/updates merge correctly.
+
+Build and inspect:
+
+```bash
+hugo
+head -c 400 public/algolia.json; echo
+```
+
+## 3. atomic-algolia locally
+
+```bash
+npm init -y
+npm install atomic-algolia --save-dev
+```
+
+`package.json`:
+
+```json
+{
+  &#34;scripts&#34;: {
+    &#34;algolia&#34;: &#34;atomic-algolia&#34;
+  }
+}
+```
+
+Local env (do not commit):
+
+```bash
+export ALGOLIA_APP_ID=&#34;YOUR_APP_ID&#34;
+export ALGOLIA_ADMIN_KEY=&#34;YOUR_ADMIN_KEY&#34;
+export ALGOLIA_INDEX_NAME=&#34;devopstales&#34;
+export ALGOLIA_INDEX_FILE=&#34;public/algolia.json&#34;
+
+npm run algolia
+```
+
+You should see add/update/remove counts in the CLI, then records in the Algolia dashboard. Details on the incremental upload model are in the [atomic-algolia](https://www.npmjs.com/package/atomic-algolia) package docs and in writeups such as [tisgoud’s GitLab CI example](https://tisgoud.nl/2020/03/algolia-and-gitlab-ci/cd/).
+
+## 4. Wire GitLab CI
+
+Extend the existing Hugo job (same image family that already builds the site). After `hugo` and before or after the Pages push:
+
+```yaml
+hugo-build:
+  image: hugomods/hugo:git-0.148.0
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+  before_script:
+    - apk add --no-cache npm
+    - npm ci || npm install
+  script:
+    - hugo
+    - touch public/.nojekyll
+    # deploy public/ to GitHub Pages (existing steps)...
+    - npm run algolia
+  only:
+    - master
+```
+
+Set masked/protected CI/CD variables in GitLab:
+
+| Variable | Purpose |
+|----------|---------|
+| `ALGOLIA_APP_ID` | Application id |
+| `ALGOLIA_ADMIN_KEY` | Admin (write) key |
+| `ALGOLIA_INDEX_NAME` | Index name |
+| `ALGOLIA_INDEX_FILE` | `public/algolia.json` |
+
+Run `npm run algolia` only on the branch that publishes production, so preview pipelines do not overwrite the live index. If you use merge-request builds, gate the step:
+
+```yaml
+- if [ &#34;$CI_COMMIT_BRANCH&#34; = &#34;master&#34; ]; then npm run algolia; fi
+```
+
+Commit `package.json` and `package-lock.json` so `npm ci` is reproducible. Prefer that over `npm init` inside the job on every run.
+
+## 5. Front-end InstantSearch (replace the sidebar form)
+
+Keep search-only credentials in site params (public):
+
+```toml
+[Params.algolia]
+  appId = &#34;YOUR_APP_ID&#34;
+  indexName = &#34;devopstales&#34;
+  searchKey = &#34;YOUR_SEARCH_ONLY_KEY&#34;
+```
+
+Add a small partial (for example `layouts/partials/widgets/algolia-search.html`) that loads InstantSearch from a CDN and mounts on a container, then swap `&#34;search&#34;` in `Params.sidebar.widgets` for your Algolia widget—or override `layouts/partials/widgets/search.html`.
+
+Minimal sketch:
+
+```html
+&lt;div id=&#34;algolia-search&#34;&gt;&lt;/div&gt;
+&lt;script src=&#34;https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js&#34;&gt;&lt;/script&gt;
+&lt;script src=&#34;https://cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js&#34;&gt;&lt;/script&gt;
+&lt;script&gt;
+const { appId, indexName, searchKey } = {{ .Site.Params.algolia | jsonify }};
+const search = instantsearch({
+  indexName,
+  searchClient: algoliasearch(appId, searchKey),
+});
+search.addWidgets([
+  instantsearch.widgets.searchBox({ container: &#39;#algolia-search&#39; }),
+  instantsearch.widgets.hits({
+    container: &#39;#algolia-hits&#39;,
+    templates: {
+      item: (hit) =&gt; `&lt;a href=&#34;${hit.permalink}&#34;&gt;&lt;strong&gt;${hit.title}&lt;/strong&gt;&lt;br&gt;${hit.summary || &#39;&#39;}&lt;/a&gt;`,
+    },
+  }),
+]);
+search.start();
+&lt;/script&gt;
+&lt;div id=&#34;algolia-hits&#34;&gt;&lt;/div&gt;
+```
+
+Tune CSS to match Roadster’s sidebar. Facet on `section` or `tags` when you want filters for kubernetes vs AI vs Hugo.
+
+Official UI building blocks are documented under [Algolia InstantSearch](https://www.algolia.com/doc/guides/building-search-ui/what-is-instantsearch/js/).
+
+## 6. Operational tips
+
+- **Quota:** atomic updates send diffs; full reindex only when you change the record shape.  
+- **Content size:** truncate `.Plain` so records stay under Algolia record limits.  
+- **Drafts:** production `hugo` already omits drafts; keep it that way in CI.  
+- **Sections:** filter with `mainSections` so `filedir` HTML includes never become hits.  
+- **Secrets:** rotate the admin key if it ever appeared in a job log or commit.  
+- **Fallback:** leave the old Google site-search widget behind a feature flag until InstantSearch is verified.
+
+## Verify
+
+```bash
+hugo
+npm run algolia
+
+curl -s &#34;https://latency-dsn.algolia.net/1/indexes/devopstales?query=kubernetes&amp;x-algolia-application-id=$ALGOLIA_APP_ID&amp;x-algolia-api-key=$ALGOLIA_SEARCH_KEY&#34; | head
+```
+
+On the live site: open the sidebar, type a known title fragment, confirm permalinks resolve under `https://devopstales.github.io/`.
+
+## Summary
+
+Generate `public/algolia.json` with a Hugo home output format, push diffs with `atomic-algolia` from GitLab CI using masked admin credentials, and query with InstantSearch using the search-only key in the theme. You keep the existing GitLab → Pages deploy path and add hosted search without turning Hugo into an application server.
+

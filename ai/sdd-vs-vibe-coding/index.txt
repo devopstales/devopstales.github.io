@@ -1,0 +1,95 @@
+---
+title: SDD vs Vibe Coding: Waterfall with Markdown or Controlled Iteration?
+url: https://devopstales.github.io/ai/sdd-vs-vibe-coding/
+date: 2026-08-17
+---
+
+
+Spec-driven development entered 2026 as the serious developer&#39;s answer to vibe coding drift: implement against a reviewed specification, not an ad-hoc prompt. Hacker News called it &#34;Waterfall Strikes Back.&#34; Both sides have a point — and the practical question was never which side wins, but how much spec a specific task needs.
+
+&lt;!--more--&gt;
+
+![Spec-driven development versus vibe coding](/img/sdd-vs-vibe-coding.webp)
+*Blueprints versus flowing code: the spec is the durable artifact, the prompt is not*
+
+Spec-driven development promises an end to vibe coding drift; Hacker News calls it waterfall with markdown. Both sides have a point. This decision guide covers where vibe coding genuinely wins, where it predictably breaks, and the middle ground that is neither ceremony nor chaos — with pointers to the enforcement tooling — [Superpowers](/ai/superpowers-enforced-sdd-skills/), Spec Kit, Kiro — that makes the disciplined side stick.
+
+## Why Vibe Coding Won First
+
+Vibe coding — a loose prompt, iterate on whatever the agent produces — dominated AI coding through 2025 because it is unmatched for small, exploratory, throwaway work. Developers shipped scripts, prototypes, and simple tools faster than ever. Then projects grew: multi-file features drifted, session-one constraints were forgotten by session four, security assumptions dropped, and architecture shifted mid-feature because the agent kept no durable memory of intent.
+
+SDD appeared as the disciplined response. The core claim: make the specification the central artifact, not the prompt. Write requirements, design, and task plan first; implement one slice at a time against them; keep the spec versioned and updated.
+
+## What Vibe Coding Is Genuinely Good At
+
+Precision matters before dismissal:
+
+- **Exploratory prototypes.** Unsure what to build? Build rough and react. SDD requires knowing what to specify — premature when you don&#39;t know yet.
+- **UI experiments.** Layout and interaction feel resist advance specification. Generate options fast, discard most, converge on what feels right.
+- **Throwaway automation.** One-off scripts, extraction jobs, migration helpers: low cost of slight wrongness, real cost of ceremony.
+- **Fast feedback.** &#34;Does this API work the way I think?&#34; gets answered in minutes. SDD would slow that loop for zero benefit.
+
+The mistake is exporting these success patterns to production features with real constraints, users, and consequences.
+
+## Where Vibe Coding Predictably Breaks
+
+- **Multi-file changes.** Past roughly five files, the context window loses invariants. Without a design doc, every prompt re-establishes context a prior session already built and forgot.
+- **Architectural drift.** Without explicit non-goals, agents implement things. A caching layer that &#34;seemed reasonable&#34; bakes into the data model within three sessions and becomes expensive to remove.
+- **Forgotten constraints.** &#34;Only authenticated users can trigger this&#34; lives in a requirements doc; in a vibe session it was mentioned once in session one and gone by session four&#39;s new endpoint.
+- **Hidden security assumptions.** Authorization rules, validation boundaries, secrets handling — exactly the implicit requirements missed when the agent optimizes for plausible working code over correct constrained code.
+- **Team handoff.** Built by iterative prompting, the record of what was decided and why is the git log. Good luck with that.
+
+## What SDD Actually Changes
+
+SDD does not eliminate iteration — the good versions are explicitly iterative. It moves iteration earlier: iterate on the spec, then implement, instead of iterating on code and inferring intent from diffs. The spec records what was decided, why, and what is out of scope — adjacent to [Architecture Decision Records](/ai/decision-records-ai-development/), but oriented around feature intent rather than system-level choices.
+
+The loop runs specify, plan, tasks, implement, validate, with a human review gate per phase. The agent participates in most phases, but humans review artifacts before implementation starts. That review gate is the central difference from vibe coding — and the mechanism [Superpowers](/ai/superpowers-enforced-sdd-skills/) enforces automatically across harnesses instead of leaving to discipline.
+
+## Why Developers Cry Waterfall
+
+The critique targets bad SDD, not SDD itself. Waterfall&#39;s defining trait is a feedback loop stretched to weeks: requirements, design, build, test, ship, with discovery arriving after weeks of building on a wrong assumption. Generating a 200-line task list and polishing requirements for two days before the agent touches code is waterfall with markdown instead of UML — same failure mode. An HN commenter using Spec Kit on a small CLI tool found it &#34;too slow, too much tweaking before seeing code&#34; — and was right to reject it for that task.
+
+The useful critique is not &#34;specs are bad.&#34; It is &#34;long upfront planning before feedback is bad.&#34; Different claims.
+
+## The Middle Ground That Works
+
+Good SDD dodges the waterfall trap with five habits:
+
+```plaintext
+  small spec --&gt; short task --&gt; implement --&gt; validate --&gt; next task
+       ^                                                   |
+       &#43;------------------ update spec -------------------&#43;
+```
+
+- **Small specs.** A feature requirements doc should fit on one screen. Ten pages means platform design or a feature needing decomposition. Oversized specs review slowly and stale quickly.
+- **Short task slices.** One agent session, one reviewable diff, testable in isolation. Oversized tasks stretch the loop and blur spec-to-code mapping.
+- **Early implementation.** Spec the first task, implement, validate, then continue. The first implementation exposes spec errors — update the spec before proceeding.
+- **Living spec.** When reality diverges from design, update the spec, not just the code. A stale spec is decoration.
+- **Tests as executable feedback.** Every acceptance criterion maps to at least one test. The suite is the machine-readable spec: &#34;only authenticated users can trigger this&#34; needs a test rejecting unauthenticated requests.
+
+Not vibe coding, not waterfall: controlled iteration with durable artifacts.
+
+## When Each Side Wins
+
+Reach for SDD — even lightweight SDD — when wrongness is expensive: risky business logic (billing, permissions, migrations, idempotency), production API contract changes, multi-agent work needing a shared source of truth, team handoffs, and refactors touching core abstractions where behavior-versus-structure must be stated explicitly.
+
+Stay with vibe coding for fifty-line scripts, feasibility experiments, UI sketches, disposable one-time automation, and solo learning prototypes — speed over structure, contained downsides.
+
+The decision is per task, not per team:
+
+| Signal | Vibe coding | Lightweight SDD | Full SDD |
+|---|---|---|---|
+| Duration | Under a day | Two or more days | Multi-week feature |
+| Files touched | One or two | Multiple | Public interfaces, data contracts |
+| Correctness stakes | Low, reversible | Security/correctness requirements | Compliance, audit trails |
+| Consumers | Solo, throwaway | Handoff to person or agent | Multiple agents or team members |
+| Review gate | None | Tests map to requirements | Design review before implementation |
+
+The two classic errors: full SDD on tasks needing lightweight SDD, and no spec at all on tasks needing at least a lightweight one. And whichever level is picked, something must keep checking spec against code — [spec-test-code traceability](/ai/spec-test-code-traceability/) checks that catch a quietly staling spec.
+
+## Summary
+
+Bad SDD is waterfall with markdown. Good SDD is controlled iteration with durable artifacts. Vibe coding is the right tool for exploration, sketches, and throwaway work — and the wrong tool for anything with constraints worth remembering. For the broader tooling landscape this choice plays out in — Spec Kit, Kiro, Claude Code skills, OpenSpec — see the [Spec Kit vs Kiro vs Claude Code comparison](/ai/spec-kit-kiro-claude-code-sdd/), and for enforcement that survives deadline pressure, the [Superpowers](/ai/superpowers-enforced-sdd-skills/) skills package.
+
+*Where do you draw the line between vibe coding and speccing in your own work? Share your rule of thumb in the comments below!*
+

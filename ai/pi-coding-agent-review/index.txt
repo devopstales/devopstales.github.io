@@ -1,0 +1,152 @@
+---
+title: Pi Coding Agent Review: A Minimal Harness You Finish Yourself
+url: https://devopstales.github.io/ai/pi-coding-agent-review/
+date: 2026-09-07
+---
+
+
+Most coding agents keep getting bigger: planning modes, subagents, permission layers, IDE integrations, background workers. Pi walks the other way. Four default tools — `read`, `write`, `edit`, `bash` — with everything interesting left to extensions, skills, packages, and your own workflow. It is less a finished product than an editable harness, and that is exactly the point.
+
+&lt;!--more--&gt;
+
+![Pi coding agent as a minimal hackable terminal harness](/img/pi-coding-agent-review.webp)
+*Four default tools, TypeScript extensions, skills, and session trees: the kit, not the product*
+
+Aligned with Pi v0.84.2 (August 2026). Note the scope change: Mario Zechner&#39;s project moved to Earendil Works in May 2026, so current packages use the `@earendil-works` scope — older tutorials showing `@mariozechner` names are stale for new installs. Unrelated name collision to avoid: `oh-my-pi`, a community fork of an OpenCode harness, is a different project entirely.
+
+## Harness, Not Product
+
+The distinction matters: a coding model answers prompts, while a harness decides what context the model sees, which tools it may call, how results return, how sessions persist, and what happens between turns. Pi exposes nearly all of those layers:
+
+```plaintext
+  Developer --&gt; Pi harness --&gt; Selected LLM provider
+                    |
+      &#43;------&#43;------&#43;------&#43;------&#43;------&#43;
+      |      |      |      |      |      |
+    read  write  edit   bash  Skills  Packages
+      |      |      |      |
+      &#43;------&#43;--&#43;---&#43;------&#43;
+                 |
+        Project workspace / shell &#43; toolchain
+
+  TypeScript extensions plug into the harness:
+  tools, events, context, commands, terminal UI
+```
+
+| Area | Rating | Why |
+|---|---|---|
+| Architecture | 9/10 | Small core, clear extension points |
+| Model flexibility | 9/10 | Broad providers, easy switching |
+| Extensibility | 10/10 | Extensions alter tools, events, context, UI |
+| Session handling | 9/10 | Tree sessions suit experimentation |
+| Initial usability | 8/10 | Easy start, technical confidence expected later |
+| Safety defaults | 5/10 | No sandbox or permission boundary |
+| Team governance | 6/10 | Buildable, intentionally not built in |
+
+Verdict up front: **8.4/10** for the right user — experienced developers building their own tooling, AI platform work, agent research, teams with existing secure execution. Less convincing for anyone wanting safe defaults without thinking about architecture.
+
+## Install and a Controlled First Session
+
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+```
+
+`--ignore-scripts` skips dependency lifecycle scripts — unneeded for a normal install and one fewer supply-chain surface. Then verify, enter a project, and start:
+
+```bash
+pi --version
+cd /path/to/project
+pi
+```
+
+Pi needs a bash-capable environment (WSL or Git Bash on Windows, not `cmd.exe`). Authenticate via `/login` for subscriptions or export provider keys (`ANTHROPIC_API_KEY` and friends); pick models with `/model`. Providers span OpenAI, Anthropic, Google, Azure, Bedrock, NIM, DeepSeek, Mistral, Groq, Cerebras, Cloudflare, xAI, OpenRouter, plus a llama.cpp router for local models and custom providers via `~/.pi/agent/models.json`. Model and harness stay separate variables — same tooling across providers makes model comparisons meaningful instead of comparing whole products.
+
+Don&#39;t open with &#34;refactor my application.&#34; Evaluate read-only first:
+
+```bash
+pi --tools read,grep,find,ls -p &#34;Inspect this repository. Explain its architecture, identify the main entry points, and list the commands you would run before making a change. Do not modify files.&#34;
+```
+
+What matters in the answer isn&#39;t eloquence — it&#39;s whether the model names real entry points and the commands you&#39;d actually run before granting write access. For interactive trials, branch first (`git switch -c ai/pi-evaluation`) so Git stays the rollback layer, or run `pi --no-session` for ephemeral mode. Project instructions go in `AGENTS.md` (`CLAUDE.md` is also understood; `AGENTS.override.md` overrides per directory):
+
+```markdown
+# Project Instructions
+
+- Read the existing implementation before modifying files.
+- Keep changes narrowly scoped to the requested task.
+- Run `npm test` after code changes.
+- Run `npm run lint` before declaring the task complete.
+- Do not modify database migrations unless explicitly requested.
+- Do not access production infrastructure.
+- Explain any destructive command before running it.
+```
+
+Then assign a real maintenance task — find one behavior-preserving fix in a module with tests, explain first, implement, run tests. Existing code forces constraint discovery; toy apps don&#39;t evaluate agents.
+
+## Why Four Tools Is a Serious Idea
+
+Split agent tools into primitives (read, modify, execute) and conveniences (search, test runners, trackers, browsers, code intelligence, planners). Pi keeps the primitive layer small and the convenience layer optional. Every extra default tool expands the system prompt, multiplies model decisions, and adds debug surface — so a Kubernetes-infra team and a TypeScript-monorepo team can build different Pis without carrying each other&#39;s tools.
+
+The price is the hidden Pi tax: custom extensions become platform surface to review, version, and update as Pi evolves. Ownership of the agent means maintenance of the agent.
+
+Skills cover the middle ground without full extensions — packaged instructions, scripts, and references loaded via progressive disclosure only when needed (deployment reviews, migrations, release prep). Packages bundle extensions, skills, prompt templates, and themes from npm or Git, version-pinned:
+
+```bash
+pi install npm:@foo/pi-tools@1.2.3
+pi list
+```
+
+Treat packages like executable dependencies, not prompt collections: extensions run code with Pi&#39;s process permissions, and skills can instruct code execution. Unknown packages deserve dependency-level suspicion. The same SDK thinking applies to embedding — Pi ships a Node.js SDK plus `pi --mode rpc` (JSON over stdin/stdout) for IDEs and custom UIs.
+
+## Session Trees Beat Linear Transcripts
+
+Pi stores sessions as trees: revisit an earlier point, try another approach, keep both paths. `/tree` navigates, `/fork` branches from an earlier message, `/clone` duplicates the active branch, `pi -c` continues the latest session, `pi -r` browses history. Sessions persist as JSONL with automatic compaction near model limits, and branches can be summarized on moves.
+
+This mirrors real debugging — multiple live hypotheses at once. Follow a caching-layer theory down one branch, fork at the decision point, pursue transaction isolation down another; the failed path stays available for contrast instead of contaminating the new one or forcing a fresh chat. Extensions can further inject per-turn context (ownership data for touched files, schema metadata near database code), replace compaction, or maintain structured migration state outside the conversation. As agent quality shifts from raw model intelligence to context engineering and tool design, that access is Pi&#39;s long-term strength.
+
+## Security: No Sandbox, By Design
+
+The critical negative: Pi runs with the invoking user&#39;s permissions and provides no built-in sandbox. Project trust — controlling whether project-local settings, extensions, and skills load — is explicitly not a filesystem, network, process, or credential boundary, and the docs are honest about it. A pseudo-sandbox users trust but attackers bypass is worse than none. Real isolation comes from containers, VMs, micro-VMs, or policy runtimes:
+
+```plaintext
+  Host --&gt; Terminal &#43; Git (rollback layer)
+  Host --&gt; Sandbox --&gt; Pi &#43; repository copy &#43; build tools
+                      &#43; minimum provider credentials
+
+  Constrain together: mounts, env vars, network, credentials.
+  Read/write mounts still allow repo modification — containers
+  help only as far as mounts, creds, capabilities, network hold.
+```
+
+Three documented patterns: the [Gondolin](https://github.com/earendil-works/gondolin) extension (tools in a local Linux micro-VM, Pi process and keys on host — custom extension tools still run on host unless delegated too), plain Docker (whole process isolated, keys enter unless proxied), and [NVIDIA OpenShell](https://docs.nvidia.com/openshell/about/overview) (policy-controlled sandbox, gateway keeps raw keys outside). An agent with shell access potentially reaches SSH config, cloud credentials, registries, local services, browser state — evaluate with all four constrained. Two hygiene commands before running Pi anywhere valued:
+
+```bash
+pi --version
+export PI_OFFLINE=1   # no startup network: update checks, telemetry
+pi
+```
+
+Finer splits exist (`PI_SKIP_VERSION_CHECK=1`, `PI_TELEMETRY=0`). For untrusted repos, unattended operation, or credential-rich workstations, treat Pi as a powerful local process and sandbox around it — and review third-party extensions like code, because that&#39;s what they are.
+
+## Against Claude Code and OpenCode
+
+Compare by philosophy, not feature count. Claude Code ships opinionated permissions, hooks, and subagents — stronger built-ins, less assembly. [OpenCode](/ai/opencode-cli-in-practice/) exposes allow/ask/deny rules with built-in agents — the closer middle ground, still more ready-made than Pi. Pi starts lower in the stack: no built-in subagents or mandatory plan mode, no permission boundary as product.
+
+| Capability | Pi | Claude Code | OpenCode |
+|---|---|---|---|
+| Core approach | Minimal extensible harness | Opinionated product | Configurable agent |
+| Default tools | Small primitive set | Larger integrated surface | Integrated surface |
+| Permissions | Not a security boundary | Built-in modes and rules | Built-in allow/ask/deny |
+| Subagents | Via customization | Isolated, allowlisted | Built-in primary &#43; subagents |
+| Custom behavior | TypeScript extensions/events | Hooks, plugins, settings | Agent and tool config |
+| Sessions | Trees with fork/clone | Linear &#43; subagent flows | Continuity &#43; built-in agents |
+| Best fit | Building own workflow | Stronger built-ins wanted | Configurable agents &#43; policy |
+
+&#34;Claude Code clone&#34; misses it: happy with Claude Code&#39;s workflow, Pi adds assembly without automatic gain — including for local backends, where the [Claude Code local-backend setup](/ai/claude-code-local-backends/) stays the polished path. Pi matters when the sentence becomes &#34;I wish my agent worked differently&#34; rather than &#34;I wish it had another feature&#34;: same harness across Anthropic, OpenAI, and local models; your own sandbox; internal metadata injected per turn; compaction producing structured engineering state. The choice needn&#39;t be exclusive — polished daily driver plus programmable laboratory, until the laboratory wins.
+
+## Summary
+
+Pi refuses to finish the agent for you: MIT-licensed ([repo](https://github.com/earendil-works/pi), [pi.dev](https://pi.dev), npm `@earendil-works/pi-coding-agent`), four default tools, deep TypeScript extension surface, skills and packages, provider independence, tree sessions with real context engineering hooks — and deliberately no sandbox. Model inference still bills normally; openness of the harness never meant free tokens. Adopt it to own the layers other products hide; sandbox around it like the powerful local process it is.
+
+*Built custom extensions or packages for a minimal agent harness? Share what you wired in — and what broke — in the comments below!*
+

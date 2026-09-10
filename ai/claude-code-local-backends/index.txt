@@ -1,0 +1,169 @@
+---
+title: Claude Code with Local Backends: Install, Config, Ollama, and llama.cpp
+url: https://devopstales.github.io/ai/claude-code-local-backends/
+date: 2026-09-03
+---
+
+
+Claude Code isn&#39;t autocomplete with better marketing — it&#39;s a terminal-native junior engineer that needs review. This guide covers install, settings layering, self-hosted Ollama and llama.cpp backends, pricing rails, and troubleshooting.
+
+&lt;!--more--&gt;
+
+![Claude Code with a local model backend on a home setup](/img/claude-code-local-backends.webp)
+*Claude Code pointed at a self-hosted endpoint: same agent loop, local billing and data path*
+
+That speed-versus-supervision tension is what most people mean by [vibe coding](/ai/sdd-vs-vibe-coding/) — fast for exploration, fragile for anything with constraints worth remembering.
+
+## Install and First Run
+
+Install paths are not equal: native scripts stay current via auto-update, package managers change only when you say so.
+
+```bash
+# macOS, Linux, WSL
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+irm https://claude.ai/install.ps1 | iex
+```
+
+```cmd
+:: Windows CMD
+curl -fsSL https://claude.ai/install.cmd -o install.cmd &amp;&amp; install.cmd &amp;&amp; del install.cmd
+```
+
+Then start inside a project folder:
+
+```bash
+cd /path/to/your/project
+claude
+```
+
+First-party mode needs an account: Claude subscription (Pro, Max, Team, Enterprise), a Console account with API credits, or supported cloud providers. Operational footnote: the first Console login creates a &#34;Claude Code&#34; workspace for centralized cost tracking.
+
+## Settings Layering Explains Most Mysteries
+
+Three developer-facing files, one precedence chain:
+
+```plaintext
+  managed policy &gt; CLI flags &gt; local &gt; project &gt; user
+       |              |           |         |        |
+       |              |           |         |        ~/.claude/settings.json
+       |              |           |         .claude/settings.json (shared)
+       |              |           .claude/settings.local.json (gitignored)
+```
+
+When config looks ignored, the winner is usually a higher-precedence file. Manage interactively with `/config`, which opens a settings UI in the REPL.
+
+### Environment Variables That Route Providers
+
+Two quirks behave as design constraints:
+
+1. A set `ANTHROPIC_API_KEY` wins over subscription login — and in print mode (`-p`) the key always wins when present.
+2. A non-first-party `ANTHROPIC_BASE_URL` (proxy, gateway, local server) makes some features conservative — MCP tool search, for example, stays off unless explicitly re-enabled.
+
+A minimal gateway pattern:
+
+```bash
+export ANTHROPIC_BASE_URL=https://your-gateway.example
+export ANTHROPIC_API_KEY=sk-your-key
+```
+
+The gateway must expose `/v1/messages` and `/v1/messages/count_tokens` and forward `anthropic-beta` and `anthropic-version` headers. Gateways choking on beta headers get a dedicated escape hatch:
+
+```bash
+export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
+```
+
+Model aliases (`opus`, `sonnet`, `haiku`) plus specific-ID pinning, with an allowlist restricting the picker even through third-party providers:
+
+```json
+{
+  &#34;model&#34;: &#34;claude-sonnet-4-5&#34;,
+  &#34;availableModels&#34;: [&#34;claude-sonnet-4-5&#34;, &#34;haiku&#34;],
+  &#34;env&#34;: {
+    &#34;ANTHROPIC_DEFAULT_SONNET_MODEL&#34;: &#34;claude-sonnet-4-5&#34;
+  }
+}
+```
+
+## Ollama: The Lowest-Friction Local Path
+
+Ollama exposes an Anthropic-compatible API, which makes it the fastest route to non-Anthropic models:
+
+```bash
+ollama launch claude
+```
+
+```bash
+ollama launch claude --model glm-4.7-flash
+```
+
+Manual wiring treats provider routing as an environment concern, not GUI clicks:
+
+```bash
+export ANTHROPIC_AUTH_TOKEN=ollama
+export ANTHROPIC_API_KEY=&#34;&#34;
+export ANTHROPIC_BASE_URL=http://localhost:11434
+
+claude --model qwen3.5
+```
+
+Context-window reality check: agentic coding is context-hungry, with at least 64k tokens recommended. An 8k or 16k local model still runs, but the project-level promise turns fragile. Shortlist GGUF and Ollama tags against hands-on coding-task behavior, not parameter counts alone.
+
+## llama.cpp: The Lightweight Server Path
+
+llama-server exposes an Anthropic Messages API at `POST /v1/messages` with SSE streaming, plus `count_tokens`. Two details decide success: compatibility is &#34;works well enough,&#34; not full-spec — and tool use requires the `--jinja` flag. Miss it and the agent loop degrades into a chatbot that forgot how to act.
+
+```bash
+# Minimal local run with tool support
+./llama-server -m /models/your-model.gguf --jinja --host 127.0.0.1 --port 8080
+```
+
+```bash
+# With a hard auth boundary
+./llama-server -m /models/your-model.gguf --jinja --api-key my-local-key --host 127.0.0.1 --port 8080
+```
+
+Point Claude Code at it with a base URL override:
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8080
+export ANTHROPIC_API_KEY=my-local-key   # only if --api-key is set server-side
+
+claude --model your-model-alias
+```
+
+Without any key or token, Claude Code falls back toward subscription login — the source of most &#34;why is it opening a browser&#34; complaints. And when the first request appears to hang, check the server&#39;s `/health` endpoint: it reports &#34;loading model&#34; until ready, which separates client config bugs from a still-loading server in seconds.
+
+## Pricing Rails
+
+Pricing follows the billing rail behind the tokens, not the CLI itself. Subscriptions (Pro around $20/month monthly, Max from $100, Team per-seat) include Claude Code; API billing follows per-million-token rates (Haiku cheapest, Opus dearest — recheck current numbers before budgeting, they move). Two controls matter operationally: print-mode budget caps (`-p` with `--max-budget-usd`) for predictable scripted spend, and `/cost` inside sessions for usage statistics. Local backends remove per-token bills but swap them for compute, memory, and uptime ownership — the bill changes shape, not physics.
+
+## Workflow: Permissions First, Commands as Rails
+
+Claude Code is permission-gated by design: reads and grep flow, bash and file modifications need approval. Cycle modes with Shift&#43;Tab — default, acceptEdits (file edits without prompts, side-effecting commands still gated), plan (read and propose, never edit) — with a newer auto mode delegating approvals to a classifier as the middle path between nagging and silence.
+
+Built-in commands turn sessions into tooling: `/init` generates a `CLAUDE.md` project guide for consistent context; `/diff` shows per-turn change views; `/rewind` restores conversation and code via checkpoints; `/debug` captures mid-session logs; `/doctor` validates install and settings. For noisy delegable work — exploration, test runs, reviews — subagents push it into isolated context instead of bloating the main session. One-shot tasks belong in print mode, which exits after answering and fits scripts and CI:
+
+```bash
+claude -p &#34;Summarise the repository architecture and list the riskiest modules&#34;
+```
+
+That investigate-first, plan-before-edit discipline is the same instinct behind [spec-driven development](/ai/sdd-vs-vibe-coding/); for enforced skill-stack versions of it see [Superpowers](/ai/superpowers-enforced-sdd-skills/), and for the tooling comparison [Spec Kit vs Kiro vs Claude Code](/ai/spec-kit-kiro-claude-code-sdd/). The non-interactive pattern parallels [`opencode run`](/ai/opencode-cli-in-practice/) — same rule applies: scripted runs are only as safe as configured permissions.
+
+## Troubleshooting Checklist
+
+- **Keeps asking to sign in against a local server** — still on subscription auth. Set `ANTHROPIC_API_KEY` (X-Api-Key gateways) or `ANTHROPIC_AUTH_TOKEN` (Bearer gateways); note the key overrides login and may need one interactive approval.
+- **Gateway errors on anthropic-beta headers** — `export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`.
+- **Tool calling dead on llama.cpp** — restart the server with `--jinja`.
+- **Prompt fatigue on every command** — acceptEdits temporarily, explicit allow rules for known-safe commands in settings.json, `/sandbox` for bash isolation, or auto mode where supported.
+- **Something feels off** — `/doctor` validates setup, `/debug` captures logs from that point, and print mode with tight budget and turn caps bounds experiments.
+
+## Summary
+
+Claude Code earns its keep as a permission-gated workflow engine: settings precedence understood once, provider routing as environment, local backends via Ollama for convenience or llama-server with `--jinja` for control, pricing tied to rails with caps for scripts. Start from the permission model, lean on the built-in commands as safety rails, and verify local-only claims on the exact deployed version rather than inferring them from the product category.
+
+*Running Claude Code against local models — what broke first, context limits or tool calling? Share the failure in the comments below!*
+

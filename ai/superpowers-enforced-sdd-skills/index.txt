@@ -1,0 +1,147 @@
+---
+title: Superpowers: Enforced Spec-Driven Skills for Coding Agents
+url: https://devopstales.github.io/ai/superpowers-enforced-sdd-skills/
+date: 2026-08-13
+---
+
+
+Most spec-driven setups fail the same way: a solid plan-implement skill gets used diligently for a week, then quietly abandoned the first time a deadline gets close. Nothing in a hand-rolled skill stops that drift. Superpowers answers the discipline problem directly — a skills package that makes brainstorming, planning, subagent review, and strict TDD mandatory steps the agent checks before every task.
+
+&lt;!--more--&gt;
+
+![Superpowers skills framework installed across coding agents](/img/superpowers-quickstart.webp)
+*Superpowers packages the full spec-driven loop as installable skills with automatic activation*
+
+Superpowers packages a full spec-driven methodology — brainstorming, planning, subagent-driven implementation, strict TDD — as installable skills that trigger automatically instead of waiting to be invoked. This guide covers the essentials: what it enforces, how the seven-skill workflow runs, and when the ceremony earns its keep.
+
+## What Superpowers Actually Is
+
+[Superpowers](https://github.com/obra/superpowers), built by Jesse Vincent and the team at Prime Radiant, describes itself as a complete software development methodology for coding agents, built on composable skills plus bootstrap instructions that make the agent use them. Plenty of skill collections exist; the differentiator is that bootstrap — the agent checks for relevant skills before starting any task, so the workflow activates automatically instead of waiting for a slash command you forget under pressure.
+
+The stated philosophy:
+
+- **Test-Driven Development** — write tests first, always
+- **Systematic over ad-hoc** — process over guessing
+- **Complexity reduction** — simplicity as the primary goal
+- **Evidence over claims** — verify before declaring success
+
+If the [Agent Skills specification](https://agentskills.io/specification) mechanics are familiar, Superpowers is a large, opinionated set of exactly that kind of `SKILL.md` directory — distributed as an installable plugin rather than something you author per repo.
+
+## Installing It on Your Agent
+
+There is no single global install: you install Superpowers separately for each harness you use. Plugin manifests ship for Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot CLI, Grok Build CLI, Kimi Code, OpenCode, Pi, Devin CLI, Factory Droid, Antigravity, and Hermes Agent, so one methodology travels across agents instead of living in one repo&#39;s skills folder.
+
+```text
+# Claude Code, official Anthropic marketplace
+/plugin install superpowers@claude-plugins-official
+
+# Claude Code, dedicated marketplace (also carries related plugins)
+/plugin marketplace add obra/superpowers-marketplace
+/plugin install superpowers@superpowers-marketplace
+
+# Cursor
+/add-plugin superpowers
+
+# Gemini CLI
+gemini extensions install https://github.com/obra/superpowers
+
+# Pi
+pi install git:github.com/obra/superpowers
+
+# Hermes Agent
+hermes plugins install obra/superpowers --enable
+
+# Devin CLI
+devin plugins install obra/superpowers
+
+# Kimi Code
+/plugins install https://github.com/obra/superpowers
+
+# OpenCode: fetch and follow .opencode/INSTALL.md from the repo
+# (separate install even if already used elsewhere on the same machine)
+```
+
+Harness quirks worth knowing before a real task: Antigravity runs the session-start hook automatically, so the workflow is live from the first message. Pi injects the `using-superpowers` bootstrap at startup and after compaction via a small extension. Hermes Agent has no post-compaction hook — a very long session compacting over its first turn can silently lose the bootstrap, so start fresh if skills stop triggering.
+
+### Verify the install
+
+Ask the agent directly instead of trusting a silent success message:
+
+```text
+What skills are available?
+```
+
+A correct install lists skills like `brainstorming`, `writing-plans`, `test-driven-development`, and `subagent-driven-development`. If a skill exists but never activates, the routing description is almost always at fault, not the model.
+
+## The Seven-Skill Workflow
+
+Superpowers documents seven skills as the basic loop, each activating at a point and handing off to the next:
+
+```plaintext
+  brainstorming --&gt; using-git-worktrees --&gt; writing-plans
+                                                      |
+                          subagent-driven-development |
+                          or executing-plans          v
+                                                      |
+  test-driven-development &lt;-- per-task dispatch ------&#43;
+        |
+        v
+  requesting-code-review --&gt; finishing-a-development-branch
+```
+
+1. **brainstorming** runs before any code. It refines a rough idea through questions, explores alternatives, and presents the design in short reviewable chunks — then saves it as a design artifact.
+2. **using-git-worktrees** activates on design approval. It creates an isolated workspace on a new branch, runs project setup, and verifies a clean test baseline before implementation.
+3. **writing-plans** breaks the design into bite-sized tasks — two to five minutes of work each — with exact file paths, complete code where relevant, and explicit verification steps.
+4. **subagent-driven-development** (fast iteration) or **executing-plans** (batched with human checkpoints) dispatches a fresh subagent per task, with two-stage review: spec compliance first, code quality second.
+5. **test-driven-development** enforces strict red-green-refactor: failing test first, watch it fail, minimal code, watch it pass, commit. Code written before its failing test existed gets deleted, not kept.
+6. **requesting-code-review** runs between tasks, reviewing the diff against the plan with severity-ranked issues; critical ones block the next task.
+7. **finishing-a-development-branch** verifies tests pass once tasks complete, then offers merge, PR, keep, or discard — and cleans up the worktree.
+
+This mirrors the tool-neutral specify-plan-implement-validate loop, with one difference that matters: enforcement. The agent checks for these skills automatically rather than relying on you to invoke each phase.
+
+## Trying It on a First Task
+
+Do not aim it at the most important feature first. Pick something real but bounded — a small endpoint, a focused bug fix, a single-module refactor — in a project that already has a test suite, since TDD enforcement is most visible there:
+
+```text
+I want to add rate limiting to our public API endpoints.
+```
+
+Expect brainstorming questions before code: which endpoints, what limit, per-user or per-key, behavior on breach. That friction is intentional. After approving the design in chunks, expect numbered small tasks before any file changes, then one subagent per task with a diff to review at each checkpoint.
+
+Watch two things on the first run. Confirm TDD is actually enforced: a failing test must appear before implementation for at least one task — if code lands first, the skill did not trigger and the discovery check needs rerunning. And watch task granularity: two-to-five-minute sizing is aggressive for some codebases, so raise fragmentation concerns at the writing-plans checkpoint, not after the fact.
+
+## What&#39;s in the Library
+
+Beyond the seven workflow skills, supporting skills group by area:
+
+| Category | Skills |
+|---|---|
+| Testing | `test-driven-development` (includes testing anti-patterns reference) |
+| Debugging | `systematic-debugging` (4-phase root cause process), `verification-before-completion` |
+| Collaboration | `brainstorming`, `writing-plans`, `executing-plans`, `dispatching-parallel-agents`, `requesting-code-review`, `receiving-code-review`, `using-git-worktrees`, `finishing-a-development-branch`, `subagent-driven-development` |
+| Meta | `writing-skills` (create new skills with testing methodology), `using-superpowers` (bootstrap) |
+
+`dispatching-parallel-agents` deserves a callout: concurrent subagent workflows with isolated context and summaries reported back instead of flooding the main session — the same territory as Claude Code&#39;s subagent model.
+
+## When It Fits and When It Doesn&#39;t
+
+Good fit: you like skills-based SDD but slide back to unstructured prompting because nothing enforces review gates; you work across multiple agents and want one traveling methodology; you want strict TDD without writing the enforcement yourself; multi-session features where architectural drift is a real risk.
+
+Weaker fit: quick scripts, throwaway prototypes, and fifty-line changes where brainstorming overhead never pays back; teams with an existing well-tuned project SDD skill (Superpowers trades customization for opinionated ceremony); environments where mandatory TDD or fine task granularity conflicts with an established process.
+
+Against the wider field, Superpowers operates at the skills layer rather than as a standalone CLI or IDE: Spec Kit gives portable markdown artifacts, Kiro gives a guided IDE experience, a hand-rolled skill gives maximum flexibility with zero enforcement. Superpowers sits between the last two — same mechanism as DIY, with mandatory-feeling enforcement and cross-agent distribution. The full portability and lock-in comparison across Spec Kit, Kiro, Claude Code skills, OpenSpec, and BMAD-METHOD is covered in [Spec Kit vs Kiro vs Claude Code](/ai/spec-kit-kiro-claude-code-sdd/).
+
+## Things to Know
+
+- **Updates are agent-dependent.** Antigravity re-runs its hook on reinstall; Git-based installs need explicit updates; marketplace installs follow the host&#39;s plugin update flow.
+- **Telemetry is on by default, easy off.** The brainstorming skill&#39;s optional visual companion loads the vendor logo (version only, no project or prompt data). Set `SUPERPOWERS_DISABLE_TELEMETRY` to any true value; Claude Code&#39;s own `DISABLE_TELEMETRY` opt-outs are honored too.
+- **Contributions go through `dev`.** Fork, switch to the `dev` branch, follow the `writing-skills` skill — new skill contributions are generally not accepted, since every skill must behave identically across all supported agents.
+- **Silent skills are a discovery problem.** Confirm with &#34;What skills are available?&#34;, check the install targets the agent actually in use, and restart Hermes sessions after compaction drops the bootstrap.
+
+## Summary
+
+Superpowers is worth installing when the gap between SDD intentions and actual session behavior is the problem to solve. It introduces no new specify-plan-implement idea — it makes the existing one harder to skip, across more agents than a repo-local skill can reach. Install it on the one harness used daily first, run a small bounded task through the full brainstorm-to-finish cycle, and judge from there whether the enforced ceremony earns its keep.
+
+*Have you tried enforced-skill workflows, Superpowers or otherwise? Share what survived contact with deadlines in the comments below!*
+

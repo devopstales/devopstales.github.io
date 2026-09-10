@@ -1,0 +1,145 @@
+---
+title: The SDD Workflow: Five Phases from Requirements to Verified Code
+url: https://devopstales.github.io/ai/sdd-workflow-five-phases/
+date: 2026-09-10
+---
+
+
+Spec-driven development works when the specification is a workflow, not a document filed away after kickoff. The point is a sequence of reviewable artifacts — requirements, design, tasks, implementation, validation — each reducing ambiguity before anyone, human or agent, changes production code.
+
+&lt;!--more--&gt;
+
+![Spec-driven development workflow across five phases](/img/sdd-workflow-five-phases.webp)
+*Specify, plan, tasks, implement, validate: each phase reviewed before the next begins*
+
+## A Chain of Artifacts, Not Paperwork
+
+The classic failure is documentation theater: a long requirements doc in a wiki while code gets written from memory and chat threads. A working loop fixes each artifact before running the next phase — and re-runs from the failed point when a mistake surfaces, not after thousands of drifted lines land in main:
+
+```plaintext
+  Specify --&gt; Plan --&gt; Tasks --&gt; Implement --&gt; Validate
+                                                |
+                                     &#43;----------&#43;----------&#43;
+                                     |                     |
+                                  drift found           ship
+                                     |                     |
+                                     v                     v
+                              fix artifact,          Done
+                              re-run from it
+```
+
+The workflow is tool-neutral: markdown in Git, [Spec Kit](/ai/spec-kit-kiro-claude-code-sdd/), an enforced skills package like [Superpowers](/ai/superpowers-enforced-sdd-skills/), or an editor with a disciplined reviewer. Sequence and gates matter; brands don&#39;t. Whether the feature deserves this machinery at all is the prior question from [SDD vs vibe coding](/ai/sdd-vs-vibe-coding/).
+
+## Phase 1: Specify Requirements
+
+Specify answers what problem is being solved and what done looks like — never how to build it. The moment the requirements say &#34;use Redis sorted sets,&#34; design leaked into the wrong document.
+
+Open with one plain-language paragraph: who hurts, why, what triggers it. Then bound agent creativity with goals (measurable outcomes), non-goals (tempting adjacent work explicitly excluded — agents expand scope by default without them), and acceptance criteria precise enough to map one-to-one onto tests. &#34;The endpoint is secure&#34; is not a criterion; &#34;unauthenticated requests receive HTTP 401&#34; is. Park everything unsettled in open questions and resolve them before design — ambiguity paid in rework later costs multiples.
+
+````markdown
+## Problem
+[One paragraph: who hurts, why, and what triggers the pain.]
+
+## Users
+- [Primary user role]
+- [Secondary user role]
+
+## Goals
+1. [Measurable outcome]
+2. [Measurable outcome]
+
+## Non-goals
+- [Explicitly out of scope]
+- [Explicitly out of scope]
+
+## Acceptance criteria
+- [ ] [Verifiable behavior]
+- [ ] [Verifiable behavior]
+
+## Open questions
+- [ ] [Question that blocks planning]
+````
+
+## Phase 2: Plan the Design
+
+The plan translates intent into technical decisions: module boundaries, schema changes, API contracts, migrations, security constraints, test strategy. It derives from the requirements plus existing project constraints — stack choices, [decision records](/ai/decision-records-ai-development/), `AGENTS.md` conventions.
+
+Name affected modules and cross-boundary contracts on both sides; agents hallucinate APIs when contracts stay implicit. Document schema, indexes, backward-compatibility, migration and rollback steps. Put security in now — auth rules, validation boundaries, log-excluded data — not in code review later. And connect acceptance criteria to test types up front: which criteria get unit, integration, or manual verification. A plan without a test strategy ships gaps discovered in production.
+
+## Phase 3: Task Slices
+
+Decompose the plan into slices each implementable in one agent session, reviewable as one diff, validatable in isolation — with explicit dependencies (migrations before readers, shared libraries before consumers) and per-task file lists, satisfied criteria, and copy-pasteable validation:
+
+```markdown
+### Task 3 -- Add rate-limit middleware
+
+**Depends on:** Task 1 (schema), Task 2 (repository)
+**Files:** middleware/ratelimit.go, middleware/ratelimit_test.go, server.go
+**Satisfies:** AC-2 (429 over limit), AC-3 (limit headers in response)
+**Validate:** `go test ./middleware/...` passes; curl over limit returns 429 with Retry-After
+**Review checkpoint:** Confirm middleware runs after auth, before handler
+```
+
+Watch for task explosions: agents emit fifty-item plans in seconds, mostly redundant or unreviewable. Five to fifteen items cover a medium feature. Every task ends at a human checkpoint — diff confirmed against its description before the next starts.
+
+## Phase 4: Implement Narrowly
+
+One task, minimal context, stop at green. Context resets between tasks are a feature: earlier assumptions stop polluting later work and diffs stay reviewable. The agent reads requirements, plan, task description, and project constraints — especially the don&#39;ts most teams skip: no unrelated refactors, no public signature changes outside the feature, no new dependencies without a plan update.
+
+Reality will surprise: unsupported library behavior, slow migrations, missing edge cases. Update the spec first, get a quick review, resume against corrected context. Silently divergent code is how drift turns permanent:
+
+```plaintext
+  Human approves task N --&gt; Agent reads task &#43; plan &#43; constraints
+      --&gt; implements --&gt; runs validation --&gt; submits diff
+      --&gt; Human reviews against task:
+            approved? mark complete, proceed to N&#43;1
+            drift? update spec/plan, re-run corrected
+```
+
+## Phase 5: Validate Against the Spec
+
+Without validation the spec is a planning exercise; with it, a contract checkable against shipped code. Run the full suite, lint, and type checks in CI, then walk every acceptance criterion marking satisfied, failed, or deferred-with-reason — manual review catches wrong behavior built to a flawed spec that tests, written to match, will miss. Finish with a spec-to-code diff: do changed files match the plan&#39;s predicted set, do in-code decisions match recorded ones? Unexpected files mean an incomplete plan or a wandering agent — both block merge-worthy until explained. Repeatable per-PR enforcement of this lives in [spec-test-code traceability](/ai/spec-test-code-traceability/): token scans, coverage checks, stale-spec warnings.
+
+## Where Agents Accelerate (and Where Humans Gate)
+
+Agents draft requirements from problem descriptions, design plans from approved requirements, task lists from plans, slices and boilerplate tests from tasks. Humans own intent, architecture approval, checkpoint diff review, and final acceptance. Skip either side and the loop fails — agents without specs drift, specs never validated against code decorate.
+
+## Mistakes That Kill It
+
+- **Huge specs before validation.** Thirty pages pre-prototype is waterfall paperwork. Minimum spec removing next-phase ambiguity, then early validation spikes.
+- **Vague criteria.** &#34;Fast,&#34; &#34;clean,&#34; &#34;user-friendly&#34; test nothing. If it isn&#39;t measurable, it isn&#39;t implementable — least of all by an agent.
+- **Missing non-goals.** The default agent adds caching layers and refactors neighbors. Say no in advance.
+- **Tests planned late.** Post-implementation tests confirm what was built, not what was intended.
+- **Skipped gates.** Spec before plan, plan before tasks, tasks before code. Each gate is cheap; post-merge drift repair is not.
+- **Exploded task lists.** Fifty generated items are a first draft: merge, split, delete unmapped.
+
+## Copy-Paste Templates
+
+Requirements, design, tasks as above, plus a validation checklist:
+
+```markdown
+# Validation -- [feature name]
+
+## Automated
+- [ ] All tests pass
+- [ ] Lint clean
+- [ ] Type check clean
+
+## Acceptance criteria
+- [ ] AC-1 --
+- [ ] AC-2 --
+
+## Spec-to-code
+- [ ] Changed files match plan
+- [ ] No undocumented architectural changes
+- [ ] Spec updated if implementation differed
+```
+
+Store specs beside the feature branch, review in pull requests, version in Git — agents and humans reading the same source.
+
+## Summary
+
+Specify, plan, tasks, implement, validate, with a review gate per step. Each phase should hand the next actor — human or agent — less guesswork than it received. Run the full loop once on a medium feature, keep artifacts in markdown, update on divergence, validate before merge. When the chain turns into paperwork, cut scope, not review: a validated two-page spec beats an unread thirty-page one.
+
+*Which phase of your SDD loop breaks down first — vague requirements, missing gates, or skipped validation? Share the failure mode in the comments below!*
+

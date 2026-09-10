@@ -1,0 +1,101 @@
+---
+title: GitLab CI to GitHub Pages for a Hugo Blog
+url: https://devopstales.github.io/hugo/gitlab-ci-to-github-pages-hugo/
+date: 2026-08-03
+keywords: Hugo, GitLab CI, GitHub Pages, .nojekyll, submodules, deploy
+---
+
+
+This blog’s source of truth and CI live on GitLab. The public site is served from GitHub Pages at [devopstales.github.io](https://devopstales.github.io/). Hugo builds in a container, the job writes into a separate Pages repository, and readers never see GitLab’s job logs—only the static tree.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+## Shape of the pipeline
+
+High level:
+
+```plaintext
+  GitLab repo (content, layouts, themes)
+           |
+           v
+  hugomods/hugo image  --&gt;  hugo  --&gt;  public/
+           |
+           v
+  clone GitHub Pages repo, replace files, commit, push
+           |
+           v
+  https://devopstales.github.io/
+```
+
+The active job uses the [hugomods/hugo](https://github.com/hugomods/docker) image pinned to a Hugo version (for example `hugomods/hugo:git-0.148.0`) and sets:
+
+```yaml
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+```
+
+Themes such as Roadster and `hugo-atom-feed` are git submodules. Without recursive checkout, `hugo` fails or silently falls back to incomplete layouts.
+
+## Build steps that matter
+
+A typical job script:
+
+1. Optional content normalization (`sed` to force `toc: true` / comment flags on section globs).
+2. `mkdir public` and copy root files that must be at the site root (for example `ads.txt`).
+3. Run `hugo`.
+4. Add `.nojekyll` so GitHub Pages does not run Jekyll on the uploaded tree.
+5. Clone the Pages repo, replace its contents with `public/`, commit, push.
+
+`.nojekyll` is not cosmetic. GitHub Pages enables Jekyll by default. Without the empty marker file, some paths—especially Markdown-looking files—can 404 or be rewritten. If you also publish agent-facing text siblings, read the companion note on [llms.txt and `index.txt` on GitHub Pages](/hugo/hugo-llms-txt-and-plaintext-output/).
+
+Locally, `build.sh` / `build-osx.sh` mirror the same Hugo invocation for a laptop build without the push step.
+
+## Deploy credentials
+
+Do **not** hardcode a GitHub personal access token in `.gitlab-ci.yml`. Store it as a masked/protected CI/CD variable (for example `GITHUB_TOKEN` or `GITHUB_PAGES_TOKEN`) and clone with that variable:
+
+```bash
+git clone &#34;https://x-access-token:${GITHUB_TOKEN}@github.com/ORG/PAGES_REPO.git&#34;
+```
+
+Use a fine-scoped token (or deploy key) with write access only to the Pages repository. Rotate anything that was ever committed in plain text.
+
+Push commits with a bot identity that matches your project norms:
+
+```bash
+git config user.name &#34;ci-bot&#34;
+git config user.email &#34;ci-bot@users.noreply.github.com&#34;
+git add -A
+git commit -m &#34;$(date &#43;%Y-%m-%d)&#34; || true
+git push
+```
+
+Copy with `cp -a public/. pages-repo/` so dotfiles such as `.nojekyll` are included. A bare `public/*` glob skips them.
+
+## Keep section scripts in sync
+
+If the job rewrites front matter per section with `sed`, every new content directory must be listed. When `content/hugo/` was added, the CI globs still targeted older sections only (`ai`, `kubernetes`, …). New Hugo posts will not get those toggles until you extend the script:
+
+```bash
+sed -i &#39;s|toc: false|toc: true|&#39; content/hugo/*.md
+```
+
+Prefer fixing front matter in the source over CI mutation when you can. If you keep the sed approach, treat “new section” as a CI checklist item.
+
+## Verify
+
+```bash
+# After a green pipeline
+curl -sI https://devopstales.github.io/ | head
+curl -sI https://devopstales.github.io/.nojekyll | head
+curl -s https://devopstales.github.io/hugo/ | head
+```
+
+Check the Pages repo history for the CI commit, and confirm submodule themes rendered (menu, Atom link, Roadster chrome).
+
+## Summary
+
+Pin a Hugo image, fetch themes recursively, build into `public/`, stamp `.nojekyll`, and push to a dedicated GitHub Pages repo with a secret token. The split—GitLab for engineering, Pages for hosting—stays simple as long as credentials stay in CI variables and new content sections stay on the deploy checklist.
+

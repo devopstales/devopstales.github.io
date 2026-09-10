@@ -1,0 +1,244 @@
+---
+title: Agent Skills vs MCP Servers: Where Should the Responsibility Live?
+url: https://devopstales.github.io/ai/agent-skills-vs-mcp-servers-decision-framework/
+date: 2026-08-06
+---
+
+
+Agent skills and MCP servers are often presented as competing ways to extend an AI agent. That framing is wrong: a skill teaches the agent how to work, while an MCP server gives it governed access to live capabilities. The useful question is not which standard wins, but where each responsibility should live.
+
+&lt;!--more--&gt;
+
+![Agent skills versus MCP servers decision framework](/img/agent-skills-vs-mcp.webp)
+*Diagram from the source article: where skill, MCP server, and backing service responsibilities live*
+
+Agent skills and MCP servers are often presented as competing ways to extend an AI agent. That framing is wrong: a skill teaches the agent how to work, while a server gives it governed access to live capabilities. This guide answers where each responsibility should live for hosted assistants such as Hermes Agent and OpenClaw: the core distinction, when each mechanism fits, what they cost in context, the thin-server pattern that combines them, and the anti-patterns to avoid.
+
+## The Core Distinction: Procedure vs Capability
+
+An Agent Skill is a directory centered on `SKILL.md`, with optional scripts, references, and assets. The [Agent Skills specification](https://agentskills.io/specification) defines required metadata and a progressive disclosure model: the host discovers a small name and description first, loads full instructions when relevant, and fetches supporting files only on demand.
+
+That makes a skill the natural home for an incident rubric, a release checklist, a research method, or instructions for driving an existing CLI. Its value is encoded procedure: sequence, judgment, constraints, examples, and the definition of a good result.
+
+MCP solves a different problem. The [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2026-07-28/basic) gives clients and servers a JSON-RPC contract for tools, resources, and prompts, with standard transports and discovery. An MCP server is therefore a good boundary around a ticket system, a cloud control plane, a source-of-truth database, or an internal search service. It owns the mechanics of reaching that system and enforces validation, authorization, timeouts, rate limits, and audit behavior outside the model&#39;s prose.
+
+### A More Precise Rule
+
+Ask whether a responsibility must remain correct without the model remembering an instruction. If yes, it belongs in deterministic code or server policy, not only in `SKILL.md`.
+
+For example, &#34;collect three supporting signals before escalating&#34; is a useful skill instruction. &#34;Reject a status change unless the caller has the incident-manager scope&#34; must be enforced by the service or MCP server, even if the skill repeats the rule. The boundary:
+
+- A skill tells the agent when an action is appropriate.
+- An MCP tool makes the action available through a typed interface.
+- The backing service decides whether the action is actually allowed.
+
+## When a SKILL.md Is Enough
+
+A skill is enough when the agent already has safe access to everything it needs and the missing ingredient is know-how. That covers repository analysis, document transformation, report generation, and local workflows built on mature CLIs.
+
+### The Data Is Local or Supplied by the User
+
+If the agent inspects a checked-out repository, runs read-only linters, compares configs, and produces a migration report, the files are already in the working environment and the host already provides filesystem and process tools. Another network service adds little value. The skill describes which files to inspect, the command order, failure handling, and the required evidence, while the host sandbox remains the actual execution boundary.
+
+### The Workflow Depends on Judgment
+
+Skills shine when several technically valid actions exist but the organization prefers one operating method. A code-review skill can define which risks deserve blocking comments, when to request a reproduction, and how to separate correctness from taste. Those rules change as teams learn, and version-controlled prose is easier to revise than a redeployed server.
+
+### Portability Matters More Than Central Control
+
+The open Agent Skills format is a portable folder, not a remote runtime. A well-scoped skill moves between compatible hosts with instructions, examples, and assets intact, although tool names and sandbox behavior still need host-specific testing. Keep host-specific notes in short references instead of forking the core procedure at the first difference.
+
+### An Existing CLI Already Provides the Capability
+
+Do not build a server just to wrap a reliable local command. If a single-user assistant can call a narrow CLI that already handles authentication, structured output, and errors, a skill is the smaller and more maintainable solution. The caveat: a CLI is not automatically safe because it is local. Avoid broad shell interpolation, prefer structured output, constrain writable targets, and never treat a skill&#39;s suggested tool allowlist as a complete authorization system.
+
+## When You Need an MCP Server
+
+Choose MCP when the problem is not remembering what to do, but reaching something safely. An MCP server is a durable, typed, governable bridge to a changing system.
+
+### The State Is Live and Authoritative
+
+Tickets, deployment status, inventory, billing records, and production metrics change between model turns. Copying that state into a skill makes it stale by construction, and scraping an interface produces an unstable contract. An MCP resource or tool fetches the current record at execution time, normalizes upstream quirks, and returns a compact projection instead of a raw vendor payload.
+
+### Credentials or User Identity Are Involved
+
+Credentials do not belong in `SKILL.md`, examples, or bundled helper scripts. For remote HTTP deployments the [MCP authorization guidance](https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/authorization) defines an OAuth-based model; for local stdio servers, credentials come through the process environment or another host-controlled mechanism. Beyond secret storage, a server maps identity to scopes, restricts tenants, redacts fields, and records who requested each mutation. Prose can only ask the model to behave.
+
+### Writes Need Transactional Guarantees
+
+Creating an invoice, changing a ticket status, or starting a deployment needs idempotency keys, optimistic concurrency, server-side validation, and a durable audit trail. Those properties live below the model. The skill may define the approval policy, but the MCP server rejects invalid transitions and makes retried requests safe.
+
+### Multiple Agents Need the Same Capability
+
+One shared MCP server presents a single contract to several agent hosts, languages, and model providers. Platform teams get one place to improve schemas, patch upstream API behavior, and apply access controls instead of copying integration logic into every skill. The price is real: the server becomes an operated dependency with versioning, observability, availability, and on-call obligations, so it should earn its existence with a genuine trust boundary.
+
+## Skill vs MCP Server in One Table
+
+| Decision signal | Agent Skill | MCP server |
+|---|---|---|
+| Static instructions, checklists, style rules | Best fit | Poor fit |
+| Live tickets, deployments, records, metrics | No | Best fit |
+| Credentials or delegated user identity | Avoid | Best fit |
+| Existing local CLI with safe, narrow commands | Good fit | Optional |
+| Transactional writes or idempotency | Weak fit | Best fit |
+| Portable procedure across agent hosts | Best fit | Optional |
+| Shared capability across languages and clients | Limited | Best fit |
+| Human approval and escalation policy | Best fit | Enforce final check |
+| Output format and evidence rubric | Best fit | No |
+
+A conservative default: start with a skill when the job is local, read-heavy, and procedural. Add an MCP server when the agent crosses a trust boundary, touches changing external state, or needs an operation that stays correct even when the model is confused.
+
+## The Context-Cost Question
+
+Context cost is often reduced to the slogan &#34;skills are progressive, tools are always loaded.&#34; Real hosts are more nuanced, so measure serialized model input instead of assuming cost from the extension format.
+
+Skills carry roughly 100 tokens of discovery metadata each, activated instructions are recommended to stay below 5,000 tokens, and references load on demand. A planning estimate:
+
+```text
+C_skill = discovery metadata &#43; activated instructions &#43; selected references
+```
+
+MCP clients discover tool definitions from servers, but the protocol does not require every discovered schema to appear in every model call. Hosts may filter, defer, cache, or route tools:
+
+```text
+C_mcp = tool schemas exposed to this turn &#43; tool results retained in context
+```
+
+The [MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) notes that stable tool ordering improves prompt-cache behavior. Caching cuts repeated processing cost but does not make an oversized catalog easier for a model to choose from.
+
+### An Illustrative Token Budget
+
+Take a hosted assistant with 20 installed skills. At roughly 100 tokens of discovery metadata each, the compact skill index costs about 2,000 tokens; activating one focused triage skill adds around 1,200 tokens plus a 600-token reference. Compare two MCP designs: a thin ticket server with four concise schemas serializes to 500-800 tokens, while a broad enterprise server with 35 verbose tools can consume several thousand tokens before any result arrives.
+
+| Turn component | Focused design | Broad design |
+|---|---|---|
+| Skill discovery metadata | About 2,000 tokens | About 2,000 tokens |
+| Activated skill and one reference | About 1,800 tokens | About 1,800 tokens |
+| MCP tool catalog exposed to model | 500-800 tokens | 4,000&#43; tokens |
+| First tool result | 300-700 tokens | 1,500&#43; tokens |
+
+These are illustrative planning numbers, not benchmarks. Capture a real prompt trace from your host, because schema verbosity, routing, result retention, and tokenizer choice move the total substantially. The practical conclusion: keep skill metadata discriminative, activate only relevant instructions, expose the smallest useful tool set, and return projections rather than raw upstream payloads.
+
+## The Thin-Server Pattern: MCP Below, Skill Above
+
+The most durable design combines both: a small capability boundary in MCP, with the operating method in a skill that calls it. Consider a support-incident workflow: read a ticket, gather evidence, classify severity, draft an operator note, and change status only after required approval.
+
+```plaintext
+  Agent        Skill              MCP server         Ticket service
+    |            |                     |                    |
+    &#43;--activate-&gt;&#43;                     |                    |
+    |  triage    |                     |                    |
+    |  procedure |--- tickets_search --&gt;&#43;-- query -----------&gt;&#43;
+    |            |&lt;-- candidates -------&#43;&lt;-- results ---------&#43;
+    |            |--- tickets_get -----&gt;&#43;-- read ------------&gt;&#43;
+    |            |&lt;-- ticket &#43; version -&#43;&lt;-- record ----------&#43;
+    |            |--- tickets_add_note -&gt;&#43;-- validated -------&gt;&#43;
+    |            |    (after approval)   |    idempotent write |
+    |            &#43;--- tickets_change ---&gt;&#43;-- scope &#43; ---------&gt;&#43;
+    |                 _status            |  transition check  |
+```
+
+### What the MCP Server Owns
+
+Keep the interface narrow and literal:
+
+| MCP tool | Purpose | Server-side responsibility |
+|---|---|---|
+| `tickets_search` | Find candidate tickets | Tenant filtering, pagination, field projection |
+| `tickets_get` | Read one ticket | Authorization, redaction, current version |
+| `tickets_add_note` | Add an operator note | Input validation, idempotency, audit record |
+| `tickets_change_status` | Apply a valid transition | Scope check, transition rules, concurrency check |
+
+No `triage_everything` tool with a paragraph-long description and a dozen unrelated flags. Four bounded operations are easier to authorize, test, observe, and reuse.
+
+### What the Skill Owns
+
+The skill owns sequence and judgment. A compact `SKILL.md` following the [Agent Skills specification](https://agentskills.io/specification):
+
+````markdown
+---
+name: incident-triage
+description: Triage support incidents using ticket evidence and the severity rubric.
+---
+
+1. Read the ticket and its current version.
+2. Collect at least two independent signals before assigning severity.
+3. Separate observed facts from hypotheses in the note.
+4. Ask for operator approval before any customer-visible note or status change.
+5. Re-read the ticket before a write; stop if its version changed.
+6. End with severity, evidence, uncertainty, and recommended next action.
+````
+
+A linked reference holds the severity rubric while the main instructions stay short enough to activate without dragging an operations handbook into every turn.
+
+### Why the Split Survives Change
+
+If the support team revises its severity rubric, update the skill. If the ticket vendor changes authentication or pagination, update the MCP server without rewriting operating policy. When a second agent host arrives, it reuses the same MCP contract and adapts only the skill&#39;s small host-specific layer. Procedural edits stop requiring service deployments, and integration fixes stop requiring policy rewrites.
+
+## A Five-Step Decision Framework
+
+More reliable than picking the fashionable extension type first:
+
+### 1. Identify the Source of Truth
+
+List every input and output the workflow touches. Static guidance, repository files, and user-provided documents lean toward a skill; mutable remote records and authoritative systems lean toward MCP. Not all state justifies a server: a local build artifact is state, but an existing sandboxed CLI may already be a sufficient boundary.
+
+### 2. Locate the Trust Boundary
+
+Mark where credentials, tenant identity, privileged data, or irreversible actions appear. If the agent crosses that line, introduce a deterministic enforcement point, typically an MCP server backed by service authorization. Treat the model and skill as request planners, not policy engines: they may propose a permitted action, but must not redefine permission by changing their own instructions.
+
+### 3. Separate Capability From Policy
+
+Name capabilities as narrow verbs with typed inputs: get a ticket, add a note, change status. Put the conditions for choosing those verbs, the evidence standard, and the preferred sequence in the skill. Some policy lives in both layers for different reasons: &#34;ask the user before deploying&#34; belongs in the skill for interaction quality, while &#34;reject deployment without an approval token&#34; belongs in code for enforcement.
+
+### 4. Estimate Context and Operating Cost
+
+Capture a real prompt trace and count skill metadata, activated instructions, tool definitions, and returned data. Then add the non-token cost of an MCP service: deployment, authentication, monitoring, versioning, and on-call ownership. If a 30-tool catalog serves one workflow, expose a task-specific subset or split the server by capability domain. If a skill repeatedly loads a 200-page reference, add a retrieval step or smaller references.
+
+### 5. Test the Boundary, Then the Behavior
+
+Test the MCP server as software and the skill as agent behavior. They fail differently, and one happy-path chat transcript hides both defect classes:
+
+| Layer | Test focus | Example assertion |
+|---|---|---|
+| Skill | Selection and procedure | Activates for incidents, not general support questions |
+| Skill | Judgment | Cites two signals before assigning high severity |
+| MCP server | Contract | Rejects missing fields and malformed identifiers |
+| MCP server | Authorization | Denies cross-tenant reads and under-scoped writes |
+| MCP server | Reliability | A retried note creates no duplicate |
+| Integrated trace | End-to-end behavior | Requests approval, detects version conflict, stops safely |
+
+## Common Anti-Patterns
+
+### Hiding a Remote API Client in a Skill
+
+A shell script reading a static bearer token and calling a production API mixes procedure, credentials, network behavior, and authorization into a package designed to be copied between hosts. Move the protected integration behind a narrow server or an approved CLI; keep only workflow and calling guidance in the skill.
+
+### Encoding the Workflow in Tool Descriptions
+
+Tool descriptions help the model select a capability and fill its schema. They are a poor substitute for a multi-step procedure with examples, exceptions, escalation rules, and output conventions. Long descriptions inflate every turn where the tool is exposed and make the contract harder to reuse. Procedure goes in a skill; tool semantics stay precise.
+
+### Building an execute_anything Tool
+
+A generic shell, SQL, or HTTP proxy collapses many permissions into one unauditable capability, shifts validation to the model, and makes least privilege fictional. Expose operations aligned to real business actions. If expert operators need an escape hatch, separate it, restrict it, and require stronger approval and logging.
+
+### Publishing a Kitchen-Sink MCP Server
+
+Dozens of unrelated tools burden selection, schema context, permissions, and maintenance. Split by coherent domain or let the host expose a relevant subset per task. A sensible start, per the Hermes FastMCP guidance: one to three high-value endpoints, thin server, clear names and schemas.
+
+### Treating Tool Hints as Security Policy
+
+Read-only annotations or allowed-tools hints improve host behavior but never replace sandboxing and server-side authorization. Metadata can be stale, misconfigured, or supplied by an untrusted component. Hints improve the interface; code and infrastructure enforce the boundary. The broader threat model, including prompt injection and tool poisoning, is covered end to end in [A2A and MCP agent security](/ai/a2a-mcp-agent-security/).
+
+### Using MCP for Static Knowledge
+
+If a procedure or reference changes only with the repository, a remote round trip adds deployment and availability costs without making the information more authoritative. Package concise material with the skill and version it with the workflow. Add a retrieval service only when the corpus is large, access-controlled, independently updated, or genuinely needs search.
+
+## Summary
+
+Choose an Agent Skill when the hard part is knowing what to do. Choose an MCP server when the hard part is safely reaching something that changes, belongs to another trust domain, or must enforce a contract. Choose both when a real workflow needs judgment above a protected capability. That is not duplication: the skill makes the agent useful, the server makes the integration governable, and the backing system makes the final decision authoritative.
+
+For most hosted assistants, the best first architecture is modest: one focused skill, a small MCP surface only where live access demands it, and a captured prompt trace to verify context cost. Add complexity after the boundary is clear, not before.
+
+*Have you split procedure and capability between skills and MCP servers in your own agents? Share what worked in the comments below!*
+

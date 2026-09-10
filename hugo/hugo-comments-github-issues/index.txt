@@ -1,0 +1,95 @@
+---
+title: Hugo Comments Using GitHub Issues
+url: https://devopstales.github.io/hugo/hugo-comments-github-issues/
+date: 2026-06-15
+keywords: Hugo, Utterances, GitHub Issues, comments, disable_comments
+---
+
+
+Disqus-style comment SaaS is heavy for a static blog. [Utterances](https://utteranc.es/) stores each discussion as a GitHub Issue, loads a small client script, and authenticates with GitHub. DevOpsTales wires it through a partial and a per-post `disable_comments` flag.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+## Prerequisites
+
+1. A public GitHub repository to hold issues (this site uses the Pages repo `devopstales/devopstales.github.io`).  
+2. Install the [Utterances GitHub App](https://github.com/apps/utterances) on that repository.  
+3. Decide how issues are matched to pages. This site uses `issue-term=&#34;url&#34;` so each permalink maps to one issue.
+
+Issues are public. Do not enable comments on posts where that would be inappropriate.
+
+## The Utterances partial
+
+`layouts/partials/utteranc.html`:
+
+```html
+&lt;script src=&#34;https://utteranc.es/client.js&#34;
+        repo=&#34;devopstales/devopstales.github.io&#34;
+        issue-term=&#34;url&#34;
+        label=&#34;utteranc&#34;
+        theme=&#34;github-light&#34;
+        crossorigin=&#34;anonymous&#34;
+        async&gt;
+&lt;/script&gt;
+```
+
+Useful knobs:
+
+| Attribute | Role |
+|-----------|------|
+| `repo` | `owner/name` where issues are created |
+| `issue-term` | `url`, `pathname`, `title`, or a specific issue number strategy |
+| `label` | Applied to new issues (create the label in the repo first) |
+| `theme` | `github-light`, `github-dark`, `preferred-color-scheme`, … |
+
+## Gate comments in layouts
+
+`layouts/partials/comments.html`:
+
+```go-html-template
+{{- if .IsPage }}
+{{- $disableComments := .Params.disable_comments | default false }}
+{{- if not $disableComments }}
+&lt;div class=&#34;comments&#34;&gt;
+  {{- partial &#34;utteranc.html&#34; . -}}
+&lt;/div&gt;
+{{- end }}
+{{- end }}
+```
+
+`layouts/_default/single.html` includes that partial after the article body (near coffeebox / pager). Front matter on a normal post:
+
+```yaml
+disable_comments: false
+```
+
+To turn comments off for one page:
+
+```yaml
+disable_comments: true
+```
+
+Default in the partial is `false`, so omitting the key still shows Utterances. Set `true` explicitly on privacy pages or posts you want locked.
+
+## Privacy and cookies
+
+The Utterances script talks to GitHub. If you run a cookie/consent banner, decide whether comment widgets load only after consent. This site also ships a cookie notice partial; keep the policy text honest about third-party embeds.
+
+## Verify
+
+1. Open a post with comments enabled.  
+2. Sign in via the Utterances UI and post a test comment.  
+3. In the GitHub repo, confirm an issue appears with label `utteranc` and a title/body tied to the page URL.  
+4. Open a post with `disable_comments: true` and confirm the script is absent from the HTML.
+
+```bash
+curl -s https://devopstales.github.io/hugo/hugo-comments-github-issues/ \
+  | grep -E &#39;utteranc.es|comments&#39;
+```
+
+## Summary
+
+Install Utterances on your Pages (or docs) repo, drop a small script partial into Hugo, wrap it with `disable_comments`, and you get issue-backed discussions without a separate comment database. Static site, GitHub as the backend, one label to filter the noise in the issue tracker.
+

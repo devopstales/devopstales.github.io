@@ -1,0 +1,104 @@
+---
+title: Hugo RSS and Atom Feeds
+url: https://devopstales.github.io/hugo/hugo-rss-and-atom-feeds/
+date: 2026-06-03
+keywords: Hugo, RSS, Atom, atom.xml, hugo-atom-feed, feeds
+---
+
+
+RSS and Atom are still how a lot of readers and tools discover new posts. Hugo can emit both from the same content tree. On DevOpsTales the site ships classic RSS plus Atom via the [hugo-atom-feed](https://github.com/kaushalmodi/hugo-atom-feed) component theme, with a custom Atom template that skips the `filedir` partial section.
+
+&lt;!--more--&gt;
+
+![Hugo](/img/hugo.webp)
+
+## Enable RSS and Atom outputs
+
+In `config.toml`, assign formats per page kind. Home and section pages get both feeds; individual posts stay on HTML (plus any other formats you add):
+
+```toml
+theme = [&#34;hugo-atom-feed&#34;, &#34;hugo-dynamic-tabs&#34;, &#34;roadster&#34;]
+
+[outputs]
+  home    = [&#34;HTML&#34;, &#34;RSS&#34;, &#34;ATOM&#34;, &#34;llms&#34;, &#34;WebManifest&#34;]
+  section = [&#34;HTML&#34;, &#34;RSS&#34;, &#34;ATOM&#34;]
+  page    = [&#34;HTML&#34;, &#34;markdown&#34;]
+```
+
+Putting `hugo-atom-feed` in the `theme` list registers the Atom media type and output format. Roadster (or your UI theme) still owns the HTML chrome.
+
+After `hugo`, you typically get:
+
+- Site RSS: `/index.xml` (Hugo’s default RSS basename)
+- Site Atom: `/atom.xml`
+- Per-section feeds under each section URL
+
+Exact paths follow your `baseURL` and pretty-URL settings. On this site that means URLs under `https://devopstales.github.io/`.
+
+## Why customize Atom
+
+The stock Atom theme is a good start. This blog also keeps HTML fragments under `content/filedir/` for series includes. Those files are not articles. They should not pollute `/atom.xml` or invent a useless section feed.
+
+Two layers handle that:
+
+1. A site param listing sections to treat carefully:
+
+```toml
+[Params]
+  disable_atom_sections = [&#34;filedir&#34;]
+```
+
+2. A site override of `layouts/_default/list.atom.xml` that returns early for that section:
+
+```go-html-template
+{{- if eq .Section &#34;filedir&#34; -}}
+{{/* Skip atom feed for filedir section */}}
+{{- else -}}
+&lt;feed xmlns=&#34;http://www.w3.org/2005/Atom&#34;{{ with site.Language.Locale }} xml:lang=&#34;{{ . }}&#34;{{ end }}&gt;
+  ...
+&lt;/feed&gt;
+{{- end -}}
+```
+
+Inside the feed, entries are limited to types in `mainSections` (or `feedSections` if you set it), and pages with `disable_feed: true` are dropped:
+
+```go-html-template
+{{- $feed_sections := site.Params.feedSections | default site.Params.mainSections -}}
+{{- $pages := where .Pages &#34;Type&#34; &#34;in&#34; $feed_sections -}}
+{{- $pages = where $pages &#34;.Params.disable_feed&#34; &#34;!=&#34; true -}}
+```
+
+That keeps Atom aligned with the “real” blog sections (ai, kubernetes, kubernetes, hugo, and so on) instead of every directory under `content/`.
+
+## RSS override
+
+RSS uses Hugo’s familiar channel/item shape. This site overrides `layouts/_default/rss.xml` so summaries prefer the page summary (from the body / `&lt;!--more--&gt;`) and can attach a thumbnail enclosure when `thumbnail` is set in front matter.
+
+Per-post opt-out for RSS:
+
+```yaml
+rss_ignore: true
+```
+
+Use that sparingly for pages that must exist in HTML but should not show up in feed readers.
+
+## Verify
+
+```bash
+hugo
+
+curl -sI https://devopstales.github.io/atom.xml | head
+curl -s https://devopstales.github.io/atom.xml | head -n 40
+
+curl -sI https://devopstales.github.io/index.xml | head
+curl -s https://devopstales.github.io/kubernetes/atom.xml | head -n 20
+```
+
+Confirm `filedir` does not get a useful Atom listing, and that new sections you care about (including `hugo`) appear in `mainsections` so they are eligible for feed entries.
+
+You can also paste the Atom URL into the [W3C Feed Validation Service](https://validator.w3.org/feed/).
+
+## Summary
+
+Enable `RSS` and `ATOM` on home and section outputs, add `hugo-atom-feed` as a component theme, then override Atom (and RSS if needed) so partial content directories like `filedir` stay out of reader inboxes. The result is boring in the best way: stable feed URLs that track your real posts.
+

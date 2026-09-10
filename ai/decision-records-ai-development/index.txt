@@ -1,0 +1,130 @@
+---
+title: Decision Records: The Missing Memory Layer for AI Coding Agents
+url: https://devopstales.github.io/ai/decision-records-ai-development/
+date: 2026-08-24
+---
+
+
+AI-generated code is cheap; judgment is scarce. When models write the code, nobody remembers why PostgreSQL beat DynamoDB, why AI emails must stay drafts, or why suggestions live in a side panel. Decision records — short, version-controlled documents capturing what was decided, why, and what was rejected — turn that judgment into durable project memory both humans and agents can read.
+
+&lt;!--more--&gt;
+
+![Decision records connecting intent to code](/img/decision-records-ai.webp)
+*ADR, PDR, and DDR records: the reviewed intent agents need before changing code*
+
+## Three Record Types
+
+| Type | Captures | Example |
+|---|---|---|
+| ADR | Architecture and technical decisions | Use PostgreSQL as primary database |
+| PDR | Product behavior and scope | AI-generated emails must remain drafts |
+| DDR | Design and interaction decisions | Show AI suggestions in a side panel |
+
+ADRs fit choices shaping system boundaries, dependencies, and operations: event-driven background processing, modular monolith, REST over GraphQL, mandatory idempotent jobs. PDRs fit choices that look arbitrary in code — a free-tier limit of three projects is pricing strategy, not a magic constant, and changing it needs a product decision, not an edit. DDRs preserve interaction principles, like keeping generated text beside the document instead of inside it so users compare before accepting.
+
+## Why AI Makes Records More Necessary
+
+Coding agents are partially stateless about project history. They inspect files and infer patterns but cannot tell intentional decisions from accidents or settled debates from open ones. Four failure modes follow:
+
+- **Reopened debates.** The team chose a modular monolith; the agent proposes extracting a service because it looks clean in isolation.
+- **Local optimization, global damage.** A cleaner file violates a system boundary; a simpler component breaks pricing assumptions.
+- **Preserved code, lost intent.** Patterns get copied without principles. Some code is compromise, transitional, or externally constrained — invisible in the file.
+- **Plausible invented rationale.** Agents draft confident explanations that mismatch the real decision, which is why human review of records is non-negotiable.
+
+## A Template That Gets Used
+
+Records must be short enough to survive deadline pressure. One practical shape, with an AI-guidance section that turns the record into durable instructions for future agents:
+
+````markdown
+# Decision: Short title
+
+Status: Proposed | Accepted | Superseded | Deprecated
+Date: YYYY-MM-DD
+Type: Architecture | Product | Design
+Owners: Team or names
+
+## Context
+
+Problem, constraints, goals, user needs, technical and business factors.
+
+## Decision
+
+State the decision clearly.
+
+## Alternatives considered
+
+### Option 1
+
+Pros:
+- ...
+
+Cons:
+- ...
+
+## Consequences
+
+What becomes easier, harder, riskier; follow-up work created.
+
+## AI guidance
+
+When an AI assistant works in this area, it should:
+- Preserve ...
+- Avoid ...
+- Prefer ...
+- Ask for review when ...
+
+## Links
+
+- Related issues, pull requests, files
+- Supersedes / Superseded by
+````
+
+Record choices that affect multiple system parts, encode product promises, resolve real debates, carry long-term tradeoffs, or that future agents might plausibly get wrong or casually reverse. Skip tiny refactors, obvious fixes, experiments, and local naming. Rule of thumb: if reversal would need discussion, record it.
+
+## Lifecycle: Supersede, Never Rewrite
+
+Four statuses suffice: **Proposed** (under discussion), **Accepted** (guides work), **Superseded** (replaced, kept for history with a link forward), **Deprecated** (not recommended, still describes existing parts — useful mid-migration). When direction changes, append a new record linking the old one. Silently rewriting history destroys the evolution trail that makes records valuable.
+
+## How Agents Should Write and Read Them
+
+Drafting is one of the better AI uses — fast structured documents from context:
+
+```text
+Draft an Architecture Decision Record for the decision in this pull request.
+Include context, alternatives, consequences, and AI guidance.
+Save it as Markdown under docs/decisions/architecture.
+```
+
+Then verify like code: accurate context, real alternatives, honest consequences, guidance matching actual intent. Reading matters equally — instruct agents before implementation:
+
+```text
+Before modifying this feature, read docs/decisions.
+Follow accepted decisions. If your change conflicts with one,
+explain the conflict before changing code.
+```
+
+That shifts the agent from predicting plausible code to operating inside documented constraints. Wire it into PR review with a checklist: no significant decision without a record, changed decisions superseded, existing records considered, AI-generated records human-reviewed.
+
+Suggested repo layout:
+
+```text
+docs/
+  decisions/
+    architecture/
+      0001-use-postgresql-for-primary-storage.md
+    product/
+      0001-ai-generated-email-requires-human-review.md
+    design/
+      0001-use-inline-validation.md
+```
+
+## Records Are Not Specs, Tests, or Comments
+
+A spec says the system shall do X; a record says X was chosen over Y under these tradeoffs — the rejected paths save future churn. Tests enforce behavior while records protect meaning (the test asserts drafts-only sending; the PDR explains the trust rationale). Comments explain surprising lines; records explain system direction. Few lines affected means comment; direction affected means record.
+
+## The Operating Model
+
+Keep it habit-sized: spot meaningful decisions during planning or implementation, have the agent draft the record, review as a team, commit as Markdown, link from the issue or PR, point agents at the folder before future work, supersede on change. No bureaucracy, no documentation role — just judgment preserved at creation, next to the code that needs it. Combined with [spec-driven development](/ai/sdd-vs-vibe-coding/), records supply the &#34;why&#34; beside the spec&#39;s &#34;what&#34;: instructions plus context for complex, long-lived systems.
+
+*Do your repos record why, or only what? Share the decision you wish someone had written down in the comments below!*
+
