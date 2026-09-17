@@ -8,7 +8,7 @@
             <link href="https://devopstales.github.io/ai/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/ai/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/ai/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-09-10T14:13:57+00:00</updated>
+    <updated>2026-09-17T08:39:32+00:00</updated>
     
     
         <author>
@@ -16,6 +16,295 @@
             </author>
     
         <id>https://devopstales.github.io/ai/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Multi-Agent Orchestration Patterns: Six Topologies and How Each Breaks]]></title>
+            <link href="https://devopstales.github.io/ai/multi-agent-orchestration-patterns/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/ai/multi-agent-orchestration-patterns/</id>
+            
+            
+            <published>2026-09-17T00:00:00+00:00</published>
+            <updated>2026-09-17T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Single-agent systems peaked with bounded tasks and one prompt. Production moved on: organizations now run double-digit agent counts, and a large share of multi-agent pilots die within months of deployment. The killer isn&rsquo;t the idea — it&rsquo;s picking the wrong coordination topology, or the right one without knowing its failure modes.</p>
+<p><img src="/img/multi-agent-orchestration-patterns.webp" alt="Six multi-agent orchestration patterns for production"  loading="lazy" decoding="async" class="zoomable" />
+<em>Orchestrator-worker, pipeline, fan-out, hierarchical, swarm, mesh: six wirings, six ways to fail</em></p>
+<h2 id="coordination-is-the-architecture">Coordination Is the Architecture</h2>
+<p>The orchestration pattern sets latency, fault tolerance, scalability ceiling, and debugging difficulty — the highest-impact decision in multi-agent design. Every production system maps to six canonical patterns or a hybrid. Start from the simplest pattern that fits; most teams over-architect long before single-agent is genuinely exhausted.</p>
+<h2 id="the-six-patterns">The Six Patterns</h2>
+<p><strong>Orchestrator-worker</strong> — centralized hub and spoke. One orchestrator decomposes, delegates to specialists, aggregates. Workers never talk to each other.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>              +--&gt; Worker A (research)
+</span></span><span style="display:flex;"><span>              |
+</span></span><span style="display:flex;"><span>  Orchestrator+--&gt; Worker B (draft)
+</span></span><span style="display:flex;"><span>  (planner)   |
+</span></span><span style="display:flex;"><span>              +--&gt; Worker C (review)
+</span></span></code></pre></div><p>Fits triage, routing, and workflows needing one accountability point, with cheap worker models under a capable planner. Fails three ways: the orchestrator bottlenecks and misclassifications compound; context overflows past ~4 workers holding every history at once; overhead dominates cost at scale ($0.50 tests becoming five-figure monthly bills). Mitigate with explicit interface contracts, structured worker outputs, per-subtask token and step budgets — and go hierarchical past five workers.</p>
+<p><strong>Sequential pipeline</strong> — fixed linear chain, shared state, no runtime branching. Ingest, extract, validate, output; research, draft, edit, publish.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  Input --&gt; Agent 1 --&gt; Agent 2 --&gt; Agent 3 --&gt; Output
+</span></span></code></pre></div><p>Predictable, inflexible. Stage-1 hallucinations cascade into polished-but-wrong finals with no backtracking; a four-stage chain can triple cost and coordination overhead versus one agent; malformed input can&rsquo;t route backward. Mitigate with lightweight validation gates between stages, retry loops for reprocessable stages, and a three-to-four-stage cap before switching to orchestrator-worker.</p>
+<p><strong>Fan-out / fan-in</strong> — parallel independent agents, aggregated by voting, weighted merge, or synthesis. No inter-agent communication; wall-clock time can drop ~75% versus sequential.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>              +--&gt; Agent A --+
+</span></span><span style="display:flex;"><span>              |              |
+</span></span><span style="display:flex;"><span>  Dispatcher -+--&gt; Agent B --+--&gt; Collector (vote/merge)
+</span></span><span style="display:flex;"><span>              |              |
+</span></span><span style="display:flex;"><span>              +--&gt; Agent C --+
+</span></span></code></pre></div><p>Fits multi-perspective analysis, parallel review, and upfront-decomposable batches. Fails on collective rate limits (five agents at 10 RPM each break a 40 RPM cap), quadratic shared-state conflicts, and aggregators hallucinating consensus between &ldquo;yes&rdquo; and &ldquo;no&rdquo;. Mitigate with explicit voting over freeform synthesis, dispatcher-level rate limits, per-worker state merged only at collection, and a five-to-eight-agent ceiling.</p>
+<p><strong>Hierarchical</strong> — tree delegation: top manager, mid supervisors, leaf workers, each level abstracting (strategy, tactics, execution) with independent context windows. Scales logarithmically — the pick for 20+ agents, massive audits, and problems no single window can hold.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>              Top Manager
+</span></span><span style="display:flex;"><span>              /    |    \
+</span></span><span style="display:flex;"><span>    Supervisor A   B     C
+</span></span><span style="display:flex;"><span>        |          |     |
+</span></span><span style="display:flex;"><span>    Worker 1   Worker 2  Worker 3
+</span></span></code></pre></div><p>Costs latency per level (a three-deep tree needs 6-12 seconds minimum), lossy inter-level summarization, and branch inconsistency the top can&rsquo;t always reconcile. Mitigate with explicit summarization requirements, cross-branch validation at the top, structured outputs everywhere, and two-to-three levels max.</p>
+<p><strong>Swarm</strong> — decentralized, no authority. Agents claim tasks from a shared blackboard and publish results; coordination emerges. Fifty research agents explore fifty hypotheses with zero central planning.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>       +--&gt; Agent A --+
+</span></span><span style="display:flex;"><span>       |              |
+</span></span><span style="display:flex;"><span>  ... -+--&gt; Agent B - +--&gt; Shared blackboard
+</span></span><span style="display:flex;"><span>       |    (tasks, results, observations)
+</span></span><span style="display:flex;"><span>       +--&gt; Agent C --+
+</span></span></code></pre></div><p>Fits unknown search spaces: research flows, competitive intel, dynamic scraping, parallel hypotheses. Fails at debuggability (reconstruct emergence from logs, no single path), ordering guarantees (none — need A-before-B? wrong pattern), and termination (agents run indefinitely without explicit time, count, or convergence criteria). Mitigate with versioned blackboard entries, a monitoring agent with intervention rights, and per-agent step and token budgets.</p>
+<p><strong>Mesh</strong> — direct peer-to-peer channels defined at deploy time. Planner, coder, and tester loops passing partials back and forth without a hub.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  Agent A &lt;--&gt; Agent B
+</span></span><span style="display:flex;"><span>     \          /
+</span></span><span style="display:flex;"><span>      \--&gt; C &lt;--
+</span></span><span style="display:flex;"><span>  (planner, coder, tester loop)
+</span></span></code></pre></div><p>Ideal for iterative refinement and stakeholder negotiation among three to eight tight collaborators. Beyond that, connections explode combinatorially (28 at eight agents), cycles loop forever without hop limits and detection, and nondeterministic routing defies tracing. Mitigate with deploy-time graphs, explicit acknowledgments, and circuit breakers terminating chains after N hops.</p>
+<h2 id="across-boundaries-topology-isnt-transport">Across Boundaries: Topology Isn&rsquo;t Transport</h2>
+<p>In-process graphs (LangGraph, CrewAI, AutoGen) keep coordination in one runtime: fast, debuggable, no network to secure. Wire protocols enter when agents are team-, framework-, or vendor-separated and must be discoverable without redeploying callers — orchestrator-worker and hierarchical travel best (user-facing orchestrator over specialist Agent Cards), mesh is the primary cross-boundary shape (peers across owners), while pipelines, fan-out, and swarms usually stay co-located. Crossing adds three failures of its own: cross-service circular delegation (enforce hop limits at the gateway), cost multiplication per billed hop (track spend per task ID), and orphaned answer ownership (propagate parent task IDs, log chains, treat provenance as observability). Identity, scoped tokens, and audit at that boundary are covered in <a href="/ai/a2a-mcp-agent-security/">A2A and MCP agent security</a>.</p>
+<h2 id="decide-then-contain-cost">Decide, Then Contain Cost</h2>
+<p>Characterize first: known decomposition goes orchestrator-worker; fixed order goes pipeline; independent parallelizable work goes fan-out; 20+ agents or context overflow goes hierarchical; unknown search space goes swarm; peer refinement goes mesh. Constrain second: sub-two-second latency rules out hierarchical and mesh; strict ordering rules out swarm and fan-out; single accountability rules out swarm and mesh; tight budgets punish fan-out&rsquo;s parallel tokens; hard debugging rules out swarm and mesh. Escalate from single-agent only on measurement: insufficient windows, genuine wall-clock parallelism needs, proven specialization gains, or single-agent cost above multi-agent overhead.</p>
+<p>Budget 2-10x single-agent token cost by pattern (orchestrator-worker cheapest at 2-3x, fan-out and swarm dearest at 4-10x). Contain it: cheap worker models under capable planners, per-agent token/step/time budgets, early termination of decided agents, shared-prefix caching, per-agent (not just total) cost tracking. The MAST taxonomy of 1,600+ traces blames a third each on specification ambiguity (fix: schemas for roles, boundaries, outputs), coordination breakdowns (fix: typed messages, acknowledgments, termination conditions), and verification gaps (fix: independent maker-checker validation).</p>
+<h2 id="observe-everything">Observe Everything</h2>
+<p>Trace every execution with spans per agent call, tool use, and aggregation; replay versioned blackboards for swarm and mesh forensics; attribute cost per agent and step; watch convergence (agent counts, iteration counts, quality drift) with alerts. Framework support varies — LangGraph and AutoGen cover most topologies natively, CrewAI and the OpenAI Agents SDK thin out at hierarchical, swarm, and mesh — but no framework substitutes for traces. Production reality is hybrid anyway: triage via orchestrator-worker, research via fan-out, drafting via pipeline, escalation via hierarchy — compose patterns, never force one to do everything. The subagent-flavored version of the same discipline inside coding tools is covered in <a href="/ai/opencode-cli-in-practice/">OpenCode CLI practice</a>.</p>
+<h2 id="summary">Summary</h2>
+<p>Single-agent by default; pattern matched to problem; failure modes designed against before deploy; cost budgeted at multiples; tracing from day one. Teams that win at multi-agent understand tradeoffs deliberately — the ones that lose picked topology by enthusiasm.</p>
+<p><em>Which orchestration topology broke on you in production — and what was the failure mode? Share the postmortem in the comments below!</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai-agents" term="ai-agents" label="ai-agents" />
+                             
+                                <category scheme="orchestration" term="orchestration" label="orchestration" />
+                             
+                                <category scheme="multi-agent" term="multi-agent" label="multi-agent" />
+                             
+                                <category scheme="architecture" term="architecture" label="architecture" />
+                             
+                                <category scheme="a2a" term="a2a" label="a2a" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Ollama to vLLM: When Your Local Server Needs to Grow Up]]></title>
+            <link href="https://devopstales.github.io/ai/ollama-to-vllm-migration/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/ai/ollama-to-vllm-migration/</id>
+            
+            
+            <published>2026-09-14T00:00:00+00:00</published>
+            <updated>2026-09-14T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Ollama is the easiest way to run a local model, until the experiment becomes a shared service. Requests queue, latency wobbles, prefixes recompute, and one GPU stops being enough. vLLM answers exactly those problems — but migration is a trade, not an upgrade: simplicity for scheduling, memory control, parallelism, and production operations.</p>
+<p><img src="/img/ollama-to-vllm-migration.webp" alt="Ollama to vLLM migration decision and path"  loading="lazy" decoding="async" class="zoomable" />
+<em>From convenient single-user serving to scheduled, observable multi-user inference</em></p>
+<h2 id="different-problems-similar-apis">Different Problems, Similar APIs</h2>
+<p>Ollama optimizes convenient consumption: CLI, model library, Modelfiles, desktop configs. vLLM is an inference engine and serving platform: request scheduling, KV cache management, continuous batching, model parallelism, OpenAI-style APIs. Both expose chat endpoints and stream tokens — the operating models diverge only under sustained or concurrent load:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Requirement</th>
+					<th>Ollama</th>
+					<th>vLLM</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Fast local setup</td>
+					<td>Excellent</td>
+					<td>More involved</td>
+			</tr>
+			<tr>
+					<td>Curated model downloads</td>
+					<td>Excellent</td>
+					<td>Hugging Face based</td>
+			</tr>
+			<tr>
+					<td>GGUF workflow</td>
+					<td>First-class</td>
+					<td>Supported, not the strength</td>
+			</tr>
+			<tr>
+					<td>Single-user chat</td>
+					<td>Excellent</td>
+					<td>Often unnecessary</td>
+			</tr>
+			<tr>
+					<td>Concurrent API traffic</td>
+					<td>Limited, configurable</td>
+					<td>Core use case</td>
+			</tr>
+			<tr>
+					<td>Continuous batching</td>
+					<td>Not the model</td>
+					<td>Core feature</td>
+			</tr>
+			<tr>
+					<td>Prefix cache reuse</td>
+					<td>Limited control</td>
+					<td>Built-in optimization</td>
+			</tr>
+			<tr>
+					<td>Multi-GPU serving</td>
+					<td>Limited</td>
+					<td>Tensor and pipeline parallelism</td>
+			</tr>
+			<tr>
+					<td>Production metrics</td>
+					<td>Basic timing fields</td>
+					<td>Prometheus endpoint</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="signals-you-outgrew-ollama">Signals You Outgrew Ollama</h2>
+<p>A slow response alone justifies nothing — model size, quantization, bandwidth, and GPU dominate single-request speed. Migration signals appear when workload shape matters:</p>
+<ul>
+<li><strong>Unstable multi-user latency.</strong> Requests wait behind long generations, time to first token scatters. Ollama&rsquo;s <code>OLLAMA_NUM_PARALLEL</code> caps concurrent requests but memory grows with parallel count times context — a config fine for one 8K chat breaks with four large-context clients.</li>
+<li><strong>Low GPU utilization with queued requests.</strong> Serialization idles the accelerator while work waits. vLLM&rsquo;s scheduler plus paged KV cache blocks keep more useful work in flight — better aggregate throughput under load, not necessarily faster single requests.</li>
+<li><strong>Prefill-dominated first tokens.</strong> Coding assistants, RAG, and agent sessions resend long shared prefixes. vLLM&rsquo;s chunked prefill and automatic prefix caching reuse computed blocks for identical leading tokens — worthless without actually shared prefixes.</li>
+<li><strong>Models bigger than one GPU.</strong> Tensor parallelism across GPUs and pipeline parallelism across nodes are deliberate vLLM paths; interconnect, topology, and shared memory still bite.</li>
+<li><strong>Dependents need observability.</strong> Ollama&rsquo;s per-response timings suffice locally; vLLM&rsquo;s <code>/metrics</code> exposes volume, queueing, first-token and inter-token latency, cache use, preemptions, and outcomes. Without those you can&rsquo;t distinguish undersized GPU from oversized context, cold loads, or plain overload.</li>
+</ul>
+<h2 id="where-ollama-still-wins">Where Ollama Still Wins</h2>
+<p>Don&rsquo;t demote it to a toy: personal workstations (one developer, occasional API — vLLM&rsquo;s setup never pays back), curated GGUF collections with tuned Modelfiles (vLLM prefers AWQ/GPTQ/FP8 Hugging Face checkpoints; migrating GGUF keeps migration pain while missing performance gains), CPU/RAM-offloaded inference that doesn&rsquo;t fit VRAM, rapid multi-model switching for evaluation, and zero-admin single-user setups with acceptable latency. If there&rsquo;s no measured concurrency problem, migration manufactures work.</p>
+<h2 id="measure-dont-benchmark-tokens-alone">Measure, Don&rsquo;t Benchmark Tokens Alone</h2>
+<p>Single-request decode speed barely discriminates the engines. Evaluate time to first token, inter-token and end-to-end latency, prefill and decode throughput, completions per minute, queue wait, VRAM consumption and utilization, failure rate — same model family, precision, context, prompts, output caps, and concurrency on both. Best test: a small load run shaped like real traffic, long system prompts, repeated prefixes, streaming, two to eight sessions.</p>
+<h2 id="migrate-models-before-servers">Migrate Models Before Servers</h2>
+<p>Ollama names don&rsquo;t map to vLLM identifiers: pin family and version, base versus instruct tune, quantization and effective precision, chat template, context length, stop tokens and defaults, tool-calling and structured-output needs, LoRA adapters and system prompts. Then pick a matching supported checkpoint — an AWQ build won&rsquo;t behave like the GGUF it replaces. The model migration usually outweighs the API migration.</p>
+<p>Budget VRAM beyond weights: KV cache (grows with context times concurrency), CUDA graphs and runtime, workspace, multimodal caches, margin. Start <code>--max-model-len</code> at real usage, not the advertised maximum, and leave utilization headroom — stable slightly-under-provisioned beats OOM at the first spike.</p>
+<h2 id="minimal-vllm-deployment">Minimal vLLM Deployment</h2>
+<p>OpenAI-compatible server on port 8000:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">services</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">vllm</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">vllm/vllm-openai:latest</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">container_name</span>: <span style="color:#ae81ff">vllm</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">restart</span>: <span style="color:#ae81ff">unless-stopped</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;8000:8000&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ipc</span>: <span style="color:#ae81ff">host</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">gpus</span>: <span style="color:#ae81ff">all</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">${HOME}/.cache/huggingface:/root/.cache/huggingface</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">environment</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">HF_TOKEN</span>: <span style="color:#ae81ff">${HF_TOKEN:-}</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">command</span>:
+</span></span><span style="display:flex;"><span>      - --<span style="color:#ae81ff">model</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">Qwen/Qwen3-8B</span>
+</span></span><span style="display:flex;"><span>      - --<span style="color:#ae81ff">served-model-name</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">local-model</span>
+</span></span><span style="display:flex;"><span>      - --<span style="color:#ae81ff">max-model-len</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;16384&#34;</span>
+</span></span><span style="display:flex;"><span>      - --<span style="color:#ae81ff">gpu-memory-utilization</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;0.90&#34;</span>
+</span></span><span style="display:flex;"><span>      - --<span style="color:#ae81ff">api-key</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">${VLLM_API_KEY:-change-me}</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat &gt; .env <span style="color:#e6db74">&lt;&lt;&#39;EOF&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">HF_TOKEN=
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">VLLM_API_KEY=replace-with-a-long-random-value
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span><span style="display:flex;"><span>docker compose up -d
+</span></span><span style="display:flex;"><span>docker compose logs -f vllm
+</span></span><span style="display:flex;"><span>curl http://localhost:8000/v1/models <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  -H <span style="color:#e6db74">&#34;Authorization: Bearer replace-with-a-long-random-value&#34;</span>
+</span></span></code></pre></div><p>Pin the image to a tested release for anything maintained — flags, metrics, and engine behavior evolve. Clients mostly change base URL, key, and model name:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI(
+</span></span><span style="display:flex;"><span>    base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://localhost:8000/v1&#34;</span>,
+</span></span><span style="display:flex;"><span>    api_key<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;replace-with-a-long-random-value&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>chat<span style="color:#f92672">.</span>completions<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;local-model&#34;</span>,
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Explain continuous batching.&#34;</span>}],
+</span></span><span style="display:flex;"><span>    temperature<span style="color:#f92672">=</span><span style="color:#ae81ff">0.2</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>print(response<span style="color:#f92672">.</span>choices[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>message<span style="color:#f92672">.</span>content)
+</span></span></code></pre></div><p>But test the feature surface, not just connectivity: streaming events, parameters, template selection, tool-call parsing, reasoning output, JSON-constrained and embedding endpoints, multimodal inputs, usage reporting, error shapes, model discovery, context enforcement. Chat-only clients migrate easily; agent frameworks with parser dependencies don&rsquo;t.</p>
+<h2 id="chat-templates-fail-silently">Chat Templates Fail Silently</h2>
+<p>Ollama bundles templates in model definitions; vLLM takes them from tokenizer config or explicit override. Wrong template still boots — symptoms show in behavior: echoed role labels, special tokens leaking, ignored system instructions, malformed tool calls, continued user messages, collapsed quality. Compare fully rendered prompts across deployments before blaming the engine.</p>
+<h2 id="stage-the-migration">Stage the Migration</h2>
+<p>Run both servers on different ports and validate sideways: reproduce the highest-traffic model first (tuning, context, parameters, chat behavior — not every experimental model); exercise integration tests against vLLM including streaming, cancellation, timeouts, tool calls, malformed input, overflow, and concurrency, recording differences instead of retry-hiding them; baseline single-request prompt/decode rates, first-token latency, and memory; then realistic concurrency with representative prompts watching queueing, cache, preemptions, and tail latency; move one noncritical client with Ollama as fallback; tune length, utilization, sequence caps, prefix caching, parallelism, and quantization one measured constraint at a time.</p>
+<p>Pre-switch checklist: vLLM supports the model; checkpoint plus quantization fit VRAM with KV headroom; context length reflects usage; template correct; stop tokens and defaults tested; streaming, tool calls, structured output validated; model alias stable; auth enabled; no direct internet exposure; Prometheus and GPU metrics collected; realistic load tests pass; timeouts handled; Ollama rollback path intact.</p>
+<h2 id="security-and-topology-notes">Security and Topology Notes</h2>
+<p>Neither endpoint belongs on the open internet — unauthenticated inference burns GPU money and invites long-prompt denial of service. vLLM API keys are a start, not a boundary: terminate TLS, restrict networks, cap request sizes, rate-limit, log access behind a reverse proxy or gateway. Watch model-specific surface too: multimodal URL loading, custom model code, remote files, unrestricted tool execution.</p>
+<p>Often the best architecture isn&rsquo;t a replacement: keep Ollama on workstations for exploration, GGUF testing, and private chat while vLLM serves one stable model to teams:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  Ollama: experimentation --&gt; model switching --&gt; personal tools
+</span></span><span style="display:flex;"><span>  vLLM:   selected model --&gt; shared endpoint --&gt; concurrent traffic --&gt; monitoring
+</span></span></code></pre></div><p>Stay on Ollama while users number one or two, requests stay sequential, latency satisfies, GGUF management matters, offloading is structural, models churn, nobody wants platform duty, and no measured throughput problem exists. Migrate when queues, repeated-prefill waste, or multi-GPU necessity show in measurements — until then simplicity is an optimization, not a weakness. For the local-backend side of the same hosting question, see <a href="/ai/claude-code-local-backends/">Claude Code with local backends</a>.</p>
+<p><em>What pushed you off a simple local server — concurrency, prefixes, or multi-GPU? Share the measurement in the comments below!</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ollama" term="ollama" label="ollama" />
+                             
+                                <category scheme="vllm" term="vllm" label="vllm" />
+                             
+                                <category scheme="llm-hosting" term="llm-hosting" label="llm-hosting" />
+                             
+                                <category scheme="self-hosting" term="self-hosting" label="self-hosting" />
+                             
+                                <category scheme="docker" term="docker" label="docker" />
+                             
+                                <category scheme="gpu" term="gpu" label="gpu" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>

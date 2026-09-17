@@ -1,0 +1,107 @@
+---
+title: Multi-Agent Orchestration Patterns: Six Topologies and How Each Breaks
+url: https://devopstales.github.io/ai/multi-agent-orchestration-patterns/
+date: 2026-09-17
+---
+
+
+Single-agent systems peaked with bounded tasks and one prompt. Production moved on: organizations now run double-digit agent counts, and a large share of multi-agent pilots die within months of deployment. The killer isn&#39;t the idea — it&#39;s picking the wrong coordination topology, or the right one without knowing its failure modes.
+
+&lt;!--more--&gt;
+
+![Six multi-agent orchestration patterns for production](/img/multi-agent-orchestration-patterns.webp)
+*Orchestrator-worker, pipeline, fan-out, hierarchical, swarm, mesh: six wirings, six ways to fail*
+
+## Coordination Is the Architecture
+
+The orchestration pattern sets latency, fault tolerance, scalability ceiling, and debugging difficulty — the highest-impact decision in multi-agent design. Every production system maps to six canonical patterns or a hybrid. Start from the simplest pattern that fits; most teams over-architect long before single-agent is genuinely exhausted.
+
+## The Six Patterns
+
+**Orchestrator-worker** — centralized hub and spoke. One orchestrator decomposes, delegates to specialists, aggregates. Workers never talk to each other.
+
+```plaintext
+              &#43;--&gt; Worker A (research)
+              |
+  Orchestrator&#43;--&gt; Worker B (draft)
+  (planner)   |
+              &#43;--&gt; Worker C (review)
+```
+
+Fits triage, routing, and workflows needing one accountability point, with cheap worker models under a capable planner. Fails three ways: the orchestrator bottlenecks and misclassifications compound; context overflows past ~4 workers holding every history at once; overhead dominates cost at scale ($0.50 tests becoming five-figure monthly bills). Mitigate with explicit interface contracts, structured worker outputs, per-subtask token and step budgets — and go hierarchical past five workers.
+
+**Sequential pipeline** — fixed linear chain, shared state, no runtime branching. Ingest, extract, validate, output; research, draft, edit, publish.
+
+```plaintext
+  Input --&gt; Agent 1 --&gt; Agent 2 --&gt; Agent 3 --&gt; Output
+```
+
+Predictable, inflexible. Stage-1 hallucinations cascade into polished-but-wrong finals with no backtracking; a four-stage chain can triple cost and coordination overhead versus one agent; malformed input can&#39;t route backward. Mitigate with lightweight validation gates between stages, retry loops for reprocessable stages, and a three-to-four-stage cap before switching to orchestrator-worker.
+
+**Fan-out / fan-in** — parallel independent agents, aggregated by voting, weighted merge, or synthesis. No inter-agent communication; wall-clock time can drop ~75% versus sequential.
+
+```plaintext
+              &#43;--&gt; Agent A --&#43;
+              |              |
+  Dispatcher -&#43;--&gt; Agent B --&#43;--&gt; Collector (vote/merge)
+              |              |
+              &#43;--&gt; Agent C --&#43;
+```
+
+Fits multi-perspective analysis, parallel review, and upfront-decomposable batches. Fails on collective rate limits (five agents at 10 RPM each break a 40 RPM cap), quadratic shared-state conflicts, and aggregators hallucinating consensus between &#34;yes&#34; and &#34;no&#34;. Mitigate with explicit voting over freeform synthesis, dispatcher-level rate limits, per-worker state merged only at collection, and a five-to-eight-agent ceiling.
+
+**Hierarchical** — tree delegation: top manager, mid supervisors, leaf workers, each level abstracting (strategy, tactics, execution) with independent context windows. Scales logarithmically — the pick for 20&#43; agents, massive audits, and problems no single window can hold.
+
+```plaintext
+              Top Manager
+              /    |    \
+    Supervisor A   B     C
+        |          |     |
+    Worker 1   Worker 2  Worker 3
+```
+
+Costs latency per level (a three-deep tree needs 6-12 seconds minimum), lossy inter-level summarization, and branch inconsistency the top can&#39;t always reconcile. Mitigate with explicit summarization requirements, cross-branch validation at the top, structured outputs everywhere, and two-to-three levels max.
+
+**Swarm** — decentralized, no authority. Agents claim tasks from a shared blackboard and publish results; coordination emerges. Fifty research agents explore fifty hypotheses with zero central planning.
+
+```plaintext
+       &#43;--&gt; Agent A --&#43;
+       |              |
+  ... -&#43;--&gt; Agent B - &#43;--&gt; Shared blackboard
+       |    (tasks, results, observations)
+       &#43;--&gt; Agent C --&#43;
+```
+
+Fits unknown search spaces: research flows, competitive intel, dynamic scraping, parallel hypotheses. Fails at debuggability (reconstruct emergence from logs, no single path), ordering guarantees (none — need A-before-B? wrong pattern), and termination (agents run indefinitely without explicit time, count, or convergence criteria). Mitigate with versioned blackboard entries, a monitoring agent with intervention rights, and per-agent step and token budgets.
+
+**Mesh** — direct peer-to-peer channels defined at deploy time. Planner, coder, and tester loops passing partials back and forth without a hub.
+
+```plaintext
+  Agent A &lt;--&gt; Agent B
+     \          /
+      \--&gt; C &lt;--
+  (planner, coder, tester loop)
+```
+
+Ideal for iterative refinement and stakeholder negotiation among three to eight tight collaborators. Beyond that, connections explode combinatorially (28 at eight agents), cycles loop forever without hop limits and detection, and nondeterministic routing defies tracing. Mitigate with deploy-time graphs, explicit acknowledgments, and circuit breakers terminating chains after N hops.
+
+## Across Boundaries: Topology Isn&#39;t Transport
+
+In-process graphs (LangGraph, CrewAI, AutoGen) keep coordination in one runtime: fast, debuggable, no network to secure. Wire protocols enter when agents are team-, framework-, or vendor-separated and must be discoverable without redeploying callers — orchestrator-worker and hierarchical travel best (user-facing orchestrator over specialist Agent Cards), mesh is the primary cross-boundary shape (peers across owners), while pipelines, fan-out, and swarms usually stay co-located. Crossing adds three failures of its own: cross-service circular delegation (enforce hop limits at the gateway), cost multiplication per billed hop (track spend per task ID), and orphaned answer ownership (propagate parent task IDs, log chains, treat provenance as observability). Identity, scoped tokens, and audit at that boundary are covered in [A2A and MCP agent security](/ai/a2a-mcp-agent-security/).
+
+## Decide, Then Contain Cost
+
+Characterize first: known decomposition goes orchestrator-worker; fixed order goes pipeline; independent parallelizable work goes fan-out; 20&#43; agents or context overflow goes hierarchical; unknown search space goes swarm; peer refinement goes mesh. Constrain second: sub-two-second latency rules out hierarchical and mesh; strict ordering rules out swarm and fan-out; single accountability rules out swarm and mesh; tight budgets punish fan-out&#39;s parallel tokens; hard debugging rules out swarm and mesh. Escalate from single-agent only on measurement: insufficient windows, genuine wall-clock parallelism needs, proven specialization gains, or single-agent cost above multi-agent overhead.
+
+Budget 2-10x single-agent token cost by pattern (orchestrator-worker cheapest at 2-3x, fan-out and swarm dearest at 4-10x). Contain it: cheap worker models under capable planners, per-agent token/step/time budgets, early termination of decided agents, shared-prefix caching, per-agent (not just total) cost tracking. The MAST taxonomy of 1,600&#43; traces blames a third each on specification ambiguity (fix: schemas for roles, boundaries, outputs), coordination breakdowns (fix: typed messages, acknowledgments, termination conditions), and verification gaps (fix: independent maker-checker validation).
+
+## Observe Everything
+
+Trace every execution with spans per agent call, tool use, and aggregation; replay versioned blackboards for swarm and mesh forensics; attribute cost per agent and step; watch convergence (agent counts, iteration counts, quality drift) with alerts. Framework support varies — LangGraph and AutoGen cover most topologies natively, CrewAI and the OpenAI Agents SDK thin out at hierarchical, swarm, and mesh — but no framework substitutes for traces. Production reality is hybrid anyway: triage via orchestrator-worker, research via fan-out, drafting via pipeline, escalation via hierarchy — compose patterns, never force one to do everything. The subagent-flavored version of the same discipline inside coding tools is covered in [OpenCode CLI practice](/ai/opencode-cli-in-practice/).
+
+## Summary
+
+Single-agent by default; pattern matched to problem; failure modes designed against before deploy; cost budgeted at multiples; tracing from day one. Teams that win at multi-agent understand tradeoffs deliberately — the ones that lose picked topology by enthusiasm.
+
+*Which orchestration topology broke on you in production — and what was the failure mode? Share the postmortem in the comments below!*
+
