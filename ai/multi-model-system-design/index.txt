@@ -1,0 +1,112 @@
+---
+title: Multi-Model System Design: The Right Model for the Right Task
+url: https://devopstales.github.io/ai/multi-model-system-design/
+date: 2026-09-24
+---
+
+
+Running a 70B model to summarize an email wastes money; running a 3B model to review production code courts disaster. Multi-model design isn&#39;t about collecting models — it&#39;s about architecture that puts the right model on the right task at the right time, with the simplest pattern that survives the constraints.
+
+&lt;!--more--&gt;
+
+![Multi-model LLM system design patterns](/img/multi-model-system-design.webp)
+*Sequential, parallel, hierarchical, ensemble: five wirings from one model to many*
+
+## Five Patterns, One Rule
+
+| Pattern | Complexity | Use when | Tradeoff |
+|---|---|---|---|
+| Single model | Lowest | Prototyping, uniform tasks | Capability ceiling |
+| Sequential | Low | Multi-step workflows | Latency stacks |
+| Parallel | Medium | Independent tasks | Cost multiplies |
+| Hierarchical | High | Complex reasoning | Orchestration burden |
+| Ensemble | Highest | Critical decisions | Highest cost |
+
+Pick the simplest that works — complexity compounds. Note the boundary: this is task-to-model routing, not autonomous agents coordinating; for that see [multi-agent orchestration](/ai/multi-agent-orchestration-patterns/).
+
+## Sequential: Pipeline and Router
+
+Pipeline chains specialists, each output feeding the next:
+
+```python
+class ModelPipeline:
+    def __init__(self):
+        self.models = [
+            {&#34;model&#34;: &#34;qwen3-1.7b&#34;, &#34;task&#34;: &#34;classify&#34;},
+            {&#34;model&#34;: &#34;qwen3-8b&#34;, &#34;task&#34;: &#34;extract&#34;},
+            {&#34;model&#34;: &#34;qwen3-32b&#34;, &#34;task&#34;: &#34;reason&#34;},
+        ]
+
+    def process(self, input: str) -&gt; str:
+        current = input
+        for model_config in self.models:
+            current = self.call_model(
+                model_config[&#34;model&#34;],
+                self.create_prompt(model_config[&#34;task&#34;], current)
+            )
+        return current
+```
+
+Latency adds per stage — three models, roughly triple the wait. Only chain steps that genuinely need different models. Router instead classifies once and dispatches to one specialist (code, math, creative, general). The classifier is the weak link: misclassify code review as summarization and quality degrades silently. Keep categories crisp enough for even a small classifier.
+
+## Parallel: Fan-Out and Voting
+
+Fan-out runs one prompt through several models concurrently — comparison, A/B testing, best-output selection — at full per-model cost:
+
+```python
+import asyncio
+
+class ModelFanOut:
+    def __init__(self):
+        self.models = [&#34;qwen3-8b&#34;, &#34;qwen3-32b&#34;, &#34;claude-sonnet-4&#34;]
+
+    async def process(self, prompt: str) -&gt; list[str]:
+        tasks = [self.call_model(model, prompt) for model in self.models]
+        return await asyncio.gather(*tasks)
+```
+
+Voting adds consensus on top — exact-match majority works for classification; generation needs semantic similarity, not string equality. Worth it where quality beats spend.
+
+## Hierarchical: Planner-Executor and Supervisor-Worker
+
+A strong planner decomposes; cheap executors run steps; the planner synthesizes. Planning is expensive, execution cheap — the economics work when decomposition dominates:
+
+```python
+class PlannerExecutor:
+    def __init__(self):
+        self.planner = &#34;qwen3-32b&#34;
+        self.executors = {&#34;code&#34;: &#34;qwen2.5-coder-7b&#34;, &#34;search&#34;: &#34;qwen3-8b&#34;}
+
+    def process(self, task: str) -&gt; str:
+        plan = self.call_model(self.planner, f&#34;Plan: {task}&#34;)
+        results = [self.call_model(self.executors.get(s[&#34;type&#34;], &#34;qwen3-8b&#34;), s[&#34;prompt&#34;])
+                   for s in self.parse_plan(plan)]
+        return self.call_model(self.planner, f&#34;Synthesize: {results}&#34;)
+```
+
+Supervisor-worker adds review to delegation: assign, execute, reviewer pass. The supervisor plans, delegates, and judges — keep it fast or everything queues behind it.
+
+## Ensemble: Weighted and Consensus
+
+Weighted ensembles score each output and take the max, weights tracking measured performance rather than benchmark hope. Consensus ensembles require threshold agreement (say 0.7) and escalate to the strongest model below it — strictness dials speed against confidence. Reserve both for decisions where wrongness costs more than tokens.
+
+## When It Earns Its Keep
+
+Mixed workloads, critical-decision quality bars, cost or latency walls. Skip it for uniform complexity (one good model wins), prototypes (optimize after the bill arrives), and simplicity-first systems. Start single; add models at measured constraints. The companion practices live nearby: [model routing strategies](/ai/model-routing-strategies/) for capability, cost, and latency routing with fallbacks; [cost optimization](/ai/cost-optimization-llm-systems/) for budgets, caching, and break-even math; [guardrails](/ai/llm-guardrails-in-practice/) so cheaper models stay inside safety bounds.
+
+## Tradeoff Matrix
+
+| Pattern | Cost | Latency | Quality | Complexity |
+|---|---|---|---|---|
+| Single model | Lowest | Lowest | Variable | Lowest |
+| Sequential | Medium | High | High | Medium |
+| Parallel | High | Low | High | Medium |
+| Hierarchical | High | High | Highest | High |
+| Ensemble | Highest | Medium | Highest | Highest |
+
+## Summary
+
+Right model, right task, right time — with architecture chosen by constraint, not enthusiasm. Capability gaps call for hierarchy, latency walls for parallelism, critical calls for ensembles, and everything else for the simplest wiring that holds.
+
+*Which multi-model pattern carries your production load — and what broke first? Share the topology in the comments below!*
+

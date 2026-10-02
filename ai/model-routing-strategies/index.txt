@@ -1,0 +1,122 @@
+---
+title: Model Routing: Stop Using One Model for Everything
+url: https://devopstales.github.io/ai/model-routing-strategies/
+date: 2026-10-01
+---
+
+
+A 70B model summarizing an email burns money; a 3B model reviewing production code courts disaster. Routing matches task complexity to model capability across four strategies — capability, cost, latency, hybrid — each optimizing what hurts most. Production systems converge on hybrid; start there only after one model genuinely fails.
+
+&lt;!--more--&gt;
+
+![LLM model routing across capability, cost, and latency](/img/model-routing-strategies.webp)
+*Classify the task, then spend the right model on it — not the biggest one*
+
+## Capability Routing: Task to Model
+
+Classify, then dispatch. Sentiment goes to 1-3B models, summarization to 3-7B, code to 7-14B coders, hard reasoning to 14-32B, creative and analytical peaks to 32B and flagship APIs:
+
+```python
+ROUTING_RULES = {
+    &#34;classify&#34;: {&#34;model&#34;: &#34;qwen3-1.7B&#34;, &#34;max_tokens&#34;: 100},
+    &#34;summarize&#34;: {&#34;model&#34;: &#34;qwen3-8B&#34;, &#34;max_tokens&#34;: 500},
+    &#34;code_review&#34;: {&#34;model&#34;: &#34;qwen2.5-coder-7b&#34;, &#34;max_tokens&#34;: 2000},
+    &#34;reason&#34;: {&#34;model&#34;: &#34;qwen3-32b&#34;, &#34;max_tokens&#34;: 4000},
+    &#34;creative&#34;: {&#34;model&#34;: &#34;claude-sonnet-4&#34;, &#34;max_tokens&#34;: 8000},
+}
+
+def route_request(task_type: str) -&gt; dict:
+    return ROUTING_RULES.get(task_type, ROUTING_RULES[&#34;reason&#34;])
+```
+
+The classifier is the weak link — code review filed as &#34;summarization&#34; loses quality silently. Keep categories crisp enough for even a small classifier, and default unknown tasks upward to reasoning models. Architectural sibling: [multi-model system design](/ai/multi-model-system-design/) covers pipeline, parallel, hierarchical, and ensemble wirings around the same routing idea.
+
+## Cost Routing: Spend Downhill
+
+Local inference amortizes fast — a mid-range GPU pays for itself in months at moderate API volume, after which local tokens cost electricity against dollars per million. Budget-aware routers fall back as sessions spend:
+
+```python
+class CostAwareRouter:
+    def __init__(self, budget_per_session: float = 0.10):
+        self.budget = budget_per_session
+        self.spent = 0.0
+        self.models = {
+            &#34;cheap&#34;: {&#34;model&#34;: &#34;qwen3-8B&#34;, &#34;cost&#34;: 0.0},
+            &#34;medium&#34;: {&#34;model&#34;: &#34;qwen3-32b&#34;, &#34;cost&#34;: 0.0},
+            &#34;expensive&#34;: {&#34;model&#34;: &#34;claude-sonnet-4&#34;, &#34;cost&#34;: 0.000015},
+        }
+
+    def route(self, task: str) -&gt; str:
+        ratio = self.spent / self.budget
+        if ratio &lt; 0.5:
+            return self.models[&#34;expensive&#34;][&#34;model&#34;]
+        elif ratio &lt; 0.8:
+            return self.models[&#34;medium&#34;][&#34;model&#34;]
+        return self.models[&#34;cheap&#34;][&#34;model&#34;]
+```
+
+Quality visibly degrades down the slope — flagship to mid to small — which is acceptable only where later-session work tolerates it. Routing routine traffic locally while reserving APIs for edge cases doubles as vendor-independence hygiene. Full break-even math lives in [cost optimization](/ai/cost-optimization-llm-systems/).
+
+## Latency Routing: First Token Is the Product
+
+Streaming users feel first-token latency: sub-200ms real-time chat caps models under ~7B, sub-500ms interactive tools under ~14B, batch and research tolerate anything. Route by measured completion budget, fastest qualifying model wins:
+
+```python
+class LatencyAwareRouter:
+    def __init__(self):
+        self.model_latencies = {
+            &#34;qwen3-1.7b&#34;: {&#34;first_token&#34;: 0.05, &#34;complete&#34;: 0.5},
+            &#34;qwen3-8B&#34;: {&#34;first_token&#34;: 0.15, &#34;complete&#34;: 2.0},
+            &#34;qwen3-32b&#34;: {&#34;first_token&#34;: 0.5, &#34;complete&#34;: 10.0},
+            &#34;claude-sonnet-4&#34;: {&#34;first_token&#34;: 0.3, &#34;complete&#34;: 5.0},
+        }
+
+    def route(self, target_latency: float) -&gt; str:
+        for model, latencies in sorted(
+            self.model_latencies.items(),
+            key=lambda x: x[1][&#34;complete&#34;]
+        ):
+            if latencies[&#34;complete&#34;] &lt;= target_latency:
+                return model
+        return &#34;qwen3-1.7b&#34;
+```
+
+Published latencies are rough — hardware, quantization, and batch size move them. Measure on the deployment, not the datasheet.
+
+## Fallbacks: Best to Most Reliable
+
+Models fail, APIs rate-limit, timeouts fire. Chain best-first down to a local last resort — local never fails on network or keys, only on speed:
+
+```python
+class FallbackRouter:
+    def __init__(self):
+        self.fallback_chain = [
+            {&#34;model&#34;: &#34;claude-sonnet-4&#34;, &#34;timeout&#34;: 30},
+            {&#34;model&#34;: &#34;qwen2.5-72b&#34;, &#34;timeout&#34;: 60},
+            {&#34;model&#34;: &#34;qwen3-32b&#34;, &#34;timeout&#34;: 120},
+            {&#34;model&#34;: &#34;qwen3-8b&#34;, &#34;timeout&#34;: 300},
+        ]
+
+    def route_with_fallback(self, prompt: str) -&gt; str:
+        for config in self.fallback_chain:
+            try:
+                return self.call_model(
+                    config[&#34;model&#34;], prompt,
+                    timeout=config[&#34;timeout&#34;]
+                )
+            except (TimeoutError, APIError) as e:
+                log.warning(f&#34;Model {config[&#39;model&#39;]} failed: {e}&#34;)
+                continue
+        raise RuntimeError(&#34;All fallback models failed&#34;)
+```
+
+## When Routing Pays
+
+Mixed workloads with classification, summarization, and reasoning in one system — measurable money and latency wins. Skip it for uniform complexity (one good model, no router tax) and early prototypes (one model until cost or latency actually bites). Strategy tradeoffs at a glance: single model simplest and priciest with consistent quality; capability routing cheaper per task at moderate complexity; cost routing cheapest with variable quality; latency routing fastest possibly at quality cost; hybrid best of all at highest implementation cost. Convergence path: capability first, cost when bills arrive, latency when users complain. Keep routed models inside [guardrails](/ai/llm-guardrails-in-practice/) — cheaper models need the same safety bounds, not weaker ones.
+
+## Summary
+
+One model everywhere is either wasteful or reckless. Classify tasks, route by capability, fall back by budget, constrain by latency, and always end the chain locally. Add routing when measurement demands it — never before.
+
+*How do you split work across models — rules, classifiers, or budgets? Share the routing table in the comments below!*
+

@@ -8,7 +8,7 @@
             <link href="https://devopstales.github.io/virtualization/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/virtualization/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/virtualization/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-09-18T12:48:28+00:00</updated>
+    <updated>2026-10-02T12:39:21+00:00</updated>
     
     
         <author>
@@ -16,6 +16,502 @@
             </author>
     
         <id>https://devopstales.github.io/virtualization/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Ceph 19.2.6, the CephX key rotation, and getting through it without losing sleep]]></title>
+            <link href="https://devopstales.github.io/virtualization/ceph-cephx-aes256k-key-rotation/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+                <link href="https://devopstales.github.io/virtualization/proxmox-ceph-debugging/?utm_source=atom_feed" rel="related" type="text/html" title="Ceph Debugging on Proxmox: Essential Commands and Troubleshooting" />
+            
+                <id>https://devopstales.github.io/virtualization/ceph-cephx-aes256k-key-rotation/</id>
+            
+            
+            <published>2026-09-21T00:00:00+00:00</published>
+            <updated>2026-09-21T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Ceph 19.2.6 is a security patch. What makes it different from every other Ceph patch you have shipped in the last five years is that the fix for the headline CVE introduces the first new CephX key type in the project&rsquo;s history, <code>aes256k</code>. That turns &ldquo;update the packages&rdquo; into &ldquo;migrate every credential in the cluster, on every node, for every client, without breaking the ones that are in use right now.&rdquo;</p>
+<p>This post walks through the whole thing: what the four CVEs actually are, how CephX authentication works well enough to understand why the rotation is hard, where the keys live on a Proxmox node, the preflight checks that save you during the upgrade, the Proxmox migration helper step by step, and the specific things that went wrong for people who did not follow the procedure.</p>
+<h2 id="the-four-cves-and-why-1926-is-different">The four CVEs and why 19.2.6 is different</h2>
+<p>Ceph released Squid 19.2.6 and Tentacle 20.2.4 on August 19, 2026, with a strong recommendation that all operators upgrade as soon as possible. Four CVEs are fixed in this release:</p>
+<table>
+	<thead>
+			<tr>
+					<th>CVE</th>
+					<th>Component</th>
+					<th>What it is</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>CVE-2025-30156</td>
+					<td>CephX</td>
+					<td>Authentication bypass caused by misuse of AES-CBC encryption</td>
+			</tr>
+			<tr>
+					<td>CVE-2026-39944</td>
+					<td>RGW</td>
+					<td>Improper verification of a cryptographic signature in STS session tokens, same unauthenticated-encryption root cause as CVE-2025-30156</td>
+			</tr>
+			<tr>
+					<td>CVE-2026-50152</td>
+					<td>Ceph Monitor</td>
+					<td>Improper authorization in the monitor subscription handler</td>
+			</tr>
+			<tr>
+					<td>CVE-2026-54330</td>
+					<td>RGW</td>
+					<td>Flaw in the SigV4 signature verifier that could reject or mis-accept properly signed requests</td>
+			</tr>
+	</tbody>
+</table>
+<p>The first row is the one that changes your maintenance plan. The fix for CVE-2025-30156 introduces <code>aes256k</code> as a new CephX key type. Before this, Ceph had one key format, <code>aes</code>, and every daemon and every client used it. Now there are two, and the cluster has to move from one to the other while keeping everything that is running, running.</p>
+<p>The practical consequence is that &ldquo;my Ceph cluster is on 19.2.6&rdquo; and &ldquo;every client can use the new key&rdquo; are two separate facts. The daemon upgrade and the credential migration are two different pieces of work, and the upgrade is not finished until the second one is done.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  Before 19.2.6                          After 19.2.6
+</span></span><span style="display:flex;"><span>  +---------------------+                +---------------------------+
+</span></span><span style="display:flex;"><span>  | all keys: aes       |   upgrade +   | service keys:  aes256k    |
+</span></span><span style="display:flex;"><span>  | all clients: aes    |   rotate =&gt;   | client keys:   staged     |
+</span></span><span style="display:flex;"><span>  +---------------------+                |   (old + new both valid)  |
+</span></span><span style="display:flex;"><span>                                         | cipher: aes still allowed |
+</span></span><span style="display:flex;"><span>                                         +---------------------------+
+</span></span></code></pre></div><p>The Ceph project notes that cephadm automates rotation for OSD and MDS daemon keys during the upgrade, and that Rook automates some client keys. Client keys used by kernel RBD or CephFS mounts are a separate concern in every deployment method, and kernel support for <code>aes256k</code> starts upstream in Linux kernel 7.0, with backports available in some distributions. If you have a kernel client on an older distro kernel, that client is not ready until the kernel is updated, and the cluster has to keep the old cipher enabled for it.</p>
+<h2 id="how-cephx-actually-works">How CephX actually works</h2>
+<p>The rotation is hard because of the ticket model. Understanding it is the difference between doing the migration with confidence and doing it while holding your breath.</p>
+<p>Every Ceph service and every client authenticates to a monitor using a long-term secret key. That key is called a user key. Once the monitor has verified the user key, it issues temporary credentials called tickets. The running client holds tickets, not the key, for the duration of its session.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  Client / daemon                   Monitor                         OSD / MDS
+</span></span><span style="display:flex;"><span>  (holds user key)                  (verifies user keys,            (validates
+</span></span><span style="display:flex;"><span>                                    issues tickets)                  service tickets)
+</span></span><span style="display:flex;"><span>        |                                  |                              |
+</span></span><span style="display:flex;"><span>        |  1. authenticate with            |                              |
+</span></span><span style="display:flex;"><span>        |     user key (long-term)         |                              |
+</span></span><span style="display:flex;"><span>        +---------------------------------&gt;|                              |
+</span></span><span style="display:flex;"><span>        |                                  |                              |
+</span></span><span style="display:flex;"><span>        |  2. monitor ticket               |                              |
+</span></span><span style="display:flex;"><span>        |     (default TTL: 3 days)        |                              |
+</span></span><span style="display:flex;"><span>        |&lt;---------------------------------|                              |
+</span></span><span style="display:flex;"><span>        |                                  |                              |
+</span></span><span style="display:flex;"><span>        |  3. request service tickets      |                              |
+</span></span><span style="display:flex;"><span>        |     (default TTL: 1 hour)        |                              |
+</span></span><span style="display:flex;"><span>        +---------------------------------&gt;|  4. ask mon:                 |
+</span></span><span style="display:flex;"><span>        |                                  |     is this ticket          |
+</span></span><span style="display:flex;"><span>        |                                  +---------------------------&gt;|
+</span></span><span style="display:flex;"><span>        |                                  |     valid?                  |
+</span></span><span style="display:flex;"><span>        |                                  |&lt;---------------------------+
+</span></span><span style="display:flex;"><span>        |                                  |                              |
+</span></span><span style="display:flex;"><span>        |  5. IO to OSD / MDS using service tickets                      |
+</span></span><span style="display:flex;"><span>        +----------------------------------------------------------------+
+</span></span></code></pre></div><p>Two things fall out of this model. First, a running client reads its user key when it starts. Updating the key on disk does not update the process that is already running. That is the grace period: existing sessions keep working on the tickets they already hold, even after the key on disk has changed. Second, the grace period has a clock. Monitor tickets last three days by default, service tickets one hour. Once a ticket expires and the client re-authenticates, it uses the key it has now, which means the migration window is the time before those tickets roll over.</p>
+<p>This is why the migration procedure is what it is. You do not flip a switch. You stage the new key so that both the old and the new are valid, give the clients a chance to refresh onto the new key, and only then retire the old one. The Proxmox migration helper manages that staging explicitly, and it is the reason a Proxmox rotation can be done gradually rather than as a whole-cluster maintenance window.</p>
+<p>One more detail that matters for encrypted OSDs. Each encrypted OSD has a dedicated Ceph user, <code>client.osd-lockbox.&lt;UUID&gt;</code>, whose key is the lockbox key. The lockbox key is not the disk-encryption key itself. It is the credential the OSD uses to retrieve the disk-encryption key from the monitor so it can unlock its block device at startup. The monitor&rsquo;s auth database and the LVM tag on the block device must contain matching copies of that key. Rotate it with a plain <code>ceph auth</code> command and you update one copy but not the other, and the OSD can no longer unlock its own disk. That is the single most destructive mistake available in this migration, and it is the reason the migration helper exists.</p>
+<h2 id="where-the-keys-live-on-a-proxmox-node">Where the keys live on a Proxmox node</h2>
+<p>Proxmox stores Ceph credentials in a few specific places, and confusing which file is authoritative is a common source of &ldquo;I rotated the key and nothing changed.&rdquo;</p>
+<ul>
+<li><code>/etc/pve/priv/ceph.client.admin.keyring</code> is the authoritative <code>client.admin</code> keyring. The Proxmox cluster filesystem, pmxcfs, synchronizes it to every node. The copy in <code>/etc/ceph</code> is a derived convenience, not the source of truth.</li>
+<li><code>/etc/pve/priv/ceph/</code> holds the keyrings for managed Ceph storages, one per storage. For an external RBD storage that is <code>&lt;STORAGE_ID&gt;.keyring</code>, for CephFS it is <code>&lt;STORAGE_ID&gt;.secret</code>.</li>
+<li><code>/etc/pve/priv/ceph.mon.keyring</code> contains both the shared <code>mon.</code> key and <code>client.admin</code>. When updating it, merge changes into the file rather than overwriting it, because <code>pveceph mon create</code> reads the <code>mon.</code> entry when initializing a new monitor.</li>
+<li>Keyrings under <code>/var/lib/ceph</code> belong to a single Ceph service and are local to that node.</li>
+</ul>
+<p>The reason this layout matters during a rotation is that a staged key has to land in the managed file, and every external client has to be handed the credential from the right file for the right user. A client that is pointed at <code>client.admin</code> as a substitute for a dedicated storage user is a client that will misbehave after the old key is retired.</p>
+<h2 id="the-preflight-before-you-patch">The preflight before you patch</h2>
+<p>Ceph 19.2.6 is urgent, but urgency is not a reason to skip the preflight. The cluster you start the migration on should be a state you already understand, so that when something changes, you can tell whether the upgrade caused it.</p>
+<p>The item that deserves specific attention is the placement group count on the internal <code>.mgr</code> pool. The <code>.mgr</code> pool is a reserved pool created by the Ceph Manager so that manager modules can store persistent state. It does not hold RBD images or CephFS data, which is exactly why it gets overlooked, but its PG configuration affects how much state the daemons track and how the cluster behaves during a rolling restart. The community has flagged unusual PG counts on <code>.mgr</code> as something to check before upgrading larger clusters, and the upstream tracker is the right place to follow the precise bug status rather than inventing a universal &ldquo;safe&rdquo; number.</p>
+<p>Capture the state before you touch anything, and save the output in the maintenance ticket. &ldquo;I think it looked like that before&rdquo; is not a position you want to be in on node three of a rolling restart.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ceph -s
+</span></span><span style="display:flex;"><span>ceph health detail
+</span></span><span style="display:flex;"><span>ceph versions
+</span></span><span style="display:flex;"><span>ceph osd lspools
+</span></span><span style="display:flex;"><span>ceph osd pool ls detail
+</span></span><span style="display:flex;"><span>ceph osd pool autoscale-status
+</span></span></code></pre></div><p>In the pool detail output, find the <code>.mgr</code> entry and record its <code>pg_num</code>, autoscale mode, size, and application metadata. If the cluster is large or the <code>.mgr</code> configuration looks unusual, compare it directly with the upstream guidance before proceeding. A few more gates worth checking:</p>
+<ul>
+<li>Every monitor, manager, OSD, and MDS that is supposed to be running is actually running.</li>
+<li>PG states are <code>active+clean</code>, or at least in a state you already understand.</li>
+<li>There is free capacity and recovery headroom. Do not start a security migration on a cluster that is already close to full.</li>
+<li>If you use RGW multisite, set <code>rgw_sigv4_insecure</code> to true before you begin, per the release notes for CVE-2026-54330.</li>
+</ul>
+<p>The preflight is boring on purpose. It is the part that distinguishes a controlled migration from an incident. The <a href="/virtualization/proxmox-ceph-debugging/">Ceph debugging commands</a> post covers the day-to-day diagnostics that make this preflight quick to run.</p>
+<h2 id="the-proxmox-migration-step-by-step">The Proxmox migration, step by step</h2>
+<p>Proxmox ships a migration helper for exactly this. It is a single script, <code>pve-cephx-rotate-service-keys</code>, that checks the cluster, rotates keys, and resumes interrupted work. It is designed to be run once per cluster, after all nodes have been upgraded to the versions that support <code>aes256k</code> and the new key rotation path.</p>
+<h3 id="before-you-begin">Before you begin</h3>
+<p>Upgrade <code>pve-manager</code> to 9.2.17 or newer and install the latest Ceph packages on every node. Staged client-key rotation requires Ceph 19.2.6-pve3, 20.2.4-pve3, or newer on every monitor. Then complete a rolling restart of all Ceph services so that every daemon is running the new code, and resolve any health warnings that are not part of the key rotation.</p>
+<p>One environment detail that trips people up: the helper verifies that every service daemon is reachable and that <code>pvestatd</code> is running on every node, because it reads the installed Ceph version through the Proxmox status layer. If <code>pvestatd</code> is not running on a node, the dry run fails with &ldquo;could not verify the installed Ceph version of &hellip; check that &lsquo;pvestatd&rsquo; runs there.&rdquo; Start it before you run the helper.</p>
+<p>Run the helper as root on one node only. Do not start another migration, a rolling restart, or any other tool that changes Ceph keys while it is running. The helper&rsquo;s lock does not block direct <code>ceph</code> authentication commands, so do not hand-edit keys with <code>ceph auth</code> during a run.</p>
+<h3 id="phase-1-migrate-the-cluster-owned-keys">Phase 1: migrate the cluster-owned keys</h3>
+<p>The first phase rotates the keys that the cluster owns: the manager, metadata server, OSD, monitor, bootstrap, crash, and encrypted OSD lockbox keys. Storage-user keys and <code>client.admin</code> are deliberately not touched in this phase, so your VMs and containers keep working on their current credentials while the daemon keys move.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Review the plan in dry-run mode</span>
+</span></span><span style="display:flex;"><span>/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys --rotate-cluster-keys
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Apply it when the plan reports no blocker</span>
+</span></span><span style="display:flex;"><span>/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys --rotate-cluster-keys --apply
+</span></span></code></pre></div><p>The helper restarts services one at a time when it needs to, including monitors, and it updates both copies of the lockbox key together, in the auth database and in the LVM tag that ceph-volume reads at activation, without stopping the OSD. After this phase, the two error-severity health checks clear. The warning about rotating service keys can remain for a few hours and clears on its own.</p>
+<h3 id="phase-2-migrate-the-keys-of-compatible-ceph-users">Phase 2: migrate the keys of compatible Ceph users</h3>
+<p>This is the phase where client compatibility matters. A single Ceph user can be shared by several workloads, so you migrate its key only when every client that uses it supports <code>aes256k</code>, including clients that are currently disconnected and external clients outside the Proxmox cluster. Ceph programs from the updated Proxmox packages support the new key. Kernel clients require a running kernel of 7.0 or newer.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Workload</th>
+					<th>Client path</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>VM with RBD disks</td>
+					<td>Userspace, unless krbd is enabled</td>
+			</tr>
+			<tr>
+					<td>Container on RBD</td>
+					<td>Always the kernel client</td>
+			</tr>
+			<tr>
+					<td>CephFS mount</td>
+					<td>Kernel, unless fuse is enabled</td>
+			</tr>
+	</tbody>
+</table>
+<p>If any affected client is incompatible or unknown, leave that user&rsquo;s key unchanged and postpone this phase. Do not rotate a shared user&rsquo;s key until every one of its clients is ready.</p>
+<p>To stage the keys for the dedicated users of managed local RBD and CephFS storages, together with <code>client.admin</code>, use:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Review the combined plan</span>
+</span></span><span style="display:flex;"><span>/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>    --rotate-all-storage-keys --rotate-admin-key
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Apply it</span>
+</span></span><span style="display:flex;"><span>/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>    --rotate-all-storage-keys --rotate-admin-key --apply
+</span></span></code></pre></div><p>The helper stages each new key and writes it to the managed keyring and secret files. Both keys remain valid until you confirm, which is what lets clients refresh onto the new key before the old one is retired. While a key is staged, do not add or downgrade monitors, and do not change that user&rsquo;s keys with other tools. The <code>AUTH_INSECURE_CLIENT_KEY_TYPE</code> warning for a staged user stays until the confirmation makes the new key current.</p>
+<h3 id="refreshing-the-clients">Refreshing the clients</h3>
+<p>A staged key does nothing until the clients actually use it. This is the part that is easy to forget and the part that, if skipped, is the part that breaks later.</p>
+<ul>
+<li>Live-migrate affected virtual machines in the web interface, or stop and start them. A guest reboot inside the VM is not enough, because the host-side RBD client holds the key, not the guest.</li>
+<li>Stop and start affected containers and other RBD clients.</li>
+<li>Let backups, restores, disk imports, and clones on Ceph storage finish before you confirm, because those operations retain the key they started with.</li>
+<li>The helper refreshes idle CephFS mounts and leaves busy or unresponsive mounts alone. Rerun it with <code>--apply</code> to retry the outstanding ones once they are idle. If a VM has an ISO from a CephFS mount attached, you may need to detach the ISO or migrate the VM to a node where the mount is idle.</li>
+<li>For clients outside Proxmox, distribute the staged credential from the managed key file for that user, then restart or remount those clients.</li>
+</ul>
+<p>The helper reports sessions that may still hold an old key. Those names are hints, not a complete inventory. Check your disconnected clients and any external copies of the keys yourself.</p>
+<h3 id="phase-3-finish-or-pause">Phase 3: finish or pause</h3>
+<p>Run a final dry run to see what is left. It prints a confirmation command when its own observed checks pass, but it cannot verify disconnected clients or external key copies for you.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys
+</span></span></code></pre></div><p>When every rotation is ready and no key still needs the old cipher, the dry run prints the options to confirm and to restrict the ciphers. Clients that still need the old key cannot authenticate after this step, and existing IO can appear to keep working until a reconnect, at which point it fails. Do not use <code>--force</code> to bypass a blocker.</p>
+<p>If a client remains incompatible, the correct move is to keep its key unchanged and the old cipher enabled, and to mute the remaining warnings while you wait for that client to upgrade. You can come back and finish the restriction later.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Current and pending key ciphers. ceph auth ls does not list pending keys.</span>
+</span></span><span style="display:flex;"><span>pveceph auth status
+</span></span></code></pre></div><p>The migration journal at <code>/etc/pve/priv/cephx-key-migration.json</code> records progress and contains the old secret keys. Protect it and keep it until the migration is complete and every client has been refreshed. Deleting it earlier loses the records needed to resume.</p>
+<h2 id="what-can-go-wrong">What can go wrong</h2>
+<p>The failure mode is not mysterious. It is a rotation that was started but not finished, with the old and new keys out of sync between the monitor&rsquo;s auth database and the key material the clients actually hold.</p>
+<p>A Rook operator ran into exactly this after the release. They triggered the key rotation, and the daemon keys moved to <code>aes256k</code> while the OSD keys did not. The operator reported <code>AUTH_INSECURE_CLIENT_KEY_TYPE: 5 auth client entities with insecure key types</code>, and then the toolbox pod could no longer parse its own keyring. The error was not a format problem. The monitor&rsquo;s debug logs showed <code>unexpected key: req.key= expected_key=</code> for <code>client.admin</code>, which is a cryptographic key mismatch, not a decode failure. The key the monitor expected for <code>client.admin</code> was not the key stored in the Kubernetes Secret, even though the rotation status reported the key generation as complete. The same mismatch showed up on the monitor&rsquo;s own local bootstrap keyring. The result was a full storage outage, with every OSD down and the operator itself locked out of <code>ceph</code> commands.</p>
+<p>The lesson is not that the procedure is fragile. It is that the procedure is load-bearing. The grace period that makes a gradual rotation possible is the same grace period that, once it closes, makes a half-finished rotation a hard outage. Three specific things separate a clean migration from that outage:</p>
+<ul>
+<li>Follow the staged sequence, do not hand-rotate individual keys with <code>ceph auth</code> while the helper is working.</li>
+<li>Rotate the lockbox key with the tool that updates both copies, never with a bare <code>ceph auth</code> command.</li>
+<li>Confirm only when every client, including disconnected and external ones, has refreshed onto the new key.</li>
+</ul>
+<p>The release also introduces six new health checks that are expected to appear after the upgrade. Two of them are error severity and set the cluster to <code>HEALTH_ERR</code> until the cluster-owned keys are migrated. Seeing <code>HEALTH_ERR</code> immediately after the upgrade is not a sign that storage has failed. It is a sign that the migration has started. The checks and what each one means:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Health check</th>
+					<th>Meaning</th>
+					<th>Action</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>AUTH_INSECURE_SERVICE_KEY_TYPE</td>
+					<td>A Ceph service key uses the old cipher</td>
+					<td>Run the cluster-owned migration. Error severity.</td>
+			</tr>
+			<tr>
+					<td>AUTH_INSECURE_SERVICE_TICKETS</td>
+					<td>Monitors issue service tickets with the old cipher</td>
+					<td>Run the cluster-owned migration. Error severity.</td>
+			</tr>
+			<tr>
+					<td>AUTH_INSECURE_CLIENT_KEY_TYPE</td>
+					<td>The active key of a Ceph user uses the old cipher</td>
+					<td>Rotate compatible users and confirm, or mute the warning.</td>
+			</tr>
+			<tr>
+					<td>AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE</td>
+					<td>A rotating service key uses the old cipher</td>
+					<td>Wait a few hours after the cluster-owned migration.</td>
+			</tr>
+			<tr>
+					<td>AUTH_INSECURE_KEYS_ALLOWED</td>
+					<td>Monitors accept the old cipher</td>
+					<td>Finish the migration, or mute while old clients remain.</td>
+			</tr>
+			<tr>
+					<td>AUTH_INSECURE_KEYS_CREATABLE</td>
+					<td>Monitors can create old-cipher keys</td>
+					<td>Finish the migration, or mute while old clients remain.</td>
+			</tr>
+	</tbody>
+</table>
+<p>A cluster that sits in <code>HEALTH_ERR</code> for a long time also stops some of its internal cleanups, which can let the monitor store grow. If you have to leave the old cipher enabled while waiting on a stubborn client, that is acceptable, but plan the headroom accordingly.</p>
+<p>For operators on Rook or cephadm rather than Proxmox, the same model applies with different tooling. The general pattern for client keys is a blue-green swap: create a new key entity, point the application at it, verify it works, then retire the old one. For daemon keys, the orchestrator manages rotation during upgrades, and manual rotation is rarely needed. The Rook project documents an <code>allowedCiphers</code> workaround for when a rotation leaves the cluster unable to accept the old cipher, but that is a recovery path for an inconsistent state, not a substitute for following the rotation sequence. The <a href="https://rook.io/docs/rook/latest-release/Storage-Configuration/Advanced/cephx-key-rotation/">Rook key rotation documentation</a> and the <a href="https://docs.ceph.com/en/latest/rados/configuration/auth-config-ref/">Ceph auth configuration reference</a> are the places to read for those deployment methods.</p>
+<h2 id="is-it-worth-rushing">Is it worth rushing?</h2>
+<p>The short answer is that the urgency is real but the window is not. Four CVEs and an explicit upstream recommendation to upgrade outweigh the convenience of staying on an older patch level. What the urgency does not justify is skipping the preflight, or starting a client-key rotation before you have checked the client estate.</p>
+<p>As long as your Ceph cluster is not reachable from untrusted networks, the impact of the authentication flaws is reduced, and the migration does not need to be a same-day panic. What it does need is to be a planned maintenance action with a captured starting state, a dry run you actually read, and a confirmation step you do not skip. Do that and the rotation is a controlled, gradual change. Skip the steps and you get the outage that the Rook issue describes, which is a full storage failure caused by a key that is valid on one side of the equation and not the other.</p>
+<h2 id="summary">Summary</h2>
+<p>Ceph 19.2.6 and 20.2.4 fix four CVEs, and the headline one, CVE-2025-30156, is fixed by introducing <code>aes256k</code>, the first new CephX key type in Ceph&rsquo;s history. That makes the upgrade a migration rather than a patch, because the cluster has to move every credential from the old <code>aes</code> cipher to the new one while running clients keep working on the tickets they already hold. The ticket model is the reason the migration is gradual and the reason it is also fragile: the grace period is real, but it has a clock.</p>
+<p>On Proxmox the work is managed by the <code>pve-cephx-rotate-service-keys</code> helper in three phases: cluster-owned keys first, then the keys of compatible Ceph users, then confirmation and cipher restriction. The preflight matters. Check cluster health, the <code>.mgr</code> pool&rsquo;s PG count, capacity, and your kernel client compatibility before you start, and capture it all. The things that go wrong are predictable: hand-rotating keys with <code>ceph auth</code> while the helper runs, rotating a lockbox key without updating both copies, or confirming before every client has refreshed. Follow the sequence, stage before you retire, and confirm only when the client estate is actually ready. Do that and the rotation is a controlled change you can run on a schedule rather than an incident you run at 2 a.m.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ceph" term="ceph" label="Ceph" />
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="security" term="security" label="Security" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ceph" term="ceph" label="Ceph" />
+                             
+                                <category scheme="cephx" term="cephx" label="CephX" />
+                             
+                                <category scheme="security" term="security" label="Security" />
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="key-rotation" term="key-rotation" label="Key Rotation" />
+                             
+                                <category scheme="troubleshooting" term="troubleshooting" label="Troubleshooting" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Fixing Proxmox SDN: missing 'source /etc/network/interfaces.d/sdn' directive]]></title>
+            <link href="https://devopstales.github.io/virtualization/proxmox-sdn-missing-source-directive/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/virtualization/proxmox-sdn-missing-source-directive/</id>
+            
+            
+            <published>2026-09-21T00:00:00+00:00</published>
+            <updated>2026-09-21T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>If you have ever applied a Proxmox VE Software-Defined Network configuration and seen this warning pop up in the task view, you are not alone:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>WARN: missing <span style="color:#e6db74">&#39;source /etc/network/interfaces.d/sdn&#39;</span> directive <span style="color:#66d9ef">for</span> SDN support!
+</span></span><span style="display:flex;"><span>Created symlink /etc/systemd/system/multi-user.target.wants/dnsmasq@testzone.service -&gt; /lib/systemd/system/dnsmasq@.service.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>TASK WARNINGS: <span style="color:#ae81ff">1</span>
+</span></span></code></pre></div><p>It looks harmless, and in most cases it is. But if you want SDN-generated networks to actually come up on the node, that one line is the difference between a pending configuration and a running one. This post explains where the warning comes from in the Proxmox source code, why the fix is a single <code>source</code> directive, and how to verify the whole pipeline works afterwards.</p>
+<h2 id="what-the-warning-actually-means">What the warning actually means</h2>
+<p>Proxmox VE SDN does not generate network interfaces the way you would write them by hand. The cluster-wide SDN state lives in <code>/etc/pve/sdn</code>, which is shared across all nodes through the pmxcfs cluster filesystem. When you apply changes from the SDN panel, the manager translates that state into per-node files:</p>
+<ul>
+<li><code>/etc/network/interfaces.d/sdn</code> - the generated ifupdown2 configuration for zones and fabrics</li>
+<li><code>/etc/frr/frr.conf</code> - the routing configuration, when a fabric is in use</li>
+<li><code>/etc/wireguard/proxmox/*.conf</code> - the WireGuard interface files, when a WireGuard fabric is in use</li>
+</ul>
+<p>The generated <code>/etc/network/interfaces.d/sdn</code> file is only picked up by ifupdown2 if the main <code>/etc/network/interfaces</code> file sources the <code>interfaces.d</code> directory. Without that line, ifupdown2 never reads the file, so the bridges, VLANs and tunnels that SDN wrote to disk are never brought up.</p>
+<p>The check itself is a grep over the parsed options of <code>/etc/network/interfaces</code>. From the <code>pve-network</code> source (<code>PVE/Network/SDN.pm</code>):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-perl" data-lang="perl"><span style="display:flex;"><span>log_warn(<span style="color:#e6db74">&#34;missing &#39;source /etc/network/interfaces.d/sdn&#39; directive for SDN support!\n&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> <span style="color:#f92672">!</span>grep { $_<span style="color:#f92672">-&gt;</span>[<span style="color:#ae81ff">1</span>] <span style="color:#f92672">=~</span> <span style="color:#e6db74">m!^source /etc/network/interfaces.d/(:?sdn|\*)!</span> } @$opts;
+</span></span></code></pre></div><p>Two things are worth noting about that regex. First, it accepts either an explicit <code>source /etc/network/interfaces.d/sdn</code> or the wildcard <code>source /etc/network/interfaces.d/*</code>. Second, the check runs on every node where a configuration is generated - the fix must be present on all of them.</p>
+<h2 id="why-this-happens">Why this happens</h2>
+<p>On a fresh Proxmox VE installation the problem does not exist. The installer writes the wildcard line at the end of <code>/etc/network/interfaces</code> automatically, so a clean install is SDN-ready from day one.</p>
+<p>The warning shows up in specific situations:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Situation</th>
+					<th>Why the directive is missing</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Manual edit of <code>/etc/network/interfaces</code></td>
+					<td>The <code>source</code> line was removed or overwritten</td>
+			</tr>
+			<tr>
+					<td>Node created before the SDN packages were present</td>
+					<td>Older installations did not get the line</td>
+			</tr>
+			<tr>
+					<td>File rewritten by a script or config management tool</td>
+					<td>The tool wrote the file without the trailing line</td>
+			</tr>
+			<tr>
+					<td>Upgraded node with a customized interfaces file</td>
+					<td>The custom file never contained the line</td>
+			</tr>
+	</tbody>
+</table>
+<p>If you run a fleet where configuration is managed by Ansible, Terraform or Puppet, treat that file as managed content: make sure the template ends with the <code>source</code> directive, or the warning will come back on every node after the next run.</p>
+<h2 id="the-fix">The fix</h2>
+<h3 id="option-1-wildcard-source-recommended">Option 1: wildcard source (recommended)</h3>
+<p>Add this line at the bottom of <code>/etc/network/interfaces</code> on every node in the cluster:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;source /etc/network/interfaces.d/*&#34;</span> &gt;&gt; /etc/network/interfaces
+</span></span></code></pre></div><p>This is the same line the Proxmox installer adds, and it is the most future-proof choice: any file in <code>/etc/network/interfaces.d/</code> is picked up, not just the SDN one. If you prefer an editor, open the file with <code>nano /etc/network/interfaces</code> and add the line at the end before saving.</p>
+<h3 id="option-2-explicit-file-source">Option 2: explicit file source</h3>
+<p>If you prefer to be strict about what gets sourced, you can target the SDN file directly:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>source /etc/network/interfaces.d/sdn
+</span></span></code></pre></div><p>The Proxmox warning accepts both forms, so either one clears it. The wildcard is the default and the one I recommend.</p>
+<h3 id="reload-networking">Reload networking</h3>
+<p>The SDN panel applies the change for you, but you can also reload from the shell:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ifreload -a
+</span></span></code></pre></div><p>On a live node, verify the generated bridge is up after reloading:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ip link show
+</span></span><span style="display:flex;"><span>ip addr show
+</span></span></code></pre></div><p>You should see the SDN-generated interface (for example a <code>vmbr0</code> VLAN sub-interface or a WireGuard tunnel) in the list.</p>
+<h2 id="verify-the-sdn-pipeline-end-to-end">Verify the SDN pipeline end to end</h2>
+<p>Fixing the warning is the easy part. Confirming the pipeline works is what saves you later. After applying the <code>source</code> directive and the SDN configuration:</p>
+<ol>
+<li>
+<p>Check the generated file exists and is not empty:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat /etc/network/interfaces.d/sdn
+</span></span></code></pre></div><p>For a VLAN zone you will see an <code>auto</code>/<code>iface</code> block for the bridge and its VLAN tags.</p>
+</li>
+<li>
+<p>Confirm the bridge is running:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ip link show type bridge
+</span></span></code></pre></div></li>
+<li>
+<p>If you enabled the optional DHCP integration, the dnsmasq instance is a systemd template service per zone:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl status dnsmasq@testzone
+</span></span></code></pre></div><p>The <code>Created symlink ... dnsmasq@testzone.service</code> line in the warning output is evidence that this part of the pipeline is working.</p>
+</li>
+<li>
+<p>For fabrics, verify FRR is running and loaded the generated config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl status frr
+</span></span><span style="display:flex;"><span>cat /etc/frr/frr.conf
+</span></span></code></pre></div></li>
+<li>
+<p>Test from a guest: attach a vNIC to a VNet, start the VM, and ping another VM on the same VNet on a different node. Cross-node connectivity is the real proof that the SDN bridge, VLAN tagging and fabric routing all came up.</p>
+</li>
+</ol>
+<h2 id="the-rest-of-the-sdn-installation">The rest of the SDN installation</h2>
+<p>The <code>source</code> directive is a prerequisite, not the whole feature. According to the official documentation, the SDN core has been installed by default since Proxmox VE 8.1. If you are upgrading from an older version, the <code>libpve-network-perl</code> package must be present on every node:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>apt update
+</span></span><span style="display:flex;"><span>apt install libpve-network-perl
+</span></span></code></pre></div><p>Two features are opt-in and require extra packages:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Feature</th>
+					<th>Package</th>
+					<th>Notes</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>DHCP for VNets</td>
+					<td><code>dnsmasq</code></td>
+					<td>Installs a per-zone template service; disable the default instance first</td>
+			</tr>
+			<tr>
+					<td>Fabric routing</td>
+					<td><code>frr-pythontools</code></td>
+					<td>Enables BGP/EVPN via FRRouting</td>
+			</tr>
+	</tbody>
+</table>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># DHCP</span>
+</span></span><span style="display:flex;"><span>apt install dnsmasq
+</span></span><span style="display:flex;"><span>systemctl disable --now dnsmasq
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># FRR</span>
+</span></span><span style="display:flex;"><span>apt install frr-pythontools
+</span></span><span style="display:flex;"><span>systemctl enable frr
+</span></span></code></pre></div><p>SDN changes are recorded as pending first and applied atomically from the main SDN panel. The rolled-out state is tracked in <code>.running-config</code> and <code>.version</code> files under <code>/etc/pve/sdn</code>, which is what makes cluster-wide rollouts and rollbacks predictable.</p>
+<h2 id="a-quick-look-at-what-sdn-gives-you">A quick look at what SDN gives you</h2>
+<p>Since this is the moment you are enabling the feature, a short tour of the pieces that consume that generated file helps frame the warning in context:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  Datacenter SDN state (/etc/pve/sdn, shared via pmxcfs)
+</span></span><span style="display:flex;"><span>              |
+</span></span><span style="display:flex;"><span>              v
+</span></span><span style="display:flex;"><span>  +-------------------------------------+
+</span></span><span style="display:flex;"><span>  | Zones: VLAN, QinQ, VXLAN, EVPN,     |
+</span></span><span style="display:flex;"><span>  | WireGuard, Simple                   |
+</span></span><span style="display:flex;"><span>  +-------------------------------------+
+</span></span><span style="display:flex;"><span>              |
+</span></span><span style="display:flex;"><span>              v
+</span></span><span style="display:flex;"><span>  +-------------------------------------+
+</span></span><span style="display:flex;"><span>  | VNets + subnets (+ optional DHCP,   |
+</span></span><span style="display:flex;"><span>  | IPAM, DNS via dnsmasq plugin)       |
+</span></span><span style="display:flex;"><span>  +-------------------------------------+
+</span></span><span style="display:flex;"><span>              |
+</span></span><span style="display:flex;"><span>              v
+</span></span><span style="display:flex;"><span>  +-------------------------------------+
+</span></span><span style="display:flex;"><span>  | Fabrics: WireGuard / BGP / EVPN     |
+</span></span><span style="display:flex;"><span>  | routing between nodes (FRR)         |
+</span></span><span style="display:flex;"><span>  +-------------------------------------+
+</span></span><span style="display:flex;"><span>              |
+</span></span><span style="display:flex;"><span>              v
+</span></span><span style="display:flex;"><span>  /etc/network/interfaces.d/sdn  --&gt;  ifupdown2 (needs the source line)
+</span></span><span style="display:flex;"><span>  /etc/frr/frr.conf              --&gt;  FRR
+</span></span><span style="display:flex;"><span>  /etc/wireguard/proxmox/*.conf  --&gt;  WireGuard
+</span></span></code></pre></div><p>A typical VLAN setup: create a VLAN zone backed by <code>vmbr0</code>, create a VNet with a VLAN tag, apply it, then attach VMs to the VNet. The warning you fixed is exactly the step that turns the generated per-node file into a live interface.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="the-warning-keeps-coming-back">The warning keeps coming back</h3>
+<p>The check reads <code>/etc/network/interfaces</code> every time a configuration is generated. If it comes back, the file was modified after your fix - usually by a config management run. Check the file tail and make the <code>source</code> line part of the managed template.</p>
+<h3 id="no-warning-but-the-bridge-is-not-up">No warning, but the bridge is not up</h3>
+<p>The warning is absent but the interface never appears. In that case ifupdown2 read the file and something else failed:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ifup --test vmbr0
+</span></span><span style="display:flex;"><span>journalctl -u ifupdown --since <span style="color:#e6db74">&#34;10 minutes ago&#34;</span>
+</span></span></code></pre></div><p>A common cause is a stale <code>auto</code>/<code>iface</code> block in <code>/etc/network/interfaces</code> itself that conflicts with the generated one.</p>
+<h3 id="dhcp-leases-not-appearing">DHCP leases not appearing</h3>
+<p>The per-zone dnsmasq service failed to start:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>systemctl status dnsmasq@testzone
+</span></span><span style="display:flex;"><span>journalctl -u dnsmasq@testzone
+</span></span></code></pre></div><p>Leases are stored in <code>/var/lib/misc/dnsmasq.&lt;zone&gt;.leases</code>.</p>
+<h3 id="fabric-routes-missing">Fabric routes missing</h3>
+<p>Verify FRR is running and actually loaded the generated configuration. The SDN fabric generates <code>/etc/frr/frr.conf</code>; if FRR is not enabled, the file exists but nothing acts on it.</p>
+<h2 id="summary">Summary</h2>
+<p>The <code>WARN: missing 'source /etc/network/interfaces.d/sdn' directive for SDN support!</code> message is Proxmox telling you that the main <code>/etc/network/interfaces</code> file does not include the directory where SDN writes its generated configuration. Add <code>source /etc/network/interfaces.d/*</code> at the bottom of the file on every node, reload networking, and the pipeline is complete. Fresh installs already have the line; it only disappears through manual edits, old upgrades or managed configurations that rewrite the file. Once the directive is in place, verify the generated file, the bridge state, and cross-node guest connectivity - that is where the real value of SDN starts to show.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="networking" term="networking" label="Networking" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="proxmox" term="proxmox" label="Proxmox" />
+                             
+                                <category scheme="sdn" term="sdn" label="SDN" />
+                             
+                                <category scheme="networking" term="networking" label="Networking" />
+                             
+                                <category scheme="troubleshooting" term="troubleshooting" label="Troubleshooting" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>

@@ -1,0 +1,237 @@
+---
+title: Ceph 19.2.6, the CephX key rotation, and getting through it without losing sleep
+url: https://devopstales.github.io/virtualization/ceph-cephx-aes256k-key-rotation/
+date: 2026-09-21
+keywords: ceph cephx, aes256k, ceph key rotation, cve-2025-30156, ceph 19.2.6, proxmox ceph, ceph health err
+---
+
+
+Ceph 19.2.6 is a security patch. What makes it different from every other Ceph patch you have shipped in the last five years is that the fix for the headline CVE introduces the first new CephX key type in the project&#39;s history, `aes256k`. That turns &#34;update the packages&#34; into &#34;migrate every credential in the cluster, on every node, for every client, without breaking the ones that are in use right now.&#34;
+
+This post walks through the whole thing: what the four CVEs actually are, how CephX authentication works well enough to understand why the rotation is hard, where the keys live on a Proxmox node, the preflight checks that save you during the upgrade, the Proxmox migration helper step by step, and the specific things that went wrong for people who did not follow the procedure.
+
+&lt;!--more--&gt;
+
+## The four CVEs and why 19.2.6 is different
+
+Ceph released Squid 19.2.6 and Tentacle 20.2.4 on August 19, 2026, with a strong recommendation that all operators upgrade as soon as possible. Four CVEs are fixed in this release:
+
+| CVE | Component | What it is |
+|-----|-----------|------------|
+| CVE-2025-30156 | CephX | Authentication bypass caused by misuse of AES-CBC encryption |
+| CVE-2026-39944 | RGW | Improper verification of a cryptographic signature in STS session tokens, same unauthenticated-encryption root cause as CVE-2025-30156 |
+| CVE-2026-50152 | Ceph Monitor | Improper authorization in the monitor subscription handler |
+| CVE-2026-54330 | RGW | Flaw in the SigV4 signature verifier that could reject or mis-accept properly signed requests |
+
+The first row is the one that changes your maintenance plan. The fix for CVE-2025-30156 introduces `aes256k` as a new CephX key type. Before this, Ceph had one key format, `aes`, and every daemon and every client used it. Now there are two, and the cluster has to move from one to the other while keeping everything that is running, running.
+
+The practical consequence is that &#34;my Ceph cluster is on 19.2.6&#34; and &#34;every client can use the new key&#34; are two separate facts. The daemon upgrade and the credential migration are two different pieces of work, and the upgrade is not finished until the second one is done.
+
+```plaintext
+  Before 19.2.6                          After 19.2.6
+  &#43;---------------------&#43;                &#43;---------------------------&#43;
+  | all keys: aes       |   upgrade &#43;   | service keys:  aes256k    |
+  | all clients: aes    |   rotate =&gt;   | client keys:   staged     |
+  &#43;---------------------&#43;                |   (old &#43; new both valid)  |
+                                         | cipher: aes still allowed |
+                                         &#43;---------------------------&#43;
+```
+
+The Ceph project notes that cephadm automates rotation for OSD and MDS daemon keys during the upgrade, and that Rook automates some client keys. Client keys used by kernel RBD or CephFS mounts are a separate concern in every deployment method, and kernel support for `aes256k` starts upstream in Linux kernel 7.0, with backports available in some distributions. If you have a kernel client on an older distro kernel, that client is not ready until the kernel is updated, and the cluster has to keep the old cipher enabled for it.
+
+## How CephX actually works
+
+The rotation is hard because of the ticket model. Understanding it is the difference between doing the migration with confidence and doing it while holding your breath.
+
+Every Ceph service and every client authenticates to a monitor using a long-term secret key. That key is called a user key. Once the monitor has verified the user key, it issues temporary credentials called tickets. The running client holds tickets, not the key, for the duration of its session.
+
+```plaintext
+  Client / daemon                   Monitor                         OSD / MDS
+  (holds user key)                  (verifies user keys,            (validates
+                                    issues tickets)                  service tickets)
+        |                                  |                              |
+        |  1. authenticate with            |                              |
+        |     user key (long-term)         |                              |
+        &#43;---------------------------------&gt;|                              |
+        |                                  |                              |
+        |  2. monitor ticket               |                              |
+        |     (default TTL: 3 days)        |                              |
+        |&lt;---------------------------------|                              |
+        |                                  |                              |
+        |  3. request service tickets      |                              |
+        |     (default TTL: 1 hour)        |                              |
+        &#43;---------------------------------&gt;|  4. ask mon:                 |
+        |                                  |     is this ticket          |
+        |                                  &#43;---------------------------&gt;|
+        |                                  |     valid?                  |
+        |                                  |&lt;---------------------------&#43;
+        |                                  |                              |
+        |  5. IO to OSD / MDS using service tickets                      |
+        &#43;----------------------------------------------------------------&#43;
+```
+
+Two things fall out of this model. First, a running client reads its user key when it starts. Updating the key on disk does not update the process that is already running. That is the grace period: existing sessions keep working on the tickets they already hold, even after the key on disk has changed. Second, the grace period has a clock. Monitor tickets last three days by default, service tickets one hour. Once a ticket expires and the client re-authenticates, it uses the key it has now, which means the migration window is the time before those tickets roll over.
+
+This is why the migration procedure is what it is. You do not flip a switch. You stage the new key so that both the old and the new are valid, give the clients a chance to refresh onto the new key, and only then retire the old one. The Proxmox migration helper manages that staging explicitly, and it is the reason a Proxmox rotation can be done gradually rather than as a whole-cluster maintenance window.
+
+One more detail that matters for encrypted OSDs. Each encrypted OSD has a dedicated Ceph user, `client.osd-lockbox.&lt;UUID&gt;`, whose key is the lockbox key. The lockbox key is not the disk-encryption key itself. It is the credential the OSD uses to retrieve the disk-encryption key from the monitor so it can unlock its block device at startup. The monitor&#39;s auth database and the LVM tag on the block device must contain matching copies of that key. Rotate it with a plain `ceph auth` command and you update one copy but not the other, and the OSD can no longer unlock its own disk. That is the single most destructive mistake available in this migration, and it is the reason the migration helper exists.
+
+## Where the keys live on a Proxmox node
+
+Proxmox stores Ceph credentials in a few specific places, and confusing which file is authoritative is a common source of &#34;I rotated the key and nothing changed.&#34;
+
+- `/etc/pve/priv/ceph.client.admin.keyring` is the authoritative `client.admin` keyring. The Proxmox cluster filesystem, pmxcfs, synchronizes it to every node. The copy in `/etc/ceph` is a derived convenience, not the source of truth.
+- `/etc/pve/priv/ceph/` holds the keyrings for managed Ceph storages, one per storage. For an external RBD storage that is `&lt;STORAGE_ID&gt;.keyring`, for CephFS it is `&lt;STORAGE_ID&gt;.secret`.
+- `/etc/pve/priv/ceph.mon.keyring` contains both the shared `mon.` key and `client.admin`. When updating it, merge changes into the file rather than overwriting it, because `pveceph mon create` reads the `mon.` entry when initializing a new monitor.
+- Keyrings under `/var/lib/ceph` belong to a single Ceph service and are local to that node.
+
+The reason this layout matters during a rotation is that a staged key has to land in the managed file, and every external client has to be handed the credential from the right file for the right user. A client that is pointed at `client.admin` as a substitute for a dedicated storage user is a client that will misbehave after the old key is retired.
+
+## The preflight before you patch
+
+Ceph 19.2.6 is urgent, but urgency is not a reason to skip the preflight. The cluster you start the migration on should be a state you already understand, so that when something changes, you can tell whether the upgrade caused it.
+
+The item that deserves specific attention is the placement group count on the internal `.mgr` pool. The `.mgr` pool is a reserved pool created by the Ceph Manager so that manager modules can store persistent state. It does not hold RBD images or CephFS data, which is exactly why it gets overlooked, but its PG configuration affects how much state the daemons track and how the cluster behaves during a rolling restart. The community has flagged unusual PG counts on `.mgr` as something to check before upgrading larger clusters, and the upstream tracker is the right place to follow the precise bug status rather than inventing a universal &#34;safe&#34; number.
+
+Capture the state before you touch anything, and save the output in the maintenance ticket. &#34;I think it looked like that before&#34; is not a position you want to be in on node three of a rolling restart.
+
+```bash
+ceph -s
+ceph health detail
+ceph versions
+ceph osd lspools
+ceph osd pool ls detail
+ceph osd pool autoscale-status
+```
+
+In the pool detail output, find the `.mgr` entry and record its `pg_num`, autoscale mode, size, and application metadata. If the cluster is large or the `.mgr` configuration looks unusual, compare it directly with the upstream guidance before proceeding. A few more gates worth checking:
+
+- Every monitor, manager, OSD, and MDS that is supposed to be running is actually running.
+- PG states are `active&#43;clean`, or at least in a state you already understand.
+- There is free capacity and recovery headroom. Do not start a security migration on a cluster that is already close to full.
+- If you use RGW multisite, set `rgw_sigv4_insecure` to true before you begin, per the release notes for CVE-2026-54330.
+
+The preflight is boring on purpose. It is the part that distinguishes a controlled migration from an incident. The [Ceph debugging commands](/virtualization/proxmox-ceph-debugging/) post covers the day-to-day diagnostics that make this preflight quick to run.
+
+## The Proxmox migration, step by step
+
+Proxmox ships a migration helper for exactly this. It is a single script, `pve-cephx-rotate-service-keys`, that checks the cluster, rotates keys, and resumes interrupted work. It is designed to be run once per cluster, after all nodes have been upgraded to the versions that support `aes256k` and the new key rotation path.
+
+### Before you begin
+
+Upgrade `pve-manager` to 9.2.17 or newer and install the latest Ceph packages on every node. Staged client-key rotation requires Ceph 19.2.6-pve3, 20.2.4-pve3, or newer on every monitor. Then complete a rolling restart of all Ceph services so that every daemon is running the new code, and resolve any health warnings that are not part of the key rotation.
+
+One environment detail that trips people up: the helper verifies that every service daemon is reachable and that `pvestatd` is running on every node, because it reads the installed Ceph version through the Proxmox status layer. If `pvestatd` is not running on a node, the dry run fails with &#34;could not verify the installed Ceph version of ... check that &#39;pvestatd&#39; runs there.&#34; Start it before you run the helper.
+
+Run the helper as root on one node only. Do not start another migration, a rolling restart, or any other tool that changes Ceph keys while it is running. The helper&#39;s lock does not block direct `ceph` authentication commands, so do not hand-edit keys with `ceph auth` during a run.
+
+### Phase 1: migrate the cluster-owned keys
+
+The first phase rotates the keys that the cluster owns: the manager, metadata server, OSD, monitor, bootstrap, crash, and encrypted OSD lockbox keys. Storage-user keys and `client.admin` are deliberately not touched in this phase, so your VMs and containers keep working on their current credentials while the daemon keys move.
+
+```bash
+# Review the plan in dry-run mode
+/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys --rotate-cluster-keys
+
+# Apply it when the plan reports no blocker
+/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys --rotate-cluster-keys --apply
+```
+
+The helper restarts services one at a time when it needs to, including monitors, and it updates both copies of the lockbox key together, in the auth database and in the LVM tag that ceph-volume reads at activation, without stopping the OSD. After this phase, the two error-severity health checks clear. The warning about rotating service keys can remain for a few hours and clears on its own.
+
+### Phase 2: migrate the keys of compatible Ceph users
+
+This is the phase where client compatibility matters. A single Ceph user can be shared by several workloads, so you migrate its key only when every client that uses it supports `aes256k`, including clients that are currently disconnected and external clients outside the Proxmox cluster. Ceph programs from the updated Proxmox packages support the new key. Kernel clients require a running kernel of 7.0 or newer.
+
+| Workload | Client path |
+|----------|-------------|
+| VM with RBD disks | Userspace, unless krbd is enabled |
+| Container on RBD | Always the kernel client |
+| CephFS mount | Kernel, unless fuse is enabled |
+
+If any affected client is incompatible or unknown, leave that user&#39;s key unchanged and postpone this phase. Do not rotate a shared user&#39;s key until every one of its clients is ready.
+
+To stage the keys for the dedicated users of managed local RBD and CephFS storages, together with `client.admin`, use:
+
+```bash
+# Review the combined plan
+/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys \
+    --rotate-all-storage-keys --rotate-admin-key
+
+# Apply it
+/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys \
+    --rotate-all-storage-keys --rotate-admin-key --apply
+```
+
+The helper stages each new key and writes it to the managed keyring and secret files. Both keys remain valid until you confirm, which is what lets clients refresh onto the new key before the old one is retired. While a key is staged, do not add or downgrade monitors, and do not change that user&#39;s keys with other tools. The `AUTH_INSECURE_CLIENT_KEY_TYPE` warning for a staged user stays until the confirmation makes the new key current.
+
+### Refreshing the clients
+
+A staged key does nothing until the clients actually use it. This is the part that is easy to forget and the part that, if skipped, is the part that breaks later.
+
+- Live-migrate affected virtual machines in the web interface, or stop and start them. A guest reboot inside the VM is not enough, because the host-side RBD client holds the key, not the guest.
+- Stop and start affected containers and other RBD clients.
+- Let backups, restores, disk imports, and clones on Ceph storage finish before you confirm, because those operations retain the key they started with.
+- The helper refreshes idle CephFS mounts and leaves busy or unresponsive mounts alone. Rerun it with `--apply` to retry the outstanding ones once they are idle. If a VM has an ISO from a CephFS mount attached, you may need to detach the ISO or migrate the VM to a node where the mount is idle.
+- For clients outside Proxmox, distribute the staged credential from the managed key file for that user, then restart or remount those clients.
+
+The helper reports sessions that may still hold an old key. Those names are hints, not a complete inventory. Check your disconnected clients and any external copies of the keys yourself.
+
+### Phase 3: finish or pause
+
+Run a final dry run to see what is left. It prints a confirmation command when its own observed checks pass, but it cannot verify disconnected clients or external key copies for you.
+
+```bash
+/usr/share/pve-manager/migrations/pve-cephx-rotate-service-keys
+```
+
+When every rotation is ready and no key still needs the old cipher, the dry run prints the options to confirm and to restrict the ciphers. Clients that still need the old key cannot authenticate after this step, and existing IO can appear to keep working until a reconnect, at which point it fails. Do not use `--force` to bypass a blocker.
+
+If a client remains incompatible, the correct move is to keep its key unchanged and the old cipher enabled, and to mute the remaining warnings while you wait for that client to upgrade. You can come back and finish the restriction later.
+
+```bash
+# Current and pending key ciphers. ceph auth ls does not list pending keys.
+pveceph auth status
+```
+
+The migration journal at `/etc/pve/priv/cephx-key-migration.json` records progress and contains the old secret keys. Protect it and keep it until the migration is complete and every client has been refreshed. Deleting it earlier loses the records needed to resume.
+
+## What can go wrong
+
+The failure mode is not mysterious. It is a rotation that was started but not finished, with the old and new keys out of sync between the monitor&#39;s auth database and the key material the clients actually hold.
+
+A Rook operator ran into exactly this after the release. They triggered the key rotation, and the daemon keys moved to `aes256k` while the OSD keys did not. The operator reported `AUTH_INSECURE_CLIENT_KEY_TYPE: 5 auth client entities with insecure key types`, and then the toolbox pod could no longer parse its own keyring. The error was not a format problem. The monitor&#39;s debug logs showed `unexpected key: req.key= expected_key=` for `client.admin`, which is a cryptographic key mismatch, not a decode failure. The key the monitor expected for `client.admin` was not the key stored in the Kubernetes Secret, even though the rotation status reported the key generation as complete. The same mismatch showed up on the monitor&#39;s own local bootstrap keyring. The result was a full storage outage, with every OSD down and the operator itself locked out of `ceph` commands.
+
+The lesson is not that the procedure is fragile. It is that the procedure is load-bearing. The grace period that makes a gradual rotation possible is the same grace period that, once it closes, makes a half-finished rotation a hard outage. Three specific things separate a clean migration from that outage:
+
+- Follow the staged sequence, do not hand-rotate individual keys with `ceph auth` while the helper is working.
+- Rotate the lockbox key with the tool that updates both copies, never with a bare `ceph auth` command.
+- Confirm only when every client, including disconnected and external ones, has refreshed onto the new key.
+
+The release also introduces six new health checks that are expected to appear after the upgrade. Two of them are error severity and set the cluster to `HEALTH_ERR` until the cluster-owned keys are migrated. Seeing `HEALTH_ERR` immediately after the upgrade is not a sign that storage has failed. It is a sign that the migration has started. The checks and what each one means:
+
+| Health check | Meaning | Action |
+|--------------|---------|--------|
+| AUTH_INSECURE_SERVICE_KEY_TYPE | A Ceph service key uses the old cipher | Run the cluster-owned migration. Error severity. |
+| AUTH_INSECURE_SERVICE_TICKETS | Monitors issue service tickets with the old cipher | Run the cluster-owned migration. Error severity. |
+| AUTH_INSECURE_CLIENT_KEY_TYPE | The active key of a Ceph user uses the old cipher | Rotate compatible users and confirm, or mute the warning. |
+| AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE | A rotating service key uses the old cipher | Wait a few hours after the cluster-owned migration. |
+| AUTH_INSECURE_KEYS_ALLOWED | Monitors accept the old cipher | Finish the migration, or mute while old clients remain. |
+| AUTH_INSECURE_KEYS_CREATABLE | Monitors can create old-cipher keys | Finish the migration, or mute while old clients remain. |
+
+A cluster that sits in `HEALTH_ERR` for a long time also stops some of its internal cleanups, which can let the monitor store grow. If you have to leave the old cipher enabled while waiting on a stubborn client, that is acceptable, but plan the headroom accordingly.
+
+For operators on Rook or cephadm rather than Proxmox, the same model applies with different tooling. The general pattern for client keys is a blue-green swap: create a new key entity, point the application at it, verify it works, then retire the old one. For daemon keys, the orchestrator manages rotation during upgrades, and manual rotation is rarely needed. The Rook project documents an `allowedCiphers` workaround for when a rotation leaves the cluster unable to accept the old cipher, but that is a recovery path for an inconsistent state, not a substitute for following the rotation sequence. The [Rook key rotation documentation](https://rook.io/docs/rook/latest-release/Storage-Configuration/Advanced/cephx-key-rotation/) and the [Ceph auth configuration reference](https://docs.ceph.com/en/latest/rados/configuration/auth-config-ref/) are the places to read for those deployment methods.
+
+## Is it worth rushing?
+
+The short answer is that the urgency is real but the window is not. Four CVEs and an explicit upstream recommendation to upgrade outweigh the convenience of staying on an older patch level. What the urgency does not justify is skipping the preflight, or starting a client-key rotation before you have checked the client estate.
+
+As long as your Ceph cluster is not reachable from untrusted networks, the impact of the authentication flaws is reduced, and the migration does not need to be a same-day panic. What it does need is to be a planned maintenance action with a captured starting state, a dry run you actually read, and a confirmation step you do not skip. Do that and the rotation is a controlled, gradual change. Skip the steps and you get the outage that the Rook issue describes, which is a full storage failure caused by a key that is valid on one side of the equation and not the other.
+
+## Summary
+
+Ceph 19.2.6 and 20.2.4 fix four CVEs, and the headline one, CVE-2025-30156, is fixed by introducing `aes256k`, the first new CephX key type in Ceph&#39;s history. That makes the upgrade a migration rather than a patch, because the cluster has to move every credential from the old `aes` cipher to the new one while running clients keep working on the tickets they already hold. The ticket model is the reason the migration is gradual and the reason it is also fragile: the grace period is real, but it has a clock.
+
+On Proxmox the work is managed by the `pve-cephx-rotate-service-keys` helper in three phases: cluster-owned keys first, then the keys of compatible Ceph users, then confirmation and cipher restriction. The preflight matters. Check cluster health, the `.mgr` pool&#39;s PG count, capacity, and your kernel client compatibility before you start, and capture it all. The things that go wrong are predictable: hand-rotating keys with `ceph auth` while the helper runs, rotating a lockbox key without updating both copies, or confirming before every client has refreshed. Follow the sequence, stage before you retire, and confirm only when the client estate is actually ready. Do that and the rotation is a controlled change you can run on a schedule rather than an incident you run at 2 a.m.
+

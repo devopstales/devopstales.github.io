@@ -1,0 +1,121 @@
+---
+title: LLM Guardrails in Practice: Control the Risk, Not the Model
+url: https://devopstales.github.io/ai/llm-guardrails-in-practice/
+date: 2026-09-28
+---
+
+
+Models hallucinate, leak data, emit harmful content, and refuse legitimate requests. Guardrails constrain behavior without removing capability — but only the guardrails that match real risk earn their latency. The discipline is knowing which ones matter and which are noise.
+
+&lt;!--more--&gt;
+
+![LLM guardrails across input, output, and safety layers](/img/llm-guardrails-in-practice.webp)
+*Validate input, filter output, budget the runtime: layered, not decorative*
+
+## Input Validation First
+
+Bad input produces bad output — and injects it. Sanitize known attack patterns early, accepting that adversarial creativity outruns regex while obvious attempts remain the most common:
+
+```python
+import re
+
+class PromptSanitizer:
+    def __init__(self):
+        self.dangerous_patterns = [
+            r&#34;ignore\s&#43;previous\s&#43;instructions&#34;,
+            r&#34;system\s&#43;prompt&#34;,
+            r&#34;you\s&#43;are\s&#43;now\s&#43;free&#34;,
+            r&#34;break\s&#43;out\s&#43;of&#34;,
+        ]
+
+    def sanitize(self, prompt: str) -&gt; str:
+        for pattern in self.dangerous_patterns:
+            prompt = re.sub(pattern, &#34;[REDACTED]&#34;, prompt, flags=re.IGNORECASE)
+        return prompt
+```
+
+Cap lengths against token waste and timeouts, and filter policy-violating topics per domain — string matching for speed, a small classifier model for production accuracy where evasion matters.
+
+## Output Filtering: Structure, Content, Facts
+
+Validate shape before meaning. Expecting JSON? Check fields exist:
+
+```python
+class ResponseValidator:
+    def __init__(self):
+        self.required_fields = [&#34;answer&#34;, &#34;confidence&#34;]
+
+    def validate(self, response: dict) -&gt; tuple[bool, str]:
+        for field in self.required_fields:
+            if field not in response:
+                return False, f&#34;Missing field: {field}&#34;
+        return True, &#34;OK&#34;
+```
+
+Filter harmful patterns on the way out with the same regex-then-classifier escalation. Fact-checking is the hard one: no dictionary scales, so check high-stakes claims against a retrieval pipeline over a knowledge base rather than hardcoded truth — and scope it to claims that matter, not every sentence.
+
+## Safety Mechanisms: Rate, Budget, Window
+
+```python
+import time
+from collections import deque
+
+class RateLimiter:
+    def __init__(self, max_requests: int = 10, window: int = 60):
+        self.max_requests = max_requests
+        self.window = window
+        self.requests = deque()
+
+    def allow(self) -&gt; bool:
+        now = time.time()
+        while self.requests and self.requests[0] &lt; now - self.window:
+            self.requests.popleft()
+        if len(self.requests) &gt;= self.max_requests:
+            return False
+        self.requests.append(now)
+        return True
+```
+
+Token budgets cap per-request spend; sliding-window trimming prevents context overflow (losing early context — summarization or attention compression preserve more at higher latency). Compliance adds the enterprise pair: data residency checks pinning regions, and structured append-only audit logs capturing request, response, and timestamp for debugging and regulators.
+
+## Assemble in Layers
+
+Simple pipeline first — validate input, call model, filter output:
+
+```python
+class SimpleGuardrails:
+    def __init__(self):
+        self.input_validator = InputValidator(max_length=10000)
+        self.output_filter = OutputFilter()
+
+    def process(self, prompt: str) -&gt; str:
+        valid, message = self.input_validator.validate(prompt)
+        if not valid:
+            return f&#34;Error: {message}&#34;
+        response = self.call_model(prompt)
+        valid, message = self.output_filter.filter(response)
+        if not valid:
+            return f&#34;Error: {message}&#34;
+        return response
+```
+
+Advanced stacks add sanitization, domain filtering, rate limiting, and token budgets around the same skeleton. Deploy guardrails for user-facing systems, sensitive data, production traffic, and compliance regimes (GDPR, HIPAA, SOC 2) — skip them for prototypes, internal-only tools, and non-sensitive workloads. Capability always trades against safety; find the system&#39;s balance, not the maximum.
+
+| Strategy | Safety | Capability | Latency |
+|---|---|---|---|
+| None | Lowest | Highest | Lowest |
+| Input validation | High | Medium | Low |
+| Output filtering | High | Medium | Low |
+| Safety mechanisms | Highest | Lowest | Highest |
+| Compliance | Highest | Lowest | Highest |
+
+## Beyond the Conversation
+
+Guardrails stop where agency starts. Once agents call MCP tools or delegate across A2A, the risk moves from model output to actions taken on someone&#39;s behalf — identity, scoped authorization, delegation limits, audit trails. That protocol layer is covered in [A2A and MCP agent security](/ai/a2a-mcp-agent-security/): polite well-filtered chatbots can still exfiltrate through tool calls without it.
+
+## Summary
+
+Sanitize and bound the input, validate structure then content then high-stakes facts on output, rate-limit and budget the runtime, log everything compliance cares about — and leave prototypes unguarded until the bill or the risk arrives.
+
+*Which guardrail caught something real in your system — and which one only added latency? Share the tradeoff in the comments below!*
+

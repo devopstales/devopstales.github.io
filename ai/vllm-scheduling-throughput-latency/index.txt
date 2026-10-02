@@ -1,0 +1,163 @@
+---
+title: vLLM Scheduling: How Throughput and Latency Trade Off in Shared Inference
+url: https://devopstales.github.io/ai/vllm-scheduling-throughput-latency/
+date: 2026-10-02
+---
+
+
+At 9 in the morning Alice asks the office&#39;s local model to summarize yesterday&#39;s meeting, and the answer streams back faster than she can read it. By 10 the whole team has found the thing. Same GPU, same model — and now everyone&#39;s replies stutter and stall. Something ran out. The hard part is telling what.
+
+The short version: the GPU is being shared, and vLLM&#39;s scheduler is good at the sharing part. What usually decides how many people fit is memory space, and long conversations eat most of it. That also tells you which targets to pick for a personal assistant, an office tool, or a customer-facing app.
+
+&lt;!--more--&gt;
+
+![vLLM logo](/img/vllm-scheduling.webp)
+*Shared inference: the scheduler&#39;s job is to keep the GPU busy without starving anyone*
+
+## Prefill, Decode, and the Two Numbers That Matter
+
+Start with Alice on her own. She sends a prompt, and the model reads all of it in a single pass. That pass is called **prefill** — the work that has to happen before the first word of the reply appears.
+
+Then the reply comes out one token per step. A token is roughly a chunk of a word. Each step produces one more token, adds it to what is already there, and goes again. That loop is **decode**, and it runs until the answer is finished.
+
+Two numbers describe how that feels to Alice:
+
+- **Time to first token (TTFT)** — how long she stares at an empty box.
+- **Inter-token latency (ITL)** — the gap between tokens, the model&#39;s typing speed.
+
+vLLM&#39;s docs call them TTFT and ITL, and later you will watch them pull against each other.
+
+```plaintext
+  prompt ----&gt; [ prefill: read it all, one pass ]
+                       |
+                       v
+                 [ first token ]   &lt;- TTFT ends here
+                       |
+        &#43;--------------&#43;--------------&#43;--------------&#43;
+        v              v              v              v
+     token n&#43;1      token n&#43;2      token n&#43;3      ...   &lt;- ITL between each
+     ( decode loop, one token per step )
+```
+
+Something else piles up during decode. To avoid redoing work every step, the model keeps a key and a value for every token it has already seen. That store is the **KV cache**, and it grows with each new token. Any write-up on serving is blunt about what limits this: inference is **memory-IO bound, not compute bound**. With only Alice&#39;s request running, the GPU&#39;s math units spend much of their time waiting for data to arrive from memory. That leftover capacity is exactly what the rest of the office is about to claim.
+
+## Continuous Batching: The Meeting That Ends When the Slides Do
+
+Five coworkers show up. The move is to **batch** them. Put all six requests into one step, and that step makes the next token for every one of them. The vLLM scheduler thinks in exactly those terms: it hands each active request its tokens for the step, and one trip through the model moves six replies forward.
+
+The older way is **static batching**. Six requests go in together, and nobody new gets in until all six are done. Carol asked for a yes-or-no. Dave asked for a full project plan. Carol is done in a handful of steps and her slot goes dark. Then another finishes, and another. The GPU keeps grinding through Dave&#39;s plan with mostly empty chairs while Aaron waits at the door with a one-line question. It is a meeting that cannot end until the person with 40 slides sits down.
+
+**Continuous batching** opens the door. The moment Carol&#39;s reply ends, Aaron drops into her slot. Every finished reply hands its seat straight to someone waiting, so the GPU spends far less time idle. The idea goes back to a 2022 paper called [Orca](https://arxiv.org/abs/2202.24198). It schedules at the level of *iterations*, not whole requests. Every single step, the scheduler decides again who is in the batch, so a finished reply never keeps its seat. Think of a waiter who checks every table on every lap instead of once per evening.
+
+```plaintext
+  static batching                 continuous batching
+  &#43;---&#43;---&#43;---&#43;---&#43;             &#43;---&#43;---&#43;---&#43;---&#43;
+  | A | B | C | D |             | A | B | C | D |
+  &#43;---&#43;---&#43;---&#43;---&#43;             &#43;---&#43;---&#43;---&#43;---&#43;
+  C done -&gt; slot idle            C done -&gt; E drops in
+  &#43;---&#43;---&#43;---&#43;---&#43;             &#43;---&#43;---&#43;---&#43;---&#43;
+  | A | B | _ | D |             | A | B | E | D |
+  &#43;---&#43;---&#43;---&#43;---&#43;             &#43;---&#43;---&#43;---&#43;---&#43;
+  ( empty chairs)               ( seat reused)
+```
+
+Orca reported **36.9x the throughput** of FasterTransformer at the same latency running GPT-3 175B. That is their own benchmark on a model that will not fit under your desk, so read it as proof the idea works, not as a forecast for your office.
+
+There is a catch. The team&#39;s total output climbs because the GPU is rarely idle. Alice, though, shares every step with five other people now. Compared with having the whole GPU to herself, each step carries more work, so her own typing speed can drop. For a shared tool that is often a fair trade — but it is a trade. The [Sarathi-Serve](https://arxiv.org/abs/2403.02310) paper names this tension directly: mixing requests in a batch makes it hard to get high throughput and low latency at the same time.
+
+## Chunked Prefill: Why One Big Paste Freezes Everyone
+
+Then Bob pastes a 20-page document and asks for a summary. Bob does not believe in short prompts. That is thousands of tokens, and every one of them needs prefilled before he sees a single word back.
+
+Without chunking, Bob&#39;s prefill runs as one enormous step. Alice, Dave, and Aaron are all mid-sentence, and their next tokens wait behind it. Every reply in the office freezes at once — a very convincing impression of a broken server.
+
+**Chunked prefill** cuts Bob&#39;s document into slices and feeds them in over several steps. Sarathi-Serve calls its version *stall-free*: new requests join the batch without pausing the replies already being written.
+
+vLLM builds every step around a **token budget**. The V1 scheduler describes a step as a simple map, request ID to number of tokens, and it counts prompt tokens and generated tokens against the same budget. A token is a token.
+
+```plaintext
+  step budget = N spaces on a tray
+
+  decodes first (each needs 1 space):
+    Alice  [1]
+    Dave   [1]
+    Aaron  [1]
+  leftover spaces -&gt; a slice of Bob&#39;s prompt:
+    Bob    [N-3 tokens]
+
+  next step: same thing, next slice, until the document is fully read
+```
+
+Picture the budget as a tray with a fixed number of spaces. Alice, Dave, and Aaron each need one space for their next token. Bob&#39;s document wants thousands, but it still picks an order: vLLM batches every pending decode first, and only then fills the leftover spaces with a slice of Bob&#39;s prompt. Next step, same thing, next slice, until his document is fully read. So everyone who is mid-reply keeps a steady typing speed, and Bob&#39;s first word arrives a few steps later than it would on a GPU alone. He pasted 20 pages — he will survive.
+
+The size of that tray is a setting, and it is a straight trade:
+
+- A **smaller** budget means fewer prefills slowing down decodes, so the gaps between tokens stay short.
+- A **bigger** budget finishes prefill sooner, so the first token shows up faster.
+
+One caution: the default budget, and whether chunking is switched on at all, have changed between vLLM versions. Check the [vLLM docs](https://docs.vllm.ai) for the release you are actually running before you tune anything.
+
+## KV Cache: The Cost That Keeps Growing
+
+That covers time. What decides how many people fit at all is memory space — and that brings us back to the KV cache.
+
+Take a real model, **Qwen 2.5 7B Instruct**. Its config lists 28 layers, 4 key-value heads, and BF16 numbers, which take two bytes each. Split its hidden size of 3584 across its 28 attention heads and each head is 128 numbers wide. Multiply it out:
+
+```plaintext
+  2 (key &#43; value)
+x 28  layers
+x 4   KV heads
+x 128 head dim
+x 2   bytes (BF16)
+= 57,344 bytes  ~ 57 KB per token
+```
+
+About **57 KB of cache for every token** in the conversation. A 4K-token chat comes to roughly 235 MB. At the model&#39;s 32K-token limit, it is about 1.9 GB for one conversation. Those are estimates from the config and leave out overhead and block rounding.
+
+Now picture 30 coworkers. Plenty of models cost far more per token. Qwen gets off lightly because its 28 attention heads share just four sets of keys and values (a group-query pattern). [AnyScale](https://www.anyscale.com/blog/continuous-batching-llm-inference) puts a 13B-parameter model at nearly a megabyte per token — well over 10x our estimate. And vLLM&#39;s [launch post](https://blog.vllm.ai/2023-06-20/vllm.html) says a single Llama 13B sequence can take up to 1.7 GB. Weights are the cost you planned for. History is the one that keeps growing.
+
+Chat makes this worse, because the model does not remember anything between turns. [OpenAI&#39;s docs](https://platform.openai.com/docs/guides/conversations) describe how conversation state works: your app resends the earlier user and assistant messages with each new request. Turn 10 carries turns 1 through 9 along with it. So every turn the prompt gets longer, the prefill gets bigger, and that conversation&#39;s cache grows. The heaviest user in the office might be a quiet person with one very long thread. They only send a message now and then, but each one drags the whole thread along — and while it runs, it takes the tallest stack on the shelf.
+
+## PagedAttention and Preemption
+
+Older serving systems made it worse still. vLLM&#39;s launch post says they wasted **60 to 80% of KV cache memory** to fragmentation and over-reservation. That is roughly like booking the big conference room for every meeting just in case it runs long.
+
+**PagedAttention** stores the cache in small, fixed-size blocks handed out as the conversation grows, the way an operating system hands out memory pages. Blocks do not need to sit next to each other, so there is no giant reservation to waste. vLLM says that brings the waste down to **under 4%**. The [peer-reviewed paper](https://arxiv.org/abs/2309.06180) puts the result at 2 to 4x the throughput of the systems it compared against at the same latency. Less memory sits reserved and empty, so more requests fit in each batch.
+
+Blocks also make **prefix caching** possible. When Alice&#39;s turn 10 starts with the same history as turn 9, vLLM can reuse the blocks it already computed if they are still in memory, instead of prefilling that history again. How much that saves depends on how your office actually chats.
+
+Now suppose the whole office is deep in long threads and the cache fills. vLLM does not fall over. It **preempts**: it pauses a request, frees its blocks, and recomputes that request later once space opens up. From Dave&#39;s desk, that is a reply that stops mid-sentence and then catches up. On the server, it is a preemption warning in the logs. See those often and your problem is cache space, with scheduling doing its best around it.
+
+```plaintext
+  cache full
+     |
+     v
+  preempt: pause Dave, free his blocks
+     |
+     &#43;---&gt; space opens --&gt; recompute Dave from the last saved block
+```
+
+Which answers the opening question. If replies freeze together when someone pastes a big document, look at chunked prefill and the token budget. If they pause and restart during long chats, that is memory. If everyone is steady but a bit slower than before, that is batching doing its job.
+
+## Tuning for Who Is Actually Using It
+
+What you tune depends on who is using it. These targets are my calls, built from everything above. None of the sources hands out numbers for them.
+
+| Target | Primary goal | What to lean on |
+|---|---|---|
+| Personal assistant | TTFT, long context | Bigger token budget, spend memory on context |
+| Shared office tool (5-30 people) | Throughput &#43; steady ITL | Chunked prefill on, smaller budget, cap context |
+| Customer-facing app | Tail latency | Hard context cap, memory headroom for bursts |
+
+**Personal assistant.** One user, so batching barely comes into it. Throughput hardly matters when there is one of you. Chase **time to first token**. A bigger token budget gets your own long prompts through prefill sooner, and you can spend the memory on long context since nobody is sharing it.
+
+**Shared office service for five to 30 people.** Wants throughput and a steady typing speed. Keep chunked prefill on, lean the budget smaller so Bob&#39;s documents do not stall anyone, and treat preemption warnings as your early sign the cache is full. I would also cap context length at about 1.9 GB for one maxed-out chat on that 7B model — a few giant threads can crowd out everybody else. Long documents can go in a fresh chat instead of turn 40.
+
+**Customer-facing app.** Plays by different rules. A slow reply there is somebody&#39;s first impression. Set targets on **tail latency**, the slowest replies, instead of the average. A median can look fine while one customer in a hundred waits far too long. Put a hard cap on context length and leave memory headroom for bursts. A spike that pushes the cache into preemption becomes stalls your customers can see.
+
+## Summary
+
+If you are setting up a shared office tool, the sharing itself is handled — the LLM scheduler does that part well. Worry first about long conversations and cache space, and only then about how many people are online. The number I would want next is the one only your setup can give: how many long chats at once before the preemption warnings start?
+
+That measurement — preemption onset under your real traffic shape — is what turns every trade in this post from a principle into a setting you can actually tune.
+

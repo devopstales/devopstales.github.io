@@ -1,0 +1,225 @@
+---
+title: Fixing Proxmox SDN: missing &#39;source /etc/network/interfaces.d/sdn&#39; directive
+url: https://devopstales.github.io/virtualization/proxmox-sdn-missing-source-directive/
+date: 2026-09-21
+---
+
+
+If you have ever applied a Proxmox VE Software-Defined Network configuration and seen this warning pop up in the task view, you are not alone:
+
+```bash
+WARN: missing &#39;source /etc/network/interfaces.d/sdn&#39; directive for SDN support!
+Created symlink /etc/systemd/system/multi-user.target.wants/dnsmasq@testzone.service -&gt; /lib/systemd/system/dnsmasq@.service.
+
+TASK WARNINGS: 1
+```
+
+It looks harmless, and in most cases it is. But if you want SDN-generated networks to actually come up on the node, that one line is the difference between a pending configuration and a running one. This post explains where the warning comes from in the Proxmox source code, why the fix is a single `source` directive, and how to verify the whole pipeline works afterwards.
+
+&lt;!--more--&gt;
+
+## What the warning actually means
+
+Proxmox VE SDN does not generate network interfaces the way you would write them by hand. The cluster-wide SDN state lives in `/etc/pve/sdn`, which is shared across all nodes through the pmxcfs cluster filesystem. When you apply changes from the SDN panel, the manager translates that state into per-node files:
+
+- `/etc/network/interfaces.d/sdn` - the generated ifupdown2 configuration for zones and fabrics
+- `/etc/frr/frr.conf` - the routing configuration, when a fabric is in use
+- `/etc/wireguard/proxmox/*.conf` - the WireGuard interface files, when a WireGuard fabric is in use
+
+The generated `/etc/network/interfaces.d/sdn` file is only picked up by ifupdown2 if the main `/etc/network/interfaces` file sources the `interfaces.d` directory. Without that line, ifupdown2 never reads the file, so the bridges, VLANs and tunnels that SDN wrote to disk are never brought up.
+
+The check itself is a grep over the parsed options of `/etc/network/interfaces`. From the `pve-network` source (`PVE/Network/SDN.pm`):
+
+```perl
+log_warn(&#34;missing &#39;source /etc/network/interfaces.d/sdn&#39; directive for SDN support!\n&#34;)
+    if !grep { $_-&gt;[1] =~ m!^source /etc/network/interfaces.d/(:?sdn|\*)! } @$opts;
+```
+
+Two things are worth noting about that regex. First, it accepts either an explicit `source /etc/network/interfaces.d/sdn` or the wildcard `source /etc/network/interfaces.d/*`. Second, the check runs on every node where a configuration is generated - the fix must be present on all of them.
+
+## Why this happens
+
+On a fresh Proxmox VE installation the problem does not exist. The installer writes the wildcard line at the end of `/etc/network/interfaces` automatically, so a clean install is SDN-ready from day one.
+
+The warning shows up in specific situations:
+
+| Situation | Why the directive is missing |
+|-----------|------------------------------|
+| Manual edit of `/etc/network/interfaces` | The `source` line was removed or overwritten |
+| Node created before the SDN packages were present | Older installations did not get the line |
+| File rewritten by a script or config management tool | The tool wrote the file without the trailing line |
+| Upgraded node with a customized interfaces file | The custom file never contained the line |
+
+If you run a fleet where configuration is managed by Ansible, Terraform or Puppet, treat that file as managed content: make sure the template ends with the `source` directive, or the warning will come back on every node after the next run.
+
+## The fix
+
+### Option 1: wildcard source (recommended)
+
+Add this line at the bottom of `/etc/network/interfaces` on every node in the cluster:
+
+```bash
+echo &#34;source /etc/network/interfaces.d/*&#34; &gt;&gt; /etc/network/interfaces
+```
+
+This is the same line the Proxmox installer adds, and it is the most future-proof choice: any file in `/etc/network/interfaces.d/` is picked up, not just the SDN one. If you prefer an editor, open the file with `nano /etc/network/interfaces` and add the line at the end before saving.
+
+### Option 2: explicit file source
+
+If you prefer to be strict about what gets sourced, you can target the SDN file directly:
+
+```bash
+source /etc/network/interfaces.d/sdn
+```
+
+The Proxmox warning accepts both forms, so either one clears it. The wildcard is the default and the one I recommend.
+
+### Reload networking
+
+The SDN panel applies the change for you, but you can also reload from the shell:
+
+```bash
+ifreload -a
+```
+
+On a live node, verify the generated bridge is up after reloading:
+
+```bash
+ip link show
+ip addr show
+```
+
+You should see the SDN-generated interface (for example a `vmbr0` VLAN sub-interface or a WireGuard tunnel) in the list.
+
+## Verify the SDN pipeline end to end
+
+Fixing the warning is the easy part. Confirming the pipeline works is what saves you later. After applying the `source` directive and the SDN configuration:
+
+1. Check the generated file exists and is not empty:
+
+   ```bash
+   cat /etc/network/interfaces.d/sdn
+   ```
+
+   For a VLAN zone you will see an `auto`/`iface` block for the bridge and its VLAN tags.
+
+2. Confirm the bridge is running:
+
+   ```bash
+   ip link show type bridge
+   ```
+
+3. If you enabled the optional DHCP integration, the dnsmasq instance is a systemd template service per zone:
+
+   ```bash
+   systemctl status dnsmasq@testzone
+   ```
+
+   The `Created symlink ... dnsmasq@testzone.service` line in the warning output is evidence that this part of the pipeline is working.
+
+4. For fabrics, verify FRR is running and loaded the generated config:
+
+   ```bash
+   systemctl status frr
+   cat /etc/frr/frr.conf
+   ```
+
+5. Test from a guest: attach a vNIC to a VNet, start the VM, and ping another VM on the same VNet on a different node. Cross-node connectivity is the real proof that the SDN bridge, VLAN tagging and fabric routing all came up.
+
+## The rest of the SDN installation
+
+The `source` directive is a prerequisite, not the whole feature. According to the official documentation, the SDN core has been installed by default since Proxmox VE 8.1. If you are upgrading from an older version, the `libpve-network-perl` package must be present on every node:
+
+```bash
+apt update
+apt install libpve-network-perl
+```
+
+Two features are opt-in and require extra packages:
+
+| Feature | Package | Notes |
+|---------|---------|-------|
+| DHCP for VNets | `dnsmasq` | Installs a per-zone template service; disable the default instance first |
+| Fabric routing | `frr-pythontools` | Enables BGP/EVPN via FRRouting |
+
+```bash
+# DHCP
+apt install dnsmasq
+systemctl disable --now dnsmasq
+
+# FRR
+apt install frr-pythontools
+systemctl enable frr
+```
+
+SDN changes are recorded as pending first and applied atomically from the main SDN panel. The rolled-out state is tracked in `.running-config` and `.version` files under `/etc/pve/sdn`, which is what makes cluster-wide rollouts and rollbacks predictable.
+
+## A quick look at what SDN gives you
+
+Since this is the moment you are enabling the feature, a short tour of the pieces that consume that generated file helps frame the warning in context:
+
+```plaintext
+  Datacenter SDN state (/etc/pve/sdn, shared via pmxcfs)
+              |
+              v
+  &#43;-------------------------------------&#43;
+  | Zones: VLAN, QinQ, VXLAN, EVPN,     |
+  | WireGuard, Simple                   |
+  &#43;-------------------------------------&#43;
+              |
+              v
+  &#43;-------------------------------------&#43;
+  | VNets &#43; subnets (&#43; optional DHCP,   |
+  | IPAM, DNS via dnsmasq plugin)       |
+  &#43;-------------------------------------&#43;
+              |
+              v
+  &#43;-------------------------------------&#43;
+  | Fabrics: WireGuard / BGP / EVPN     |
+  | routing between nodes (FRR)         |
+  &#43;-------------------------------------&#43;
+              |
+              v
+  /etc/network/interfaces.d/sdn  --&gt;  ifupdown2 (needs the source line)
+  /etc/frr/frr.conf              --&gt;  FRR
+  /etc/wireguard/proxmox/*.conf  --&gt;  WireGuard
+```
+
+A typical VLAN setup: create a VLAN zone backed by `vmbr0`, create a VNet with a VLAN tag, apply it, then attach VMs to the VNet. The warning you fixed is exactly the step that turns the generated per-node file into a live interface.
+
+## Troubleshooting
+
+### The warning keeps coming back
+
+The check reads `/etc/network/interfaces` every time a configuration is generated. If it comes back, the file was modified after your fix - usually by a config management run. Check the file tail and make the `source` line part of the managed template.
+
+### No warning, but the bridge is not up
+
+The warning is absent but the interface never appears. In that case ifupdown2 read the file and something else failed:
+
+```bash
+ifup --test vmbr0
+journalctl -u ifupdown --since &#34;10 minutes ago&#34;
+```
+
+A common cause is a stale `auto`/`iface` block in `/etc/network/interfaces` itself that conflicts with the generated one.
+
+### DHCP leases not appearing
+
+The per-zone dnsmasq service failed to start:
+
+```bash
+systemctl status dnsmasq@testzone
+journalctl -u dnsmasq@testzone
+```
+
+Leases are stored in `/var/lib/misc/dnsmasq.&lt;zone&gt;.leases`.
+
+### Fabric routes missing
+
+Verify FRR is running and actually loaded the generated configuration. The SDN fabric generates `/etc/frr/frr.conf`; if FRR is not enabled, the file exists but nothing acts on it.
+
+## Summary
+
+The `WARN: missing &#39;source /etc/network/interfaces.d/sdn&#39; directive for SDN support!` message is Proxmox telling you that the main `/etc/network/interfaces` file does not include the directory where SDN writes its generated configuration. Add `source /etc/network/interfaces.d/*` at the bottom of the file on every node, reload networking, and the pipeline is complete. Fresh installs already have the line; it only disappears through manual edits, old upgrades or managed configurations that rewrite the file. Once the directive is in place, verify the generated file, the bridge state, and cross-node guest connectivity - that is where the real value of SDN starts to show.
+

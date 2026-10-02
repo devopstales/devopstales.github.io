@@ -8,7 +8,7 @@
             <link href="https://devopstales.github.io/ai/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/ai/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/ai/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-09-18T12:48:28+00:00</updated>
+    <updated>2026-10-02T12:39:20+00:00</updated>
     
     
         <author>
@@ -16,6 +16,742 @@
             </author>
     
         <id>https://devopstales.github.io/ai/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[vLLM Scheduling: How Throughput and Latency Trade Off in Shared Inference]]></title>
+            <link href="https://devopstales.github.io/ai/vllm-scheduling-throughput-latency/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/ai/vllm-scheduling-throughput-latency/</id>
+            
+            
+            <published>2026-10-02T00:00:00+00:00</published>
+            <updated>2026-10-02T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>At 9 in the morning Alice asks the office&rsquo;s local model to summarize yesterday&rsquo;s meeting, and the answer streams back faster than she can read it. By 10 the whole team has found the thing. Same GPU, same model — and now everyone&rsquo;s replies stutter and stall. Something ran out. The hard part is telling what.</p>
+<p>The short version: the GPU is being shared, and vLLM&rsquo;s scheduler is good at the sharing part. What usually decides how many people fit is memory space, and long conversations eat most of it. That also tells you which targets to pick for a personal assistant, an office tool, or a customer-facing app.</p>
+<p><img src="/img/vllm-scheduling.webp" alt="vLLM logo"  loading="lazy" decoding="async" class="zoomable" />
+<em>Shared inference: the scheduler&rsquo;s job is to keep the GPU busy without starving anyone</em></p>
+<h2 id="prefill-decode-and-the-two-numbers-that-matter">Prefill, Decode, and the Two Numbers That Matter</h2>
+<p>Start with Alice on her own. She sends a prompt, and the model reads all of it in a single pass. That pass is called <strong>prefill</strong> — the work that has to happen before the first word of the reply appears.</p>
+<p>Then the reply comes out one token per step. A token is roughly a chunk of a word. Each step produces one more token, adds it to what is already there, and goes again. That loop is <strong>decode</strong>, and it runs until the answer is finished.</p>
+<p>Two numbers describe how that feels to Alice:</p>
+<ul>
+<li><strong>Time to first token (TTFT)</strong> — how long she stares at an empty box.</li>
+<li><strong>Inter-token latency (ITL)</strong> — the gap between tokens, the model&rsquo;s typing speed.</li>
+</ul>
+<p>vLLM&rsquo;s docs call them TTFT and ITL, and later you will watch them pull against each other.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  prompt ----&gt; [ prefill: read it all, one pass ]
+</span></span><span style="display:flex;"><span>                       |
+</span></span><span style="display:flex;"><span>                       v
+</span></span><span style="display:flex;"><span>                 [ first token ]   &lt;- TTFT ends here
+</span></span><span style="display:flex;"><span>                       |
+</span></span><span style="display:flex;"><span>        +--------------+--------------+--------------+
+</span></span><span style="display:flex;"><span>        v              v              v              v
+</span></span><span style="display:flex;"><span>     token n+1      token n+2      token n+3      ...   &lt;- ITL between each
+</span></span><span style="display:flex;"><span>     ( decode loop, one token per step )
+</span></span></code></pre></div><p>Something else piles up during decode. To avoid redoing work every step, the model keeps a key and a value for every token it has already seen. That store is the <strong>KV cache</strong>, and it grows with each new token. Any write-up on serving is blunt about what limits this: inference is <strong>memory-IO bound, not compute bound</strong>. With only Alice&rsquo;s request running, the GPU&rsquo;s math units spend much of their time waiting for data to arrive from memory. That leftover capacity is exactly what the rest of the office is about to claim.</p>
+<h2 id="continuous-batching-the-meeting-that-ends-when-the-slides-do">Continuous Batching: The Meeting That Ends When the Slides Do</h2>
+<p>Five coworkers show up. The move is to <strong>batch</strong> them. Put all six requests into one step, and that step makes the next token for every one of them. The vLLM scheduler thinks in exactly those terms: it hands each active request its tokens for the step, and one trip through the model moves six replies forward.</p>
+<p>The older way is <strong>static batching</strong>. Six requests go in together, and nobody new gets in until all six are done. Carol asked for a yes-or-no. Dave asked for a full project plan. Carol is done in a handful of steps and her slot goes dark. Then another finishes, and another. The GPU keeps grinding through Dave&rsquo;s plan with mostly empty chairs while Aaron waits at the door with a one-line question. It is a meeting that cannot end until the person with 40 slides sits down.</p>
+<p><strong>Continuous batching</strong> opens the door. The moment Carol&rsquo;s reply ends, Aaron drops into her slot. Every finished reply hands its seat straight to someone waiting, so the GPU spends far less time idle. The idea goes back to a 2022 paper called <a href="https://arxiv.org/abs/2202.24198">Orca</a>. It schedules at the level of <em>iterations</em>, not whole requests. Every single step, the scheduler decides again who is in the batch, so a finished reply never keeps its seat. Think of a waiter who checks every table on every lap instead of once per evening.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  static batching                 continuous batching
+</span></span><span style="display:flex;"><span>  +---+---+---+---+             +---+---+---+---+
+</span></span><span style="display:flex;"><span>  | A | B | C | D |             | A | B | C | D |
+</span></span><span style="display:flex;"><span>  +---+---+---+---+             +---+---+---+---+
+</span></span><span style="display:flex;"><span>  C done -&gt; slot idle            C done -&gt; E drops in
+</span></span><span style="display:flex;"><span>  +---+---+---+---+             +---+---+---+---+
+</span></span><span style="display:flex;"><span>  | A | B | _ | D |             | A | B | E | D |
+</span></span><span style="display:flex;"><span>  +---+---+---+---+             +---+---+---+---+
+</span></span><span style="display:flex;"><span>  ( empty chairs)               ( seat reused)
+</span></span></code></pre></div><p>Orca reported <strong>36.9x the throughput</strong> of FasterTransformer at the same latency running GPT-3 175B. That is their own benchmark on a model that will not fit under your desk, so read it as proof the idea works, not as a forecast for your office.</p>
+<p>There is a catch. The team&rsquo;s total output climbs because the GPU is rarely idle. Alice, though, shares every step with five other people now. Compared with having the whole GPU to herself, each step carries more work, so her own typing speed can drop. For a shared tool that is often a fair trade — but it is a trade. The <a href="https://arxiv.org/abs/2403.02310">Sarathi-Serve</a> paper names this tension directly: mixing requests in a batch makes it hard to get high throughput and low latency at the same time.</p>
+<h2 id="chunked-prefill-why-one-big-paste-freezes-everyone">Chunked Prefill: Why One Big Paste Freezes Everyone</h2>
+<p>Then Bob pastes a 20-page document and asks for a summary. Bob does not believe in short prompts. That is thousands of tokens, and every one of them needs prefilled before he sees a single word back.</p>
+<p>Without chunking, Bob&rsquo;s prefill runs as one enormous step. Alice, Dave, and Aaron are all mid-sentence, and their next tokens wait behind it. Every reply in the office freezes at once — a very convincing impression of a broken server.</p>
+<p><strong>Chunked prefill</strong> cuts Bob&rsquo;s document into slices and feeds them in over several steps. Sarathi-Serve calls its version <em>stall-free</em>: new requests join the batch without pausing the replies already being written.</p>
+<p>vLLM builds every step around a <strong>token budget</strong>. The V1 scheduler describes a step as a simple map, request ID to number of tokens, and it counts prompt tokens and generated tokens against the same budget. A token is a token.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  step budget = N spaces on a tray
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  decodes first (each needs 1 space):
+</span></span><span style="display:flex;"><span>    Alice  [1]
+</span></span><span style="display:flex;"><span>    Dave   [1]
+</span></span><span style="display:flex;"><span>    Aaron  [1]
+</span></span><span style="display:flex;"><span>  leftover spaces -&gt; a slice of Bob&#39;s prompt:
+</span></span><span style="display:flex;"><span>    Bob    [N-3 tokens]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  next step: same thing, next slice, until the document is fully read
+</span></span></code></pre></div><p>Picture the budget as a tray with a fixed number of spaces. Alice, Dave, and Aaron each need one space for their next token. Bob&rsquo;s document wants thousands, but it still picks an order: vLLM batches every pending decode first, and only then fills the leftover spaces with a slice of Bob&rsquo;s prompt. Next step, same thing, next slice, until his document is fully read. So everyone who is mid-reply keeps a steady typing speed, and Bob&rsquo;s first word arrives a few steps later than it would on a GPU alone. He pasted 20 pages — he will survive.</p>
+<p>The size of that tray is a setting, and it is a straight trade:</p>
+<ul>
+<li>A <strong>smaller</strong> budget means fewer prefills slowing down decodes, so the gaps between tokens stay short.</li>
+<li>A <strong>bigger</strong> budget finishes prefill sooner, so the first token shows up faster.</li>
+</ul>
+<p>One caution: the default budget, and whether chunking is switched on at all, have changed between vLLM versions. Check the <a href="https://docs.vllm.ai">vLLM docs</a> for the release you are actually running before you tune anything.</p>
+<h2 id="kv-cache-the-cost-that-keeps-growing">KV Cache: The Cost That Keeps Growing</h2>
+<p>That covers time. What decides how many people fit at all is memory space — and that brings us back to the KV cache.</p>
+<p>Take a real model, <strong>Qwen 2.5 7B Instruct</strong>. Its config lists 28 layers, 4 key-value heads, and BF16 numbers, which take two bytes each. Split its hidden size of 3584 across its 28 attention heads and each head is 128 numbers wide. Multiply it out:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  2 (key + value)
+</span></span><span style="display:flex;"><span>x 28  layers
+</span></span><span style="display:flex;"><span>x 4   KV heads
+</span></span><span style="display:flex;"><span>x 128 head dim
+</span></span><span style="display:flex;"><span>x 2   bytes (BF16)
+</span></span><span style="display:flex;"><span>= 57,344 bytes  ~ 57 KB per token
+</span></span></code></pre></div><p>About <strong>57 KB of cache for every token</strong> in the conversation. A 4K-token chat comes to roughly 235 MB. At the model&rsquo;s 32K-token limit, it is about 1.9 GB for one conversation. Those are estimates from the config and leave out overhead and block rounding.</p>
+<p>Now picture 30 coworkers. Plenty of models cost far more per token. Qwen gets off lightly because its 28 attention heads share just four sets of keys and values (a group-query pattern). <a href="https://www.anyscale.com/blog/continuous-batching-llm-inference">AnyScale</a> puts a 13B-parameter model at nearly a megabyte per token — well over 10x our estimate. And vLLM&rsquo;s <a href="https://blog.vllm.ai/2023-06-20/vllm.html">launch post</a> says a single Llama 13B sequence can take up to 1.7 GB. Weights are the cost you planned for. History is the one that keeps growing.</p>
+<p>Chat makes this worse, because the model does not remember anything between turns. <a href="https://platform.openai.com/docs/guides/conversations">OpenAI&rsquo;s docs</a> describe how conversation state works: your app resends the earlier user and assistant messages with each new request. Turn 10 carries turns 1 through 9 along with it. So every turn the prompt gets longer, the prefill gets bigger, and that conversation&rsquo;s cache grows. The heaviest user in the office might be a quiet person with one very long thread. They only send a message now and then, but each one drags the whole thread along — and while it runs, it takes the tallest stack on the shelf.</p>
+<h2 id="pagedattention-and-preemption">PagedAttention and Preemption</h2>
+<p>Older serving systems made it worse still. vLLM&rsquo;s launch post says they wasted <strong>60 to 80% of KV cache memory</strong> to fragmentation and over-reservation. That is roughly like booking the big conference room for every meeting just in case it runs long.</p>
+<p><strong>PagedAttention</strong> stores the cache in small, fixed-size blocks handed out as the conversation grows, the way an operating system hands out memory pages. Blocks do not need to sit next to each other, so there is no giant reservation to waste. vLLM says that brings the waste down to <strong>under 4%</strong>. The <a href="https://arxiv.org/abs/2309.06180">peer-reviewed paper</a> puts the result at 2 to 4x the throughput of the systems it compared against at the same latency. Less memory sits reserved and empty, so more requests fit in each batch.</p>
+<p>Blocks also make <strong>prefix caching</strong> possible. When Alice&rsquo;s turn 10 starts with the same history as turn 9, vLLM can reuse the blocks it already computed if they are still in memory, instead of prefilling that history again. How much that saves depends on how your office actually chats.</p>
+<p>Now suppose the whole office is deep in long threads and the cache fills. vLLM does not fall over. It <strong>preempts</strong>: it pauses a request, frees its blocks, and recomputes that request later once space opens up. From Dave&rsquo;s desk, that is a reply that stops mid-sentence and then catches up. On the server, it is a preemption warning in the logs. See those often and your problem is cache space, with scheduling doing its best around it.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  cache full
+</span></span><span style="display:flex;"><span>     |
+</span></span><span style="display:flex;"><span>     v
+</span></span><span style="display:flex;"><span>  preempt: pause Dave, free his blocks
+</span></span><span style="display:flex;"><span>     |
+</span></span><span style="display:flex;"><span>     +---&gt; space opens --&gt; recompute Dave from the last saved block
+</span></span></code></pre></div><p>Which answers the opening question. If replies freeze together when someone pastes a big document, look at chunked prefill and the token budget. If they pause and restart during long chats, that is memory. If everyone is steady but a bit slower than before, that is batching doing its job.</p>
+<h2 id="tuning-for-who-is-actually-using-it">Tuning for Who Is Actually Using It</h2>
+<p>What you tune depends on who is using it. These targets are my calls, built from everything above. None of the sources hands out numbers for them.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Target</th>
+					<th>Primary goal</th>
+					<th>What to lean on</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Personal assistant</td>
+					<td>TTFT, long context</td>
+					<td>Bigger token budget, spend memory on context</td>
+			</tr>
+			<tr>
+					<td>Shared office tool (5-30 people)</td>
+					<td>Throughput + steady ITL</td>
+					<td>Chunked prefill on, smaller budget, cap context</td>
+			</tr>
+			<tr>
+					<td>Customer-facing app</td>
+					<td>Tail latency</td>
+					<td>Hard context cap, memory headroom for bursts</td>
+			</tr>
+	</tbody>
+</table>
+<p><strong>Personal assistant.</strong> One user, so batching barely comes into it. Throughput hardly matters when there is one of you. Chase <strong>time to first token</strong>. A bigger token budget gets your own long prompts through prefill sooner, and you can spend the memory on long context since nobody is sharing it.</p>
+<p><strong>Shared office service for five to 30 people.</strong> Wants throughput and a steady typing speed. Keep chunked prefill on, lean the budget smaller so Bob&rsquo;s documents do not stall anyone, and treat preemption warnings as your early sign the cache is full. I would also cap context length at about 1.9 GB for one maxed-out chat on that 7B model — a few giant threads can crowd out everybody else. Long documents can go in a fresh chat instead of turn 40.</p>
+<p><strong>Customer-facing app.</strong> Plays by different rules. A slow reply there is somebody&rsquo;s first impression. Set targets on <strong>tail latency</strong>, the slowest replies, instead of the average. A median can look fine while one customer in a hundred waits far too long. Put a hard cap on context length and leave memory headroom for bursts. A spike that pushes the cache into preemption becomes stalls your customers can see.</p>
+<h2 id="summary">Summary</h2>
+<p>If you are setting up a shared office tool, the sharing itself is handled — the LLM scheduler does that part well. Worry first about long conversations and cache space, and only then about how many people are online. The number I would want next is the one only your setup can give: how many long chats at once before the preemption warnings start?</p>
+<p>That measurement — preemption onset under your real traffic shape — is what turns every trade in this post from a principle into a setting you can actually tune.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="vllm" term="vllm" label="vllm" />
+                             
+                                <category scheme="llm-serving" term="llm-serving" label="llm-serving" />
+                             
+                                <category scheme="inference" term="inference" label="inference" />
+                             
+                                <category scheme="gpu" term="gpu" label="gpu" />
+                             
+                                <category scheme="kv-cache" term="kv-cache" label="kv-cache" />
+                             
+                                <category scheme="continuous-batching" term="continuous-batching" label="continuous-batching" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Model Routing: Stop Using One Model for Everything]]></title>
+            <link href="https://devopstales.github.io/ai/model-routing-strategies/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/ai/model-routing-strategies/</id>
+            
+            
+            <published>2026-10-01T00:00:00+00:00</published>
+            <updated>2026-10-01T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>A 70B model summarizing an email burns money; a 3B model reviewing production code courts disaster. Routing matches task complexity to model capability across four strategies — capability, cost, latency, hybrid — each optimizing what hurts most. Production systems converge on hybrid; start there only after one model genuinely fails.</p>
+<p><img src="/img/model-routing-strategies.webp" alt="LLM model routing across capability, cost, and latency"  loading="lazy" decoding="async" class="zoomable" />
+<em>Classify the task, then spend the right model on it — not the biggest one</em></p>
+<h2 id="capability-routing-task-to-model">Capability Routing: Task to Model</h2>
+<p>Classify, then dispatch. Sentiment goes to 1-3B models, summarization to 3-7B, code to 7-14B coders, hard reasoning to 14-32B, creative and analytical peaks to 32B and flagship APIs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>ROUTING_RULES <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;classify&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-1.7B&#34;</span>, <span style="color:#e6db74">&#34;max_tokens&#34;</span>: <span style="color:#ae81ff">100</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;summarize&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-8B&#34;</span>, <span style="color:#e6db74">&#34;max_tokens&#34;</span>: <span style="color:#ae81ff">500</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;code_review&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen2.5-coder-7b&#34;</span>, <span style="color:#e6db74">&#34;max_tokens&#34;</span>: <span style="color:#ae81ff">2000</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;reason&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-32b&#34;</span>, <span style="color:#e6db74">&#34;max_tokens&#34;</span>: <span style="color:#ae81ff">4000</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;creative&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;claude-sonnet-4&#34;</span>, <span style="color:#e6db74">&#34;max_tokens&#34;</span>: <span style="color:#ae81ff">8000</span>},
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">route_request</span>(task_type: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> ROUTING_RULES<span style="color:#f92672">.</span>get(task_type, ROUTING_RULES[<span style="color:#e6db74">&#34;reason&#34;</span>])
+</span></span></code></pre></div><p>The classifier is the weak link — code review filed as &ldquo;summarization&rdquo; loses quality silently. Keep categories crisp enough for even a small classifier, and default unknown tasks upward to reasoning models. Architectural sibling: <a href="/ai/multi-model-system-design/">multi-model system design</a> covers pipeline, parallel, hierarchical, and ensemble wirings around the same routing idea.</p>
+<h2 id="cost-routing-spend-downhill">Cost Routing: Spend Downhill</h2>
+<p>Local inference amortizes fast — a mid-range GPU pays for itself in months at moderate API volume, after which local tokens cost electricity against dollars per million. Budget-aware routers fall back as sessions spend:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CostAwareRouter</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self, budget_per_session: float <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.10</span>):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>budget <span style="color:#f92672">=</span> budget_per_session
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>spent <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.0</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>models <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;cheap&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-8B&#34;</span>, <span style="color:#e6db74">&#34;cost&#34;</span>: <span style="color:#ae81ff">0.0</span>},
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;medium&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-32b&#34;</span>, <span style="color:#e6db74">&#34;cost&#34;</span>: <span style="color:#ae81ff">0.0</span>},
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;expensive&#34;</span>: {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;claude-sonnet-4&#34;</span>, <span style="color:#e6db74">&#34;cost&#34;</span>: <span style="color:#ae81ff">0.000015</span>},
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">route</span>(self, task: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        ratio <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>spent <span style="color:#f92672">/</span> self<span style="color:#f92672">.</span>budget
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> ratio <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0.5</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>models[<span style="color:#e6db74">&#34;expensive&#34;</span>][<span style="color:#e6db74">&#34;model&#34;</span>]
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">elif</span> ratio <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0.8</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>models[<span style="color:#e6db74">&#34;medium&#34;</span>][<span style="color:#e6db74">&#34;model&#34;</span>]
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>models[<span style="color:#e6db74">&#34;cheap&#34;</span>][<span style="color:#e6db74">&#34;model&#34;</span>]
+</span></span></code></pre></div><p>Quality visibly degrades down the slope — flagship to mid to small — which is acceptable only where later-session work tolerates it. Routing routine traffic locally while reserving APIs for edge cases doubles as vendor-independence hygiene. Full break-even math lives in <a href="/ai/cost-optimization-llm-systems/">cost optimization</a>.</p>
+<h2 id="latency-routing-first-token-is-the-product">Latency Routing: First Token Is the Product</h2>
+<p>Streaming users feel first-token latency: sub-200ms real-time chat caps models under ~7B, sub-500ms interactive tools under ~14B, batch and research tolerate anything. Route by measured completion budget, fastest qualifying model wins:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">LatencyAwareRouter</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>model_latencies <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;qwen3-1.7b&#34;</span>: {<span style="color:#e6db74">&#34;first_token&#34;</span>: <span style="color:#ae81ff">0.05</span>, <span style="color:#e6db74">&#34;complete&#34;</span>: <span style="color:#ae81ff">0.5</span>},
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;qwen3-8B&#34;</span>: {<span style="color:#e6db74">&#34;first_token&#34;</span>: <span style="color:#ae81ff">0.15</span>, <span style="color:#e6db74">&#34;complete&#34;</span>: <span style="color:#ae81ff">2.0</span>},
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;qwen3-32b&#34;</span>: {<span style="color:#e6db74">&#34;first_token&#34;</span>: <span style="color:#ae81ff">0.5</span>, <span style="color:#e6db74">&#34;complete&#34;</span>: <span style="color:#ae81ff">10.0</span>},
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;claude-sonnet-4&#34;</span>: {<span style="color:#e6db74">&#34;first_token&#34;</span>: <span style="color:#ae81ff">0.3</span>, <span style="color:#e6db74">&#34;complete&#34;</span>: <span style="color:#ae81ff">5.0</span>},
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">route</span>(self, target_latency: float) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> model, latencies <span style="color:#f92672">in</span> sorted(
+</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>model_latencies<span style="color:#f92672">.</span>items(),
+</span></span><span style="display:flex;"><span>            key<span style="color:#f92672">=</span><span style="color:#66d9ef">lambda</span> x: x[<span style="color:#ae81ff">1</span>][<span style="color:#e6db74">&#34;complete&#34;</span>]
+</span></span><span style="display:flex;"><span>        ):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> latencies[<span style="color:#e6db74">&#34;complete&#34;</span>] <span style="color:#f92672">&lt;=</span> target_latency:
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> model
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#e6db74">&#34;qwen3-1.7b&#34;</span>
+</span></span></code></pre></div><p>Published latencies are rough — hardware, quantization, and batch size move them. Measure on the deployment, not the datasheet.</p>
+<h2 id="fallbacks-best-to-most-reliable">Fallbacks: Best to Most Reliable</h2>
+<p>Models fail, APIs rate-limit, timeouts fire. Chain best-first down to a local last resort — local never fails on network or keys, only on speed:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">FallbackRouter</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fallback_chain <span style="color:#f92672">=</span> [
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;claude-sonnet-4&#34;</span>, <span style="color:#e6db74">&#34;timeout&#34;</span>: <span style="color:#ae81ff">30</span>},
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen2.5-72b&#34;</span>, <span style="color:#e6db74">&#34;timeout&#34;</span>: <span style="color:#ae81ff">60</span>},
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-32b&#34;</span>, <span style="color:#e6db74">&#34;timeout&#34;</span>: <span style="color:#ae81ff">120</span>},
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-8b&#34;</span>, <span style="color:#e6db74">&#34;timeout&#34;</span>: <span style="color:#ae81ff">300</span>},
+</span></span><span style="display:flex;"><span>        ]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">route_with_fallback</span>(self, prompt: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> config <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>fallback_chain:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">try</span>:
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>call_model(
+</span></span><span style="display:flex;"><span>                    config[<span style="color:#e6db74">&#34;model&#34;</span>], prompt,
+</span></span><span style="display:flex;"><span>                    timeout<span style="color:#f92672">=</span>config[<span style="color:#e6db74">&#34;timeout&#34;</span>]
+</span></span><span style="display:flex;"><span>                )
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">except</span> (<span style="color:#a6e22e">TimeoutError</span>, APIError) <span style="color:#66d9ef">as</span> e:
+</span></span><span style="display:flex;"><span>                log<span style="color:#f92672">.</span>warning(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Model </span><span style="color:#e6db74">{</span>config[<span style="color:#e6db74">&#39;model&#39;</span>]<span style="color:#e6db74">}</span><span style="color:#e6db74"> failed: </span><span style="color:#e6db74">{</span>e<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">continue</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">RuntimeError</span>(<span style="color:#e6db74">&#34;All fallback models failed&#34;</span>)
+</span></span></code></pre></div><h2 id="when-routing-pays">When Routing Pays</h2>
+<p>Mixed workloads with classification, summarization, and reasoning in one system — measurable money and latency wins. Skip it for uniform complexity (one good model, no router tax) and early prototypes (one model until cost or latency actually bites). Strategy tradeoffs at a glance: single model simplest and priciest with consistent quality; capability routing cheaper per task at moderate complexity; cost routing cheapest with variable quality; latency routing fastest possibly at quality cost; hybrid best of all at highest implementation cost. Convergence path: capability first, cost when bills arrive, latency when users complain. Keep routed models inside <a href="/ai/llm-guardrails-in-practice/">guardrails</a> — cheaper models need the same safety bounds, not weaker ones.</p>
+<h2 id="summary">Summary</h2>
+<p>One model everywhere is either wasteful or reckless. Classify tasks, route by capability, fall back by budget, constrain by latency, and always end the chain locally. Add routing when measurement demands it — never before.</p>
+<p><em>How do you split work across models — rules, classifiers, or budgets? Share the routing table in the comments below!</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="llm" term="llm" label="llm" />
+                             
+                                <category scheme="model-routing" term="model-routing" label="model-routing" />
+                             
+                                <category scheme="cost-optimization" term="cost-optimization" label="cost-optimization" />
+                             
+                                <category scheme="latency" term="latency" label="latency" />
+                             
+                                <category scheme="python" term="python" label="python" />
+                             
+                                <category scheme="self-hosting" term="self-hosting" label="self-hosting" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[LLM Guardrails in Practice: Control the Risk, Not the Model]]></title>
+            <link href="https://devopstales.github.io/ai/llm-guardrails-in-practice/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/ai/llm-guardrails-in-practice/</id>
+            
+            
+            <published>2026-09-28T00:00:00+00:00</published>
+            <updated>2026-09-28T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Models hallucinate, leak data, emit harmful content, and refuse legitimate requests. Guardrails constrain behavior without removing capability — but only the guardrails that match real risk earn their latency. The discipline is knowing which ones matter and which are noise.</p>
+<p><img src="/img/llm-guardrails-in-practice.webp" alt="LLM guardrails across input, output, and safety layers"  loading="lazy" decoding="async" class="zoomable" />
+<em>Validate input, filter output, budget the runtime: layered, not decorative</em></p>
+<h2 id="input-validation-first">Input Validation First</h2>
+<p>Bad input produces bad output — and injects it. Sanitize known attack patterns early, accepting that adversarial creativity outruns regex while obvious attempts remain the most common:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> re
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">PromptSanitizer</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>dangerous_patterns <span style="color:#f92672">=</span> [
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">r</span><span style="color:#e6db74">&#34;ignore\s+previous\s+instructions&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">r</span><span style="color:#e6db74">&#34;system\s+prompt&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">r</span><span style="color:#e6db74">&#34;you\s+are\s+now\s+free&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">r</span><span style="color:#e6db74">&#34;break\s+out\s+of&#34;</span>,
+</span></span><span style="display:flex;"><span>        ]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">sanitize</span>(self, prompt: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> pattern <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>dangerous_patterns:
+</span></span><span style="display:flex;"><span>            prompt <span style="color:#f92672">=</span> re<span style="color:#f92672">.</span>sub(pattern, <span style="color:#e6db74">&#34;[REDACTED]&#34;</span>, prompt, flags<span style="color:#f92672">=</span>re<span style="color:#f92672">.</span>IGNORECASE)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> prompt
+</span></span></code></pre></div><p>Cap lengths against token waste and timeouts, and filter policy-violating topics per domain — string matching for speed, a small classifier model for production accuracy where evasion matters.</p>
+<h2 id="output-filtering-structure-content-facts">Output Filtering: Structure, Content, Facts</h2>
+<p>Validate shape before meaning. Expecting JSON? Check fields exist:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ResponseValidator</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>required_fields <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#34;answer&#34;</span>, <span style="color:#e6db74">&#34;confidence&#34;</span>]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">validate</span>(self, response: dict) <span style="color:#f92672">-&gt;</span> tuple[bool, str]:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> field <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>required_fields:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> field <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> response:
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>, <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Missing field: </span><span style="color:#e6db74">{</span>field<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">True</span>, <span style="color:#e6db74">&#34;OK&#34;</span>
+</span></span></code></pre></div><p>Filter harmful patterns on the way out with the same regex-then-classifier escalation. Fact-checking is the hard one: no dictionary scales, so check high-stakes claims against a retrieval pipeline over a knowledge base rather than hardcoded truth — and scope it to claims that matter, not every sentence.</p>
+<h2 id="safety-mechanisms-rate-budget-window">Safety Mechanisms: Rate, Budget, Window</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> time
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> collections <span style="color:#f92672">import</span> deque
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">RateLimiter</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self, max_requests: int <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>, window: int <span style="color:#f92672">=</span> <span style="color:#ae81ff">60</span>):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>max_requests <span style="color:#f92672">=</span> max_requests
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>window <span style="color:#f92672">=</span> window
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>requests <span style="color:#f92672">=</span> deque()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">allow</span>(self) <span style="color:#f92672">-&gt;</span> bool:
+</span></span><span style="display:flex;"><span>        now <span style="color:#f92672">=</span> time<span style="color:#f92672">.</span>time()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">while</span> self<span style="color:#f92672">.</span>requests <span style="color:#f92672">and</span> self<span style="color:#f92672">.</span>requests[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">&lt;</span> now <span style="color:#f92672">-</span> self<span style="color:#f92672">.</span>window:
+</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>requests<span style="color:#f92672">.</span>popleft()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> len(self<span style="color:#f92672">.</span>requests) <span style="color:#f92672">&gt;=</span> self<span style="color:#f92672">.</span>max_requests:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>requests<span style="color:#f92672">.</span>append(now)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">True</span>
+</span></span></code></pre></div><p>Token budgets cap per-request spend; sliding-window trimming prevents context overflow (losing early context — summarization or attention compression preserve more at higher latency). Compliance adds the enterprise pair: data residency checks pinning regions, and structured append-only audit logs capturing request, response, and timestamp for debugging and regulators.</p>
+<h2 id="assemble-in-layers">Assemble in Layers</h2>
+<p>Simple pipeline first — validate input, call model, filter output:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">SimpleGuardrails</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>input_validator <span style="color:#f92672">=</span> InputValidator(max_length<span style="color:#f92672">=</span><span style="color:#ae81ff">10000</span>)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>output_filter <span style="color:#f92672">=</span> OutputFilter()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">process</span>(self, prompt: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        valid, message <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>input_validator<span style="color:#f92672">.</span>validate(prompt)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> valid:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Error: </span><span style="color:#e6db74">{</span>message<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>        response <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>call_model(prompt)
+</span></span><span style="display:flex;"><span>        valid, message <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>output_filter<span style="color:#f92672">.</span>filter(response)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> valid:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Error: </span><span style="color:#e6db74">{</span>message<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> response
+</span></span></code></pre></div><p>Advanced stacks add sanitization, domain filtering, rate limiting, and token budgets around the same skeleton. Deploy guardrails for user-facing systems, sensitive data, production traffic, and compliance regimes (GDPR, HIPAA, SOC 2) — skip them for prototypes, internal-only tools, and non-sensitive workloads. Capability always trades against safety; find the system&rsquo;s balance, not the maximum.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Strategy</th>
+					<th>Safety</th>
+					<th>Capability</th>
+					<th>Latency</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>None</td>
+					<td>Lowest</td>
+					<td>Highest</td>
+					<td>Lowest</td>
+			</tr>
+			<tr>
+					<td>Input validation</td>
+					<td>High</td>
+					<td>Medium</td>
+					<td>Low</td>
+			</tr>
+			<tr>
+					<td>Output filtering</td>
+					<td>High</td>
+					<td>Medium</td>
+					<td>Low</td>
+			</tr>
+			<tr>
+					<td>Safety mechanisms</td>
+					<td>Highest</td>
+					<td>Lowest</td>
+					<td>Highest</td>
+			</tr>
+			<tr>
+					<td>Compliance</td>
+					<td>Highest</td>
+					<td>Lowest</td>
+					<td>Highest</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="beyond-the-conversation">Beyond the Conversation</h2>
+<p>Guardrails stop where agency starts. Once agents call MCP tools or delegate across A2A, the risk moves from model output to actions taken on someone&rsquo;s behalf — identity, scoped authorization, delegation limits, audit trails. That protocol layer is covered in <a href="/ai/a2a-mcp-agent-security/">A2A and MCP agent security</a>: polite well-filtered chatbots can still exfiltrate through tool calls without it.</p>
+<h2 id="summary">Summary</h2>
+<p>Sanitize and bound the input, validate structure then content then high-stakes facts on output, rate-limit and budget the runtime, log everything compliance cares about — and leave prototypes unguarded until the bill or the risk arrives.</p>
+<p><em>Which guardrail caught something real in your system — and which one only added latency? Share the tradeoff in the comments below!</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="llm" term="llm" label="llm" />
+                             
+                                <category scheme="guardrails" term="guardrails" label="guardrails" />
+                             
+                                <category scheme="security" term="security" label="security" />
+                             
+                                <category scheme="python" term="python" label="python" />
+                             
+                                <category scheme="validation" term="validation" label="validation" />
+                             
+                                <category scheme="compliance" term="compliance" label="compliance" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[Multi-Model System Design: The Right Model for the Right Task]]></title>
+            <link href="https://devopstales.github.io/ai/multi-model-system-design/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/ai/multi-model-system-design/</id>
+            
+            
+            <published>2026-09-24T00:00:00+00:00</published>
+            <updated>2026-09-24T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>Running a 70B model to summarize an email wastes money; running a 3B model to review production code courts disaster. Multi-model design isn&rsquo;t about collecting models — it&rsquo;s about architecture that puts the right model on the right task at the right time, with the simplest pattern that survives the constraints.</p>
+<p><img src="/img/multi-model-system-design.webp" alt="Multi-model LLM system design patterns"  loading="lazy" decoding="async" class="zoomable" />
+<em>Sequential, parallel, hierarchical, ensemble: five wirings from one model to many</em></p>
+<h2 id="five-patterns-one-rule">Five Patterns, One Rule</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Pattern</th>
+					<th>Complexity</th>
+					<th>Use when</th>
+					<th>Tradeoff</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Single model</td>
+					<td>Lowest</td>
+					<td>Prototyping, uniform tasks</td>
+					<td>Capability ceiling</td>
+			</tr>
+			<tr>
+					<td>Sequential</td>
+					<td>Low</td>
+					<td>Multi-step workflows</td>
+					<td>Latency stacks</td>
+			</tr>
+			<tr>
+					<td>Parallel</td>
+					<td>Medium</td>
+					<td>Independent tasks</td>
+					<td>Cost multiplies</td>
+			</tr>
+			<tr>
+					<td>Hierarchical</td>
+					<td>High</td>
+					<td>Complex reasoning</td>
+					<td>Orchestration burden</td>
+			</tr>
+			<tr>
+					<td>Ensemble</td>
+					<td>Highest</td>
+					<td>Critical decisions</td>
+					<td>Highest cost</td>
+			</tr>
+	</tbody>
+</table>
+<p>Pick the simplest that works — complexity compounds. Note the boundary: this is task-to-model routing, not autonomous agents coordinating; for that see <a href="/ai/multi-agent-orchestration-patterns/">multi-agent orchestration</a>.</p>
+<h2 id="sequential-pipeline-and-router">Sequential: Pipeline and Router</h2>
+<p>Pipeline chains specialists, each output feeding the next:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ModelPipeline</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>models <span style="color:#f92672">=</span> [
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-1.7b&#34;</span>, <span style="color:#e6db74">&#34;task&#34;</span>: <span style="color:#e6db74">&#34;classify&#34;</span>},
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-8b&#34;</span>, <span style="color:#e6db74">&#34;task&#34;</span>: <span style="color:#e6db74">&#34;extract&#34;</span>},
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen3-32b&#34;</span>, <span style="color:#e6db74">&#34;task&#34;</span>: <span style="color:#e6db74">&#34;reason&#34;</span>},
+</span></span><span style="display:flex;"><span>        ]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">process</span>(self, input: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        current <span style="color:#f92672">=</span> input
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> model_config <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>models:
+</span></span><span style="display:flex;"><span>            current <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>call_model(
+</span></span><span style="display:flex;"><span>                model_config[<span style="color:#e6db74">&#34;model&#34;</span>],
+</span></span><span style="display:flex;"><span>                self<span style="color:#f92672">.</span>create_prompt(model_config[<span style="color:#e6db74">&#34;task&#34;</span>], current)
+</span></span><span style="display:flex;"><span>            )
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> current
+</span></span></code></pre></div><p>Latency adds per stage — three models, roughly triple the wait. Only chain steps that genuinely need different models. Router instead classifies once and dispatches to one specialist (code, math, creative, general). The classifier is the weak link: misclassify code review as summarization and quality degrades silently. Keep categories crisp enough for even a small classifier.</p>
+<h2 id="parallel-fan-out-and-voting">Parallel: Fan-Out and Voting</h2>
+<p>Fan-out runs one prompt through several models concurrently — comparison, A/B testing, best-output selection — at full per-model cost:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> asyncio
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ModelFanOut</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>models <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#34;qwen3-8b&#34;</span>, <span style="color:#e6db74">&#34;qwen3-32b&#34;</span>, <span style="color:#e6db74">&#34;claude-sonnet-4&#34;</span>]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">process</span>(self, prompt: str) <span style="color:#f92672">-&gt;</span> list[str]:
+</span></span><span style="display:flex;"><span>        tasks <span style="color:#f92672">=</span> [self<span style="color:#f92672">.</span>call_model(model, prompt) <span style="color:#66d9ef">for</span> model <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>models]
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> asyncio<span style="color:#f92672">.</span>gather(<span style="color:#f92672">*</span>tasks)
+</span></span></code></pre></div><p>Voting adds consensus on top — exact-match majority works for classification; generation needs semantic similarity, not string equality. Worth it where quality beats spend.</p>
+<h2 id="hierarchical-planner-executor-and-supervisor-worker">Hierarchical: Planner-Executor and Supervisor-Worker</h2>
+<p>A strong planner decomposes; cheap executors run steps; the planner synthesizes. Planning is expensive, execution cheap — the economics work when decomposition dominates:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">PlannerExecutor</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>planner <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;qwen3-32b&#34;</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>executors <span style="color:#f92672">=</span> {<span style="color:#e6db74">&#34;code&#34;</span>: <span style="color:#e6db74">&#34;qwen2.5-coder-7b&#34;</span>, <span style="color:#e6db74">&#34;search&#34;</span>: <span style="color:#e6db74">&#34;qwen3-8b&#34;</span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">process</span>(self, task: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        plan <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>call_model(self<span style="color:#f92672">.</span>planner, <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Plan: </span><span style="color:#e6db74">{</span>task<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>        results <span style="color:#f92672">=</span> [self<span style="color:#f92672">.</span>call_model(self<span style="color:#f92672">.</span>executors<span style="color:#f92672">.</span>get(s[<span style="color:#e6db74">&#34;type&#34;</span>], <span style="color:#e6db74">&#34;qwen3-8b&#34;</span>), s[<span style="color:#e6db74">&#34;prompt&#34;</span>])
+</span></span><span style="display:flex;"><span>                   <span style="color:#66d9ef">for</span> s <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>parse_plan(plan)]
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>call_model(self<span style="color:#f92672">.</span>planner, <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Synthesize: </span><span style="color:#e6db74">{</span>results<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span></code></pre></div><p>Supervisor-worker adds review to delegation: assign, execute, reviewer pass. The supervisor plans, delegates, and judges — keep it fast or everything queues behind it.</p>
+<h2 id="ensemble-weighted-and-consensus">Ensemble: Weighted and Consensus</h2>
+<p>Weighted ensembles score each output and take the max, weights tracking measured performance rather than benchmark hope. Consensus ensembles require threshold agreement (say 0.7) and escalate to the strongest model below it — strictness dials speed against confidence. Reserve both for decisions where wrongness costs more than tokens.</p>
+<h2 id="when-it-earns-its-keep">When It Earns Its Keep</h2>
+<p>Mixed workloads, critical-decision quality bars, cost or latency walls. Skip it for uniform complexity (one good model wins), prototypes (optimize after the bill arrives), and simplicity-first systems. Start single; add models at measured constraints. The companion practices live nearby: <a href="/ai/model-routing-strategies/">model routing strategies</a> for capability, cost, and latency routing with fallbacks; <a href="/ai/cost-optimization-llm-systems/">cost optimization</a> for budgets, caching, and break-even math; <a href="/ai/llm-guardrails-in-practice/">guardrails</a> so cheaper models stay inside safety bounds.</p>
+<h2 id="tradeoff-matrix">Tradeoff Matrix</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Pattern</th>
+					<th>Cost</th>
+					<th>Latency</th>
+					<th>Quality</th>
+					<th>Complexity</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Single model</td>
+					<td>Lowest</td>
+					<td>Lowest</td>
+					<td>Variable</td>
+					<td>Lowest</td>
+			</tr>
+			<tr>
+					<td>Sequential</td>
+					<td>Medium</td>
+					<td>High</td>
+					<td>High</td>
+					<td>Medium</td>
+			</tr>
+			<tr>
+					<td>Parallel</td>
+					<td>High</td>
+					<td>Low</td>
+					<td>High</td>
+					<td>Medium</td>
+			</tr>
+			<tr>
+					<td>Hierarchical</td>
+					<td>High</td>
+					<td>High</td>
+					<td>Highest</td>
+					<td>High</td>
+			</tr>
+			<tr>
+					<td>Ensemble</td>
+					<td>Highest</td>
+					<td>Medium</td>
+					<td>Highest</td>
+					<td>Highest</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="summary">Summary</h2>
+<p>Right model, right task, right time — with architecture chosen by constraint, not enthusiasm. Capability gaps call for hierarchy, latency walls for parallelism, critical calls for ensembles, and everything else for the simplest wiring that holds.</p>
+<p><em>Which multi-model pattern carries your production load — and what broke first? Share the topology in the comments below!</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="llm" term="llm" label="llm" />
+                             
+                                <category scheme="architecture" term="architecture" label="architecture" />
+                             
+                                <category scheme="model-routing" term="model-routing" label="model-routing" />
+                             
+                                <category scheme="python" term="python" label="python" />
+                             
+                                <category scheme="cost-optimization" term="cost-optimization" label="cost-optimization" />
+                            
+                        
+                    
+                
+            
+        </entry>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[What Is Spec-Driven Development? The Spec as Source of Truth]]></title>
+            <link href="https://devopstales.github.io/ai/what-is-spec-driven-development/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/ai/what-is-spec-driven-development/</id>
+            
+            
+            <published>2026-09-21T00:00:00+00:00</published>
+            <updated>2026-09-21T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p>For most of software history the spec was a temporary planning artifact and the code was ground truth. Spec-driven development inverts that: the versioned specification becomes the primary artifact, and code is generated or verified against it. The idea is old — formal methods, design-by-contract, BDD all contain versions. What&rsquo;s new is the motive: AI agents need explicit, durable intent because prompts evaporate and sessions reset.</p>
+<p><img src="/img/what-is-spec-driven-development.webp" alt="The spec as source of truth for AI coding"  loading="lazy" decoding="async" class="zoomable" />
+<em>Intent written, reviewed, and versioned before any agent writes code</em></p>
+<h2 id="what-sdd-actually-means">What SDD Actually Means</h2>
+<p>A versioned specification guides or generates implementation, written and reviewed before agents write code. It captures what to build (problem, goals, non-goals), what correct looks like (acceptance criteria, edge cases, error states), how to build it (architecture, data model, contracts, security constraints), and how to verify it (test strategy, validation rules, <a href="/ai/spec-test-code-traceability/">traceability</a> back to requirements). The spec is living: when implementation proves it wrong, correct the spec before continuing. Honesty is maintained like code, or the spec becomes confidently misleading documentation.</p>
+<p>Three positions on the spectrum: <strong>spec-first</strong> writes everything upfront (strictest, closest to waterfall if careless); <strong>spec-anchored</strong> keeps the spec synced through the feature lifecycle (most practical); <strong>spec-as-source</strong> generates or validates implementation from the spec — the direction <a href="/ai/spec-kit-kiro-claude-code-sdd/">Spec Kit and Kiro</a> pull toward, while <a href="/ai/superpowers-enforced-sdd-skills/">Superpowers</a> sits nearer spec-anchored, enforcing review discipline automatically.</p>
+<h2 id="why-now-three-conditions">Why Now: Three Conditions</h2>
+<p>SDD isn&rsquo;t worth it for a one-day solo script. It pays when features span multiple sessions, agents make architectural decisions, and someone else reviews or continues the work — increasingly the default under AI-assisted development. Models with vague prompts decide vaguely; models with reviewed constraints, non-goals, and acceptance criteria decide better and correct faster. Generation is cheap, deciding what to build is hard — SDD moves effort to intent before generation. And prompts don&rsquo;t survive session boundaries while a repo-stored spec does: every fresh session implements against identical intent without re-establishing context.</p>
+<h2 id="four-artifacts">Four Artifacts</h2>
+<p>Requirements (problem, users, goals, non-goals, acceptance criteria), design (architecture, data model, contracts, security for this feature), task plan (small slices with dependencies and validation), traceability record (criteria to tests, decisions to files, tasks to commits). Step-by-step production of all four lives in the <a href="/ai/sdd-workflow-five-phases/">five-phase SDD workflow</a>; a small feature can hold them in one short markdown file — habit beats format.</p>
+<h2 id="what-sdd-is-not">What SDD Is Not</h2>
+<p><strong>Not documentation.</strong> Docs describe what exists, written after the fact. Specs constrain what may be built, authoritative before implementation, validated after. A spec describing what was built already failed.</p>
+<p><strong>Not TDD.</strong> Tests start TDD: failing test, minimum code, unit-level loop — excellent tests, no answer to whether the right thing is being built. SDD starts with intent: who hurts, what correct looks like, what&rsquo;s out of scope — then informs which tests to write. SDD drives TDD: acceptance criteria become scenarios, design boundaries become contract tests, task plans become unit coverage lists.</p>
+<p><strong>Not BDD.</strong> Gherkin scenarios bridge business intent and implementation from the user&rsquo;s perspective — useful as acceptance-criteria language inside a requirements spec, which is the container. BDD tooling makes scenarios executable; SDD makes intent durable across tools, sessions, and teammates.</p>
+<p><strong>Not formal methods.</strong> Proofs are rigorous and expensive; SDD needs no mathematical notation. Rigor scales with stakes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  prose spec --&gt; structured markdown + criteria --&gt; machine-readable + schemas
+</span></span><span style="display:flex;"><span>      --&gt; contract tests from spec --&gt; formal proof
+</span></span></code></pre></div><p>Most teams live in the middle: explicit enough to implement against and verify, reviewed by humans. Companion, not substitute: <a href="/ai/decision-records-ai-development/">decision records</a> capture why choices were made and what was rejected, while specs capture what to build and how to verify — intent plus reasoning, both in the repo.</p>
+<h2 id="benefits-and-costs-honestly">Benefits and Costs, Honestly</h2>
+<p>Less drift (reviewers compare against something), better agent outputs (constraints and non-goals in context), easier PRs (spec as checklist), team alignment across people and agents, test planning falling out of criteria, handoffs that survive sessions and sprints.</p>
+<p>Against that: real upfront effort (unjustified on small features), false confidence from unvalidated specs (stale specs mislead readers and agents alike), rot when specs are treated as planning exhaust instead of living documents, generated bureaucracy (a 200-task thirty-second plan is a schedule-shaped fog), and tool lock-in where proprietary formats trap portable intent — prefer markdown with headers and criteria.</p>
+<h2 id="summary">Summary</h2>
+<p>Old discipline, newly practical: write intent down, reviewed and versioned, before agents build; keep it honest when reality differs; review, test, and hand off against it. Small enough to maintain, precise enough to constrain, durable enough to outlast any session. When to pay that overhead versus prompting freely is the prior call in <a href="/ai/sdd-vs-vibe-coding/">SDD vs vibe coding</a>.</p>
+<p><em>Where does spec discipline pay most in your work — drift prevention, review speed, or handoffs? Share the setup in the comments below!</em></p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="ai" term="ai" label="AI" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="sdd" term="sdd" label="sdd" />
+                             
+                                <category scheme="ai-coding" term="ai-coding" label="ai-coding" />
+                             
+                                <category scheme="methodology" term="methodology" label="methodology" />
+                             
+                                <category scheme="tdd" term="tdd" label="tdd" />
+                             
+                                <category scheme="bdd" term="bdd" label="bdd" />
+                             
+                                <category scheme="specifications" term="specifications" label="specifications" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>
