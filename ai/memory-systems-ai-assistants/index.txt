@@ -1,0 +1,55 @@
+---
+title: Memory Systems in AI Assistants: Working, Structured, Retrieval
+url: https://devopstales.github.io/ai/memory-systems-ai-assistants/
+date: 2026-10-08
+---
+
+
+Memory turns assistants from reactive to persistent — and it&#39;s where systems quietly rot. The old short-term/long-term split no longer covers modern agents. The working stack is three layers: working memory for the live run, structured state for durable truth, retrieval memory for supporting evidence — plus a consolidation policy that forgets as deliberately as it remembers.
+
+&lt;!--more--&gt;
+
+![Layered memory system for an AI assistant](/img/memory-systems-ai-assistants.webp)
+*Live run state, durable structured truth, searchable evidence: three jobs, three stores*
+
+## Three Layers, Three Jobs
+
+**Working memory** is the current run&#39;s context — conversation history prepended per run, thread-level persistence via checkpointers. It keeps local coherence and explodes first when tool results, file reads, and long chats pile up.
+
+**Retrieval memory** looks things up when relevant instead of replaying every turn: vector stores, searchable transcripts, hybrid keyword-plus-semantic search. The technique overlaps RAG, but assistant memory doesn&#39;t end there — and retrieval should supply candidates, never decide policy. Precedence, privacy, recency, and conflict resolution still need structured rules; similarity search alone can&#39;t resolve contradictory user state.
+
+**Structured memory** holds durable facts, preferences, and constraints as explicit fields with precedence: latest instruction wins, session memory overrides global for the current task, conflicts with live intent trigger clarification instead of silent obedience. Underused and the best home for standing policies — better than retrieval for anything stable.
+
+Memory is also distinct from its neighbors: PKM, wikis, and standalone RAG are knowledge-architecture paradigms, while a shared knowledge base needs separate maintenance so agents don&#39;t act on stale facts. Layer map: human thinking in PKM, shared truth in wikis, compiled synthesis in an [LLM Wiki](/ai/llm-wiki-compiled-knowledge/), machine access in RAG, agent continuity in memory. Full paradigm comparison in [PKM vs RAG vs Wiki vs Memory](/ai/pkm-rag-wiki-memory/).
+
+## Retrieval Mechanics That Matter
+
+Capture, encode, search, rerank-or-filter, inject. Quality lives in filtering, chunking, and ranking at least as much as embeddings. Hybrid retrieval (semantic plus lexical, with tunable balance and metadata filters for tenancy) is the sane default — users ask for meaning and exact identifiers in the same breath. Managed services trade ops for dependency; open-source vector-native, Postgres-native (vectors beside relational data, JOINs, ACID), and distributed engines trade control for tuning burden. Pick by operating reality, not benchmark tables.
+
+## How It Rots: Three Failures
+
+- **Stale or contradictory memory.** Consolidation is the most error-prone stage: context poisoning, memory loss, duplicates, unresolved contradictions. Systems remember too much, too early, with no forgetting rule.
+- **Context overload.** Long conversations exceed windows; trimming, deletion, summarization, and checkpoint management aren&#39;t optimizations but requirements — prune tool outputs, preserve full transcripts on disk.
+- **Long context mistaken for recall.** Very-long-term conversational memory stays hard, and mid-prompt relevance degrades with brute-force stuffing. Compact, retrieve, and state explicitly instead.
+
+## Latency, Cost, and the Selective Loop
+
+Qualitatively: raw session history reads cheapest and costs the most tokens; summaries cost a model step to produce but relieve pressure; structured state reads cheap and stays cheap; retrieval costs medium infra for low-to-medium token pressure; full replay of everything is almost never worth it. The robust loop stays selective and staged:
+
+```plaintext
+  load durable state --&gt; retrieve supporting context --&gt; answer
+      --&gt; capture only candidate memories --&gt; consolidate later
+```
+
+Inject, reason, distill, consolidate — with tracing and evals on every layer, because memory changes without observability are undebuggable. Compaction serves the current run; memory serves future runs — different jobs, different mechanisms.
+
+## When Memory Helps and Hurts
+
+Helps with stable preferences, durable constraints, reusable workflow lessons, and corpora too large for prompts. Hurts one-shot tasks, fast-changing user state, noisy indexes, and irreconcilable conflicts. Session memory must never auto-promote to global, and memory is not a security boundary — an agent treating every recalled string as truth is a confusion engine. For the five-layer stack this layer plugs into, see [AI assistant architecture](/ai/ai-assistant-architecture/).
+
+## Summary
+
+Working memory for the live run, structured state for durable truth, retrieval for evidence, conservative consolidation governing all three. Selection and organization beat volume — store less, promote deliberately, forget on purpose.
+
+*What memory failure bit you — stale recall, overload, or silent contradiction? Share the debugging story in the comments below!*
+

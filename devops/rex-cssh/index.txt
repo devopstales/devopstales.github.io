@@ -1,0 +1,305 @@
+---
+title: rex-cssh: Cluster SSH in Rex, the New Terminal Multiplexer from Superlogical
+url: https://devopstales.github.io/devops/rex-cssh/
+date: 2026-11-24
+keywords: Rex, Superlogical, cluster SSH, terminal multiplexer, cssh, tmux-cssh, Mitchell Hashimoto
+---
+
+
+[Rex](https://www.superlogical.com/) is a terminal multiplexer made by [Superlogical](https://www.superlogical.com/), the new company from Mitchell Hashimoto — the author of Ghostty and co-founder of HashiCorp. It has been in public beta since late October 2026, and the first thing I wanted to do in it was the thing I do every day in tmux: cluster SSH.
+
+This post is about that: what Rex is, why it cannot synchronize panes out of the box, and how I closed the gap with [`rex-cssh`](https://github.com/devopstales/rex-cssh), a single-file Python tool in the spirit of [tmux-cssh](https://github.com/zinic/tmux-cssh). It opens one Rex pane per host, tiles them into a grid, and broadcasts whatever you type in any pane to all the others.
+
+&lt;!--more--&gt;
+
+![Rex by Superlogical](/img/rex-icon.webp)
+
+## What is Rex
+
+Superlogical announced itself in July 2026 with a simple pitch: they are building **&#34;the multiplexer for all work&#34;** — local development, remote access, coding agents, background jobs, production applications, shared terminals, incident response. The founding team is Mitchell Hashimoto, Jack Pearkes (HashiCorp&#39;s first employee), Alasdair Monk, and Hector Simpson, funded by Notable Capital and Amplify Partners plus a long list of individual investors from the dev tooling world.
+
+Their plan has three parts:
+
+1. Build an incredible multiplexer.
+2. Make everything in it composable.
+3. Make it safe and operable in production.
+
+Rex is part one, and it is a terminal multiplexer first — the same problem screen solved in the 1980s and tmux refined since: terminals that outlive the application, organized into layouts. What you actually get today in the public beta:
+
+- A **macOS application** (Linux, FreeBSD and Windows get a **server** during beta; the iOS and Windows apps are for enrolled testers).
+- A **server/client split** like tmux, but with a twist: the server keeps sessions running whether or not anything is looking at them, and you can reconnect from the web or from native apps on another device. Close the app, walk away, come back from your phone or another machine, pick up exactly where you left off.
+- **Native scrollback, selection, and scrolling** — the most common papercuts of existing multiplexers, fixed at the app level instead of being worked around.
+- **Built-in session sharing**, so a live session can be handed to another person.
+- A **first-class CLI**, `rex`, which is both an administrative tool and an automation foundation: every command can emit stable JSON, resources have permanent IDs, exit codes are documented, and there is a complete Lua scripting interface on top.
+- An **agent skill** (`rex skill setup`) that teaches coding agents such as Claude Code or Codex how to open tabs, split panes, and read a terminal&#39;s screen through that same CLI.
+
+### Taxonomy
+
+If you know tmux, the mapping is nearly one-to-one:
+
+| Rex | tmux | Meaning |
+| --- | --- | --- |
+| session | session | A group of related work. The server keeps it alive even when no client is attached |
+| window | window (tab) | A tab within a session, holding a layout of blocks |
+| block | pane | One terminal application in a window |
+| client | attached client | A program connected to the server, such as the macOS app |
+
+Every session, window, block, and client has an ID that never changes and is never reused — for example `block:01a10d99-0c06-7795-bf67-798ce4c36a33` — plus an optional label you can set and change. Commands accept a full ID, a case-insensitive label, a position (`-w 2` for the second tab), or the short tail of an ID. If a target is ambiguous, the command exits with status 3 and tells you what matched instead of guessing.
+
+Inside any Rex terminal, the CLI already knows where you are from environment variables the server sets:
+
+| Variable | Holds |
+| --- | --- |
+| `REX_SESSION` | The ID of the session you are in |
+| `REX_BLOCK` | The ID of the terminal you are typing in |
+| `REX_SERVER` | The address of the server running the terminal |
+| `REX_BIN_DIR` | The directory holding the `rex` executable |
+
+### Quick start
+
+With the app installed (it puts `rex` on the `PATH` of every terminal it opens):
+
+```bash
+rex new demo              # create a session with a default terminal
+rex send -s demo &#39;ls&#39;     # type text into its focused block
+rex capture -s demo       # print that block&#39;s screen
+rex split -- sh           # split the terminal you are in (inside Rex)
+rex kill demo             # end the session
+```
+
+That is the entire mental model, and every command in this post builds on those four verbs: create, send, capture, kill — plus `split`, `focus`, and the `session`/`window`/`block`/`client` resource commands.
+
+## The gap: cluster SSH
+
+If you administer more than one server, you have used some form of **cluster SSH** — the idea goes back to the classic [ClusterSSH](https://github.com/duncs/clusterssh) tool: open a terminal to every host in a fleet, and whatever you type in one terminal is replicated to all the rest. [tmux-cssh](https://github.com/zinic/tmux-cssh) does exactly this inside tmux, built on tmux&#39;s `synchronize-panes` option.
+
+It earns its keep on the boring, repetitive work:
+
+- `uptime`, `df -h`, `journalctl -p err -n 50` across a dozen nodes at once
+- applying a firewall rule or a config change to a whole tier
+- verifying that a rollout actually landed everywhere
+- chasing an incident where you need the same commands on several boxes simultaneously
+
+I had been moving my day-to-day terminal work into Rex and hit the gap immediately: **Rex has no built-in &#34;synchronize panes&#34;, and it cannot observe what you type in a pane.** `rex capture` reads the rendered screen and scrollback — great for agents, useless for mirroring keystrokes. There is no hook to say &#34;forward this block&#39;s input to those other blocks&#34;.
+
+So the replication has to live inside each pane, wrapped around `ssh` itself. That is what `rex-cssh` does.
+
+## rex-cssh
+
+[`rex-cssh`](https://github.com/devopstales/rex-cssh) is a single Python file, about 450 lines, using only the standard library. Requirements:
+
+- Rex with the `rex` CLI on your `PATH`
+- Python 3.9 or later
+- `ssh`
+
+Install it by putting the file somewhere on your `PATH`:
+
+```bash
+chmod &#43;x rex-cssh
+ln -s &#34;$PWD/rex-cssh&#34; /usr/local/bin/rex-cssh   # optional
+```
+
+### Usage
+
+```bash
+rex-cssh [options] [user@]host[:port] ...
+rex-cssh -c CLUSTER [options]
+```
+
+Examples:
+
+```bash
+rex-cssh web1 web2 admin@db1:2222          # three panes
+rex-cssh -u deploy -i ~/.ssh/id_ed25519 web1 web2 web3
+rex-cssh -c web                            # hosts from a cluster definition
+rex-cssh -c web,db -l prod                 # several clusters, custom label
+rex-cssh -x &#39;uptime&#39; -t web1 web2          # run a command on each host
+rex-cssh -d web1 web2 web3                 # dry run: print the ssh commands
+```
+
+The options:
+
+| Option | Description |
+| --- | --- |
+| `-c, --cluster NAME[,NAME]` | Add hosts from the cluster file |
+| `-u, --user USER` | Default ssh user (a `user@` on a host wins) |
+| `-p, --port PORT` | Default ssh port (a `:port` on a host wins) |
+| `-i, --identity FILE` | ssh identity file |
+| `-o, --option OPT` | ssh `-o` option, repeatable |
+| `-x, --remote-cmd CMD` | Command to run on each host |
+| `-t, --tty` | Force a tty (`ssh -t`) when used with `-x` |
+| `-l, --label LABEL` | Tab or session label (default `cssh-&lt;cluster or first host&gt;`) |
+| `-n, --new-session` | Open a new session (named by `-l`) instead of a new tab |
+| `--ssh CMD` | ssh command to use (default `ssh`) |
+| `-d, --dry-run` | Print what would run, then exit |
+
+IPv6 hosts use brackets, as ssh does: `user@[::1]:22`.
+
+Cluster definitions live in `~/.rex-cssh.conf` (override the path with `$REX_CSSH_CONF`):
+
+```plaintext
+# name: host host user@host:port ...
+web: web1 web2 web3
+db:  admin@db1 admin@db2:2222
+```
+
+Once the grid is up, you type in **any** pane and every pane gets it. Three keys are bound under the `Ctrl-]` prefix, typed in any pane:
+
+| Keys | Action |
+| --- | --- |
+| `Ctrl-]` `t` | Toggle broadcast for all panes. Labels show `[solo]` while it is off, so you can type in one pane |
+| `Ctrl-]` `q` | Close all the host panes |
+| `Ctrl-]` `]` | Send a literal `Ctrl-]` to ssh |
+
+When a host&#39;s `ssh` exits cleanly, its pane closes. If it fails, the pane stays open until you press Enter so you can read the error.
+
+![Developer workflow](/img/developer-workflow.webp)
+
+### How it works
+
+The whole system has two parts: a launcher that builds the grid, and a per-pane pty wrapper that does the keystroke replication.
+
+```plaintext
+  pane web1              pane web2              pane web3
+  &#43;----------------&#43;     &#43;----------------&#43;     &#43;----------------&#43;
+  | rex-cssh --pane|     | rex-cssh --pane|     | rex-cssh --pane|
+  |   |            |     |   |            |     |   |            |
+  |   v            |     |   v            |     |   v            |
+  | pty -&gt; ssh     |     | pty -&gt; ssh     |     | pty -&gt; ssh     |
+  &#43;-------&#43;--------&#43;     &#43;-------&#43;--------&#43;     &#43;-------&#43;--------&#43;
+          |                     |                     |
+          &#43;-------- unix datagram sockets -----------&#43;
+                        /tmp/rex-cssh-XXXX/
+                      0.sock  1.sock  2.sock  state.json
+```
+
+**1. Rendezvous directory.** The launcher creates a private directory under `/tmp` (unix socket paths have a short length limit, so it cannot sit next to anything deep) with one datagram socket per pane, plus a `state.json` holding the session ID, window ID, the block ID of every pane, and the host labels. The last wrapper to exit removes the directory.
+
+**2. The grid.** Rex has no &#34;tile&#34; command, so the layout is built with repeated `rex split` calls, each with a computed `--ratio` that keeps every cell the same size. The shape is a near-square: 5 hosts become two rows of 3 and 2. Row leaders are stacked downwards first, then columns are split to the right of each leader:
+
+```python
+def grid_shape(n):
+    &#34;&#34;&#34;Return the number of hosts per row, e.g. 5 -&gt; [3, 2].&#34;&#34;&#34;
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
+    return [min(cols, n - r * cols) for r in range(rows)]
+
+def split(anchor, direction, ratio, i):
+    res = rex_json(rex, &#34;split&#34;, &#34;-s&#34;, session, &#34;-b&#34;, anchor,
+                   f&#34;--split={direction}&#34;,
+                   &#34;--ratio&#34;, str(max(1, min(99, round(ratio)))),
+                   &#34;--focus=false&#34;, &#34;--label&#34;, targets[i][1],
+                   &#34;--&#34;, *pane_cmd(i))
+    return res[&#34;block_ids&#34;][0]
+```
+
+Notice `--label targets[i][1]`: every block is labeled with its host, so the grid stays legible and the label doubles as the broadcast-state indicator later.
+
+**3. The pty wrapper.** Each pane does not run `ssh` directly; it runs the same script in an internal mode:
+
+```bash
+python3 rex-cssh --pane 0 --dir /tmp/rex-cssh-abc123 --label web1 -- ssh web1
+```
+
+The wrapper forks `ssh` on a pty (`pty.fork`) and then runs one `select` loop over three sources: the pty master (ssh output), its own unix socket (keystrokes from siblings), and its own stdin (your keystrokes):
+
+```python
+while True:
+    ready, _, _ = select.select(
+        [master, sock] &#43; ([0] if stdin_open else []), [], [])
+
+    if master in ready:
+        data = os.read(master, 65536)   # ssh output -&gt; your screen
+        if not data:
+            break                       # child closed the pty
+        write_all(1, data)
+
+    if sock in ready:
+        msg = sock.recv(CHUNK &#43; 16)
+        if msg[:1] == b&#34;D&#34; and broadcast:
+            write_all(master, msg[1:])  # sibling keystrokes -&gt; local ssh
+
+    if 0 in ready:
+        data = os.read(0, 4096)
+        # ... Ctrl-] prefix handling (t / q / ]) ...
+        write_all(master, data)         # your keystrokes -&gt; local ssh
+        if broadcast:
+            for i in range(0, len(data), CHUNK):
+                tell(b&#34;D&#34; &#43; data[i:i &#43; CHUNK])   # -&gt; all sibling wrappers
+```
+
+The anti-loop rule is what makes this simple: **bytes received over the socket are written only to the local ssh, never forwarded again.** Your own keystrokes are the only bytes that get broadcast, as `D`-prefixed datagrams split into 1024-byte chunks (unix datagrams are small). A second message type, `B`, carries the broadcast flag so that when one pane toggles it off, every pane turns off together.
+
+**4. The broadcast toggle.** `Ctrl-] t` flips the flag in all wrappers and then relabels every block, appending ` [solo]` while broadcast is off — a cheap, visible state indicator built on `rex block rename`:
+
+```python
+suffix = &#34;&#34; if broadcast else &#34; [solo]&#34;
+for blk, name in zip(st[&#34;blocks&#34;], st[&#34;labels&#34;]):
+    subprocess.Popen([st[&#34;rex&#34;], &#34;block&#34;, &#34;rename&#34;, &#34;-s&#34;, st[&#34;session&#34;],
+                      blk, name &#43; suffix], ...)
+```
+
+**5. Session or tab.** If `REX_SESSION` is set (you are inside a Rex terminal), the launcher opens a **new window** — a tab — in the current session with `rex window new`. Outside Rex, or with `-n`, it creates a **new session** with `rex new`. In the latter case it then does a best-effort switch of your connected apps to that session:
+
+```python
+for client in clients:                      # from `rex client ls --json`
+    if client.get(&#34;info&#34;, {}).get(&#34;kind&#34;) != &#34;app&#34;:
+        continue
+    rex -C &lt;client&gt; do session.select session_id=&lt;session&gt;
+```
+
+That last part needs **Remote Control** turned on in the Rex app&#39;s Settings under Rex Server. If it is off, the session is still created — you just have to select it yourself.
+
+**6. Teardown.** `Ctrl-] q` kills the session (or just the window, if the launcher opened a tab). A pane whose ssh exits cleanly simply closes; one that failed waits on Enter. When the last wrapper unlinks its socket, it removes the rendezvous directory. If the session is killed from outside — the app, `rex kill`, a crashed server — the wrappers clean up on `SIGTERM`/`SIGHUP`, and as a backstop the launcher sweeps any rendezvous directory older than an hour on its next run. No daemons, no cleanup command to remember.
+
+### A typical session
+
+```bash
+$ rex-cssh -d web1 web2 web3
+layout (hosts per row): [2, 1]
+[web1] ssh web1
+[web2] ssh web2
+[web3] ssh web3
+
+$ rex-cssh web1 web2 web3
+rex-cssh: opened 3 panes in this session
+```
+
+The grid opens as a new tab labeled `cssh-web1`. You type `uptime`, it lands in all three panes. You spot one box acting up, press `Ctrl-] t`, the labels flip to `[solo]`, and you investigate that one host without your typing leaking to the others. `Ctrl-] t` again to rejoin, `Ctrl-] q` when done.
+
+For the one-shot case — a command you want run everywhere, not an interactive session:
+
+```bash
+rex-cssh -x &#39;systemctl restart haproxy&#39; -t web1 web2 web3
+```
+
+## Limitations
+
+Honest list of what is missing:
+
+- **Early keystrokes can be lost.** If you start typing before every pane&#39;s wrapper has bound its socket, those bytes only reach the panes that were ready. Each send globs the current socket list, so late joiners simply do not get the earlier bytes. In practice the grid is up in well under a second, but do not paste a wall of text immediately.
+- **The grid is fixed.** It is always a near-square of equal cells, because Rex has no tiling command. No 4-across rows, no custom layouts.
+- **Broadcast is all or nothing.** `Ctrl-] t` solos a single pane, but there is no per-pane exclusion while the rest stay in sync.
+- **Rex is in beta.** I am on `0.1.0-preview.21`. The CLI surface — command names, JSON shapes, the Remote Control behavior — can still move under the tool.
+
+And the obvious one: if you live in tmux, [tmux-cssh](https://github.com/zinic/tmux-cssh) does the same job and has had years of battle-testing. `rex-cssh` is for when Rex is where your terminal is.
+
+## Why this was easy to build against
+
+The part of this I want to emphasize: the tool is about 450 lines because the CLI underneath is a real API.
+
+- **Stable JSON.** Every listing and mutation command emits machine-readable output with `--json`, including full IDs. The launcher saves the block IDs that each `split` returns and feeds them back into the next `split` — no parsing of human-oriented tables.
+- **Permanent IDs, documented exit codes.** Targets match by ID, label, position, or ID tail; ambiguity is an error (exit 3), not a guess. `rex wait` and `rex events` exist for when you need to synchronize on a block or session ending.
+- **Context for free.** `REX_SESSION` and `REX_BLOCK` in every terminal mean the script knows where it is without asking.
+- **The same surface agents use.** The `rex skill` guide that Superlogical ships with the CLI is what I used to learn the commands — which is a nice sign: if the automation story is good enough for coding agents, it is good enough for a cssh clone.
+
+Scripting tmux works too, but it means `list-panes -F` format strings and praying they hold. Scripting zellij means plugins. Rex gives you JSON, IDs, and exit codes out of the box, and a pty-plus-unix-socket wrapper is the only extra machinery needed to fill in what the multiplexer itself does not do.
+
+## Where this goes next
+
+`rex-cssh` is deliberately a small tool: one file, no dependencies, no configuration beyond an optional cluster file. The natural next steps are a per-pane mute list, a paste buffer that waits for all sockets to be ready, and layout options once Rex&#39;s layout commands grow up.
+
+More interesting to me is what the CLI enables beyond cssh: `rex events` streams server events, `rex do` runs Lua on the server, and `rex capture` gives you any pane&#39;s screen on demand. Fleet monitoring that renders into a live Rex session, or an agent that opens a debug session and reads the screen instead of guessing at logs, are both short scripts away. That &#34;everything in it composable&#34; line in Superlogical&#39;s plan is the first time in a long time that a multiplexer has felt like a foundation rather than a habit.
+
+If you have the macOS beta (or a Linux server) running, give [`rex-cssh`](https://github.com/devopstales/rex-cssh) a try and tell me what is missing. And if you have not tried [Rex](https://www.superlogical.com/rex/) yet, the [docs](https://www.superlogical.com/rex/docs/) are a good place to start — the CLI alone is worth a look.
+

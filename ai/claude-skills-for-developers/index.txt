@@ -1,0 +1,82 @@
+---
+title: Claude Skills for Developers: SKILL.md That Survives Real Work
+url: https://devopstales.github.io/ai/claude-skills-for-developers/
+date: 2026-11-05
+---
+
+
+Teams misuse Claude Skills two ways: dumping grounds, or giant copy-pasted prompts that never graduate. Both are sloppy. Skills work through progressive disclosure — compact metadata first, full instructions only on task match — letting dozens stay available without bloating every session. Treat them like operations code, not prompt poetry.
+
+&lt;!--more--&gt;
+
+![Claude Skills SKILL.md structure across IDEs](/img/claude-skills-developers.webp)
+*One folder shape from CLI to JetBrains: metadata routes, instructions execute*
+
+## CLAUDE.md vs Skills vs Hooks vs Subagents
+
+Create a skill when a checklist, deploy playbook, review rubric, or API gotcha keeps getting pasted into chat — or when a CLAUDE.md section grows from fact into process. The layering:
+
+| Layer | Loading | Use for |
+|---|---|---|
+| CLAUDE.md | Always | Project facts, durable conventions, repo rules |
+| Skill | On demand | Repeatable procedures, playbooks, domain checklists |
+| Hook | Event-triggered | Automatic side effects on save, commit, session start |
+| Subagent | Isolated context | Noisy exploration and test runs off the main thread |
+
+Every-session instruction belongs in CLAUDE.md; sometimes-relevant method belongs in a skill; must-fire-per-event belongs in a hook. Bloated always-loaded context loses to on-demand focus — which is also why SDD loops encode naturally as skills (see [Spec Kit vs Kiro vs Claude Code](/ai/spec-kit-kiro-claude-code-sdd/), or install one prebuilt in [Superpowers](/ai/superpowers-enforced-sdd-skills/)).
+
+## Paths and Portability
+
+A skill is a folder — `SKILL.md` plus optional scripts, references, assets — with explicit name matching its kebab-case directory, precise description, and YAML frontmatter. Project scope (`.claude/skills/`) couples to the codebase; personal scope (`~/.claude/skills/`) travels across repos; plugins namespace theirs. Monorepos discover nested skill dirs automatically; only a brand-new top-level skills directory needs a restart to be watched.
+
+Portability rule: Claude Code alone means `.claude/skills`; genuine cross-client means the open Agent Skills shape at `.agents/skills` (GitHub Copilot and Codex scan there). Related, not identical — pick deliberately. Claude Code tolerates missing descriptions and derived names; portable skills must not rely on that. Exact `SKILL.md` casing, no README inside the folder, enterprise-over-personal-over-project precedence.
+
+| Client | Skills path | Notes |
+|---|---|---|
+| Claude Code CLI | `.claude/skills/` | Most complete surface, full tools support |
+| VS Code &#43; Claude | `.claude/skills/` | Inline diffs, plan review, file mention |
+| JetBrains (IDEA, PyCharm, GoLand…) | `.claude/skills/` | Launch from IDE terminal or `/ide` reconnect |
+| Copilot, Codex | `.agents/skills/` | Open standard, cross-client |
+
+## Descriptions Are the Router
+
+Vague descriptions match everything and disambiguate nothing (&#34;helps with code review&#34;); routing-grade ones state the job plus the exact trigger phrases (&#34;Review pull requests for security issues, migration risk, and missing tests. Use when reviewing a PR, git diff, or release-critical change.&#34;). Non-triggering skills are router failures, not model failures — diagnose by asking the model when it would use the skill and listening to its paraphrase. Over-triggering means under-specified routing: narrow scope, add negative triggers, or set user-invocation-only for risky workflows like deploys. Front-load keywords; catalogs truncate descriptions under skill-count pressure.
+
+Scope like a function: coherent unit of work, neither wiki-broad (model chases irrelevant instructions) nor so narrow that tasks need skill stacks. Keep SKILL.md under ~500 lines/~5,000 tokens with explicit reference loading (&#34;read references/api-errors.md on non-200&#34;) — injected skills don&#39;t re-read later and compact down to budgets over long sessions.
+
+````markdown
+---
+name: review-pr
+description: Review pull requests for security issues, migration risk, and missing tests. Use when reviewing a PR, git diff, or release critical change.
+disable-model-invocation: true
+allowed-tools: Bash(git diff *) Bash(gh pr diff *) Read Grep Glob
+---
+
+# Review PR
+
+Read references/checklist.md before running any commands.
+
+1. Collect the diff and changed files.
+2. Flag correctness, security, and test coverage issues.
+3. Return findings grouped by severity with file references.
+4. Suggest the smallest safe fix first.
+````
+
+Manual for risk (`disable-model-invocation`), hidden-but-available for background knowledge (`user-invocable: false`). Note `allowed-tools` pre-approves while active without restricting the universe — deny rules still live in permissions, and SDK apps must enforce tool access in their own config where frontmatter doesn&#39;t apply.
+
+## Scripts, Forks, and Tests
+
+Agent-facing scripts stay non-interactive (flags/env/stdin, never TTY prompts), document via `--help`, emit JSON/CSV on stdout with diagnostics on stderr, exit loudly (`set -euo pipefail`), and pin tool versions with runtime requirements stated. Heavy research belongs in forked subagents (`context: fork` plus an Explore agent) returning summaries — thousands of exploration tokens never touch the main thread.
+
+Test three layers, not one demo: triggering (should-fire and should-not-fire queries plus edge cases), functional correctness, and baseline comparison without the skill (tool calls, failures, clarification loops, tokens). Fixture prompts with expected outputs in `evals/`; verify discovery with &#34;What skills are available?&#34; (SDK setups need the Skill tool enabled, correct setting sources, and correct cwd); test on the shipping model and client since tool-use reliability varies by model.
+
+## Troubleshooting Boring Failures First
+
+Not found means filename case or wrong directory. Invalid frontmatter means delimiters, quotes, or non-hyphenated names. Lost influence over long sessions means compaction and catalog truncation — trim and front-load. Hanging scripts mean interactive input in non-interactive shells. Invisible SDK skills mean tool/settings/cwd misconfiguration. Failing MCP-backed calls mean connection, auth, scopes, then case-sensitive tool names — in that order.
+
+## Summary
+
+Crisp runbooks survive; brainstorms in folders don&#39;t. Clear names, small files, explicit triggers, deterministic scripts, real evals — operational engineering all the way down.
+
+*What skill earns its keep in your workflow — and which one never triggers? Share both in the comments below!*
+

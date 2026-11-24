@@ -1,0 +1,390 @@
+---
+title: Monitoring a Self-Hosted LLM Stack: vLLM, Phoenix, and Grafana Measurements
+url: https://devopstales.github.io/ai/llm-self-hosted-stack-monitoring-measurements/
+date: 2026-10-27
+---
+
+
+Running a self-hosted LLM stack produces signals on several axes at once — serving health, per-tenant token consumption, response quality, and full request traces. Classic web monitoring does not capture most of them. Tokens, batching, KV cache pressure, queue dynamics, inter-token latency, and trace spans all need their own measurement.
+
+This post is a practical guide to monitoring a self-hosted LLM inference stack. It covers what to measure at each layer (vLLM serving, AI Gateway access, Phoenix tracing and evaluation), which PromQL queries turn raw metrics into dashboards, how KEDA autoscaling consumes the signals, and which SLOs and alerts belong on the platform. The examples assume two NVIDIA DGX Spark units running vLLM, but the metrics and queries apply to any vLLM-based stack.
+
+&lt;!--more--&gt;
+
+![Monitoring a self-hosted LLM inference stack](/img/coding-terminal.webp)
+*Measurements across the LLM stack: vLLM, Phoenix, Grafana*
+
+## The monitoring axes of an LLM stack
+
+An LLM platform exposes four distinct measurement domains:
+
+| Domain | What it answers | Source |
+|--------|----------------|--------|
+| Serving health | Is the inference engine alive, saturated, or queueing? | vLLM `/metrics` &#43; Prometheus |
+| Usage and FinOps | Who consumes what, on which model, at what token cost? | Envoy AI Gateway |
+| Tracing | What happened inside each request — span by span? | Arize Phoenix (OpenTelemetry/OpenInference) |
+| Response quality | Does the platform produce good answers, and is quality regressing? | Phoenix evals (LLM-as-judge) |
+
+Classic RPS / p95 / error-rate monitoring is necessary but insufficient. You must also track tokens, KV cache utilization, prefix cache hit ratio, time-to-first-token, inter-token latency, trace latency per span, and LLM-as-judge scores. The sections below show how.
+
+## Layer 1: vLLM serving metrics
+
+vLLM natively exposes a Prometheus endpoint at `/metrics` with each metric carrying a `model_name` label. Scrape it on every inference pod.
+
+### Metrics to collect
+
+| Metric | What it tells you |
+|--------|-------------------|
+| `vllm:num_requests_running` | Requests actively being processed by the engine |
+| `vllm:num_requests_waiting` | Requests queued because the batch is full |
+| `vllm:gpu_cache_usage_perc` | KV cache pressure on the GPU |
+| `vllm:time_to_first_token_seconds` | TTFT histogram — time until the first token streams |
+| `vllm:inter_token_latency_seconds` | ITL histogram — gap between streamed tokens |
+| `vllm:e2e_request_latency_seconds` | End-to-end request latency histogram |
+| `vllm:prompt_tokens` | Input tokens consumed |
+| `vllm:generation_tokens` | Output tokens generated |
+| `vllm:prefix_cache_hits` | KV cache reuse for repeated prefixes (critical for FIM autocomplete) |
+
+Metric names can shift between vLLM versions. Hit `http://&lt;node&gt;:8000/metrics` and confirm the exact names before writing queries.
+
+### Prometheus scrape configuration
+
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: &#34;vllm&#34;
+    metrics_path: /metrics
+    static_configs:
+      - targets: [&#34;spark-1:8000&#34;, &#34;spark-2:8000&#34;]
+
+  - job_name: &#34;prometheus&#34;
+    static_configs:
+      - targets: [&#34;localhost:9090&#34;]
+```
+
+Add a stable `instance` or `model` label via relabeling when replicas multiply — dashboards need it to distinguish nodes.
+
+### PromQL queries worth copying
+
+**KV cache usage percent (the saturation signal)**
+
+```promql
+max by (instance) (vllm:gpu_cache_usage_perc)
+```
+
+**Running versus waiting requests (the queue signal)**
+
+```promql
+max by (instance) (vllm:num_requests_running)
+max by (instance) (vllm:num_requests_waiting)
+```
+
+**TTFT p95**
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[5m]))
+)
+```
+
+**Inter-token latency p95**
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le) (rate(vllm:inter_token_latency_seconds_bucket[5m]))
+)
+```
+
+**Requests per second**
+
+```promql
+sum by (model_name) (rate(vllm:request_success[5m]))
+```
+
+**Tokens per second (generated)**
+
+```promql
+sum by (model_name) (rate(vllm:generation_tokens[5m]))
+```
+
+**Prefix cache hit ratio (FIM efficiency)**
+
+```promql
+sum(rate(vllm:prefix_cache_hits[5m]))
+  /
+sum(rate(vllm:prefix_cache_hits[5m]) &#43; rate(vllm:prefix_cache_misses[5m]))
+```
+
+Always use the `rate`-then-`sum-by-le`-then-`histogram_quantile` shape for histograms. A flat or wrong percentile usually means missing `rate` or wrong ordering.
+
+### Grafana panels for vLLM
+
+Create a row called &#34;Inference health&#34; with these panels:
+
+- **KV cache usage (%)** — `max by (instance) (vllm:gpu_cache_usage_perc)`, stat panel with a red threshold at 85%.
+- **Running vs waiting requests** — stacked bar or two stat panels. A climbing `waiting` count while `running` stays flat means the batch is saturated — that is your concurrency ceiling.
+- **TTFT p95 (seconds)** — time series, threshold at 1s for chat, 200ms for IDE autocomplete (FIM).
+- **ITL p95 (seconds)** — time token latency; streaming users feel this directly.
+- **Generated tokens per second** — throughput in tokens, not requests.
+- **Prefix cache hit ratio** — gauge; a low ratio means autocomplete is recomputing prefixes instead of reusing KV cache.
+
+## Layer 2: AI Gateway access metrics
+
+The gateway (Envoy AI Gateway in this stack) sits one level above vLLM. It instruments traffic with the OpenTelemetry Gen AI semantic conventions, so you measure business-level LLM vocabulary instead of raw HTTP.
+
+### Metrics to collect
+
+| Metric | Measures |
+|--------|----------|
+| `gen_ai.client.token.usage` | Tokens consumed (input / output / total) |
+| `gen_ai.server.request.duration` | End-to-end per-request latency at the gateway |
+| `gen_ai.server.time_to_first_token` | TTFT at the gateway level |
+| `gen_ai.server.time_per_output_token` | Inter-token latency at the gateway |
+
+Each metric carries `gen_ai.*` labels: `model`, `operation` (chat, embedding), `provider`. You can inject arbitrary HTTP headers as labels (`x-tenant-id`, `x-team`, `x-app`).
+
+### PromQL for FinOps and usage
+
+**Tokens per tenant per day**
+
+```promql
+sum by (tenant) (gen_ai_client_token_usage_total{operation=&#34;chat&#34;})
+  * on () group_left() (86400)
+```
+
+Adjust the label names to what your gateway actually exports. The point is to answer:
+
+- Which tenant burns the most tokens over the last 30 days?
+- Which team has the highest p95 latency on the coder model?
+- What is the prompt-to-generation ratio per user? (useful for context sizing)
+- How many chat versus embedding calls per client?
+
+### Grafana panels for the gateway
+
+Create a row called &#34;Usage and FinOps&#34;:
+
+- **Tokens per second by tenant** — `sum by (tenant) (rate(gen_ai_client_token_usage_total[5m]))`
+- **Requests per second by model** — `sum by (model) (rate(gen_ai_server_request_duration_count[5m]))`
+- **Gateway TTFT p95** — histogram quantile on `gen_ai_server_time_to_first_token_seconds`
+- **Error rate by model** — `1 - (success / total)` per `gen_ai.*` labels
+
+## Layer 3: Tracing with Arize Phoenix
+
+Metrics tell you *that* something is slow or failing. Traces tell you *where* in the request lifecycle it happened. Arize Phoenix is the open-source AI observability platform that captures full span hierarchies — latency, token counts, input/output content, and a complete audit trail — for every LLM request.
+
+Phoenix is built on OpenTelemetry and OpenInference, is vendor- and language-agnostic, and runs locally, in a container, or on Kubernetes.
+
+### Run Phoenix locally
+
+```bash
+pip install arize-phoenix
+phoenix serve
+```
+
+Or with `uvx` (no install):
+
+```bash
+uvx arize-phoenix serve
+```
+
+Phoenix listens on `http://localhost:6006` by default.
+
+### Run Phoenix with Docker Compose
+
+```yaml
+# docker-compose.yml
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix
+    ports:
+      - &#34;6006:6006&#34;
+    volumes:
+      - ./phoenix-data:/app/data
+```
+
+### Instrument your application
+
+Phoenix auto-detects your framework and LLM provider and installs the right OpenInference instrumentation:
+
+```bash
+npx @arizeai/phoenix-cli setup
+# or, with Phoenix installed:
+px setup
+```
+
+Or wire it up in code using the OpenTelemetry SDK plus the Phoenix exporter, with instrumentation packages for OpenAI, LangChain, LlamaIndex, DSPy, AWS Bedrock, OpenAI Agents, Vercel AI, Mastra, CrewAI, and more.
+
+Every query then produces a full span hierarchy in Phoenix — latency, token counts, full audit trail — visible in the Phoenix UI at `http://localhost:6006`.
+
+### Grafana panel for traces
+
+Phoenix exposes trace data through its own UI and API rather than Prometheus. Use the Phoenix UI to inspect individual traces, and use Prometheus/Grafana for the aggregate service-level metrics from Layer 1 and Layer 2. The two are complementary: Grafana tells you *that* p95 TTFT breached; Phoenix tells you *which span* in *which trace* caused it.
+
+## Layer 4: Evaluation with Phoenix evals (LLM-as-judge)
+
+Infrastructure metrics tell you whether the platform works. They do not tell you whether it produces good answers. That is a separate dimension, measured by continuous evaluation with LLM-as-judge.
+
+Phoenix evals (`arize-phoenix-evals`) scores every answer for:
+
+| Evaluator | What it checks |
+|-----------|----------------|
+| Hallucination | Did the answer contradict or fabricate beyond the retrieved context? |
+| QA correctness | Did the answer actually address the question? |
+| Context relevance | Did the retrieved chunks contain what was needed to answer? |
+
+Scores are logged back as span annotations — visible inline with the Phoenix trace, alongside latency.
+
+### Run evals with Phoenix
+
+```python
+# phoenix_evals.py — simplified
+from phoenix.evals import (
+    HallucinationEvaluator,
+    QAEvaluator,
+    RelevanceEvaluator,
+    OpenAIModel,
+)
+
+model = OpenAIModel(
+    model_name=&#34;gemini-2.5-flash-lite&#34;,
+    api_key=&#34;...&#34;,
+)
+
+hallucination_eval = HallucinationEvaluator(model)
+qa_eval = QAEvaluator(model)
+relevance_eval = RelevanceEvaluator(model)
+
+# Run after each query
+result = hallucination_eval.evaluate(
+    query=question,
+    response=answer,
+    context=retrieved_chunks,
+)
+```
+
+The judge can also be a local Ollama model (e.g., `llama3.2`) instead of a cloud API, keeping the entire eval loop self-hosted.
+
+### Versioned datasets and experiments
+
+`phoenix-datasets` manages versioned query sets and experiment runs. You can:
+
+- Create versioned datasets of examples for experimentation, evaluation, and fine-tuning
+- Track and evaluate changes to prompts, LLMs, and retrieval strategies
+- Compare how changes to chunking, top-k, or the judge model affect quality over time
+
+### Grafana panel for evaluation
+
+Push eval scores as Prometheus metrics (via the Phoenix client or a small exporter) so they appear in the same Grafana as technical metrics:
+
+**Eval pass rate**
+
+```promql
+sum(phoenix_eval_passed_total)
+  /
+sum(phoenix_eval_passed_total &#43; phoenix_eval_failed_total)
+```
+
+A quality score dropping from 80% to 65% overnight is more telling than a latency graph. Use it to detect regressions on a model bump, a vLLM version bump, or a routing change.
+
+## Layer 5: KEDA autoscaling signals
+
+Standard Kubernetes HPA scales on CPU/memory, which does not reflect vLLM load. The limiting factor is VRAM and the engine&#39;s internal batch, not host CPU. KEDA solves this by scaling on Prometheus metrics.
+
+### Meaningful triggers
+
+For each model, the KEDA `ScaledObject` uses two vLLM metrics:
+
+```yaml
+# KEDA ScaledObject snippet
+triggers:
+  - type: prometheus
+    metadata:
+      query: max(vllm:num_requests_running{model_name=&#34;qwen-coder&#34;}) / scalar(vector(32))
+      threshold: &#34;0.7&#34;
+  - type: prometheus
+    metadata:
+      query: max(vllm:gpu_cache_usage_perc{model_name=&#34;qwen-coder&#34;})
+      threshold: &#34;0.6&#34;
+```
+
+- `num_requests_running / maxNumSeqs` — internal batch saturation. At 70% occupied, add a replica before a queue forms.
+- `gpu_cache_usage_perc` — KV cache pressure. At 60%, long contexts are eating VRAM; scale early.
+
+The goal is to anticipate: these indicators rise before a queue forms on the user side, so KEDA adds a replica early enough to absorb a surge without degrading in-flight latency. That is the difference between an autoscaler that reacts (queue grows, latency explodes) and one that anticipates.
+
+### Grafana panel for autoscaling
+
+- **Batch saturation (%)** — `max by (model_name) (vllm:num_requests_running / maxNumSeqs)` with a yellow threshold at 0.7 and red at 0.85.
+
+## SLOs and alerts
+
+Define starter alerts next to the metrics:
+
+```yaml
+- alert: LLMHighP95Latency
+  expr: histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[5m]))) &gt; 1
+  for: 10m
+  labels:
+    severity: page
+  annotations:
+    summary: &#34;vLLM p95 TTFT &gt; 1s (10m)&#34;
+
+- alert: LLMKVCachePressure
+  expr: max(vllm:gpu_cache_usage_perc) &gt; 85
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: &#34;KV cache usage &gt; 85%&#34;
+
+- alert: LLMQueueBuilding
+  expr: max by (instance) (vllm:num_requests_waiting) &gt; 0
+  for: 2m
+  labels:
+    severity: warning
+  annotations:
+    summary: &#34;Requests waiting in vLLM queue&#34;
+
+- alert: LLMQualityRegression
+  expr: sum(phoenix_eval_passed_total) / sum(phoenix_eval_passed_total &#43; phoenix_eval_failed_total) &lt; 0.8
+  for: 1h
+  labels:
+    severity: warning
+  annotations:
+    summary: &#34;Phoenix eval pass rate below 80%&#34;
+```
+
+Targets down, empty panels, and flat percentiles are the usual failure modes — curl `/metrics` directly first, then check metric names and window lengths. For trace-level debugging, open Phoenix at `http://localhost:6006`.
+
+## What to measure first (day-one minimum)
+
+If you are instrumenting from scratch, start with these six panels and five alerts:
+
+**Panels:**
+1. KV cache usage (%)
+2. Running vs waiting requests
+3. TTFT p95
+4. ITL p95
+5. Generated tokens per second
+6. Eval pass rate (%)
+
+**Alerts:**
+1. p95 TTFT breach sustained
+2. KV cache above 85%
+3. Waiting queue building
+4. Eval pass rate below 80%
+5. Scrape target down
+
+Next wins come from per-model SLOs, per-tenant token budgets, autoscaling on queue time plus KV cache headroom, and trace-level dashboards in Phoenix.
+
+---
+
+Replace the dash values in any results tables with your own measured numbers after running the benchmarks. Which metric warned you first in your stack — latency, queue depth, cache pressure, or eval score?
+

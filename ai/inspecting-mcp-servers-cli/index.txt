@@ -1,0 +1,580 @@
+---
+title: Inspecting and Debugging MCP Servers from the CLI: JSON-RPC, jq, and Shell Helpers
+url: https://devopstales.github.io/ai/inspecting-mcp-servers-cli/
+date: 2026-11-08
+---
+
+
+The fastest way to learn what an MCP server actually does is to talk to it directly, without a model in the loop. The [Model Context Protocol](https://modelcontextprotocol.io/) speaks JSON-RPC 2.0 over a boring transport, so every message you send is printable, greppable, and scriptable. You can list a server&#39;s tools, call one with fixed arguments, diff its contract between versions, and script the checks in CI.
+
+This guide covers the stdio transport in depth: the initialize handshake, listing and calling tools, extracting schemas with jq, shell helper functions, a debugging playbook, and what changes when a server speaks Streamable HTTP over curl. All examples were run against the reference [filesystem server](https://github.com/modelcontextprotocol/servers) on macOS.
+
+&lt;!--more--&gt;
+
+![Inspecting and debugging MCP servers from the CLI](/img/coding-terminal.webp)
+*JSON-RPC over stdio: print a request, pipe it to the server, format the response with jq*
+
+## Why debug MCP servers outside the host app
+
+AI hosts — Claude Desktop, Cursor, Kilo Code — show you the model&#39;s view of your server: which tool it chose to call, and whatever the host decided to render of the response. When you are debugging the server itself, that view is lossy. You want the wire.
+
+Concretely, talking to the server directly lets you:
+
+- **Audit what a server exposes** before wiring it into a host: the tool list, the exact `inputSchema` of every tool, and the description text the model will see verbatim.
+- **Reproduce tool behavior deterministically.** A tool call with fixed arguments either works or it does not. No model, no prompt, no ambiguity.
+- **Diff the contract between server versions** before upgrading the pinned version in your client config.
+- **Script contract checks in CI**, so a breaking schema change fails a pipeline instead of a production agent.
+- **Understand error semantics** — protocol errors versus tool errors — without a client that swallows them.
+
+The enabler is the transport. Over stdio, MCP is one JSON object per line on two file descriptors. `echo` is a client.
+
+## The wire format
+
+```plaintext
+  shell                                MCP server process
+  &#43;----------------------&#43;  stdin      &#43;-----------------------------&#43;
+  | printf / echo        | ===========&gt; | reads one JSON object per  |
+  |                      |              | line from stdin            |
+  | jq                   | &lt;=========== | writes one JSON object per |
+  &#43;----------------------&#43;  stdout     | line to stdout             |
+                                       | logs go to stderr          |
+                                       &#43;-----------------------------&#43;
+```
+
+Three rules matter:
+
+1. **One JSON-RPC 2.0 object per line** (newline-delimited JSON) on stdin and stdout.
+2. **stdout is protocol traffic only.** Servers write their own logs to stderr — the reference filesystem server prints its banner and allowed-directory list there, keeping the JSON channel clean.
+3. **Requests, responses, and notifications** are distinguished by the `id` field:
+
+```json
+{
+  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+  &#34;method&#34;: &#34;tools/list&#34;,
+  &#34;id&#34;: 1,
+  &#34;params&#34;: {}
+}
+```
+
+A request carries an `id`; the matching response echoes it with either a `result` or an `error` member. A notification has no `id` and expects no response.
+
+A liveness probe exists in the protocol — `ping`. It is fast, touches no state, and a working server answers with an empty result:
+
+```bash
+echo &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;ping&#34;,&#34;id&#34;:1}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq -c
+```
+
+```plaintext
+{&#34;result&#34;:{},&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1}
+```
+
+## The initialize handshake
+
+Strictly, a session opens with an `initialize` request, followed by a `notifications/initialized` notification, and only then may the client call other methods. Because the stdio transport is a plain pipe, the whole handshake is one pipeline — `printf` emits all three lines, and jq receives the two responses:
+
+```bash
+printf &#39;%s\n&#39; \
+  &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-06-18&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;cli&#34;,&#34;version&#34;:&#34;1.0&#34;}}}&#39; \
+  &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39; \
+  &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;tools/list&#34;,&#34;params&#34;:{}}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq
+```
+
+The first response confirms the session and negotiates the protocol version:
+
+```json
+{
+  &#34;result&#34;: {
+    &#34;protocolVersion&#34;: &#34;2025-06-18&#34;,
+    &#34;capabilities&#34;: {
+      &#34;tools&#34;: { &#34;listChanged&#34;: true },
+      &#34;resources&#34;: { &#34;listChanged&#34;: true }
+    },
+    &#34;serverInfo&#34;: {
+      &#34;name&#34;: &#34;secure-filesystem-server&#34;,
+      &#34;version&#34;: &#34;0.2.0&#34;
+    }
+  },
+  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+  &#34;id&#34;: 1
+}
+```
+
+Details worth knowing:
+
+- **`protocolVersion` is a proposal, not a demand.** The client states the newest version it supports; if the server does not support it, the server responds with the version it does support. Read the response before trusting any version-dependent behavior.
+- **`serverInfo.version` is self-reported, not necessarily the package version.** The npm release `2026.8.31` of the filesystem server reports itself as `0.2.0` on the wire; a different release line reports `2.2.0`. You cannot always recover the installed version from the protocol alone — pin the package version, then read `serverInfo` to see what you actually got.
+- **`notifications/initialized` has no `id`.** It is a notification — the server never responds to it, which is exactly what you want to see in the output (only two response objects come back, for ids 1 and 2).
+- **Be explicit about EOF.** When you pipe `printf` or `echo`, stdin closes when the writer exits and the server shuts down cleanly. If you ever run the server with stdin held open (an interactive terminal), the pipeline waits for responses that require more input — end the stream when you are done.
+
+Many servers, the reference ones included, answer a bare `tools/list` without any handshake:
+
+```bash
+echo &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;tools/list&#34;,&#34;id&#34;:1}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq
+```
+
+That is convenient, but do not build on it: stricter servers reject requests sent before `initialized`, and the full handshake costs three lines. Use the bare form to poke at a lenient server, and the handshake form anywhere the behavior must be reproducible.
+
+One practical note: the first `npx -y` invocation downloads the package (expect 20-30 seconds); subsequent runs hit the npx cache and start in a few seconds.
+
+## Server instructions
+
+The initialize result carries one more member worth extracting: `instructions`. It is optional, it is a plain string, and it is server-level usage guidance written for the client — in practice, for the model. Hosts forward it into the model&#39;s context, so it is part of the contract you are auditing, exactly like the tool descriptions.
+
+Note what it is not: there is no `instructions/list` method. Instructions ride in the initialize response and nowhere else; asking for a separate method comes back as `-32601 Method not found`.
+
+To list a server&#39;s instructions, run the handshake and extract the field:
+
+```bash
+printf &#39;%s\n&#39; \
+  &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2024-11-05&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;manual-debug-cli&#34;,&#34;version&#34;:&#34;1.0.0&#34;}}}&#39; \
+  &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq -r &#39;select(.id == 1) | .result.instructions // &#34;null&#34;&#39;
+```
+
+The filesystem server does not set one, so you get:
+
+```plaintext
+null
+```
+
+The reference [everything server](https://github.com/modelcontextprotocol/servers/tree/main/src/everything) does. The same request, pointed at it:
+
+```bash
+printf &#39;%s\n&#39; \
+  &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2024-11-05&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;manual-debug-cli&#34;,&#34;version&#34;:&#34;1.0.0&#34;}}}&#39; \
+  &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39; \
+  | npx -y @modelcontextprotocol/server-everything \
+  | jq -r &#39;select(.id == 1) | .result.instructions&#39;
+```
+
+```plaintext
+# Everything Server – Server Instructions
+
+Audience: These instructions are written for an LLM or autonomous agent
+integrating with the Everything MCP Server. Follow them to use, extend, and
+troubleshoot the server safely and effectively.
+
+## Protocol Versions
+...
+```
+
+A multi-section markdown document describing the server&#39;s protocol eras, its task-based tools, and its conventions — all of it prose your model will read on every session. When auditing a third-party server, read this field with the same suspicion as the tool descriptions: it can steer which tools the model reaches for first and what behavior it considers normal, and it is easy to overlook because it arrives once, at session start, instead of on every call.
+
+## Listing the tools
+
+`tools/list` returns every tool the server exposes, with the JSON Schema each tool validates its arguments against. Against the filesystem server:
+
+```bash
+echo &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;tools/list&#34;,&#34;id&#34;:1}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq -r &#39;.result.tools[].name&#39;
+```
+
+```plaintext
+read_file
+read_text_file
+read_media_file
+read_multiple_files
+write_file
+edit_file
+create_directory
+list_directory
+list_directory_with_sizes
+directory_tree
+move_file
+search_files
+get_file_info
+list_allowed_directories
+```
+
+If you used the full handshake pipeline, filter to the response you want — the initialize response has no `tools` member and would otherwise print a jq error:
+
+```bash
+| jq -r &#39;select(.id == 2) | .result.tools[].name&#39;
+```
+
+The filesystem server&#39;s surface is a good template for what to audit in any server: read tools (`read_file`, `read_text_file`, `read_media_file`, `read_multiple_files`), mutating tools (`write_file`, `edit_file`, `create_directory`, `move_file`), discovery tools (`list_directory`, `directory_tree`, `search_files`, `get_file_info`), and introspection (`list_allowed_directories`). `read_file` is deprecated in the current line in favor of `read_text_file` — the deprecation shows up in the tool&#39;s description text, which is exactly why the model&#39;s-eye audit matters: the model reads that description.
+
+Extract a single tool&#39;s contract:
+
+```bash
+echo &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;tools/list&#34;,&#34;id&#34;:1}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq &#39;.result.tools[] | select(.name == &#34;read_file&#34;)&#39;
+```
+
+Its input schema, as the server advertises it:
+
+```json
+{
+  &#34;$schema&#34;: &#34;http://json-schema.org/draft-07/schema#&#34;,
+  &#34;type&#34;: &#34;object&#34;,
+  &#34;properties&#34;: {
+    &#34;path&#34;: { &#34;type&#34;: &#34;string&#34; },
+    &#34;tail&#34;: {
+      &#34;description&#34;: &#34;If provided, returns only the last N lines of the file&#34;,
+      &#34;type&#34;: &#34;number&#34;
+    },
+    &#34;head&#34;: {
+      &#34;description&#34;: &#34;If provided, returns only the first N lines of the file&#34;,
+      &#34;type&#34;: &#34;number&#34;
+    }
+  },
+  &#34;required&#34;: [&#34;path&#34;]
+}
+```
+
+This schema is the contract: anything you pass as `arguments` will be validated against it before the tool runs, and anything the model passes will be too.
+
+## Calling a tool
+
+`tools/call` takes the tool name and an arguments object matching its schema. Reading a file:
+
+```bash
+echo &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;id&#34;:1,&#34;params&#34;:{&#34;name&#34;:&#34;read_file&#34;,&#34;arguments&#34;:{&#34;path&#34;:&#34;/tmp/mcp-scratch/hello.txt&#34;}}}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq
+```
+
+```json
+{
+  &#34;result&#34;: {
+    &#34;content&#34;: [
+      { &#34;type&#34;: &#34;text&#34;, &#34;text&#34;: &#34;hello from mcp-scratch\n&#34; }
+    ],
+    &#34;structuredContent&#34;: {
+      &#34;content&#34;: &#34;hello from mcp-scratch\n&#34;
+    }
+  },
+  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+  &#34;id&#34;: 1
+}
+```
+
+Two things in that response deserve attention:
+
+- **`content` is a list of typed blocks** (`text`, `image`, `resource`...). Most CLI work is `jq -r &#39;.result.content[].text&#39;`.
+- **`structuredContent` is optional machine-readable output** alongside the human-readable blocks. Current servers include it when a tool defines an output schema. If you are scripting on tool output, prefer it when present — it is the stable shape.
+
+### The two classes of failure
+
+This distinction is the core of debugging MCP servers, because clients conflate it:
+
+| Signal | Meaning |
+|--------|---------|
+| No response at all | The server never answered: a hung handler, a version bug, or stdin left open with more input expected |
+| `error` member with `-32601` | The server does not know that method |
+| `error` member with `-32602` | Invalid parameters, or a tool name the server does not expose |
+| `result.isError: true` | The tool ran and failed — the message is in `content` |
+| `result` without `isError` | Success |
+
+Protocol errors look like this — asking for a tool that does not exist:
+
+```json
+{
+  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+  &#34;id&#34;: 2,
+  &#34;error&#34;: { &#34;code&#34;: -32602, &#34;message&#34;: &#34;Tool nonexistent_tool not found&#34; }
+}
+```
+
+Tool errors are valid responses whose `result` carries the failure — a missing file:
+
+```json
+{
+  &#34;result&#34;: {
+    &#34;content&#34;: [
+      { &#34;type&#34;: &#34;text&#34;, &#34;text&#34;: &#34;ENOENT: no such file or directory, open &#39;/private/tmp/mcp-scratch/nope.txt&#39;&#34; }
+    ],
+    &#34;isError&#34;: true
+  },
+  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+  &#34;id&#34;: 2
+}
+```
+
+and a path outside the configured allow-list:
+
+```json
+{
+  &#34;result&#34;: {
+    &#34;content&#34;: [
+      { &#34;type&#34;: &#34;text&#34;, &#34;text&#34;: &#34;Access denied - path outside allowed directories: /etc/hosts not in /tmp/mcp-scratch, /private/tmp/mcp-scratch&#34; }
+    ],
+    &#34;isError&#34;: true
+  },
+  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+  &#34;id&#34;: 2
+}
+```
+
+A model sees all of these as &#34;the tool said X&#34; and adapts; a script must branch on them differently. `error` means the request was malformed or unhandled — fix the call. `isError` means the call was understood and rejected — that is the tool telling you something about the world.
+
+## Resources and prompts
+
+Tools are not the only capability a server can expose. The same request shape covers resources (data the server serves) and prompts (templates it ships):
+
+```bash
+echo &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;resources/list&#34;,&#34;id&#34;:1}&#39; \
+  | npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq
+```
+
+The filesystem server has neither, so both methods come back as protocol errors:
+
+```json
+{ &#34;jsonrpc&#34;: &#34;2.0&#34;, &#34;id&#34;: 1, &#34;error&#34;: { &#34;code&#34;: -32601, &#34;message&#34;: &#34;Method not found&#34; } }
+```
+
+On a server that implements them, `resources/list` returns `result.resources[]` entries with `uri`, `name`, `description`, and `mimeType`, and `prompts/list` returns `result.prompts[]` with `name`, `description`, and the `arguments` each prompt accepts. Checking for them costs one request each and tells you which parts of the protocol a server actually uses — useful context when you are auditing a third-party server or writing its client integration.
+
+## A jq filter cheat sheet
+
+| Goal | Filter |
+|------|--------|
+| Tool names | `.result.tools[].name` |
+| One tool, full contract | `.result.tools[] \| select(.name == &#34;read_file&#34;)` |
+| One tool&#39;s input schema | `.result.tools[] \| select(.name == &#34;read_file&#34;) \| .inputSchema` |
+| Text output of a call | `.result.content[].text` |
+| Did the tool fail? | `.result.isError` |
+| Server identity (initialize response) | `.result.serverInfo` |
+| Negotiated protocol version | `.result.protocolVersion` |
+| Pick one response from a handshake pipeline | `select(.id == 2)` |
+| Parse an SSE response | `grep &#39;^data: &#39; \| sed &#39;s/^data: //&#39; \| jq` |
+
+A few habits pay off:
+
+- **Slurp when the output is multiple messages.** `jq -s` collects all lines into an array, which makes per-message logic (`map`, `select`, `length`) trivial.
+- **`jq -c` for pipelines, `jq` for humans.** When the response feeds another stage, keep it compact.
+- **`jq -r` for raw text.** Without it, the file content you just read comes back as a JSON string with escaped newlines.
+
+## Shell helper functions
+
+The handshake boilerplate is long. Three functions collapse it — verified end to end against the filesystem server:
+
+```bash
+# Send one request through a full MCP handshake and print its response.
+# Usage: mcp_req &lt;method&gt; [params-json] &lt;server command...&gt;
+mcp_req() {
+  local method=&#34;$1&#34; params=&#34;${2:-{\}}&#34;
+  shift 2
+  printf &#39;%s\n%s\n%s\n&#39; \
+    &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-06-18&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;mcp-req&#34;,&#34;version&#34;:&#34;1.0&#34;}}}&#39; \
+    &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39; \
+    &#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:2,\&#34;method\&#34;:\&#34;${method}\&#34;,\&#34;params\&#34;:${params}}&#34; \
+    | &#34;$@&#34; 2&gt;/dev/null \
+    | jq -c &#39;select(.id == 2)&#39;
+}
+
+# List the server&#39;s tools
+mcp_tools() {
+  mcp_req &#34;tools/list&#34; &#34;{}&#34; &#34;$@&#34;
+}
+
+# Call a tool
+# Usage: mcp_call &lt;tool&gt; &lt;arguments-json&gt; &lt;server command...&gt;
+mcp_call() {
+  local tool=&#34;$1&#34; args=&#34;${2:-{\}}&#34;
+  shift 2
+  mcp_req &#34;tools/call&#34; &#34;{\&#34;name\&#34;:\&#34;${tool}\&#34;,\&#34;arguments\&#34;:${args}}&#34; &#34;$@&#34;
+}
+```
+
+The design choices, and why:
+
+- **The handshake is built in**, so the functions work against strict servers, not just lenient ones.
+- **`2&gt;/dev/null`** keeps server logs off the JSON channel in interactive use; for debugging, drop it or redirect stderr to a file.
+- **`select(.id == 2)`** returns only the response to your request, never the initialize handshake.
+- **The server command is the trailing argument list.** The same functions work with `npx` packages, local binaries, or `docker run` commands — anything that speaks stdio MCP.
+
+Usage:
+
+```bash
+# List tool names
+mcp_tools npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq -r &#39;.result.tools[].name&#39;
+
+# Read a file, raw text
+mcp_call read_file &#39;{&#34;path&#34;:&#34;/tmp/mcp-scratch/hello.txt&#34;}&#39; \
+  npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq -r &#39;.result.content[].text&#39;
+```
+
+```plaintext
+hello from mcp-scratch
+```
+
+```bash
+# Call a tool and check the error semantics
+mcp_call read_file &#39;{&#34;path&#34;:&#34;/tmp/mcp-scratch/nope.txt&#34;}&#39; \
+  npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq -c &#39;{isError: .result.isError, text: .result.content[0].text}&#39;
+```
+
+```plaintext
+{&#34;isError&#34;:true,&#34;text&#34;:&#34;ENOENT: no such file or directory, open &#39;/private/tmp/mcp-scratch/nope.txt&#39;&#34;}
+```
+
+One property to understand: **every invocation starts the server fresh.** For stdio servers that is a feature, not a cost — each test runs against a clean process, with no leaked state between calls, which is exactly what deterministic reproduction requires. The cost is startup time per call (a few seconds once the npx cache is warm). If you need a long-lived, stateful session with server-to-client notifications, you want a host app or the inspector instead.
+
+## Version contracts in CI
+
+Because the tool list and schemas are plain JSON, a contract check is a snapshot plus a diff. A minimal pattern:
+
+```bash
+mcp_tools npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch \
+  | jq -r &#39;.result.tools[].name&#39; | sort &gt; /tmp/mcp-contract-2026.8.31.txt
+
+mcp_tools npx -y @modelcontextprotocol/server-filesystem@2.2.0 /tmp/mcp-scratch \
+  | jq -r &#39;.result.tools[].name&#39; | sort &gt; /tmp/mcp-contract-2.2.0.txt
+
+diff -u /tmp/mcp-contract-2.2.0.txt /tmp/mcp-contract-2026.8.31.txt
+```
+
+The filesystem server&#39;s contract is not stable across its release lines. The diff above returns:
+
+```plaintext
+--- /tmp/mcp-contract-2.2.0.txt
+&#43;&#43;&#43; /tmp/mcp-contract-2026.8.31.txt
+@@
+- append_file
+- copy_file
+```
+
+Two tools that exist on one line of the release are absent on the other. If your agent&#39;s prompts or tests mention `copy_file`, the upgrade breaks silently at the model layer — until you checked at the protocol layer. Snapshot the full `tools/list` response (names plus schemas), store it next to the pinned version, and diff on every bump. An empty diff is the good outcome: it means the contract did not move.
+
+## Debugging playbook
+
+In rough order of what to try first:
+
+1. **Pin the exact version the client launches.** Read the version from your host&#39;s MCP configuration and pin it in every test command. Version drift is the first suspect: on one semver line of the filesystem server, `tools/call` on path-based tools never returned a response while `initialize` and unknown-tool errors worked fine; the identical call succeeded on the dated release line. Same command, different binary, different behavior — re-run against the exact deployed version before reasoning about anything else.
+2. **Separate protocol errors from tool errors.** `error` means fix the request; `isError` means the tool told you something. Branching on the wrong one sends you debugging the server when the request was malformed, and vice versa.
+3. **Read stderr.** The server&#39;s own log goes there — banners, configuration echoes, warnings. Pipe it to a file and follow it:
+
+   ```bash
+   # Terminal 1: run with logs captured (hold stdin open interactively)
+   npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch 2&gt;server.log
+
+   # Terminal 2
+   tail -f server.log
+   ```
+
+   The filesystem server prints its effective allowed directories at startup, which instantly explains `Access denied` tool errors.
+4. **Prove liveness cheaply before debugging logic.** A `ping` that returns `{&#34;result&#34;:{}}` rules out transport, packaging, and npx problems. If ping hangs, the problem is before the protocol.
+5. **Test the negative path on purpose.** A nonexistent file, a path outside the allow-list, an unknown tool, an empty arguments object. A server that returns a clean `isError` result for all of them is healthier than one that works on the happy path and hangs on the sad one.
+6. **Point write-capable servers at scratch space.** The filesystem server scopes itself to the directories passed on its command line — `/tmp/mcp-scratch` in these examples. When you are testing `write_file`, `edit_file`, or `move_file`, the allow-list is your only guardrail. Give it a directory you do not care about.
+7. **Keep transcripts.** `tee` both directions into a file when you are hunting a flaky failure. A saved transcript of a failing session is also the bug report: it reproduces without the original machine.
+
+## Inspecting Streamable HTTP servers with curl
+
+Not everything speaks stdio. The protocol&#39;s Streamable HTTP transport serves the same JSON-RPC over `POST /mcp`, and production servers increasingly ship only that. The curl flow is: initialize, capture the session, then call.
+
+```bash
+# 1) Initialize. Note the mcp-session-id response header.
+curl -si -X POST http://127.0.0.1:8124/mcp \
+  -H &#39;Content-Type: application/json&#39; \
+  -H &#39;Accept: application/json, text/event-stream&#39; \
+  -d &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;id&#34;:1,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-06-18&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;curl&#34;,&#34;version&#34;:&#34;1.0&#34;}}}&#39;
+```
+
+```plaintext
+HTTP/1.1 200 OK
+mcp-session-id: 0760409b-4637-41e5-ba4b-8ebb5d4a5e83
+content-type: application/json
+
+{&#34;result&#34;:{&#34;protocolVersion&#34;:&#34;2025-06-18&#34;,&#34;capabilities&#34;:{&#34;tools&#34;:{}},&#34;serverInfo&#34;:{&#34;name&#34;:&#34;demo-http-mcp&#34;,&#34;version&#34;:&#34;1.0.0&#34;}},&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1}
+```
+
+```bash
+# Capture the session id for the next requests
+SESSION=$(curl -si -X POST http://127.0.0.1:8124/mcp \
+  -H &#39;Content-Type: application/json&#39; \
+  -H &#39;Accept: application/json, text/event-stream&#39; \
+  -d &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;id&#34;:1,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-06-18&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;curl&#34;,&#34;version&#34;:&#34;1.0&#34;}}}&#39; \
+  | awk &#39;tolower($1)==&#34;mcp-session-id:&#34;{print $2}&#39; | tr -d &#39;\r&#39;)
+
+# 2) Complete the handshake. A notification gets 202 Accepted, no body.
+curl -si -X POST http://127.0.0.1:8124/mcp \
+  -H &#39;Content-Type: application/json&#39; \
+  -H &#39;Accept: application/json, text/event-stream&#39; \
+  -H &#34;mcp-session-id: $SESSION&#34; \
+  -d &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39; | head -1
+```
+
+```plaintext
+HTTP/1.1 202 Accepted
+```
+
+```bash
+# 3) List tools and call one, carrying the session id.
+curl -s -X POST http://127.0.0.1:8124/mcp \
+  -H &#39;Content-Type: application/json&#39; \
+  -H &#39;Accept: application/json, text/event-stream&#39; \
+  -H &#34;mcp-session-id: $SESSION&#34; \
+  -d &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;tools/list&#34;,&#34;id&#34;:2}&#39; | jq
+
+curl -s -X POST http://127.0.0.1:8124/mcp \
+  -H &#39;Content-Type: application/json&#39; \
+  -H &#39;Accept: application/json, text/event-stream&#39; \
+  -H &#34;mcp-session-id: $SESSION&#34; \
+  -d &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;id&#34;:3,&#34;params&#34;:{&#34;name&#34;:&#34;get_time&#34;,&#34;arguments&#34;:{}}}&#39; \
+  | jq -c &#39;.result.content&#39;
+```
+
+```plaintext
+[{&#34;type&#34;:&#34;text&#34;,&#34;text&#34;:&#34;time: 2026-11-08T09:50:00.652Z&#34;}]
+```
+
+The rules that differ from stdio:
+
+- **The session header is mandatory after initialize.** A server that assigns one rejects requests without it (my test server answered `400 Bad Request` with `Missing session`), and each session is independent.
+- **`Accept` must list both media types.** The server may answer `application/json` or `text/event-stream` per request. When it chooses SSE, the payload arrives as `data:` lines — strip them before jq:
+
+  ```bash
+  curl -sN -X POST http://127.0.0.1:8124/mcp \
+    -H &#39;Content-Type: application/json&#39; \
+    -H &#39;Accept: application/json, text/event-stream&#39; \
+    -H &#34;mcp-session-id: $SESSION&#34; \
+    -d &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;tools/list&#34;,&#34;id&#34;:2}&#39; \
+    | grep &#39;^data: &#39; | sed &#39;s/^data: //&#39; | jq
+  ```
+
+- **Everything else is the same protocol.** Methods, ids, error codes, tool errors — identical to stdio. The stdio playbook transfers wholesale.
+
+I verified this flow against a minimal compliant server; the commands apply to any Streamable HTTP endpoint, and the same error taxonomy (`-32601`, `-32602`, `isError`) holds.
+
+## When to reach for the official inspector
+
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is the reference tool for exploratory debugging — a browser UI that proxies to a stdio or HTTP server, with request/response logs, a live tool catalog, and the ability to watch server-to-client notifications as they happen:
+
+```bash
+npx @modelcontextprotocol/inspector npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /tmp/mcp-scratch
+```
+
+Use the inspector when you are exploring an unfamiliar server or watching notification traffic; use the CLI when you need a command that reproduces a failure, runs in CI, or fits in a bug report. The two are complementary, and the inspector&#39;s log view is a good place to learn what the CLI one-liners are doing under the hood.
+
+## A security note
+
+A tool call executes code with the permissions of the server process, so auditing a third-party server means running it the way you would a new dependency: in a scratch directory or container, with the environment variables it will get in production — or with fake credentials until you trust it. The filesystem server&#39;s allow-list is visible in its own startup log and enforced in every path-based tool, which is the model: explicit scope, enforced server-side, observable from the wire.
+
+Read tool descriptions with the same suspicion you would read a README written by the vendor: the model sees them verbatim and treats them as ground truth. Misleading or over-broad descriptions are a prompt-layer attack surface, and the CLI makes them trivial to audit before the server ever reaches a host. For the wider threat model around MCP servers — identity, delegation, audit — see [A2A and MCP Agent Security](/ai/a2a-mcp-agent-security/).
+
+## Summary
+
+An MCP server over stdio is a process that reads JSON and writes JSON. `printf`, `jq`, and a pipe are a complete client:
+
+- The **handshake** (`initialize`, `notifications/initialized`, then the request) is the reproducible way to open a session; lenient servers tolerate bare requests, strict ones do not.
+- **`tools/list` is the contract** — names, schemas, and the description text the model will read. Snapshot it, diff it across versions, fail CI when it moves.
+- **Errors come in two classes**: protocol `error` (bad request, method, or tool name) and `result.isError` (the tool ran and reported a failure). Branch on the right one.
+- **Shell helpers** turn the handshake into three functions that work with any stdio server, and **curl with a captured `mcp-session-id`** does the same job for Streamable HTTP endpoints.
+- **Pin versions, test the negative path, read stderr, keep transcripts.** The debugging loop is the same as for any networked service — the only difference is that the wire format is small enough to hold in your head.
+
+*Which MCP servers have you debugged from the terminal, and what did the wire show that the host app hid? Share it in the comments below!*
+

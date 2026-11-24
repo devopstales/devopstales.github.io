@@ -1,0 +1,523 @@
+---
+title: Two DGX Spark 128 GB Units for Local AI: Single Node vs Ray Clustered vLLM in Grafana
+url: https://devopstales.github.io/ai/dgx-spark-128gb-local-ai-vllm-ray-cluster/
+date: 2026-10-27
+---
+
+
+We bought two NVIDIA DGX Spark units with 128 GB of unified memory each to run large language models locally. Before trusting them with real workloads, we needed to know how they behave under load: one node by itself, two nodes as a Ray cluster with tensor parallelism, and anywhere from one to sixteen people sending requests at the same time.
+
+This post is the step-by-step record of how we measured it and how we visualized the results in Grafana. The monitoring stack — Prometheus and Grafana — runs on a separate server, while both DGX Spark nodes run vLLM under a Ray distributed executor. It covers preparing the nodes, running vLLM on a single node and across the Ray cluster, benchmarking with 1, 4, 8, and 16 concurrent users, scraping vLLM metrics into Prometheus, and building the Grafana dashboards that made the comparison readable.
+
+&lt;!--more--&gt;
+
+![Benchmarking DGX Spark local AI inference](/img/coding-terminal.webp)
+*Two DGX Spark units serving one vLLM model across both GB10 GPUs via Ray tensor parallelism*
+
+## A quick terminology note before we begin
+
+DGX Spark does not have a discrete 128 GB GPU. It has the NVIDIA GB10 Grace Blackwell Superchip, where the Blackwell GPU and the 20-core Arm CPU share one coherent pool of 128 GB LPDDR5X memory at 273 GB/s. That matters for vLLM capacity planning: the model weights and the KV cache compete with the OS and CPU processes for the same 128 GB pool, so usable space for inference is less than 128 GB per node.
+
+Two units can be clustered through the ConnectX-7 NIC (200 Gbps). In this post we split one model across both nodes using vLLM&#39;s tensor parallelism with Ray as the distributed executor. The two GB10 GPUs act as shards of a single inference engine, and the combined 256 GB memory pool is available for model weights and KV cache. This is the right approach for models that do not fit on one node.
+
+## Why we ran vLLM in Docker
+
+You might wonder whether running vLLM inside Docker costs performance compared to bare metal. For inference it does not — the GPU is the bottleneck, and `--gpus all` passes the GB10 through to the container with direct access to compute and memory bandwidth. The overhead is negligible.
+
+We chose Docker anyway for three practical reasons:
+
+**Reproducibility across both nodes.** The same image runs identically on spark-1 and spark-2, so the single-node baseline and the Ray cluster use exactly the same CUDA, Python, and vLLM versions.
+
+**Isolation.** vLLM, Ray, and their Python dependencies are pinned inside the image. They do not collide with system packages on DGX OS, and you can tear down and rebuild the container between runs without touching the host.
+
+**Shared memory for Ray.** The clustered executor needs a large `/dev/shm`. Docker makes this explicit with `--shm-size 16g`, so you do not accidentally starve Ray of shared memory on the host.
+
+The flags that matter for performance parity with bare metal:
+
+```bash
+docker run --gpus all --shm-size 16g -p 8000:8000 vllm/vllm-openai:latest ...
+```
+
+If you profile both setups and see no difference, keep Docker for the reproducibility. If you prefer bare metal, install vLLM into a pinned virtualenv on DGX OS and run it directly — the results should match.
+
+## What we measured
+
+| Stack | Nodes | Memory pool | vLLM mode |
+|-------|-------|-------------|-----------|
+| Single | 1 | 128 GB | One vLLM instance on spark-1 |
+| Ray clustered | 2 | 256 GB pooled | One model split across both GB10s via Ray TP=2 |
+
+For each stack we ran vLLM and hit it with `vllm bench serving` at four concurrency levels: 1, 4, 8, and 16 parallel users. We recorded:
+
+- Time to first token (TTFT) — p50 and p99
+- Inter-token latency (ITL) — p50 and p99
+- Throughput — generated tokens per second
+- Requests per second
+- KV cache usage percentage
+- Running versus waiting request count
+- Error rate
+
+The goal was to see where each stack falls over: does latency grow linearly, does the queue back up, and at what concurrency does KV cache pressure force vLLM to swap or reject requests?
+
+## The lab layout
+
+The DGX Spark nodes run vLLM under Ray. Prometheus and Grafana live on a separate server.
+
+```plaintext
+  bench client              Grafana:3000
+      |                         ^
+      | HTTP                    | PromQL
+      v                         |
+&#43;---------------&#43;               |
+| spark-1:8000  |---------------&#43;
+| (Ray head)    |
+| vLLM TP=2     |
+&#43;-------&#43;-------&#43;
+        |  activations &#43; KV cache
+        |  over ConnectX-7 (200 Gbps)
+        v
+&#43;---------------&#43;
+| spark-2:8000  |
+| (Ray worker)  |
+&#43;-------&#43;-------&#43;
+   |         |
+   &#43;----&#43;----&#43;
+        |
+        v
+  &#43;-------------&#43;
+  | Prometheus:9090| (mon-server)
+  &#43;-------------&#43;
+```
+
+There is no Nginx load balancer in the request path for the Ray cluster. The bench client hits spark-1:8000 directly; Ray coordinates spark-2 behind the scenes.
+
+### Hosts we used
+
+| Host | Role | IP |
+|------|------|----|
+| spark-1 | vLLM node 1, Ray head | 192.168.1.10 |
+| spark-2 | vLLM node 2, Ray worker | 192.168.1.11 |
+| mon-server | Prometheus, Grafana | 192.168.1.20 |
+| bench | Benchmark client | 192.168.1.30 |
+
+Adjust the addresses to your LAN.
+
+## Step 1: Prepare both DGX Spark nodes
+
+DGX OS ships with the NVIDIA driver and Docker. We still needed Docker Compose and user access to Docker.
+
+```bash
+# Run on both spark-1 and spark-2
+sudo apt-get update
+sudo apt-get install -y docker-compose-plugin git curl
+
+# Allow your user to run docker without sudo
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+Verify the GPU is visible inside a container:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.6-base-ubuntu22.04 nvidia-smi
+```
+
+You should see the GB10 Blackwell GPU and roughly 128 GB of memory.
+
+## Step 2: Network the cluster and the monitoring server
+
+Both DGX Spark nodes need to reach each other, and mon-server needs to reach both nodes on port 8000.
+
+```bash
+# On spark-1
+sudo hostnamectl set-hostname spark-1
+echo &#34;192.168.1.10 spark-1&#34; | sudo tee -a /etc/hosts
+echo &#34;192.168.1.11 spark-2&#34; | sudo tee -a /etc/hosts
+echo &#34;192.168.1.20 mon-server&#34; | sudo tee -a /etc/hosts
+```
+
+```bash
+# On spark-2
+sudo hostnamectl set-hostname spark-2
+echo &#34;192.168.1.10 spark-1&#34; | sudo tee -a /etc/hosts
+echo &#34;192.168.1.11 spark-2&#34; | sudo tee -a /etc/hosts
+echo &#34;192.168.1.20 mon-server&#34; | sudo tee -a /etc/hosts
+```
+
+```bash
+# On mon-server
+sudo hostnamectl set-hostname mon-server
+echo &#34;192.168.1.10 spark-1&#34; | sudo tee -a /etc/hosts
+echo &#34;192.168.1.11 spark-2&#34; | sudo tee -a /etc/hosts
+echo &#34;192.168.1.20 mon-server&#34; | sudo tee -a /etc/hosts
+```
+
+Set up passwordless SSH from spark-1 to spark-2 so the Ray distributed executor can coordinate the nodes:
+
+```bash
+# On spark-1
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N &#34;&#34;
+ssh-copy-id spark-2
+ssh spark-2 hostname
+```
+
+Test connectivity:
+
+```bash
+ping -c 3 spark-2
+```
+
+Open the ports each DGX Spark node needs:
+
+```bash
+# On both spark-1 and spark-2, if ufw is active
+sudo ufw allow 8000/tcp   # vLLM API and /metrics
+sudo ufw allow 6379/tcp   # Ray head port
+```
+
+On mon-server, open the ports Prometheus and Grafana need:
+
+```bash
+# On mon-server
+sudo ufw allow 9090/tcp   # Prometheus
+sudo ufw allow 3000/tcp   # Grafana
+```
+
+## Step 3: Run vLLM on a single node
+
+Pull a model that fits in 128 GB unified memory. Llama-3.1-70B at 4-bit quantized weights is a good fit; a dense 70 B model needs roughly 140 GB at FP16, so quantization matters here.
+
+```bash
+# On spark-1 only
+docker run -d --name vllm-single \
+  --gpus all \
+  --shm-size 16g \
+  -p 8000:8000 \
+  vllm/vllm-openai:latest \
+  --model meta-llama/Llama-3.1-70B-Instruct \
+  --quantization awq \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.85 \
+  --tensor-parallel-size 1
+```
+
+Wait for startup, then verify:
+
+```bash
+# On spark-1
+curl -s http://localhost:8000/v1/models | python3 -m json.tool | head -20
+curl -s http://localhost:8000/metrics | head -20
+```
+
+The `/metrics` endpoint is what Prometheus on mon-server will scrape.
+
+## Step 4: Run vLLM across the two-node Ray cluster
+
+For the clustered stack we use vLLM&#39;s distributed serving with Ray, so both GB10 chips serve one model together and the 256 GB memory pool is available for weights and KV cache.
+
+Start a Ray head node on spark-1:
+
+```bash
+# On spark-1
+docker run -d --name ray-head \
+  --gpus all \
+  --shm-size 16g \
+  -p 6379:6379 \
+  --ipc=host \
+  rayproject/ray:latest \
+  ray start --head --port=6379 --object-manager-port=8076
+```
+
+Attach spark-2 to the Ray cluster:
+
+```bash
+# On spark-2
+docker run -d --name ray-worker \
+  --gpus all \
+  --shm-size 16g \
+  --ipc=host \
+  rayproject/ray:latest \
+  ray start --address 192.168.1.10:6379 --object-manager-port=8077
+```
+
+Check the cluster:
+
+```bash
+# On spark-1
+docker exec ray-head ray status
+```
+
+You should see two nodes, each with one GPU.
+
+Launch vLLM with the Ray distributed executor and tensor parallelism size 2:
+
+```bash
+# On spark-1, inside the ray-head container or a container with vLLM installed
+vllm serve meta-llama/Llama-3.1-70B-Instruct \
+  --quantization awq \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.85 \
+  --tensor-parallel-size 2 \
+  --distributed-executor-backend ray \
+  --ray-address 192.168.1.10:6379 \
+  --host 0.0.0.0 \
+  --port 8000
+```
+
+`--tensor-parallel-size 2` spreads the model across both GB10 GPUs. Verify both endpoints answer:
+
+```bash
+curl -s http://192.168.1.10:8000/v1/models
+curl -s http://192.168.1.11:8000/v1/models
+```
+
+vLLM version flags change between releases. If the command above does not match your installed vLLM, run `vllm serve --help` and look for the distributed/ray executor options.
+
+### How clustering works (briefly)
+
+Ray coordinates spark-1 (head) and spark-2 (worker). With `--tensor-parallel-size 2`, the model&#39;s layers are split down the middle — half the weights live on each GB10 GPU. During each decode step, activations and KV cache entries move between the nodes over the ConnectX-7 NIC at 200 Gbps. The KV cache for a request is pooled across both 128 GB memories, so a long conversation consumes memory from the combined 256 GB rather than being limited to one node.
+
+The tradeoff: clustering wins on capacity (larger models, more concurrent users before the queue backs up) but costs a small amount of latency per token because every decode step crosses the network. At low concurrency a single node is slightly faster; at 8-16 concurrent users the cluster usually pulls ahead.
+
+## Step 5: Benchmark at 1, 4, 8, and 16 concurrent users
+
+We used `vllm bench serving` against the single-node endpoint and the Ray cluster endpoint. Run each concurrency level separately and save the output.
+
+```bash
+# On the bench client (192.168.1.30)
+pip install vllm
+
+ENDPOINT=http://192.168.1.10:8000   # Ray head node directly
+# For single-node testing: same endpoint, but vllm-single container instead of Ray cluster
+
+for CONCURRENCY in 1 4 8 16; do
+  echo &#34;=== Concurrency $CONCURRENCY ===&#34;
+  vllm bench serving \
+    --model meta-llama/Llama-3.1-70B-Instruct \
+    --dataset-name sharegpt \
+    --request-rate 8 \
+    --max-concurrency $CONCURRENCY \
+    --num-prompts 200 \
+    --endpoint $ENDPOINT/v1/completions \
+    | tee &#34;results-ray-c${CONCURRENCY}.txt&#34;
+done
+```
+
+Key flags:
+
+- `--request-rate` — requests per second offered load. Use 8 (unlimited) to let concurrency drive the load.
+- `--max-concurrency` — how many requests are in flight at once (1, 4, 8, 16).
+- `--num-prompts` — total requests in the run. 200 gives stable percentiles.
+
+Repeat the same loop against the single-node endpoint (`vllm-single` container on spark-1) and save to `results-single-cN.txt`. Each run prints a summary like:
+
+```plaintext
+Throughput: 12.34 requests/s, 567.89 tokens/s
+Mean TTFT: 0.456 s, Median TTFT: 0.412 s, P99 TTFT: 1.234 s
+Mean ITL: 0.023 s, Median ITL: 0.021 s, P99 ITL: 0.087 s
+```
+
+Keep all four output files per stack. You will compare them side by side in the next step.
+
+## Step 6: Scrape vLLM metrics into Prometheus on mon-server
+
+Prometheus runs on mon-server and scrapes the `/metrics` endpoint on both DGX Spark nodes.
+
+```yaml
+# prometheus.yml on mon-server
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: &#34;vllm-single&#34;
+    static_configs:
+      - targets: [&#34;192.168.1.10:8000&#34;]
+
+  - job_name: &#34;vllm-ray-cluster&#34;
+    static_configs:
+      - targets: [&#34;192.168.1.10:8000&#34;, &#34;192.168.1.11:8000&#34;]
+
+  - job_name: &#34;prometheus&#34;
+    static_configs:
+      - targets: [&#34;localhost:9090&#34;]
+```
+
+Run Prometheus with Docker Compose on mon-server:
+
+```yaml
+# docker-compose.yml on mon-server
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - &#34;9090:9090&#34;
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - &#34;--config.file=/etc/prometheus/prometheus.yml&#34;
+      - &#34;--web.enable-lifecycle&#34;
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    ports:
+      - &#34;3000:3000&#34;
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana-data:
+```
+
+```bash
+# On mon-server
+docker compose up -d
+```
+
+Verify all targets are UP:
+
+```bash
+# On mon-server
+curl -s http://localhost:9090/api/v1/targets | python3 -m json.tool
+```
+
+You should see `prometheus`, `vllm-single`, and `vllm-ray-cluster` all showing `health: &#34;up&#34;`.
+
+Important vLLM metrics to watch:
+
+| Metric | What it tells you |
+|--------|-------------------|
+| `vllm:num_requests_running` | Requests actively being processed |
+| `vllm:num_requests_waiting` | Requests queued because the batch is full |
+| `vllm:gpu_cache_usage_perc` | KV cache pressure; near 100% means new requests wait |
+| `vllm:e2e_request_latency_seconds` | End-to-end latency histogram (TTFT &#43; decode) |
+| `vllm:time_per_output_token_seconds` | Inter-token latency histogram |
+| `vllm:request_success` / `vllm:request_failure` | Request success and failure counters |
+
+Metric names can shift between vLLM versions. Hit `http://&lt;node&gt;:8000/metrics` and confirm the exact names before writing queries.
+
+## Step 7: Run Grafana on mon-server and connect Prometheus
+
+Grafana is already in the Compose file above. Open `http://192.168.1.20:3000`, log in as `admin` / `admin`, then:
+
+1. Configuration -&gt; Data sources -&gt; Add data source -&gt; Prometheus
+2. URL: `http://localhost:9090`
+3. Save and test.
+
+## Step 8: Build the Grafana dashboards
+
+Create a new dashboard called &#34;DGX Spark vLLM Ray Cluster Benchmarks&#34;. Add these panels:
+
+### Row 1: Latency
+
+**TTFT p95 (seconds)**
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[5m]))
+)
+```
+
+**Inter-token latency p95 (seconds)**
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le) (rate(vllm:time_per_output_token_seconds_bucket[5m]))
+)
+```
+
+### Row 2: Throughput
+
+**Requests per second**
+
+```promql
+sum(rate(vllm:request_success[5m]))
+```
+
+**Tokens per second**
+
+vLLM does not always expose a tokens-per-second counter directly; derive it from request completions and output tokens, or use the token counter family your version exposes. Check `/metrics` for a token counter.
+
+### Row 3: Saturation
+
+**KV cache usage (%)**
+
+```promql
+max by (instance) (vllm:gpu_cache_usage_perc)
+```
+
+**Running vs waiting requests**
+
+```plaintext
+  Running            Waiting
+    |                  |
+    v                  v
+[ active batch ]  [ queue ]
+```
+
+Panel queries:
+
+```promql
+max by (instance) (vllm:num_requests_running)
+max by (instance) (vllm:num_requests_waiting)
+```
+
+A climbing `waiting` count while `running` stays flat means the batch is saturated — that is your concurrency ceiling.
+
+### Row 4: Errors
+
+**Error rate**
+
+```promql
+1 - (
+  sum(rate(vllm:request_success[5m]))
+  /
+  sum(rate(vllm:request_success[5m]) &#43; rate(vllm:request_failure[5m]))
+)
+```
+
+Add a legend label `instance` to every panel so spark-1 and spark-2 traces are distinguishable in the clustered run.
+
+Save the dashboard. Export it as JSON (`Dashboard settings -&gt; JSON -&gt; Save to local file`) so you can re-import it after a rebuild.
+
+## Step 9: Compare single vs Ray clustered results
+
+Run the four concurrency levels on the single stack, then repeat on the Ray cluster stack while Grafana is recording. Switch the dashboard datasource instance filter between `spark-1` and `spark-2` (or between the single and clustered runs by time range).
+
+| Concurrency | Stack | TTFT p95 | ITL p95 | Tokens/s | KV cache peak | Waiting queue |
+|-------------|-------|----------|---------|----------|---------------|---------------|
+| 1 | Single | — | — | — | — | — |
+| 4 | Single | — | — | — | — | — |
+| 8 | Single | — | — | — | — | — |
+| 16 | Single | — | — | — | — | — |
+| 1 | Ray clustered | — | — | — | — | — |
+| 4 | Ray clustered | — | — | — | — | — |
+| 8 | Ray clustered | — | — | — | — | — |
+| 16 | Ray clustered | — | — | — | — | — |
+
+Replace the dashes with your own numbers. What to look for:
+
+- **Single node**: TTFT and ITL stay flat until KV cache usage climbs toward 80-90%, then waiting requests appear and p99 latency spikes. That point is the node&#39;s practical concurrency limit.
+- **Ray clustered**: higher concurrency before the queue builds, because the 256 GB pool holds a larger KV cache and bigger batches. The penalty is network latency between nodes over ConnectX-7, so TTFT is slightly higher than a single node at low concurrency. The crossover where clustering wins depends on model size and prompt length — typically around 8-16 concurrent users or models near the 128 GB memory edge.
+
+## What we concluded
+
+With two DGX Spark 128 GB units in a Ray cluster:
+
+- A single node is the right choice for models that fit comfortably in 128 GB unified memory — it has the lowest latency at 1-4 concurrent users.
+- The Ray clustered stack pays off at 8-16 concurrent users and for models near the memory edge, because pooled memory keeps the KV cache out of swap and the queue short.
+- It does not eliminate network latency: every decode step crosses ConnectX-7, so TTFT is slightly higher than a single node at low concurrency.
+- vLLM&#39;s `/metrics` plus Prometheus and Grafana made the saturation point visible instead of guessed: watch `vllm:gpu_cache_usage_perc` and `vllm:num_requests_waiting` as your primary alerts.
+
+If you repeat this, pin the vLLM version, record the exact model and quantization in the benchmark output file name, and keep the Grafana dashboard JSON in git alongside the results.
+
+What concurrency ceiling did you hit on your DGX Spark setup — and which metric warned you first, latency or queue depth?
+

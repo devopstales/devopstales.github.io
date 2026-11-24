@@ -1,0 +1,87 @@
+---
+title: Cost Optimization for LLM Systems: Spend Tokens Where They Matter
+url: https://devopstales.github.io/ai/cost-optimization-llm-systems/
+date: 2026-10-05
+---
+
+
+Ten thousand requests a day at a cent each is $100 daily — and enterprise scale turns that into five figures fast. Optimization isn&#39;t corner-cutting; it&#39;s spending tokens where they matter. Budgets, fallbacks, local inference break-evens, and caching form the practical stack, roughly in that order of effort.
+
+&lt;!--more--&gt;
+
+![LLM cost optimization across budgets, fallback, and caching](/img/cost-optimization-llm-systems.webp)
+*Budget per session, fall back by quality, cache everything repeatable*
+
+## Budget Tokens Explicitly
+
+Simplest control available: limits per session, per task, per day. Per-task budgets beat flat session caps because tasks need different context — pair each budget with its model:
+
+```yaml
+task_budgets:
+  classify:
+    max_tokens: 100
+    model: qwen3-1.7b
+  summarize:
+    max_tokens: 500
+    model: qwen3-8b
+  code_review:
+    max_tokens: 2000
+    model: qwen2.5-coder-7b
+  reason:
+    max_tokens: 4000
+    model: qwen3-32b
+```
+
+Adaptive budgets go further, tracking an exponential moving average of actual use per task type (0.9 history weight favors recent workloads — tune it to volatility) and allocating 1.5x the running average. Static caps stop bleeding; adaptive caps stop over-allocating.
+
+## Local Inference Break-Even
+
+Local tokens cost electricity after hardware amortization: a mid-range GPU pays for itself in months at moderate API volume, and an hour-plus of daily use already favors self-hosting. Used cards shorten it further; flagship new cards lengthen it; all of it assumes steady utilization — pausable API bills versus sunk hardware is the real comparison, not sticker prices. One caveat dwarfs the spreadsheet: provider-shaped fine-tunes, evals, and tool schemas cost engineering time to unwind, so score lock-in depth before running hardware numbers.
+
+## Fall Back by Quality, Then Latency
+
+Try models best-first until output meets a quality threshold, accepting that evaluation itself needs a mechanism — small classifiers or heuristic checks (length, structure, keywords), none perfect:
+
+```python
+class QualityFallback:
+    def __init__(self, quality_threshold: float = 0.8):
+        self.threshold = quality_threshold
+        self.models = [
+            {&#34;model&#34;: &#34;claude-sonnet-4&#34;, &#34;cost&#34;: 0.015},
+            {&#34;model&#34;: &#34;qwen2.5-72b&#34;, &#34;cost&#34;: 0.002},
+            {&#34;model&#34;: &#34;qwen3-32b&#34;, &#34;cost&#34;: 0.001},
+            {&#34;model&#34;: &#34;qwen3-8b&#34;, &#34;cost&#34;: 0.0004},
+        ]
+
+    def route(self, prompt: str) -&gt; str:
+        for model_config in self.models:
+            result = self.call_model(model_config[&#34;model&#34;], prompt)
+            if self.evaluate_quality(result) &gt;= self.threshold:
+                return result
+        return self.call_model(self.models[0][&#34;model&#34;], prompt)
+```
+
+Latency fallback is simpler: fastest model inside the time budget wins. Both patterns — plus capability and budget routing — are covered with working code in [model routing strategies](/ai/model-routing-strategies/).
+
+## Cache the Repeatable
+
+Caching is the most underrated lever because identical prompts recur constantly: classifications, FAQs, repeated tool calls. Exact-match SHA caches are trivial to build with bounded size. Semantic caches catch same-meaning different-wording via embeddings and similarity thresholds — aggressive 0.95 for safety, looser 0.85 for coverage, tuned against measured miss rates. Common-query pattern caches (&#34;what&#39;s the weather&#34; → check API) look unsophisticated and work. Guard the same spend with [guardrails](/ai/llm-guardrails-in-practice/) — token budgets are a safety mechanism there, cost control here, same code both places.
+
+## When It Pays — and the Hybrid End State
+
+High volumes, mixed workloads, accumulating API bills: optimize. Prototypes, single models, ~100 requests a day: skip it, the machinery costs more than it saves. Get the flow working, optimize when the bill arrives. Production converges on hybrid — session budgets, quality/latency fallbacks, cached repeats — real complexity, real savings. The architectural twin of this per-call thinking is [multi-model system design](/ai/multi-model-system-design/): routing picks the model, budgeting picks the spend, caching skips the call.
+
+| Strategy | Cost | Quality | Complexity |
+|---|---|---|---|
+| None | Highest | Consistent | Lowest |
+| Token budgeting | Moderate | Variable | Medium |
+| Fallback models | Low-Medium | Variable | Medium |
+| Caching | Lowest | High on hits | Medium |
+| Hybrid | Optimized | Optimized | Highest |
+
+## Summary
+
+Budget explicitly, fall back gracefully, self-host past break-even, cache aggressively — in that effort order, stopping wherever the bill stops hurting.
+
+*What cut your LLM bill most — routing, caching, or going local? Share the numbers in the comments below!*
+

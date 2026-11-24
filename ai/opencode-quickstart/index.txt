@@ -1,0 +1,124 @@
+---
+title: OpenCode Quickstart: Install, Configure, and Run the Terminal Agent
+url: https://devopstales.github.io/ai/opencode-quickstart/
+date: 2026-11-23
+---
+
+
+OpenCode is an open-source terminal-first agentic coder: TUI on bare invocation, one-shot `opencode run` for scripts, headless `opencode serve` with web UI, programmatic control through the official JS/TS SDK — all provider-flexible from cloud APIs to local Ollama. Install, verify, connect, run real workflows: the whole ramp in one page.
+
+&lt;!--more--&gt;
+
+![OpenCode terminal agent with self-hosted model backend](/img/opencode-quickstart.webp)
+*TUI, CLI, server, SDK: four surfaces on one provider-flexible agent*
+
+## Install and Verify
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+```bash
+npm install -g opencode-ai
+brew install anomalyco/tap/opencode
+sudo pacman -S opencode
+docker run -it --rm ghcr.io/anomalyco/opencode
+```
+
+Windows favors WSL (Scoop/Chocolatey/npm otherwise). Then `opencode --version` and `opencode --help` — version numbers move fast, so cross-check the [official docs](https://opencode.ai/docs/) and changelog before trusting any printed output shape.
+
+## Connect a Provider Two Ways
+
+Interactive `/connect` inside the TUI walks provider auth including browser flows; CLI `opencode auth login` stores keys at the auth store (env and project `.env` also load). Local models skip keys entirely — any OpenAI-compatible endpoint works, so Ollama and llama-server plug straight in (backend detail in [Claude Code local backends](/ai/claude-code-local-backends/), same pattern).
+
+## First Correct Project Run
+
+```bash
+cd /path/to/your/repo
+opencode
+```
+
+Then `/init`: analyzes the project, writes `AGENTS.md`, worth committing for shared agent-plus-teammate context.
+
+## CLI Workflows That Matter
+
+```bash
+opencode run &#34;Explain how closures work in JavaScript&#34;
+opencode run &#34;Write a Go function ParsePort(envVar string, defaultPort int) (int, error). Read env, parse int, validate 1-65535, default when empty. Include 3 table-driven tests.&#34;
+opencode run --agent plan --file ./src/auth.ts \
+  &#34;Refactor this file to reduce complexity. Output a short plan only. Do not run commands.&#34;
+opencode run --agent explore \
+  &#34;Where is authentication validated for API requests in this repository?&#34;
+```
+
+Plan and explore agents double as smoke tests for permission-restricted and locating behavior. Persistent servers cut repeated cold boots across scripted runs:
+
+```bash
+opencode serve --port 4096 --hostname 127.0.0.1
+opencode run --attach http://localhost:4096 &#34;Summarize the repo structure and main entrypoints.&#34;
+```
+
+Piping, Makefiles, CI targets, unattended permission policies, and failure modes graduate to the [CLI practice guide](/ai/opencode-cli-in-practice/).
+
+## Programmatic Control via SDK
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+```javascript
+import { createOpencode } from &#34;@opencode-ai/sdk&#34;;
+
+const opencode = await createOpencode({
+  hostname: &#34;127.0.0.1&#34;,
+  port: 4096,
+});
+
+const health = await opencode.client.global.health();
+console.log(&#34;Healthy:&#34;, health.data.healthy);
+
+const session = await opencode.client.session.create({
+  body: { title: &#34;SDK quickstart demo&#34; },
+});
+
+const result = await opencode.client.session.prompt({
+  path: { id: session.data.id },
+  body: {
+    parts: [{ type: &#34;text&#34;, text: &#34;Generate a small README section describing this repo.&#34; }],
+  },
+});
+console.log(result.data);
+
+opencode.server.close();
+```
+
+## Minimal Config and Daily Cheatsheet
+
+```jsonc
+{
+  &#34;$schema&#34;: &#34;https://opencode.ai/config.json&#34;,
+  &#34;model&#34;: &#34;provider/model&#34;,
+  &#34;small_model&#34;: &#34;provider/small-model&#34;,
+  &#34;server&#34;: {
+    &#34;port&#34;: 4096,
+    &#34;hostname&#34;: &#34;127.0.0.1&#34;
+  },
+  &#34;permission&#34;: {
+    &#34;edit&#34;: &#34;ask&#34;,
+    &#34;bash&#34;: &#34;ask&#34;
+  }
+}
+```
+
+Daily surface: bare `opencode` for TUI, `run` (plus `--file`, `--model`, `--agent`) for one-shots, `models --refresh`, `auth login`, `serve`/`web` (OpenAPI at `/doc`, optional basic-auth password), `session list`, `stats`, `export`/`import`. TUI essentials: `/connect`, `/init`, `/share`, `/undo`, `/redo`, `/help`, leader-key shortcuts. Full permission hardening for unattended jobs belongs to the CLI practice guide.
+
+## Next: Multi-Agent Orchestration
+
+Running base means the [Oh My Opencode quickstart](/ai/oh-my-opencode-quickstart/) is one plugin away: `ultrawork` activates Sisyphus plus specialists in parallel. Roster and routing detail in the [agents deep dive](/ai/oh-my-opencode-agents/); measured payoffs and billing hazards in the [experience report](/ai/oh-my-opencode-experience/).
+
+## Summary
+
+Install script, version check, provider connected, `/init` committed, one-shot runs verified, server and SDK reachable, configAsk-by-default. Fifteen minutes to a working terminal agent; the rest is workflow discipline.
+
+*What runs your OpenCode — cloud APIs, local Ollama, or a mix? Share the provider setup in the comments below!*
+

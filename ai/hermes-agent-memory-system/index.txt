@@ -1,0 +1,46 @@
+---
+title: Hermes Agent Memory: Two Small Files Beat a Vector Database
+url: https://devopstales.github.io/ai/hermes-agent-memory-system/
+date: 2026-11-02
+---
+
+
+Models are stateless by design: every request independent, no continuity past the context window. Most frameworks bolt memory on afterward — a database to query, a window to stuff. Hermes inverts it: memory isn&#39;t retrieved when needed but injected at every session start, curated, bounded, always active. Two files under 3,600 characters total.
+
+&lt;!--more--&gt;
+
+![Hermes agent bounded core memory files](/img/hermes-agent-memory.webp)
+*MEMORY.md plus USER.md, frozen per session: the agent is its memory*
+
+## Always Active, Never Retrieved
+
+Context is everything shown right now — uncurated dumps that cost tokens, compound latency, and hit ceilings. Memory is actively kept and carried forward: distilled, consolidated, forgotten on purpose. The Hermes core is two file-backed stores with hard caps — agent notes at 2,200 characters, user profile at 1,375 — holding dense declarative facts, never timestamped narration. At session start both inject as one frozen block into the system prompt:
+
+```plaintext
+  session start --&gt; load MEMORY.md &#43; USER.md --&gt; frozen system prompt
+      --&gt; prefetch external provider --&gt; model answers
+      --&gt; sync turn to provider --&gt; persist file edits to disk
+```
+
+Frozen matters for prefix caching: identical system prompts across turns let the model cache prefix computation and process only the conversation delta. Mid-session writes persist to disk immediately but enter the prompt next session — the model never chases its own updates. One optional external plugin (eight backends compared in [agent memory providers](/ai/agent-memory-providers/)) adds retrieval beside the files through prefetch on the way in and sync on the way out, with recall modes trading tokens for control (auto-inject, tools-only, or hybrid).
+
+## Triggers: Save Proactively, Recall by Layer
+
+Saves fire on corrections (&#34;use this instead&#34;), observed preference patterns, discovered environment facts and project conventions, completed complex workflows, and tool quirks — skipping trivia, re-discoverables, data dumps, session ephemera, and anything already in instruction files. The decision test: correction or explicit instruction saves; preference or pattern goes to profile; environment fact goes to memory; easily re-discovered or session-bound gets skipped.
+
+Recall is layered, not queried: core files arrive automatically at session start; past-conversation lookup goes through full-text session search (&#34;we discussed this last week&#34; versus &#34;remember forever&#34;); provider tools handle targeted retrieval when configured. The single management tool adds, replaces, and removes by substring match — no read action exists because content is already in-context. Past 80% capacity the agent consolidates: merge, compress, drop — dense facts survive, verbosity dies.
+
+## Brain Versus Library
+
+Internal memory (always-on identity, preferences, lessons) differs fundamentally from external knowledge bases (vast on-demand references: wikis, notes, papers, filesystems, code). Agents look libraries up; they carry brains with them. The bridge is distillation: ArXiv-scale reading compresses to one durable takeaway promoted inward. Session search versus persistent memory follows the same split — unlimited searchable history for &#34;find that discussion&#34; against ~1,300 always-present tokens for &#34;facts that shape every answer,&#34; fixed cost versus on-demand search.
+
+## Bounded Beats Unlimited
+
+Caps force curation: limited space keeps only what matters, compresses ruthlessly, prioritizes explicitly. Small stays fast (1,300 prompt tokens versus 100K-query latency), stays clean (attention spent on tasks, not noise triage), and forgets well — remove, replace, capacity-pressure consolidation, injection scanning with dedup. Memory scaling research confirms the direction: accumulated experience improves agents only through quality extraction, relevant retrieval, and generalizable patterns over timestamped logs. Entries carry injection scanning and exact-duplicate rejection because recalled strings shape behavior — governance, not decoration.
+
+## Summary
+
+Two files, firm limits, frozen per session, curated by the agent under capacity pressure, extended by at most one plugin, backed by libraries rather than confused with them. Small, curated, always active — a working model of the user carried into every conversation.
+
+*What belongs in your agent&#39;s permanent memory — and what should it be forced to forget? Share the policy in the comments below!*
+

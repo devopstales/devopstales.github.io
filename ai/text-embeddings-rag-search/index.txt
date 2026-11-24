@@ -1,0 +1,80 @@
+---
+title: Text Embeddings for RAG and Search: Ollama and OpenAI-Compatible APIs
+url: https://devopstales.github.io/ai/text-embeddings-rag-search/
+date: 2026-11-09
+---
+
+
+An embedding is a fixed-dimensional float vector placing similar meanings nearby — a representation layer for search, clustering, dedup, and RAG retrieval, not token IDs and not chat output. The concepts stay identical across backends; only the HTTP surface changes. Two local patterns cover nearly everything: Ollama&#39;s embed endpoint and any OpenAI-compatible embeddings route.
+
+&lt;!--more--&gt;
+
+![Text embeddings feeding retrieval for RAG](/img/text-embeddings-rag-search.webp)
+*Chunk, embed, index, retrieve text: embeddings choose what the chat model sees*
+
+## Where Embeddings Sit in RAG
+
+Offline: chunk documents (size, overlap, structure decide quality), embed each chunk with metadata (source, offsets, ACL), index into memory, library, or vector database. Query time: embed the query, retrieve top-k by vector similarity (plus hybrid keyword when terms matter), assemble retrieved plain text into the chat prompt. Critical nuance: chat APIs consume text and tools, never embedding tensors — embeddings select which text to inject. &#34;Query with precalculated embeddings&#34; always means retrieve-then-send-text.
+
+Beyond retrieval: semantic search, cross-encoder reranking of candidates, clustering and dedup without hand labels, prototype-based classification scoring, and multimodal image-text bridging.
+
+## Ollama Embeddings in Python
+
+Ollama serves `POST /api/embed` with model name and string-or-list input, returning aligned vectors:
+
+```python
+import httpx
+
+OLLAMA = &#34;http://127.0.0.1:11434&#34;
+MODEL = &#34;nomic-embed-text&#34;  # pull your chosen tag first
+
+def embed_ollama(texts: list[str]) -&gt; list[list[float]]:
+    r = httpx.post(
+        f&#34;{OLLAMA}/api/embed&#34;,
+        json={&#34;model&#34;: MODEL, &#34;input&#34;: texts},
+        timeout=120.0,
+    )
+    r.raise_for_status()
+    return r.json()[&#34;embeddings&#34;]
+
+if __name__ == &#34;__main__&#34;:
+    qv = embed_ollama([&#34;What is retrieval-augmented generation?&#34;])[0]
+    doc_vs = embed_ollama([
+        &#34;RAG combines retrieval with generation.&#34;,
+        &#34;Embeddings map text into vector space for similarity search.&#34;,
+    ])
+    print(len(qv), len(doc_vs), len(doc_vs[0]))
+```
+
+Pull the model tag first, and remember embedding throughput shares Ollama&#39;s scheduling with generation under load.
+
+## OpenAI-Compatible Embeddings in Python
+
+llama.cpp-style servers expose `POST /v1/embeddings` — same concepts, official `openai` client, pointed locally:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url=&#34;http://127.0.0.1:8080/v1&#34;,
+    api_key=&#34;not-needed&#34;,  # many local servers ignore this
+)
+
+def embed_openai_compatible(text: str, model: str) -&gt; list[float]:
+    r = client.embeddings.create(model=model, input=text)
+    return r.data[0].embedding
+
+if __name__ == &#34;__main__&#34;:
+    print(len(embed_openai_compatible(&#34;hello from llama.cpp&#34;, &#34;your-embedding-model-id&#34;)))
+```
+
+## Persist, Query, Rerank
+
+Store vector plus text plus metadata per chunk — prototype in a Python list with NumPy cosine similarity, graduate to FAISS or a vector database as data grows. Query loop stays four steps: embed query, top-k search, join chunk texts, send context plus question to chat. Then rerank: cross-encoders or second scoring models re-ordering vector-retrieved candidates catch what similarity rankings miss.
+
+## Summary
+
+Embeddings are the selection layer beneath RAG: chunk deliberately, embed locally through either HTTP surface, persist with metadata, retrieve by similarity, rerank the finalists, and always send text — never tensors — to the chat model.
+
+*Which embedding setup serves your retrieval — Ollama, llama.cpp, or hosted APIs? Share the stack in the comments below!*
+

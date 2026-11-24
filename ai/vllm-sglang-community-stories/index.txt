@@ -1,0 +1,156 @@
+---
+title: vLLM and SGLang: The Community Stories Behind Two Open-Source Inference Engines
+url: https://devopstales.github.io/ai/vllm-sglang-community-stories/
+date: 2026-10-02
+---
+
+
+Everyone benchmarks vLLM and SGLang on FLOPS and tokens per second, but the more interesting story is how two academic side projects became the default backends for serving large language models.
+
+This post walks through where each engine came from, why they compete, how their contributor bases actually overlap, and what that means for choosing an inference engine in production.
+
+&lt;!--more--&gt;
+
+![vLLM and SGLang logos on a dark background](/img/vllm-sglang-community.webp)
+*Two of the most active open-source LLM inference engines, both born from academic research.*
+
+## Why inference is the real bottleneck
+
+Training an LLM grabs the headlines for its compute bill, but inference is what determines whether a model is actually usable in production. A model with hundreds of billions of parameters has to serve many concurrent users under tight latency, throughput, and cost constraints, and that is a cross-stack problem spanning hardware, software, and scheduling.
+
+The core difficulty is that autoregressive decoding is inherently sequential. You generate one token, then feed it back in to get the next, so you cannot parallelize the generation the way you can a training step. On top of that, attention is compute- and memory-intensive, and the KV cache grows with every token of every active sequence. The result is that an inference engine has to be clever about memory, batching, and CPU-GPU overlap to keep expensive hardware busy.
+
+That is exactly the problem vLLM and SGLang were built to solve, and it is why the engine sits at the center of the whole serving stack.
+
+## Where the two engines came from
+
+### vLLM and PagedAttention
+
+vLLM traces back to a 2023 paper, &#34;Efficient Memory Management for Large Language Model Serving with PagedAttention.&#34; Its breakthrough was not a new AI algorithm; it borrowed an idea from operating systems. Paging and virtual memory let the OS hand out memory in fine-grained blocks and manage them efficiently, and PagedAttention does the same thing for the KV cache.
+
+Instead of reserving a contiguous block of memory for each request&#39;s KV cache, vLLM breaks the cache into fixed-size blocks and allocates them on demand. This cuts fragmentation, lets requests share blocks, and is what makes high-throughput request handling possible. It also builds on continuous batching, a technique first described in the Orca paper, where the scheduler inserts or removes a sequence in the middle of a batch instead of waiting for the whole batch to finish.
+
+The payoff was immediate. Against a Hugging Face Transformers backend, vLLM handled up to five times the traffic and boosted throughput by as much as thirty times. That is how a research project became a community standard within half a year.
+
+### SGLang and RadixAttention
+
+SGLang came from the paper &#34;SGLang: Efficient Execution of Structured Language Model Programs&#34; and opened with a highly optimized runtime built around RadixAttention and an efficient CPU scheduling design.
+
+RadixAttention extends PagedAttention rather than replacing it. It keeps as much prompt and generation KV cache as possible and tries to reuse KV cache across requests. When two requests share a prefix, the cached prefix is not recomputed, which slashes prefill work. The paper shows significant gains over engines without this reuse, and SGLang still benchmarks well even with RadixAttention switched off, which tells you the fundamentals underneath are strong.
+
+```plaintext
+PagedAttention:  block the KV cache like OS pages -&gt; less fragmentation
+RadixAttention:  &#43; reuse cached prefixes across requests -&gt; less prefill
+```
+
+## Two Berkeley lineages
+
+Both projects trace to UC Berkeley, which has a long habit of producing infrastructure that outlives its authors. Postgres, RISC-V, Spark, and Ray all came out of that ecosystem, and vLLM is the latest in the line.
+
+The early initiators, Woosuk Kwon for vLLM and Lianmin Zheng for SGLang, both studied under Ion Stoica, the professor who led the students behind Spark and Ray. vLLM shipped its open-source release in June 2023; SGLang followed roughly six months later in early 2024.
+
+There is a direct thread between the two. In 2023, Lianmin Zheng, Ying Sheng, and others founded LMSYS.org, which produced FastChat, Chatbot Arena (now LMArena), and Vicuna. Chatbot Arena had already adopted vLLM and FastChat as backends in April 2023, months before vLLM&#39;s official open-source release, and you can still find traces of that history in the early commit logs of the repositories.
+
+```plaintext
+  Ion Stoica (UC Berkeley)
+        |
+   &#43;----&#43;----------------&#43;
+   |                     |
+Woosuk Kwon         Lianmin Zheng
+   |                     |
+ vLLM (Jun 2023)      SGLang (early 2024)
+   PagedAttention       RadixAttention
+```
+
+FastChat originally aimed to cover the full model lifecycle, training, inference, and evaluation, but has largely fallen out of active maintenance. The later rise of SGLang and Chatbot Arena built on FastChat&#39;s early practices and branched into the inference and evaluation ecosystems we see today.
+
+## The contributor overlap
+
+The community data tells a story of shared talent. As many as 194 developers have contributed code to both vLLM and SGLang, about 30% of SGLang&#39;s total code contributors. A few named contributors show how people move between the projects:
+
+| Contributor | Background | vLLM | SGLang |
+|-------------|------------|------|--------|
+| comaniac | OpenAI engineer | 77 PRs | 17 PRs early, then slowed |
+| Shangming Cai | Alibaba Cloud Feitian Lab | 18 PRs (Jun-Apr) | 52 PRs from April, key contributor |
+| CatherineSue | Oracle engineer | 4 bug-fix PRs | 76 PRs, core contributor |
+
+The patterns are telling. Some contributors shift their focus over time, and a few early vLLM authors who joined large companies stopped contributing, which fuels the (reasonable) speculation that those companies may be building internal inference engines. The overlap is also a reminder that in this space, contributors are mobile and the &#34;team&#34; behind an engine is less stable than the brand suggests.
+
+By scale, vLLM is far larger. Over ten thousand people have engaged in issue and PR discussions, nearly two thousand have submitted PRs, and the project averages at least ten new issues a day, with more than two thousand issues and PRs still awaiting triage. SGLang has a leaner footprint, fewer than half of vLLM&#39;s contributors, and a user base under one-fifth its size. That smaller team is a double-edged sword: faster iteration, but maintainers stretched thin, with issue response times of three to five days versus vLLM&#39;s twelve hours to three days.
+
+## Development, refactors, and the V1 moment
+
+The version and community-momentum timelines show different trajectories. vLLM surged after launch, slowed noticeably from September to December 2024, then re-accelerated with its V1 refactor. SGLang has climbed steadily since v0.2 and, like vLLM, entered a second wave of rapid growth in the first half of 2025.
+
+Key milestones from an OpenRank perspective:
+
+- **June 2023**: vLLM launches with PagedAttention and grows quickly on leading performance.
+- **January 2024**: SGLang ships its first release and gains attention for RadixAttention.
+- **July 2024**: SGLang releases v0.2, entering its first acceleration phase.
+- **September 2024**: vLLM ships v0.6.0, cutting latency by roughly five times and improving performance about 2.7x through CPU scheduling and other optimizations. SGLang releases v0.3 the day before.
+- **December 2024 to January 2025**: vLLM unveils the V1 refactor, and with DeepSeek V3 and R1 hitting the scene, both engines enter a second wave of explosive growth.
+
+The V1 refactor is the most instructive part of the story. By 2024, vLLM had accumulated so much complexity that a third-party study showed its CPU scheduling overhead could exceed half of total inference time in some scenarios, leaving GPU compute underutilized. The official blog acknowledged that rapid evolution created horizontal-scaling challenges and made it hard to merge independently developed features. V1 was the answer: a foundational rewrite that re-accelerated growth once it landed in early 2025.
+
+SGLang took the opposite path in the same period. It supported fewer features, models, and hardware targets, yet turned in equally strong results thanks to a more extensible architecture, excellent CPU scheduling, and later a &#34;zero-overhead&#34; scheduling design. The lesson is that architectural discipline can beat raw feature count when the goal is keeping the GPU busy.
+
+## The performance war and its quiet end
+
+In 2025, both engines published benchmark results asserting leadership with nearly every release, which fueled recurring debates on social media. Recognizing the limits of same-day number wars, both projects gradually shifted to reproducible methods, end-to-end metrics under real workloads, and independent third-party evaluations.
+
+A recent third-party comparison from Alibaba Cloud benchmarked vLLM against SGLang on the Qwen family, and the overall single-GPU and dual-GPU results favored SGLang. That said, benchmark outcomes vary widely across hardware, models, and configurations, so any single result should be interpreted case by case rather than taken as a verdict.
+
+```plaintext
+  vLLM  ~10,000 contributors   ~2,000 issues/PRs in triage
+  SGLang  &lt;50% of vLLM         ~3-5 day issue response
+```
+
+## Convergence and the engines to watch
+
+Model architectures are showing signs of convergence, and the mainstream engines are becoming more similar in features, algorithms, and operator stacks. vLLM and SGLang now both support continuous batching, PagedAttention, RadixAttention, chunked prefill, speculative decoding, disaggregated serving, and CUDA Graphs, along with operator libraries like FlashInfer, FlashAttention, and DeepGEMM, plus parallelism and quantization.
+
+Good ideas propagate fast in open source, and a new optimization in one engine is often adopted by the others within months. That suggests the top engines will converge further on raw performance, which shifts competition toward factors beyond speed alone.
+
+A few other inference engines worth knowing about, in one line each:
+
+- **TensorRT-LLM**: launched by NVIDIA in late 2023, deeply tuned for its own hardware, and historically tightly controlled, making deep community participation harder.
+- **OpenVINO**: developed by Intel, focused on efficient deployment across Intel CPUs and GPUs for both edge and clustered inference.
+- **llama.cpp**: written in C&#43;&#43; by Georgi Gerganov in 2023, it targets low-barrier edge inference, running LLMs on ordinary PCs and even phones, and is widely adopted by individual developers.
+- **LMDeploy**: co-developed by the MMDeploy and MMRazor teams at Shanghai AI Lab, with dual backends, TurboMind for high performance and PyTorch for broad hardware coverage, plus strong quantization support.
+
+If you are already serving with vLLM, see how the scheduling and memory mechanics work in [vLLM Scheduling: How Throughput and Latency Trade Off in Shared Inference](/ai/vllm-scheduling-throughput-latency/) and how to get a first instance running in [vLLM Quickstart: High-Throughput Production LLM Serving](/ai/vllm-quickstart/).
+
+## Ecosystem moves: foundations, funding, and adoption
+
+The ecosystem moves tell you as much as the benchmarks. During their rapid-growth phase, both projects drew attention from investors and foundations:
+
+- In August 2023, a16z launched the Open Source AI Grant, and vLLM core developers Woosuk Kwon and Zhuohan Li were among the first recipients. In the June 2025 cohort, SGLang core developers Ying Sheng and Lianmin Zheng were also funded.
+- In July 2024, ZhenFund announced a donation to vLLM, and the same month the Linux Foundation&#39;s LF AI &amp; Data sub-foundation announced vLLM&#39;s entry into its incubation and donation process. vLLM later moved under the PyTorch Foundation, with plans for deep collaboration across multiple areas.
+- In March 2025, two months before vLLM formally joined the PyTorch Foundation, PyTorch published a post welcoming SGLang to &#34;the PyTorch ecosystem&#34; (not a formal donation to the foundation).
+
+Adoption is broad on both sides. Engineers from Google, Meta, Microsoft, ByteDance, Alibaba, Tencent, and other companies participate actively in both repositories. Companies building on vLLM include Red Hat, IBM, and Anyscale; SGLang adopters include xAI, AMD, NVIDIA, Intel, LinkedIn, and Oracle.
+
+The Chinese developer communities are sizable and growing. Roughly 33% of vLLM&#39;s contributors are based in China, and the share is about 52% for SGLang. Both projects run in-person meetups, with vLLM holding them in Beijing, Shanghai, and Shenzhen, and SGLang hosting its first dedicated workshop for Chinese developers at the GOSIM conference near West Lake.
+
+## Choosing between them
+
+There is no single winner, and the right answer depends on your workload. The practical differences that matter:
+
+| Factor | vLLM | SGLang |
+|--------|------|--------|
+| Maturity and scale | Larger community, more hardware/model coverage | Leaner, faster-moving, fewer targets |
+| Scheduling | V1 refactor removed CPU overhead | Zero-overhead scheduling design |
+| Prefix reuse | PagedAttention, continuous batching | RadixAttention for cross-request KV reuse |
+| Issue response | ~12 hours to 3 days | ~3 to 5 days |
+| Ecosystem home | PyTorch Foundation, a16z grant | PyTorch ecosystem, a16z grant |
+
+If your workload has lots of shared prefixes, system prompts, or repeated structure, SGLang&#39;s RadixAttention can cut prefill cost. If you need broadest hardware and model support plus a larger contributor base to lean on, vLLM is the safer default. Because the engines are converging on performance, the decision is increasingly about these operational differences, not raw speed.
+
+The bigger takeaway is that both projects are community-driven and still evolving. An engine that wins a benchmark this quarter may not win next quarter, so the health of the community, the architecture, and the foundation backing matter at least as much as any single number.
+
+## Summary
+
+vLLM and SGLang are both Berkeley-rooted inference engines that turned academic research into production infrastructure. vLLM started with PagedAttention and a massive community, hit a complexity wall, and climbed back with its V1 refactor. SGLang arrived later with RadixAttention and a leaner, more extensible design. Their contributor bases overlap heavily, their performance is converging, and both are now anchored in the PyTorch ecosystem with strong industry adoption.
+
+For most teams the choice is not about which engine is faster, but which fits your workload: SGLang when shared prefixes dominate, vLLM when you want the largest community and broadest support. Either way, the engine is where inference performance is won, and these two are where the competition lives.
+

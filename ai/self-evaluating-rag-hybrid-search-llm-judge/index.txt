@@ -1,0 +1,401 @@
+---
+title: Building a Self-Evaluating RAG System: Hybrid Search, Routing, and LLM-as-Judge
+url: https://devopstales.github.io/ai/self-evaluating-rag-hybrid-search-llm-judge/
+date: 2026-10-27
+---
+
+
+Most RAG systems are demos: they retrieve chunks and generate an answer immediately, with no check on whether the retrieved context is relevant, sufficient, or even correct. When retrieval misses, the model hallucinates. There is no recovery loop, no quality signal, and no way to tell which step produced a bad answer.
+
+This post documents how to build a self-evaluating RAG system that routes queries, retrieves with hybrid search, and evaluates its own answers using LLM-as-judge. It is built in three cooperating parts:
+
+1. **Hybrid search and retrieval** — dense &#43; BM25 vectors with int8 quantization in Qdrant, RRF fusion, payload filtering, and multi-year balanced fetch.
+2. **Agent and MCP** — a LangGraph ReAct loop with routing guardrails, wrapped in FastMCP and exposed through a Streamlit UI.
+3. **Observability and evaluation** — Arize Phoenix tracing plus LLM-as-judge scoring for hallucination, QA correctness, and context relevance.
+
+The LLM provider layer is shared: Ollama (local llama3.2, nomic-embed-text) or Gemini API (gemini-2.5-flash-lite), switchable via environment variable with no code changes.
+
+&lt;!--more--&gt;
+
+![Self-evaluating RAG system architecture](/img/coding-terminal.webp)
+*Three cooperating parts: hybrid retrieval, ReAct agent with MCP, and Phoenix observability with LLM-as-judge*
+
+## Why demo RAG fails
+
+A standard RAG pipeline looks like this:
+
+```plaintext
+  user query
+       |
+       v
+  [ embed ] --&gt; [ vector search ] --&gt; [ generate answer ]
+```
+
+It works until it does not. The retriever returns irrelevant chunks, the generator has no way to know, and the user receives a fluent fabrication. There is no signal that the answer is wrong, and no loop to fix it.
+
+A self-evaluating RAG system adds three things:
+
+- **Routing**: the system decides where to look (vector store, web search, or direct answer) instead of always retrieving.
+- **Retrieval validation**: the system grades retrieved context before generating, and rewrites the query if context is insufficient.
+- **Self-evaluation**: every answer is scored for hallucination, QA correctness, and context relevance, and the scores are written back into the same traces they evaluate.
+
+## System architecture
+
+```plaintext
+  data.csv                    Qdrant                   Arize Phoenix
+  ------                    -------                   -------------
+    |                          |                           |
+    v                          v                           v
+&#43;--------&#43;           &#43;----------------&#43;           &#43;------------------&#43;
+| ingest |---&gt; dense&#43;|  Qdrant: named |&lt;----| query |&lt;--| langgraph_flow |
+|  .py   |   BM25 int8|  vectors, RRF  |----&gt;  .py   |      .py       |
+&#43;--------&#43;   payload  |  payload idx   |           &#43;--------&#43;--------&#43;
+                      &#43;-------&#43;--------&#43;                    |
+                              |                             v
+                              |                       &#43;----------------&#43;
+                              |                       |  Phoenix traces|
+                              |                       |  &#43; LLM-as-judge|
+                              v                       &#43;----------------&#43;
+                        &#43;----------&#43;
+                        |  agent.py|
+                        |  ReAct   |
+                        |  loop    |
+                        &#43;-----&#43;----&#43;
+                              |
+                              v
+                        &#43;----------&#43;
+                        | mcp_server.py |
+                        | FastMCP     |
+                        &#43;----------&#43;
+                              |
+                              v
+                        &#43;----------&#43;
+                        |  app.py  |
+                        | Streamlit|
+                        &#43;----------&#43;
+                              ^
+                              |
+                        end user / MCP client
+```
+
+### Part 1: Hybrid search and retrieval
+
+The ingestion pipeline starts with `data.csv` as the source. `ingest.py` produces dense vectors (via nomic-embed-text or Gemini embeddings) and BM25 vectors, quantizes them to int8, and stores them in Qdrant with:
+
+- **Named vectors** — separate vector fields for dense and sparse/BM25 representations
+- **RRF fusion** — reciprocal rank fusion combines dense and keyword rankings without per-corpus alpha tuning
+- **Payload indexes** — metadata fields for filtering (year, document type, source)
+
+`query.py` handles runtime retrieval:
+
+- Hybrid search (dense &#43; BM25)
+- Payload filtering (e.g., restrict to a specific year or document type)
+- Multi-year balanced fetch — retrieve per year, then compare and summarize across years
+
+`langgraph_flow.py` orchestrates the workflow: extract years from the query, fetch per-year context, compare, and summarize.
+
+`config.py` is the single settings file and LLM provider abstraction.
+
+Example ingest flow:
+
+```python
+# ingest.py — simplified
+from qdrant_client import QdrantClient
+from qdrant_client.models import VectorParams, Distance, PointStruct
+import uuid
+
+client = QdrantClient(&#34;http://localhost:6333&#34;)
+
+client.recreate_collection(
+    collection_name=&#34;documents&#34;,
+    vectors_config={
+        &#34;dense&#34;: VectorParams(size=768, distance=Distance.COSINE),
+        &#34;bm25&#34;: VectorParams(size=768, distance=Distance.COSINE),
+    },
+    quantization_config={
+        &#34;scalar&#34;: {&#34;type&#34;: &#34;INT8&#34;, &#34;quantile&#34;: 0.99, &#34;always_ram&#34;: True},
+    },
+)
+
+for record in records:
+    point = PointStruct(
+        id=str(uuid.uuid4()),
+        vector={
+            &#34;dense&#34;: dense_embedding(record[&#34;text&#34;]),
+            &#34;bm25&#34;: bm25_embedding(record[&#34;text&#34;]),
+        },
+        payload={
+            &#34;text&#34;: record[&#34;text&#34;],
+            &#34;year&#34;: record[&#34;year&#34;],
+            &#34;source&#34;: record[&#34;source&#34;],
+        },
+    )
+    client.upsert(collection_name=&#34;documents&#34;, points=[point])
+```
+
+Runtime hybrid search with RRF:
+
+```python
+# query.py — simplified
+def hybrid_search(query, year=None, limit=10):
+    dense_vec = embed(query)
+    bm25_vec = bm25_embed(query)
+
+    prefetch = [
+        models.Prefetch(
+            query=dense_vec,
+            using=&#34;dense&#34;,
+            limit=limit,
+        ),
+        models.Prefetch(
+            query=bm25_vec,
+            using=&#34;bm25&#34;,
+            limit=limit,
+        ),
+    ]
+
+    filter_condition = None
+    if year:
+        filter_condition = models.Filter(
+            must=[models.FieldCondition(key=&#34;year&#34;, match=models.MatchValue(value=year))]
+        )
+
+    results = client.query_points(
+        collection_name=&#34;documents&#34;,
+        prefetch=prefetch,
+        query=models.Fusion(fusion=models.Fusion.RRF),
+        query_filter=filter_condition,
+        limit=limit,
+    )
+    return results.points
+```
+
+### Part 2: Agent and MCP
+
+The retrieval layer feeds into a LangGraph ReAct agent (`agent.py`) that runs a think → act → synthesize loop with routing guardrails:
+
+- **Think**: analyze the query, decide whether retrieval is needed, and where to route.
+- **Act**: call retrieval, web search, or generate directly based on the routing decision.
+- **Synthesize**: compose the final answer from validated context.
+
+`mcp_server.py` wraps the agent in FastMCP and exposes three tools to any MCP client:
+
+1. `query_documents` — hybrid search &#43; generate over the local corpus
+2. `web_search` — fallback for out-of-corpus queries
+3. `evaluate_answer` — LLM-as-judge scoring on a generated answer
+
+`app.py` is a Streamlit UI with five tabs:
+
+1. Data ingestion
+2. Agent chat
+3. Qdrant and Phoenix dashboards
+4. Datasets and experiments
+5. RAG evaluation
+
+Start the MCP server:
+
+```python
+# mcp_server.py — simplified
+from fastmcp import FastMCP
+
+mcp = FastMCP(&#34;rag-agent&#34;)
+
+@mcp.tool()
+def query_documents(question: str) -&gt; str:
+    result = agent.run(question)
+    return result[&#34;answer&#34;]
+
+@mcp.tool()
+def web_search(query: str) -&gt; str:
+    return agent.web_search(query)
+
+@mcp.tool()
+def evaluate_answer(question: str, answer: str, context: str) -&gt; dict:
+    return judge.score(question, answer, context)
+
+if __name__ == &#34;__main__&#34;:
+    mcp.run()
+```
+
+### Part 3: Observability and evaluation
+
+Every query produces a full span hierarchy in Arize Phoenix — latency, token counts, and a complete audit trail captured by Phoenix tracing.
+
+`phoenix_datasets.py` manages versioned query sets and experiment runs, so you can compare how changes to chunking, top-k, or the judge model affect quality over time.
+
+The LLM-as-judge layer runs three evaluators after each query:
+
+| Evaluator | What it checks |
+|-----------|----------------|
+| Hallucination | Did the answer contradict or fabricate beyond the retrieved context? |
+| QA correctness | Did the answer actually address the question? |
+| Context relevance | Did the retrieved chunks contain what was needed to answer? |
+
+The judge can be Ollama (local llama3.2) or Gemini API (gemini-2.5-flash-lite), selected through the same `LLM_PROVIDER` switch.
+
+Scores are logged back as span annotations — visible inline with the Phoenix trace, alongside latency:
+
+```python
+# phoenix_datasets.py — simplified
+from phoenix.client import Client
+from phoenix.trace import SpanAnnotationData
+
+px = Client()
+
+annotations = [
+    SpanAnnotationData(
+        name=&#34;hallucination&#34;,
+        span_id=str(span_id),
+        annotator_kind=&#34;LLM&#34;,
+        result={&#34;label&#34;: hallucination_label, &#34;score&#34;: 1.0 if hallucination_label == &#34;not_hallucinated&#34; else 0.0},
+    ),
+    SpanAnnotationData(
+        name=&#34;qa_correctness&#34;,
+        span_id=str(span_id),
+        annotator_kind=&#34;LLM&#34;,
+        result={&#34;label&#34;: correctness_label, &#34;score&#34;: correctness_score},
+    ),
+    SpanAnnotationData(
+        name=&#34;context_relevance&#34;,
+        span_id=str(span_id),
+        annotator_kind=&#34;LLM&#34;,
+        result={&#34;label&#34;: relevance_label, &#34;score&#34;: relevance_score},
+    ),
+]
+
+px.annotate_spans(annotations=annotations)
+```
+
+## LLM provider layer
+
+All three parts share a single LLM provider abstraction in `config.py`:
+
+```python
+# config.py — simplified
+import os
+
+LLM_PROVIDER = os.getenv(&#34;LLM_PROVIDER&#34;, &#34;ollama&#34;)  # ollama or gemini
+
+if LLM_PROVIDER == &#34;ollama&#34;:
+    EMBED_MODEL = &#34;nomic-embed-text&#34;
+    CHAT_MODEL = &#34;llama3.2&#34;
+    OLLAMA_BASE_URL = os.getenv(&#34;OLLAMA_BASE_URL&#34;, &#34;http://localhost:11434&#34;)
+else:
+    EMBED_MODEL = &#34;gemini-embedding-001&#34;
+    CHAT_MODEL = &#34;gemini-2.5-flash-lite&#34;
+    GEMINI_API_KEY = os.getenv(&#34;GEMINI_API_KEY&#34;)
+```
+
+Switching providers requires no code changes — only the `LLM_PROVIDER` environment variable, or a dropdown in the Streamlit UI.
+
+## Running the stack
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Ollama installed locally (for the local provider option)
+- Qdrant (vector database)
+- Arize Phoenix (observability)
+
+### Docker Compose
+
+```yaml
+# docker-compose.yml
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - &#34;6333:6333&#34;
+    volumes:
+      - ./qdrant-data:/qdrant/storage
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - &#34;6006:6006&#34;
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - &#34;11434:11434&#34;
+    volumes:
+      - ./ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  rag-agent:
+    build: .
+    ports:
+      - &#34;8501:8501&#34;
+    environment:
+      - LLM_PROVIDER=ollama
+      - QDRANT_HOST=qdrant
+      - PHOENIX_HOST=phoenix
+    depends_on:
+      - qdrant
+      - phoenix
+      - ollama
+```
+
+Pull the local models:
+
+```bash
+docker exec ollama ollama pull llama3.2
+docker exec ollama ollama pull nomic-embed-text
+```
+
+Initialize the vector store:
+
+```bash
+python ingest.py --source data.csv --collection documents
+```
+
+Start the Stack:
+
+```bash
+docker compose up -d
+```
+
+Open the Streamlit UI at `http://localhost:8501`.
+
+## Evaluation results
+
+On the evaluation dataset, the self-evaluating RAG system produced:
+
+| Metric | Result |
+|--------|--------|
+| Hallucination rate | 0% |
+| QA correctness | 100% |
+| Context relevance | 50% |
+
+The 50% context relevance is expected: out-of-scope queries still retrieve something (the system does not refuse), but what is retrieved is not genuinely relevant. That is not a retrieval failure — it is correct behavior surfaced clearly by the evaluation. The value of closing the evaluation loop inside the observability platform is that you see not just that something went wrong, but which step produced the gap.
+
+## What to measure first
+
+If you are building this from scratch, start with these signals:
+
+1. **Context relevance** — are the retrieved chunks actually useful? This is the leading indicator of answer quality.
+2. **Hallucination** — does the answer stay within the retrieved context?
+3. **QA correctness** — does the answer address the question asked?
+4. **Latency per span** — which part of the loop (retrieve, grade, generate) dominates?
+5. **Token counts** — input and output tokens per query, for cost tracking.
+
+## What we concluded
+
+A self-evaluating RAG system is not much more complex than a demo RAG system, but it changes the operational model entirely:
+
+- **Routing** prevents unnecessary retrieval for simple queries.
+- **Hybrid search (dense &#43; BM25 with RRF)** catches both semantic and keyword matches.
+- **Retrieval validation** rewrites queries when context is insufficient, instead of generating from bad chunks.
+- **LLM-as-judge** scores every answer for hallucination, correctness, and relevance, and writes the scores back into the traces.
+- **Shared LLM provider** lets you switch between local Ollama and Gemini without code changes.
+
+The result is a system that knows when it does not know, tells you which step failed, and improves observably over time through versioned experiment runs.
+
+Have you run LLM-as-judge evaluation on your RAG system, and which evaluator caught the most issues — hallucination, correctness, or context relevance?
+

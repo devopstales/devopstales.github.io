@@ -8,7 +8,7 @@
             <link href="https://devopstales.github.io/devops/" rel="alternate" type="text/html" title="html" />
             <link href="https://devopstales.github.io/devops/index.xml" rel="alternate" type="application/rss+xml" title="rss" />
             <link href="https://devopstales.github.io/devops/atom.xml" rel="self" type="application/atom+xml" title="atom" />
-    <updated>2026-10-02T12:39:20+00:00</updated>
+    <updated>2026-11-24T15:27:02+00:00</updated>
     
     
         <author>
@@ -16,6 +16,366 @@
             </author>
     
         <id>https://devopstales.github.io/devops/</id>
+    
+        
+        <entry>
+            <title type="html"><![CDATA[rex-cssh: Cluster SSH in Rex, the New Terminal Multiplexer from Superlogical]]></title>
+            <link href="https://devopstales.github.io/devops/rex-cssh/?utm_source=atom_feed" rel="alternate" type="text/html" />
+            
+            
+                <id>https://devopstales.github.io/devops/rex-cssh/</id>
+            
+            
+            <published>2026-11-24T00:00:00+00:00</published>
+            <updated>2026-11-24T00:00:00+00:00</updated>
+            
+            
+            <content type="html"><![CDATA[<p><a href="https://www.superlogical.com/">Rex</a> is a terminal multiplexer made by <a href="https://www.superlogical.com/">Superlogical</a>, the new company from Mitchell Hashimoto — the author of Ghostty and co-founder of HashiCorp. It has been in public beta since late October 2026, and the first thing I wanted to do in it was the thing I do every day in tmux: cluster SSH.</p>
+<p>This post is about that: what Rex is, why it cannot synchronize panes out of the box, and how I closed the gap with <a href="https://github.com/devopstales/rex-cssh"><code>rex-cssh</code></a>, a single-file Python tool in the spirit of <a href="https://github.com/zinic/tmux-cssh">tmux-cssh</a>. It opens one Rex pane per host, tiles them into a grid, and broadcasts whatever you type in any pane to all the others.</p>
+<p><img src="/img/rex-icon.webp" alt="Rex by Superlogical"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h2 id="what-is-rex">What is Rex</h2>
+<p>Superlogical announced itself in July 2026 with a simple pitch: they are building <strong>&ldquo;the multiplexer for all work&rdquo;</strong> — local development, remote access, coding agents, background jobs, production applications, shared terminals, incident response. The founding team is Mitchell Hashimoto, Jack Pearkes (HashiCorp&rsquo;s first employee), Alasdair Monk, and Hector Simpson, funded by Notable Capital and Amplify Partners plus a long list of individual investors from the dev tooling world.</p>
+<p>Their plan has three parts:</p>
+<ol>
+<li>Build an incredible multiplexer.</li>
+<li>Make everything in it composable.</li>
+<li>Make it safe and operable in production.</li>
+</ol>
+<p>Rex is part one, and it is a terminal multiplexer first — the same problem screen solved in the 1980s and tmux refined since: terminals that outlive the application, organized into layouts. What you actually get today in the public beta:</p>
+<ul>
+<li>A <strong>macOS application</strong> (Linux, FreeBSD and Windows get a <strong>server</strong> during beta; the iOS and Windows apps are for enrolled testers).</li>
+<li>A <strong>server/client split</strong> like tmux, but with a twist: the server keeps sessions running whether or not anything is looking at them, and you can reconnect from the web or from native apps on another device. Close the app, walk away, come back from your phone or another machine, pick up exactly where you left off.</li>
+<li><strong>Native scrollback, selection, and scrolling</strong> — the most common papercuts of existing multiplexers, fixed at the app level instead of being worked around.</li>
+<li><strong>Built-in session sharing</strong>, so a live session can be handed to another person.</li>
+<li>A <strong>first-class CLI</strong>, <code>rex</code>, which is both an administrative tool and an automation foundation: every command can emit stable JSON, resources have permanent IDs, exit codes are documented, and there is a complete Lua scripting interface on top.</li>
+<li>An <strong>agent skill</strong> (<code>rex skill setup</code>) that teaches coding agents such as Claude Code or Codex how to open tabs, split panes, and read a terminal&rsquo;s screen through that same CLI.</li>
+</ul>
+<h3 id="taxonomy">Taxonomy</h3>
+<p>If you know tmux, the mapping is nearly one-to-one:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Rex</th>
+					<th>tmux</th>
+					<th>Meaning</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>session</td>
+					<td>session</td>
+					<td>A group of related work. The server keeps it alive even when no client is attached</td>
+			</tr>
+			<tr>
+					<td>window</td>
+					<td>window (tab)</td>
+					<td>A tab within a session, holding a layout of blocks</td>
+			</tr>
+			<tr>
+					<td>block</td>
+					<td>pane</td>
+					<td>One terminal application in a window</td>
+			</tr>
+			<tr>
+					<td>client</td>
+					<td>attached client</td>
+					<td>A program connected to the server, such as the macOS app</td>
+			</tr>
+	</tbody>
+</table>
+<p>Every session, window, block, and client has an ID that never changes and is never reused — for example <code>block:01a10d99-0c06-7795-bf67-798ce4c36a33</code> — plus an optional label you can set and change. Commands accept a full ID, a case-insensitive label, a position (<code>-w 2</code> for the second tab), or the short tail of an ID. If a target is ambiguous, the command exits with status 3 and tells you what matched instead of guessing.</p>
+<p>Inside any Rex terminal, the CLI already knows where you are from environment variables the server sets:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Variable</th>
+					<th>Holds</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>REX_SESSION</code></td>
+					<td>The ID of the session you are in</td>
+			</tr>
+			<tr>
+					<td><code>REX_BLOCK</code></td>
+					<td>The ID of the terminal you are typing in</td>
+			</tr>
+			<tr>
+					<td><code>REX_SERVER</code></td>
+					<td>The address of the server running the terminal</td>
+			</tr>
+			<tr>
+					<td><code>REX_BIN_DIR</code></td>
+					<td>The directory holding the <code>rex</code> executable</td>
+			</tr>
+	</tbody>
+</table>
+<h3 id="quick-start">Quick start</h3>
+<p>With the app installed (it puts <code>rex</code> on the <code>PATH</code> of every terminal it opens):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rex new demo              <span style="color:#75715e"># create a session with a default terminal</span>
+</span></span><span style="display:flex;"><span>rex send -s demo <span style="color:#e6db74">&#39;ls&#39;</span>     <span style="color:#75715e"># type text into its focused block</span>
+</span></span><span style="display:flex;"><span>rex capture -s demo       <span style="color:#75715e"># print that block&#39;s screen</span>
+</span></span><span style="display:flex;"><span>rex split -- sh           <span style="color:#75715e"># split the terminal you are in (inside Rex)</span>
+</span></span><span style="display:flex;"><span>rex kill demo             <span style="color:#75715e"># end the session</span>
+</span></span></code></pre></div><p>That is the entire mental model, and every command in this post builds on those four verbs: create, send, capture, kill — plus <code>split</code>, <code>focus</code>, and the <code>session</code>/<code>window</code>/<code>block</code>/<code>client</code> resource commands.</p>
+<h2 id="the-gap-cluster-ssh">The gap: cluster SSH</h2>
+<p>If you administer more than one server, you have used some form of <strong>cluster SSH</strong> — the idea goes back to the classic <a href="https://github.com/duncs/clusterssh">ClusterSSH</a> tool: open a terminal to every host in a fleet, and whatever you type in one terminal is replicated to all the rest. <a href="https://github.com/zinic/tmux-cssh">tmux-cssh</a> does exactly this inside tmux, built on tmux&rsquo;s <code>synchronize-panes</code> option.</p>
+<p>It earns its keep on the boring, repetitive work:</p>
+<ul>
+<li><code>uptime</code>, <code>df -h</code>, <code>journalctl -p err -n 50</code> across a dozen nodes at once</li>
+<li>applying a firewall rule or a config change to a whole tier</li>
+<li>verifying that a rollout actually landed everywhere</li>
+<li>chasing an incident where you need the same commands on several boxes simultaneously</li>
+</ul>
+<p>I had been moving my day-to-day terminal work into Rex and hit the gap immediately: <strong>Rex has no built-in &ldquo;synchronize panes&rdquo;, and it cannot observe what you type in a pane.</strong> <code>rex capture</code> reads the rendered screen and scrollback — great for agents, useless for mirroring keystrokes. There is no hook to say &ldquo;forward this block&rsquo;s input to those other blocks&rdquo;.</p>
+<p>So the replication has to live inside each pane, wrapped around <code>ssh</code> itself. That is what <code>rex-cssh</code> does.</p>
+<h2 id="rex-cssh">rex-cssh</h2>
+<p><a href="https://github.com/devopstales/rex-cssh"><code>rex-cssh</code></a> is a single Python file, about 450 lines, using only the standard library. Requirements:</p>
+<ul>
+<li>Rex with the <code>rex</code> CLI on your <code>PATH</code></li>
+<li>Python 3.9 or later</li>
+<li><code>ssh</code></li>
+</ul>
+<p>Install it by putting the file somewhere on your <code>PATH</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>chmod +x rex-cssh
+</span></span><span style="display:flex;"><span>ln -s <span style="color:#e6db74">&#34;</span>$PWD<span style="color:#e6db74">/rex-cssh&#34;</span> /usr/local/bin/rex-cssh   <span style="color:#75715e"># optional</span>
+</span></span></code></pre></div><h3 id="usage">Usage</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rex-cssh <span style="color:#f92672">[</span>options<span style="color:#f92672">]</span> <span style="color:#f92672">[</span>user@<span style="color:#f92672">]</span>host<span style="color:#f92672">[</span>:port<span style="color:#f92672">]</span> ...
+</span></span><span style="display:flex;"><span>rex-cssh -c CLUSTER <span style="color:#f92672">[</span>options<span style="color:#f92672">]</span>
+</span></span></code></pre></div><p>Examples:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rex-cssh web1 web2 admin@db1:2222          <span style="color:#75715e"># three panes</span>
+</span></span><span style="display:flex;"><span>rex-cssh -u deploy -i ~/.ssh/id_ed25519 web1 web2 web3
+</span></span><span style="display:flex;"><span>rex-cssh -c web                            <span style="color:#75715e"># hosts from a cluster definition</span>
+</span></span><span style="display:flex;"><span>rex-cssh -c web,db -l prod                 <span style="color:#75715e"># several clusters, custom label</span>
+</span></span><span style="display:flex;"><span>rex-cssh -x <span style="color:#e6db74">&#39;uptime&#39;</span> -t web1 web2          <span style="color:#75715e"># run a command on each host</span>
+</span></span><span style="display:flex;"><span>rex-cssh -d web1 web2 web3                 <span style="color:#75715e"># dry run: print the ssh commands</span>
+</span></span></code></pre></div><p>The options:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Option</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>-c, --cluster NAME[,NAME]</code></td>
+					<td>Add hosts from the cluster file</td>
+			</tr>
+			<tr>
+					<td><code>-u, --user USER</code></td>
+					<td>Default ssh user (a <code>user@</code> on a host wins)</td>
+			</tr>
+			<tr>
+					<td><code>-p, --port PORT</code></td>
+					<td>Default ssh port (a <code>:port</code> on a host wins)</td>
+			</tr>
+			<tr>
+					<td><code>-i, --identity FILE</code></td>
+					<td>ssh identity file</td>
+			</tr>
+			<tr>
+					<td><code>-o, --option OPT</code></td>
+					<td>ssh <code>-o</code> option, repeatable</td>
+			</tr>
+			<tr>
+					<td><code>-x, --remote-cmd CMD</code></td>
+					<td>Command to run on each host</td>
+			</tr>
+			<tr>
+					<td><code>-t, --tty</code></td>
+					<td>Force a tty (<code>ssh -t</code>) when used with <code>-x</code></td>
+			</tr>
+			<tr>
+					<td><code>-l, --label LABEL</code></td>
+					<td>Tab or session label (default <code>cssh-&lt;cluster or first host&gt;</code>)</td>
+			</tr>
+			<tr>
+					<td><code>-n, --new-session</code></td>
+					<td>Open a new session (named by <code>-l</code>) instead of a new tab</td>
+			</tr>
+			<tr>
+					<td><code>--ssh CMD</code></td>
+					<td>ssh command to use (default <code>ssh</code>)</td>
+			</tr>
+			<tr>
+					<td><code>-d, --dry-run</code></td>
+					<td>Print what would run, then exit</td>
+			</tr>
+	</tbody>
+</table>
+<p>IPv6 hosts use brackets, as ssh does: <code>user@[::1]:22</code>.</p>
+<p>Cluster definitions live in <code>~/.rex-cssh.conf</code> (override the path with <code>$REX_CSSH_CONF</code>):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span># name: host host user@host:port ...
+</span></span><span style="display:flex;"><span>web: web1 web2 web3
+</span></span><span style="display:flex;"><span>db:  admin@db1 admin@db2:2222
+</span></span></code></pre></div><p>Once the grid is up, you type in <strong>any</strong> pane and every pane gets it. Three keys are bound under the <code>Ctrl-]</code> prefix, typed in any pane:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Keys</th>
+					<th>Action</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>Ctrl-]</code> <code>t</code></td>
+					<td>Toggle broadcast for all panes. Labels show <code>[solo]</code> while it is off, so you can type in one pane</td>
+			</tr>
+			<tr>
+					<td><code>Ctrl-]</code> <code>q</code></td>
+					<td>Close all the host panes</td>
+			</tr>
+			<tr>
+					<td><code>Ctrl-]</code> <code>]</code></td>
+					<td>Send a literal <code>Ctrl-]</code> to ssh</td>
+			</tr>
+	</tbody>
+</table>
+<p>When a host&rsquo;s <code>ssh</code> exits cleanly, its pane closes. If it fails, the pane stays open until you press Enter so you can read the error.</p>
+<p><img src="/img/developer-workflow.webp" alt="Developer workflow"  loading="lazy" decoding="async" class="zoomable" /></p>
+<h3 id="how-it-works">How it works</h3>
+<p>The whole system has two parts: a launcher that builds the grid, and a per-pane pty wrapper that does the keystroke replication.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>  pane web1              pane web2              pane web3
+</span></span><span style="display:flex;"><span>  +----------------+     +----------------+     +----------------+
+</span></span><span style="display:flex;"><span>  | rex-cssh --pane|     | rex-cssh --pane|     | rex-cssh --pane|
+</span></span><span style="display:flex;"><span>  |   |            |     |   |            |     |   |            |
+</span></span><span style="display:flex;"><span>  |   v            |     |   v            |     |   v            |
+</span></span><span style="display:flex;"><span>  | pty -&gt; ssh     |     | pty -&gt; ssh     |     | pty -&gt; ssh     |
+</span></span><span style="display:flex;"><span>  +-------+--------+     +-------+--------+     +-------+--------+
+</span></span><span style="display:flex;"><span>          |                     |                     |
+</span></span><span style="display:flex;"><span>          +-------- unix datagram sockets -----------+
+</span></span><span style="display:flex;"><span>                        /tmp/rex-cssh-XXXX/
+</span></span><span style="display:flex;"><span>                      0.sock  1.sock  2.sock  state.json
+</span></span></code></pre></div><p><strong>1. Rendezvous directory.</strong> The launcher creates a private directory under <code>/tmp</code> (unix socket paths have a short length limit, so it cannot sit next to anything deep) with one datagram socket per pane, plus a <code>state.json</code> holding the session ID, window ID, the block ID of every pane, and the host labels. The last wrapper to exit removes the directory.</p>
+<p><strong>2. The grid.</strong> Rex has no &ldquo;tile&rdquo; command, so the layout is built with repeated <code>rex split</code> calls, each with a computed <code>--ratio</code> that keeps every cell the same size. The shape is a near-square: 5 hosts become two rows of 3 and 2. Row leaders are stacked downwards first, then columns are split to the right of each leader:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">grid_shape</span>(n):
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Return the number of hosts per row, e.g. 5 -&gt; [3, 2].&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    cols <span style="color:#f92672">=</span> math<span style="color:#f92672">.</span>ceil(math<span style="color:#f92672">.</span>sqrt(n))
+</span></span><span style="display:flex;"><span>    rows <span style="color:#f92672">=</span> math<span style="color:#f92672">.</span>ceil(n <span style="color:#f92672">/</span> cols)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> [min(cols, n <span style="color:#f92672">-</span> r <span style="color:#f92672">*</span> cols) <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> range(rows)]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">split</span>(anchor, direction, ratio, i):
+</span></span><span style="display:flex;"><span>    res <span style="color:#f92672">=</span> rex_json(rex, <span style="color:#e6db74">&#34;split&#34;</span>, <span style="color:#e6db74">&#34;-s&#34;</span>, session, <span style="color:#e6db74">&#34;-b&#34;</span>, anchor,
+</span></span><span style="display:flex;"><span>                   <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;--split=</span><span style="color:#e6db74">{</span>direction<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>,
+</span></span><span style="display:flex;"><span>                   <span style="color:#e6db74">&#34;--ratio&#34;</span>, str(max(<span style="color:#ae81ff">1</span>, min(<span style="color:#ae81ff">99</span>, round(ratio)))),
+</span></span><span style="display:flex;"><span>                   <span style="color:#e6db74">&#34;--focus=false&#34;</span>, <span style="color:#e6db74">&#34;--label&#34;</span>, targets[i][<span style="color:#ae81ff">1</span>],
+</span></span><span style="display:flex;"><span>                   <span style="color:#e6db74">&#34;--&#34;</span>, <span style="color:#f92672">*</span>pane_cmd(i))
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> res[<span style="color:#e6db74">&#34;block_ids&#34;</span>][<span style="color:#ae81ff">0</span>]
+</span></span></code></pre></div><p>Notice <code>--label targets[i][1]</code>: every block is labeled with its host, so the grid stays legible and the label doubles as the broadcast-state indicator later.</p>
+<p><strong>3. The pty wrapper.</strong> Each pane does not run <code>ssh</code> directly; it runs the same script in an internal mode:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>python3 rex-cssh --pane <span style="color:#ae81ff">0</span> --dir /tmp/rex-cssh-abc123 --label web1 -- ssh web1
+</span></span></code></pre></div><p>The wrapper forks <code>ssh</code> on a pty (<code>pty.fork</code>) and then runs one <code>select</code> loop over three sources: the pty master (ssh output), its own unix socket (keystrokes from siblings), and its own stdin (your keystrokes):</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">while</span> <span style="color:#66d9ef">True</span>:
+</span></span><span style="display:flex;"><span>    ready, _, _ <span style="color:#f92672">=</span> select<span style="color:#f92672">.</span>select(
+</span></span><span style="display:flex;"><span>        [master, sock] <span style="color:#f92672">+</span> ([<span style="color:#ae81ff">0</span>] <span style="color:#66d9ef">if</span> stdin_open <span style="color:#66d9ef">else</span> []), [], [])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> master <span style="color:#f92672">in</span> ready:
+</span></span><span style="display:flex;"><span>        data <span style="color:#f92672">=</span> os<span style="color:#f92672">.</span>read(master, <span style="color:#ae81ff">65536</span>)   <span style="color:#75715e"># ssh output -&gt; your screen</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> data:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">break</span>                       <span style="color:#75715e"># child closed the pty</span>
+</span></span><span style="display:flex;"><span>        write_all(<span style="color:#ae81ff">1</span>, data)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> sock <span style="color:#f92672">in</span> ready:
+</span></span><span style="display:flex;"><span>        msg <span style="color:#f92672">=</span> sock<span style="color:#f92672">.</span>recv(CHUNK <span style="color:#f92672">+</span> <span style="color:#ae81ff">16</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> msg[:<span style="color:#ae81ff">1</span>] <span style="color:#f92672">==</span> <span style="color:#e6db74">b</span><span style="color:#e6db74">&#34;D&#34;</span> <span style="color:#f92672">and</span> broadcast:
+</span></span><span style="display:flex;"><span>            write_all(master, msg[<span style="color:#ae81ff">1</span>:])  <span style="color:#75715e"># sibling keystrokes -&gt; local ssh</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> <span style="color:#ae81ff">0</span> <span style="color:#f92672">in</span> ready:
+</span></span><span style="display:flex;"><span>        data <span style="color:#f92672">=</span> os<span style="color:#f92672">.</span>read(<span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">4096</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># ... Ctrl-] prefix handling (t / q / ]) ...</span>
+</span></span><span style="display:flex;"><span>        write_all(master, data)         <span style="color:#75715e"># your keystrokes -&gt; local ssh</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> broadcast:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">for</span> i <span style="color:#f92672">in</span> range(<span style="color:#ae81ff">0</span>, len(data), CHUNK):
+</span></span><span style="display:flex;"><span>                tell(<span style="color:#e6db74">b</span><span style="color:#e6db74">&#34;D&#34;</span> <span style="color:#f92672">+</span> data[i:i <span style="color:#f92672">+</span> CHUNK])   <span style="color:#75715e"># -&gt; all sibling wrappers</span>
+</span></span></code></pre></div><p>The anti-loop rule is what makes this simple: <strong>bytes received over the socket are written only to the local ssh, never forwarded again.</strong> Your own keystrokes are the only bytes that get broadcast, as <code>D</code>-prefixed datagrams split into 1024-byte chunks (unix datagrams are small). A second message type, <code>B</code>, carries the broadcast flag so that when one pane toggles it off, every pane turns off together.</p>
+<p><strong>4. The broadcast toggle.</strong> <code>Ctrl-] t</code> flips the flag in all wrappers and then relabels every block, appending <code> [solo]</code> while broadcast is off — a cheap, visible state indicator built on <code>rex block rename</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>suffix <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span> <span style="color:#66d9ef">if</span> broadcast <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#34; [solo]&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> blk, name <span style="color:#f92672">in</span> zip(st[<span style="color:#e6db74">&#34;blocks&#34;</span>], st[<span style="color:#e6db74">&#34;labels&#34;</span>]):
+</span></span><span style="display:flex;"><span>    subprocess<span style="color:#f92672">.</span>Popen([st[<span style="color:#e6db74">&#34;rex&#34;</span>], <span style="color:#e6db74">&#34;block&#34;</span>, <span style="color:#e6db74">&#34;rename&#34;</span>, <span style="color:#e6db74">&#34;-s&#34;</span>, st[<span style="color:#e6db74">&#34;session&#34;</span>],
+</span></span><span style="display:flex;"><span>                      blk, name <span style="color:#f92672">+</span> suffix], <span style="color:#f92672">...</span>)
+</span></span></code></pre></div><p><strong>5. Session or tab.</strong> If <code>REX_SESSION</code> is set (you are inside a Rex terminal), the launcher opens a <strong>new window</strong> — a tab — in the current session with <code>rex window new</code>. Outside Rex, or with <code>-n</code>, it creates a <strong>new session</strong> with <code>rex new</code>. In the latter case it then does a best-effort switch of your connected apps to that session:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> client <span style="color:#f92672">in</span> clients:                      <span style="color:#75715e"># from `rex client ls --json`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> client<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;info&#34;</span>, {})<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;kind&#34;</span>) <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#34;app&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">continue</span>
+</span></span><span style="display:flex;"><span>    rex <span style="color:#f92672">-</span>C <span style="color:#f92672">&lt;</span>client<span style="color:#f92672">&gt;</span> do session<span style="color:#f92672">.</span>select session_id<span style="color:#f92672">=&lt;</span>session<span style="color:#f92672">&gt;</span>
+</span></span></code></pre></div><p>That last part needs <strong>Remote Control</strong> turned on in the Rex app&rsquo;s Settings under Rex Server. If it is off, the session is still created — you just have to select it yourself.</p>
+<p><strong>6. Teardown.</strong> <code>Ctrl-] q</code> kills the session (or just the window, if the launcher opened a tab). A pane whose ssh exits cleanly simply closes; one that failed waits on Enter. When the last wrapper unlinks its socket, it removes the rendezvous directory. If the session is killed from outside — the app, <code>rex kill</code>, a crashed server — the wrappers clean up on <code>SIGTERM</code>/<code>SIGHUP</code>, and as a backstop the launcher sweeps any rendezvous directory older than an hour on its next run. No daemons, no cleanup command to remember.</p>
+<h3 id="a-typical-session">A typical session</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>$ rex-cssh -d web1 web2 web3
+</span></span><span style="display:flex;"><span>layout <span style="color:#f92672">(</span>hosts per row<span style="color:#f92672">)</span>: <span style="color:#f92672">[</span>2, 1<span style="color:#f92672">]</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>web1<span style="color:#f92672">]</span> ssh web1
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>web2<span style="color:#f92672">]</span> ssh web2
+</span></span><span style="display:flex;"><span><span style="color:#f92672">[</span>web3<span style="color:#f92672">]</span> ssh web3
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>$ rex-cssh web1 web2 web3
+</span></span><span style="display:flex;"><span>rex-cssh: opened <span style="color:#ae81ff">3</span> panes in this session
+</span></span></code></pre></div><p>The grid opens as a new tab labeled <code>cssh-web1</code>. You type <code>uptime</code>, it lands in all three panes. You spot one box acting up, press <code>Ctrl-] t</code>, the labels flip to <code>[solo]</code>, and you investigate that one host without your typing leaking to the others. <code>Ctrl-] t</code> again to rejoin, <code>Ctrl-] q</code> when done.</p>
+<p>For the one-shot case — a command you want run everywhere, not an interactive session:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>rex-cssh -x <span style="color:#e6db74">&#39;systemctl restart haproxy&#39;</span> -t web1 web2 web3
+</span></span></code></pre></div><h2 id="limitations">Limitations</h2>
+<p>Honest list of what is missing:</p>
+<ul>
+<li><strong>Early keystrokes can be lost.</strong> If you start typing before every pane&rsquo;s wrapper has bound its socket, those bytes only reach the panes that were ready. Each send globs the current socket list, so late joiners simply do not get the earlier bytes. In practice the grid is up in well under a second, but do not paste a wall of text immediately.</li>
+<li><strong>The grid is fixed.</strong> It is always a near-square of equal cells, because Rex has no tiling command. No 4-across rows, no custom layouts.</li>
+<li><strong>Broadcast is all or nothing.</strong> <code>Ctrl-] t</code> solos a single pane, but there is no per-pane exclusion while the rest stay in sync.</li>
+<li><strong>Rex is in beta.</strong> I am on <code>0.1.0-preview.21</code>. The CLI surface — command names, JSON shapes, the Remote Control behavior — can still move under the tool.</li>
+</ul>
+<p>And the obvious one: if you live in tmux, <a href="https://github.com/zinic/tmux-cssh">tmux-cssh</a> does the same job and has had years of battle-testing. <code>rex-cssh</code> is for when Rex is where your terminal is.</p>
+<h2 id="why-this-was-easy-to-build-against">Why this was easy to build against</h2>
+<p>The part of this I want to emphasize: the tool is about 450 lines because the CLI underneath is a real API.</p>
+<ul>
+<li><strong>Stable JSON.</strong> Every listing and mutation command emits machine-readable output with <code>--json</code>, including full IDs. The launcher saves the block IDs that each <code>split</code> returns and feeds them back into the next <code>split</code> — no parsing of human-oriented tables.</li>
+<li><strong>Permanent IDs, documented exit codes.</strong> Targets match by ID, label, position, or ID tail; ambiguity is an error (exit 3), not a guess. <code>rex wait</code> and <code>rex events</code> exist for when you need to synchronize on a block or session ending.</li>
+<li><strong>Context for free.</strong> <code>REX_SESSION</code> and <code>REX_BLOCK</code> in every terminal mean the script knows where it is without asking.</li>
+<li><strong>The same surface agents use.</strong> The <code>rex skill</code> guide that Superlogical ships with the CLI is what I used to learn the commands — which is a nice sign: if the automation story is good enough for coding agents, it is good enough for a cssh clone.</li>
+</ul>
+<p>Scripting tmux works too, but it means <code>list-panes -F</code> format strings and praying they hold. Scripting zellij means plugins. Rex gives you JSON, IDs, and exit codes out of the box, and a pty-plus-unix-socket wrapper is the only extra machinery needed to fill in what the multiplexer itself does not do.</p>
+<h2 id="where-this-goes-next">Where this goes next</h2>
+<p><code>rex-cssh</code> is deliberately a small tool: one file, no dependencies, no configuration beyond an optional cluster file. The natural next steps are a per-pane mute list, a paste buffer that waits for all sockets to be ready, and layout options once Rex&rsquo;s layout commands grow up.</p>
+<p>More interesting to me is what the CLI enables beyond cssh: <code>rex events</code> streams server events, <code>rex do</code> runs Lua on the server, and <code>rex capture</code> gives you any pane&rsquo;s screen on demand. Fleet monitoring that renders into a live Rex session, or an agent that opens a debug session and reads the screen instead of guessing at logs, are both short scripts away. That &ldquo;everything in it composable&rdquo; line in Superlogical&rsquo;s plan is the first time in a long time that a multiplexer has felt like a foundation rather than a habit.</p>
+<p>If you have the macOS beta (or a Linux server) running, give <a href="https://github.com/devopstales/rex-cssh"><code>rex-cssh</code></a> a try and tell me what is missing. And if you have not tried <a href="https://www.superlogical.com/rex/">Rex</a> yet, the <a href="https://www.superlogical.com/rex/docs/">docs</a> are a good place to start — the CLI alone is worth a look.</p>]]></content>
+            
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="devops" term="devops" label="DevOps" />
+                             
+                                <category scheme="linux" term="linux" label="Linux" />
+                            
+                        
+                    
+                 
+                    
+                 
+                    
+                         
+                        
+                            
+                             
+                                <category scheme="rex" term="rex" label="rex" />
+                             
+                                <category scheme="superlogical" term="superlogical" label="superlogical" />
+                             
+                                <category scheme="cluster-ssh" term="cluster-ssh" label="cluster-ssh" />
+                             
+                                <category scheme="ssh" term="ssh" label="ssh" />
+                             
+                                <category scheme="terminal-multiplexer" term="terminal-multiplexer" label="terminal-multiplexer" />
+                             
+                                <category scheme="tmux" term="tmux" label="tmux" />
+                             
+                                <category scheme="python" term="python" label="python" />
+                            
+                        
+                    
+                
+            
+        </entry>
     
         
         <entry>

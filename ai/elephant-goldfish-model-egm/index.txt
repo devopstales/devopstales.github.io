@@ -1,0 +1,163 @@
+---
+title: Elephant-Goldfish Model (EGM): Design With Deep Context, Review With Fresh Eyes
+url: https://devopstales.github.io/ai/elephant-goldfish-model-egm/
+date: 2026-11-02
+---
+
+
+Most long AI coding sessions fail the same way: an hour in, the model has absorbed every requirement, every tangent, and every unexamined assumption you both made — and when you finally ask it to review its own work, it reads straight past the gaps it already filled in mentally. Google&#39;s [Elephant-Goldfish Model](https://github.com/google/elephant-goldfish-model) (EGM) attacks exactly that failure. It splits the job into two roles with opposite memory profiles: a context-rich &#34;Elephant&#34; that drafts the design, and stateless &#34;Goldfish&#34; reviewers that read the draft cold and flag what a fresh reader would trip over.
+
+&lt;!--more--&gt;
+
+![Elephant drafts the design, goldfish swarm reviews it with zero shared context](/img/elephant-goldfish-model.webp)
+*The EGM loop: a deep-context agent drafts the spec, fresh zero-context subagents stress-test it, and you approve before any code is written*
+
+EGM packages that split as an installable plugin — Apache 2.0, developed in-house at Google and used daily by thousands of its engineers to ship production code — so the brainstorm-draft-review cycle runs on whatever coding agent you already use, with the context handoff between Elephant and Goldfish automated instead of copy-pasted by hand.
+
+## Where the Idea Comes From
+
+The metaphor predates the plugin. It comes from an essay by Dave Rensin, [Elephants, Goldfish and the New Golden Age of Software Engineering](https://drensin.medium.com/elephants-goldfish-and-the-new-golden-age-of-software-engineering-c33641a48874), which frames the whole approach. The central worry is that AI velocity is a double-edged sword:
+
+&gt; If we are not careful, we are not just writing code faster. We are mass-producing our mistakes.
+
+Rensin&#39;s argument is that &#34;design is the new code.&#34; When a human writes code, the micro-decisions and the *why* live in the logic. When an AI writes the code, the human is no longer making those micro-decisions — so if they are not forced to &#34;shift left&#34; into a design document before the code exists, the resulting system becomes incomprehensible to the person who is ultimately responsible for it. The plugin makes that shift-left step a first-class, repeatable workflow.
+
+The two roles map onto two failure modes of long sessions:
+
+- **The Elephant** — &#34;an elephant never forgets.&#34; A heavily prompted, context-rich session that holds all the institutional knowledge, the arguments you had with the model, and the entire history of the feature. It writes the design.
+- **The Goldfish** — &#34;a goldfish forgets instantly.&#34; A brand-new session with zero memory that knows only what is placed in front of it. It reads the document literally, so when it hits an undefined term or an unhandled edge case it has no choice but to flag it.
+
+The human is a third role the agents never replace: you make the architectural trade-offs and sign off before implementation.
+
+## The Three Roles
+
+| Role | What it sees | What it does |
+|---|---|---|
+| **Elephant** | Your project, requirements, and earlier decisions | Explores the problem and drafts the specification |
+| **Goldfish** | The document and its referenced source material, with no earlier conversation | Finds missing assumptions, unclear requirements, and implementation risks |
+| **You** | The goals and constraints that matter | Resolves trade-offs, approves the design, decides what to build |
+
+The key constraint is context isolation. Goldfish reviewers never see the conversation that produced the draft — that is the entire point. A reviewer sharing the designer&#39;s history shares its blind spots, so EGM refuses to fake the review: if the host agent cannot spawn genuinely fresh subagents with isolated context, the review stops rather than running in the same contaminated session.
+
+## How the Workflow Runs
+
+The core loop is three skills plus your approval:
+
+```plaintext
+  /egm-brainstorm           /egm-draft              /egm-review
+        |                       |                       |
+        v                       v                       v
+  concepts_brief.md --&gt; design_draft.md --&gt; Goldfish swarm
+        (no code yet)      (section by     (zero context,
+                            section)         five stages)
+                                                       |
+                                                       v
+                                              you approve, then
+                                              the agent implements
+```
+
+### Phase 1: Growing the Elephant (`/egm-brainstorm`)
+
+You load the system context and co-design under a hard &#34;no code yet&#34; rule. The agent interviews you, challenges assumptions, and stress-tests the idea with a fresh reviewer swarm across multiple lenses. The agreed direction lands in `concepts_brief.md`. Rensin&#39;s advice for this phase is blunt: argue to learn, not to win, and if the model drifts into a sycophantic spiral, remind it that &#34;when you agree with me you are not being helpful.&#34;
+
+### Phase 2: Drafting With the Elephant (`/egm-draft`)
+
+The brief becomes a Markdown design document under `docs/designs/`, written section by section with a pause after each for your feedback in chat. The document covers the problem definition, the technical plan, alternatives considered, and a concrete implementation plan that enumerates the specific files to change.
+
+### Phase 3: The Goldfish Protocol (`/egm-review`)
+
+The model flips from co-design to adversarial validation. Three steps run automatically:
+
+- **Comprehension check** — a stateless Goldfish reads the complete design and must explain the architecture and intent back to the Elephant. If it cannot summarize the plan accurately, the document is ambiguous and needs more drafting.
+- **Antagonistic review** — multiple Goldfish instances act as skeptical technical reviewers, hunting edge cases, hidden dependencies, and logical gaps. Their personas are explicitly instructed to lead with risks and argue the strongest case against your proposal, not validate it. Findings are funneled back to the Elephant for resolution.
+- **Implementation readiness check** — a final Goldfish does a strict go/no-go, verifying that file paths, data structures, and function signatures are all present and unambiguous, so the spec is ready to be transcribed into code.
+
+Once you approve, you tell the coding agent to build to the plan.
+
+## The Rest of the Skill Set
+
+The three-phase loop is the headline, but the plugin ships seven skills, each usable on its own — the docs say explicitly that the workflow is not a prescription:
+
+| Skill | What it does |
+|---|---|
+| `egm-brainstorm` | Tests an idea and writes a concept brief |
+| `egm-draft` | Turns a brief or existing notes into a design document |
+| `egm-resolve` | Works through review findings and agrees on changes |
+| `egm-bootstrap` | Generates and verifies READMEs for an existing codebase, bottom-up |
+| `egm-review` | Reviews a design with fresh agents across five stages |
+| `egm-review-loop` | Runs a configured group of reviewers for a specific review task |
+| `egm-drift-report` | Compares checked-in documents with the current source code |
+
+Two of them are worth calling out. `egm-bootstrap` walks an existing tree recursively — leaf READMEs first, then parent summaries, then a root map of the whole system — so an Elephant can navigate a codebase it has never seen. `egm-drift-report` is the maintenance counterpart: it scans your design directory against the live code and reports where they diverge, which you then reconcile by updating the doc or the code. Rensin recommends running it weekly, since a spec that drifts from reality is a spec the Goldfish can no longer review honestly.
+
+## Installing It
+
+There is no single global install: you install the plugin per harness, and it is deliberately cross-agent — a Google-originated project that ships first-class support for Claude Code and Codex as well as its own Antigravity.
+
+```text
+# Antigravity CLI
+agy plugin install https://github.com/google/elephant-goldfish-model
+
+# Claude Code
+claude plugin marketplace add google/elephant-goldfish-model
+claude plugin install egm@egm
+
+# Codex
+codex plugin marketplace add google/elephant-goldfish-model
+codex plugin add egm@egm
+```
+
+Claude Cowork and ChatGPT Work have their own setup path in the repo&#39;s harness docs. Start a new session after installing, since skills load at session start.
+
+### Verify the install
+
+Ask the agent directly rather than trusting a silent success message:
+
+```text
+What EGM skills are available?
+```
+
+A correct install lists `egm-brainstorm`, `egm-draft`, `egm-review`, and the rest. Note the prefix quirk: in Antigravity (agy CLI) and Claude Code the commands take an `/egm:` prefix, so it is `/egm:egm-brainstorm`, not a bare slash command. In Codex you select the skill from the skill picker instead.
+
+## Trying It on a First Task
+
+Do not aim it at the most important feature first, and do not use it at all for a small, clear bug fix — the docs say a quick fix should just go through your normal workflow, because the design-and-review cycle costs real time and tokens. Pick something that genuinely needs design decisions: a feature where the interesting questions are about behavior, not syntax. The repo&#39;s own example is adding webhook delivery — what happens when a delivery fails, or when the same event arrives twice?
+
+```text
+/egm-brainstorm Add webhook delivery to this project.
+```
+
+Expect an interview before any structure: failure semantics, idempotency, retry behavior. Fresh reviewers will challenge the proposal, and the agreed direction saves to `concepts_brief.md`. Then:
+
+```text
+/egm-draft
+```
+
+```text
+/egm-review design_draft.md
+```
+
+The review is designed to produce a lot of feedback — take what is relevant and ignore the rest. Approve the design, then ask the agent to implement it.
+
+## When It Fits and When It Doesn&#39;t
+
+Good fit: features that need real design decisions before code; long, multi-session work where architectural drift is a genuine risk; existing codebases you want to document so future Elephants have context to load; teams that want the review gate to be a repeatable, isolated step instead of a mood.
+
+Weaker fit: quick scripts, throwaway prototypes, and small well-bounded fixes where the brainstorm-draft-review ceremony never pays back; harnesses that cannot spawn isolated subagents, where EGM will simply stop the review rather than degrade it; teams that already run an equivalent design-doc workflow and would be swapping one opinionated process for another.
+
+Against the wider field, EGM occupies the same skills layer as [Superpowers](/ai/superpowers-enforced-sdd-skills/) but takes a different bet. Superpowers automates the whole brainstorm-to-finish loop including strict TDD and per-task subagent implementation; EGM stops at the approved specification and hands implementation back to whatever agent and skills you already trust. Where Superpowers enforces how you build, EGM enforces how you decide. The broader portability comparison across Spec Kit, Kiro, Claude Code skills, OpenSpec, and BMAD-METHOD is covered in [Spec Kit vs Kiro vs Claude Code](/ai/spec-kit-kiro-claude-code-sdd/).
+
+## Things to Know
+
+- **It is a process layer, not a model.** EGM is a set of skills and subagent personas that sit on top of your existing coding agent; there is no new model or runtime to host.
+- **Fresh subagents are a hard requirement.** Review needs genuinely isolated contexts. If the host cannot create them, EGM stops the review instead of running it in a contaminated session.
+- **A review is not a test.** The project&#39;s own docs are explicit that review does not replace tests or human judgment — it surfaces design gaps, it does not verify behavior.
+- **It is not an officially supported Google product.** It is Apache 2.0, developed and used internally at Google, open-sourced in October 2026, with a v0.1.0 release.
+- **Approved specs are the artifact.** Keep them under `docs/designs/` — they are the durable record of the micro-decisions, and the thing a Goldfish can review later when the code has drifted.
+
+## Summary
+
+EGM is worth installing when the gap between a feature you designed and the code an AI produced from it is the problem to solve. It introduces no new specify-plan-implement idea — it splits the existing one by memory profile, so the agent that wrote the design is not the agent that reviews it, and the human judgment in between stays with you. Install it on the one harness you use daily first, run a single bounded feature that needs real design decisions through the full brainstorm-to-review cycle, and judge from there whether the fresh-eyes review earns its keep.
+
+*Have you run a design-and-review loop like EGM or Superpowers on a real feature? Share what the zero-context reviewers actually caught that the designer missed, in the comments below.*
+

@@ -1,0 +1,64 @@
+---
+title: Kanban in Hermes: Dispatching Agents Without DDoSing Your Own GPU
+url: https://devopstales.github.io/ai/kanban-hermes-workflows/
+date: 2026-10-26
+---
+
+
+Hermes Agent ships a durable Kanban board whose dispatcher happily promotes every ready task at once — fine against elastic cloud APIs, a self-inflicted denial of service against one small GPU cluster. Uncapped promotion floods the gateway with concurrent requests and turns throughput into queueing, thrashing, and timeouts.
+
+&lt;!--more--&gt;
+
+![Hermes Kanban board with controlled dispatch workers](/img/kanban-hermes-workflows.webp)
+*Durable board, isolated profiles, dispatcher: powerful until promotion outruns the cluster*
+
+## How Dispatch Works — and Where the Cap Isn&#39;t
+
+Three layers: the board (durable SQLite state for tasks, columns, relations, history), workers (profiles in isolated workspaces), and the dispatcher (long-lived process scanning for dispatchable cards, claiming atomically, and spawning runs against Ollama, vLLM, or llama.cpp endpoints). Cards start in backlog or ready; the dispatcher pulls and launches.
+
+The trap, found by reading the dispatcher source: `hermes kanban dispatch` caps only new spawns per pass (`--max 2` limits that pass, not total running tasks), and no `max_active_tasks` config is consulted on that path — unbounded promotion limited only by ready-queue size. Gateway-embedded dispatch and a forced daemon against one board race on claims; a down gateway silences dispatch until service returns, then bursts. Verify with process listing (`pgrep` for gateway versus daemon), config key inspection, and ready/running queue counts. Config wires exactly two keys — gateway-embedded dispatch toggle and tick interval — so active-task control must come from explicit cadence plus dependency modeling.
+
+## Strategy 1: Dependency Chains for Sequential Flows
+
+Pipelines sharing artifacts, migrations, same-store batch jobs: model parent-child links so children become dispatchable only on parent completion. A small CLI helper script creates the chain (parent ingest, child report, child publish), then low dispatcher limits pull tasks one by one without ever breaching concurrency caps. Deterministic by construction.
+
+## Strategy 2: Cron with a Running-Aware Cap
+
+For deterministic pacing, wrap dispatch in a host-cron script that counts running tasks first and dispatches only remaining slots:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+MAX_PARALLEL=&#34;${MAX_PARALLEL:-2}&#34;
+
+running_out=&#34;$(hermes kanban list --status running)&#34;
+
+if [[ &#34;$running_out&#34; == *&#34;(no matching tasks)&#34;* ]]; then
+  running_count=0
+else
+  running_count=&#34;$(printf &#39;%s\n&#39; &#34;$running_out&#34; | wc -l)&#34;
+fi
+
+slots=$(( MAX_PARALLEL - running_count ))
+
+if (( slots &lt;= 0 )); then
+  echo &#34;Already at limit running=$running_count max=$MAX_PARALLEL dispatch skipped&#34;
+  exit 0
+fi
+
+hermes kanban dispatch --max &#34;$slots&#34;
+```
+
+Schedule per minute via crontab with explicit `PATH` (cron environments are minimal — use absolute binary paths), writable log directories, and `crontab -l` verification. Sub-minute cadence comes from a loop wrapper (four passes per minute with sleeps) guarded by `flock` against overlapping runs. The cap only governs dispatches through this script — disable gateway-embedded dispatch or it promotes independently. And skip internal LLM-driven cron: burning model calls to run shell schedules while busy doing real work is backwards.
+
+## Monitor, Tune, Know When Kanban Fits
+
+Watch gateway metrics (rate, latency, errors, token throughput), node health (GPU utilization, VRAM, CPU, RAM), and board shape (backlog, ready, active, done). Raise concurrency gradually: rising latency at flat throughput, growing timeouts, or long-tailed active tasks all mean roll back to the last stable config and keep it default. Kanban earns its place with long-lived research and engineering backlogs, multi-profile collaboration, restart-surviving workflows, and dashboard triage by humans — single runs spawning temporary helpers stay simpler with built-in delegation tools. When named profiles grow into real coordination topologies, the patterns in [multi-agent orchestration](/ai/multi-agent-orchestration-patterns/) describe what dispatch alone can&#39;t. For the serving runtimes underneath, the [Ollama to vLLM](/ai/ollama-to-vllm-migration/) migration guide covers which backend matches shared-service load.
+
+## Summary
+
+Board for durability, profiles for isolation, dispatcher for flow — with promotion capped by measured slots, dependencies for sequences, cron for pacing, and metrics for truth. Configured that way, Kanban stays responsive while the gateway and hardware stay alive.
+
+*Running background agents against self-hosted models — what caps your dispatch? Share the setup in the comments below!*
+

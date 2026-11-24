@@ -1,0 +1,308 @@
+---
+title: Managing Documents with Local LLMs and Self-Hosted Apps
+url: https://devopstales.github.io/ai/self-hosted-document-management-local-llms/
+date: 2026-10-27
+---
+
+
+I stopped relying on cloud AI services for document management. Instead, I run a self-hosted stack of Paperless-ngx, Paperless-GPT, and Paperless AI, backed by local LLMs through Ollama. Nothing leaves my network: academic records, certificates, invoices, tax filings, and receipts all stay on my own hardware.
+
+This post documents the stack I built to manage documents locally: how Paperless-ngx serves as the central document hub, how Paperless-GPT handles OCR, how Paperless AI provides RAG-powered chat over the archive, and how everything connects to a local Ollama instance running Qwen 3, MiniCPM-V, and Llama 3.2.
+
+&lt;!--more--&gt;
+
+![Document management stack with local LLMs](/img/coding-terminal.webp)
+*Paperless-ngx, Paperless-GPT, and Paperless AI with a local Ollama backend*
+
+## Why not just use ChatGPT
+
+I consider many AI tools overrated, but their reasoning capabilities are genuinely useful for boring, monotonous work. Document organization is exactly that: renaming files, extracting text from scans, tagging invoices, and searching through tax filings. Sending personal documents — financial records, academic transcripts, identification — to a third-party cloud service is unnecessary when local models can handle the same work.
+
+The trade-off is operational overhead: I manage three applications, an LLM provider, and the underlying server. The benefit is privacy, data sovereignty, and no subscription fees.
+
+## The lab layout
+
+```plaintext
+  Scanner / email / manual upload
+                  |
+                  v
+        &#43;-------------&#43;
+        |  Paperless  |
+        |    -ngx     |  &lt;- central document hub (storage, tags, web UI)
+        &#43;------&#43;------&#43;
+               |
+      &#43;--------&#43;--------&#43;
+      |        tag rule  |
+      v        v         v
+&#43;----------&#43; &#43;----------&#43; &#43;-----------&#43;
+| Paperless | | Paperless | | Paperless |
+|    GPT    | |     AI    | |   Ollama  |
+|   (OCR)   | |   (RAG)   | |  (LLMs)   |
+&#43;-----&#43;-----&#43; &#43;-----&#43;-----&#43; &#43;-----&#43;-----&#43;
+      |           |            |
+      &#43;-----&#43;-----&#43;------------&#43;
+            |         |
+            v         v
+      extracted text   chat / search
+      sent back to     over archive
+      Paperless-ngx
+```
+
+### Hosts and services
+
+| Service | Role | Endpoint |
+|---------|------|----------|
+| Paperless-ngx | Document storage, metadata, web UI | http://paperless:8000 |
+| Paperless-GPT | OCR, text extraction, tag generation | http://paperless-gpt:8000 |
+| Paperless AI | RAG chat, document Q&amp;A | http://paperless-ai:8000 |
+| Ollama | Local LLM inference (Qwen 3, MiniCPM-V, Llama 3.2) | http://ollama:11434 |
+
+All services run on the same home lab host (Proxmox LXC containers or Docker Compose), reachable only on the local network.
+
+## Step 1: Paperless-ngx as the document hub
+
+Paperless-ngx is the foundation. It stores scanned PDFs, images, Office files, and text documents, extracts correspondents, tags, and custom fields, and exposes a web UI for browsing and searching.
+
+Deploy it with Docker Compose:
+
+```yaml
+# docker-compose.yml
+services:
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: paperless
+    ports:
+      - &#34;8000:8000&#34;
+    environment:
+      PAPERLESS_ADMIN_USER: admin
+      PAPERLESS_ADMIN_PASSWORD: changeme
+      PAPERLESS_DB_HOST: db
+      PAPERLESS_DB_NAME: paperless
+      PAPERLESS_DB_USER: paperless
+      PAPERLESS_DB_PASSWORD: changeme
+      PAPERLESS_REDIS: redis://redis:6379
+      PAPERLESS_OCR_LANGUAGE: eng&#43;deu
+    volumes:
+      - ./data:/usr/src/paperless/data
+      - ./media:/usr/src/paperless/media
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: changeme
+    volumes:
+      - ./db-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - ./redis-data:/data
+```
+
+Start it:
+
+```bash
+docker compose up -d
+```
+
+Create a superuser and configure the web UI:
+
+```bash
+docker compose exec paperless python3 manage.py createsuperuser
+```
+
+Open `http://localhost:8000`, log in, and configure:
+
+- **Document types**: invoice, receipt, certificate, statement, contract
+- **Correspondents**: utility providers, banks, government agencies
+- **Tags**: tax-2025, insurance, medical, household
+
+### Import rules
+
+Paperless-ngx can pull documents directly from email via IMAP. Configure a mail account in Settings -&gt; Mail so it only grabs essential attachments, not spam. Matching algorithms then assign correspondents and tags automatically based on content.
+
+Paperless-ngx&#39;s built-in OCR works well for clean text documents but struggles with tables, weird indentation, and graphical elements. That is where Paperless-GPT comes in.
+
+## Step 2: Paperless-GPT for OCR and text extraction
+
+Paperless-GPT is a companion service, not a standalone document store. It connects to both Paperless-ngx and an LLM provider (Ollama in my setup) and performs OCR analysis on documents that the built-in engine cannot handle cleanly.
+
+Deploy Paperless-GPT:
+
+```yaml
+services:
+  paperless-gpt:
+    image: ghcr.io/icereed/paperless-gpt:latest
+    container_name: paperless-gpt
+    ports:
+      - &#34;8001:8000&#34;
+    environment:
+      PAPERLESS_URL: http://paperless:8000
+      PAPERLESS_API_TOKEN: &lt;paperless-api-token&gt;
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen3:8b
+      OLLAMA_VISION_MODEL: minicpm-v
+    volumes:
+      - ./paperless-gpt-data:/app/data
+    depends_on:
+      - paperless
+      - ollama
+```
+
+### OCR workflow
+
+1. Upload a document to Paperless-ngx.
+2. An automation rule applies the `paperless-gpt` tag.
+3. Paperless-GPT detects the tag and extracts text from the document using the vision model (MiniCPM-V).
+4. Review the OCR result in the Paperless-GPT UI.
+5. Approve it, and Paperless-GPT sends the extracted text back to Paperless-ngx as the document content.
+
+Paperless-GPT sometimes makes mistakes — invoices with random characters, tables, and graphical elements can confuse it — but it produces coherent results where Paperless-ngx&#39;s native OCR fails. It also generates tags, correspondents, dates, and titles, though I use Paperless AI for those fields because it hallucinates less.
+
+## Step 3: Paperless AI for RAG chat over the archive
+
+Paperless AI connects to Paperless-ngx and a local LLM, giving you Retrieval-Augmented Generation over your entire document archive. Instead of skimming dozens of invoices and tax filings, you ask natural-language questions and get precise answers with citations.
+
+Deploy Paperless AI:
+
+```yaml
+services:
+  paperless-ai:
+    image: ghcr.io/clusterzx/paperless-ai:latest
+    container_name: paperless-ai
+    ports:
+      - &#34;8002:8000&#34;
+    environment:
+      PAPERLESS_URL: http://paperless:8000
+      PAPERLESS_API_TOKEN: &lt;paperless-api-token&gt;
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3.2
+      EMBEDDING_MODEL: nomic-embed-text
+    volumes:
+      - ./paperless-ai-data:/app/data
+    depends_on:
+      - paperless
+      - ollama
+```
+
+### What you can do with it
+
+- Query the entire archive for specific details (e.g., &#34;What was the total paid to Contoso Utilities in 2025?&#34;)
+- Select individual documents and ask the LLM questions about them
+- Generate tags, correspondents, dates, and titles with fewer hallucinations than Paperless-GPT
+- Chat with documents through a web interface
+
+Pair it with Llama 3.2 for fast, accurate answers over your local archive.
+
+## Step 4: Ollama as the local LLM provider
+
+Ollama runs the models that power Paperless-GPT and Paperless AI. It runs as a container on the same host:
+
+```yaml
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - &#34;11434:11434&#34;
+    volumes:
+      - ./ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
+Pull the models:
+
+```bash
+docker exec ollama ollama pull qwen3:8b
+docker exec ollama ollama pull minicpm-v
+docker exec ollama ollama pull llama3.2
+docker exec ollama ollama pull nomic-embed-text
+```
+
+Model assignments:
+
+| Model | Used by | Purpose |
+|-------|---------|---------|
+| Qwen 3 8B | Paperless-GPT | General text extraction |
+| MiniCPM-V | Paperless-GPT | Vision OCR on images and scans |
+| Llama 3.2 | Paperless AI | RAG chat, tag/correspondent generation |
+| nomic-embed-text | Paperless AI | Embeddings for document retrieval |
+
+I run these on an aged NVIDIA Pascal GPU — sufficient for 7-8B parameter models and vision inference at home-lab scale.
+
+## Step 5: Connect the three services
+
+All three Paperless services need an API token from Paperless-ngx:
+
+1. Log into Paperless-ngx as admin.
+2. Go to Settings -&gt; Tokens -&gt; Add token.
+3. Copy the token into each service&#39;s `PAPERLESS_API_TOKEN` environment variable.
+
+The automation rule in Paperless-ngx:
+
+1. Document uploaded.
+2. Rule matches filename or content pattern.
+3. Rule applies the `paperless-gpt` tag.
+4. Paperless-GPT polls Paperless-ngx for tagged documents.
+5. OCR result is written back to Paperless-ngx.
+6. Paperless AI indexes the document for RAG queries.
+
+## Backup strategy
+
+I run a 3-2-1 backup across the three containers:
+
+- Three copies of the data (live, local backup, offsite)
+- Two different media (NVMe SSD, external USB drive)
+- One copy offsite (encrypted, synced to a remote location)
+
+Back up these directories:
+
+```bash
+tar czf paperless-backup-$(date &#43;%F).tar.gz \
+  ./data ./media ./db-data ./redis-data \
+  ./paperless-gpt-data ./paperless-ai-data ./ollama-data
+```
+
+If the local NAS fails, the document collection can be restored from the backups without data loss.
+
+## What the stack replaces
+
+| Cloud service | Self-hosted replacement |
+|---------------|------------------------|
+| ChatGPT / Claude for document Q&amp;A | Paperless AI &#43; Llama 3.2 |
+| Cloud OCR (Adobe, Google Drive) | Paperless-GPT &#43; MiniCPM-V |
+| Cloud document storage | Paperless-ngx on local storage |
+| Subscription document management | Self-hosted, no per-user fees |
+
+## Trade-offs
+
+**Advantages:**
+- Privacy: financial records, tax filings, and IDs never leave the network
+- No subscription costs
+- Full control over models and data retention
+- Works offline
+
+**Disadvantages:**
+- Operational overhead: three applications plus Ollama to maintain
+- Local models are smaller than frontier cloud models; hallucinations still happen
+- Hardware limits model size (Pascal GPU runs 7-8B models well, not 70B)
+
+## What we concluded
+
+A local LLM document stack is practical for home-lab scale. Paperless-ngx handles storage and metadata, Paperless-GPT handles difficult OCR, and Paperless AI gives you RAG chat over your archive — all backed by Ollama running Qwen 3, MiniCPM-V, and Llama 3.2 on local hardware.
+
+The setup requires more maintenance than a SaaS subscription, but the privacy and sovereignty trade-off is worth it for personal documents. If you already run a home lab, adding these three containers is a small step with a large payoff.
+
+What self-hosted document tools do you use, and which local models power them?
+

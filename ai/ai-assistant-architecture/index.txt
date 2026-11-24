@@ -1,0 +1,86 @@
+---
+title: AI Assistant Architecture: LLM, Memory, Tools, Routing, Observability
+url: https://devopstales.github.io/ai/ai-assistant-architecture/
+date: 2026-10-12
+---
+
+
+A production assistant isn&#39;t &#34;an LLM with a prompt.&#34; It&#39;s a runtime turning intent into responses and actions through five layers: model, memory, tooling, routing, observability. That split matches provider APIs, MCP, self-hosted runtimes, and real systems alike — and every production disagreement eventually reduces to which context was visible, which tool executed, which model answered, which memory changed, and where the trace says time went.
+
+&lt;!--more--&gt;
+
+![Layered AI assistant architecture with data flow](/img/ai-assistant-architecture.webp)
+*Five layers, one request contract: intent in, answer plus actions plus trace out*
+
+## The Request Contract
+
+```text
+AssistantRequest  = user intent &#43; identity &#43; session &#43; attachments &#43; policy
+AssistantResponse = answer &#43; actions &#43; citations &#43; state changes &#43; trace id
+```
+
+Serious assistants are stateful: they plan, call tools, collaborate, and keep enough state for multi-step work. Start boring — one orchestrator, one durable memory path, one trace per request, one explicit tool policy. Multi-agent graphs come only after single-agent failures are explainable without guessing.
+
+## Five Layers
+
+| Layer | Responsibility | Typical interface |
+|---|---|---|
+| LLM | Reason, generate, emit structured calls | Responses/Messages APIs, OpenAI- or Anthropic-compatible endpoints |
+| Memory | Session state, durable notes, searchable knowledge | Embeddings, vector search, memory read/write tools |
+| Tooling | Read data, act outside the model | JSON-schema tools, MCP, file/web search |
+| Routing | Model, backend, policy, tenant path | Aliases, failover groups, health checks, budgets |
+| Observability | Explain what happened | Traces, spans, logs, metrics, evals |
+
+The model layer consumes working context and returns answers or structured action requests with retry and tracing metadata — self-hosted vLLM and llama.cpp preserve provider-style interfaces inside your own walls (see [Ollama to vLLM](/ai/ollama-to-vllm-migration/) for the serving side). Memory splits into working, durable symbolic, and searchable semantic buckets — file-backed notes and reviewed promotions often beat pure vector stores for honesty; the full layer model lives in [memory systems](/ai/memory-systems-ai-assistants/). Tooling is a contract boundary: the model emits structured requests, a runtime executes, results flow back — MCP generalizes this to client-server with tools, prompts, and resources (procedure versus capability in [skills vs MCP servers](/ai/agent-skills-vs-mcp-servers-decision-framework/)). Routing chooses execution lanes, not just models: provider path, tenant, budget, latency class, fallback. Observability keeps architecture from becoming folklore: no trace per request, no spans per call, no architecture — just vibes.
+
+## The Stable Loop: Capture, Enrich, Respond, Record
+
+```plaintext
+  capture --&gt; enrich --&gt; respond --&gt; record
+     |           |           |           |
+  identity &#43;  session &#43;   answer or   persist state,
+  session,   retrieval,  tool call,   emit spans,
+  policy     aux-model    close loop  metrics, evals
+             chores
+```
+
+Capture matters more than it looks: ingress carries channel metadata, identities, authorization, session boundaries, cron ticks — skip it and ad-hoc middleware returns. Enrich is where demos diverge from systems: explicit retrieval plus auxiliary model slots for compression, summarization, and routing, never spending flagship tokens on chores. Respond closes the loop in prose plus control flow. Record carries consistency semantics: staged visibility is normal (writes acknowledged before readable, frozen session snapshots, opt-in reviewed promotion), so define read-after-write rules per layer explicitly.
+
+## Patterns and Failure Modes
+
+Managed (fastest, provider-shaped), retrieval-first (grounding as differentiator), tool-first (operator over chatbot — side effects and approvals become core), gateway (always-on surfaces, identity complexity), specialist mesh (ownership boundaries, harder debugging — topologies in [multi-agent orchestration](/ai/multi-agent-orchestration-patterns/)). Managed versus self-hosted trades delivery speed and lock-in against privacy and ops burden; mitigate each direction deliberately. And the deployment shape that ties lanes together in practice:
+
+```yaml
+edge:
+  gateway: persistent messaging ingress
+
+routing:
+  proxy: litellm
+  policy: latency and budget aware
+  tenancy: session and channel scoped
+
+llm:
+  primary: provider responses or messages API
+  local_fallback: vllm
+  local_dev: ollama or llama.cpp
+
+memory:
+  session: sqlite or postgres
+  semantic: pgvector or weaviate
+
+tools:
+  contract: json schema tools plus mcp
+
+observability:
+  traces: opentelemetry
+  evals: regression sets before route or memory changes
+```
+
+Assistants rarely fail on base-model quality. They fail on lying context (budget it, rerank, pin key facts top), retrieval misses (evaluate retrieval separately, filter metadata, hybrid search), sloppy tool boundaries (tight schemas, idempotency keys, approval gates), unquality-controlled routing (sticky sessions, per-route evals), poisoned memory (separate working from durable, review promotions), missing traces, and unvalidated plausible claims. Mitigation stack, boring on purpose: trace everything, version prompts, eval retrieval independently, idempotent tools, regression evals before changing routes or memory. Cross-boundary identity, delegation scope, and audit for the agent-to-agent half are covered in [A2A and MCP agent security](/ai/a2a-mcp-agent-security/).
+
+## Summary
+
+Intent plus identity plus session plus policy in; answer plus actions plus citations plus state plus trace out. Boring stack, explicit contracts, staged memory visibility, evaluated routes — architecture you can debug beats architecture you can demo.
+
+*Which layer broke your assistant last — context, tools, memory, routing, or the missing trace? Share the failure in the comments below!*
+

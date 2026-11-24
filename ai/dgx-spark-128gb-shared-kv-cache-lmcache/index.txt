@@ -1,0 +1,290 @@
+---
+title: Shared KV Cache Across Two DGX Spark Units: Valkey Cluster, Local SSD, and P2P Options
+url: https://devopstales.github.io/ai/dgx-spark-128gb-shared-kv-cache-lmcache/
+date: 2026-10-27
+---
+
+
+Two NVIDIA DGX Spark units running independent vLLM instances have a blind spot: vLLM&#39;s prefix cache is per-node. A request landing on spark-2 cannot reuse the KV cache blocks that spark-1 already computed for the same prompt prefix. Every node cold-starts its own KV cache, so repeated prompts and multi-turn conversations pay the prefill penalty on every hop.
+
+This post documents how to share KV cache across both DGX Spark nodes using LMCache, a standalone KV cache layer for LLM inference. It compares three native storage backends — a Valkey cluster on both nodes, local SSD per node, and direct P2P transfer over the ConnectX-7 NIC — with no custom Python or dispatcher code required.
+
+&lt;!--more--&gt;
+
+![Shared KV cache across two DGX Spark units](/img/coding-terminal.webp)
+*LMCache as the shared KV cache layer between two vLLM instances on DGX Spark*
+
+## Why per-node KV cache is a problem
+
+vLLM computes key-value (KV) cache blocks during prefill and reuse them during decode. With `--enable-prefix-caching`, vLLM reuses KV blocks for repeated prompt prefixes — but only within a single node. If spark-1 has already processed &#34;Analyze this quarterly report&#34; and spark-2 receives the same prompt, spark-2 recomputes the prefix from scratch.
+
+For multi-turn chat, coding autocomplete (FIM), and RAG workloads where prompts share long system prompts or document contexts, this means wasted GPU cycles and higher time-to-first-token (TTFT) on every request that lands on the &#34;wrong&#34; node.
+
+## What LMCache is
+
+LMCache is an open-source KV cache management layer for LLM inference. It runs as a standalone daemon separate from the vLLM engine, so KV cache is not lost when vLLM restarts. Key capabilities relevant to this setup:
+
+- **Tiered offload** — move KV cache out of GPU memory into CPU RAM, local SSD, or remote backends
+- **Cross-engine reuse** — KV cache persists across vLLM restarts and can be shared between instances
+- **Cross-node sharing** — KV blocks can move between nodes over the network
+- **Non-prefix KV reuse** — reuses cached KV blocks at any prompt position (CacheBlend), not just exact prefix matches
+- **Observability** — KV cache hit metrics, lifecycle, and request-level performance
+
+LMCache is vendor-neutral and Apache-2.0 licensed.
+
+## The DGX Spark memory constraint
+
+This is the most important sizing consideration for this stack. DGX Spark has **128 GB of unified LPDDR5X memory** shared between the Blackwell GPU and the Arm CPU. Everything draws from the same pool:
+
+- Model weights (e.g., Llama-3.1-70B at 4-bit quantized ≈ 40-45 GB)
+- vLLM GPU working set and active KV cache
+- The KV cache backend (Valkey process memory, SSD cache metadata, P2P buffers)
+- DGX OS and system processes
+
+Because CPU and GPU share one memory pool, the KV cache backend competes directly with vLLM for usable space. You must set memory limits and eviction policies so the cache layer does not starve the inference engine or the OS.
+
+Rule of thumb: reserve memory for model weights &#43; vLLM working set &#43; KV backend &#43; OS overhead before deciding how much to allocate to the shared KV store.
+
+## Architecture options (ASCII)
+
+### Option 1: Valkey cluster on both DGX Spark nodes
+
+```plaintext
+  client                   Nginx least_conn
+      |                           |
+      v                           v
+  &#43;-------------------&#43;   &#43;-------------------&#43;
+  | spark-1           |   | spark-2           |
+  | vLLM:8000         |   | vLLM:8000         |
+  | LMCache daemon    |   | LMCache daemon    |
+  | Valkey:6379 (M)   |   | Valkey:6379 (S)   |
+  &#43;--------&#43;----------&#43;   &#43;----------&#43;--------&#43;
+           |                          |
+           &#43;----- Valkey cluster -----&#43;
+                       |
+              KV blocks shared over ConnectX-7
+```
+
+Valkey (the open-source Redis fork) runs on both nodes as a cluster. LMCache on each node writes KV blocks to its local Valkey instance, which replicates to the peer. Either node can read KV blocks computed by the other.
+
+### Option 2: Local SSD per node
+
+```plaintext
+  client                   Nginx hash (sticky)
+      |                           |
+      v                           v
+  &#43;-------------------&#43;   &#43;-------------------&#43;
+  | spark-1           |   | spark-2           |
+  | vLLM:8000         |   | vLLM:8000         |
+  | LMCache daemon    |   | LMCache daemon    |
+  | Local SSD cache   |   | Local SSD cache   |
+  &#43;--------&#43;----------&#43;   &#43;----------&#43;--------&#43;
+           |                          |
+        (no central store; each node
+         serves only its own cached KV)
+```
+
+Each node writes KV blocks to its own NVMe SSD. With Nginx `hash` routing, repeated prompts from the same client consistently land on the same node, so that node&#39;s SSD cache stays warm. There is no cross-node sharing in this option, but each node avoids recomputing its own frequent prefixes.
+
+### Option 3: P2P over ConnectX-7 (no central store)
+
+```plaintext
+  client                   Nginx least_conn
+      |                           |
+      v                           v
+  &#43;-------------------&#43;   &#43;-------------------&#43;
+  | spark-1           |   | spark-2           |
+  | vLLM:8000         |   | vLLM:8000         |
+  | LMCache daemon    |   | LMCache daemon    |
+  | NIXL P2P          |&lt;==&gt;| NIXL P2P          |
+  &#43;--------&#43;----------&#43;   &#43;----------&#43;--------&#43;
+           |
+        Direct KV block transfer
+        over ConnectX-7 (200 Gbps)
+```
+
+LMCache transfers KV blocks directly between the two nodes using NIXL over TCP/RDMA. There is no central Valkey instance and no disk. Both nodes must be up simultaneously for cross-node hits.
+
+## Deployment considerations
+
+### Valkey cluster (Option 1)
+
+**Topology choices:**
+
+| Topology | Capacity | Durability | Memory cost |
+|----------|----------|------------|-------------|
+| 2 masters, no replicas | Maximum | Lower | Lower |
+| 1 master &#43; 1 replica | Half | Higher | Higher (replicated data) |
+
+For a two-node lab, two masters gives the most cache capacity. If a node fails, its KV cache is unavailable until it returns — acceptable for a development stack, less so for production.
+
+**Memory limit:** Set `maxmemory` on each Valkey instance with `allkeys-lru` eviction so the cache never starves vLLM or the OS on the 128 GB unified pool.
+
+**Persistence:** RDB or AOF optional. Pure in-memory is fastest; persistence adds durability at the cost of disk I/O.
+
+### Local SSD (Option 2)
+
+LMCache writes KV blocks to each node&#39;s local NVMe SSD. This is durable and uses no extra RAM for a cache server, but SSD write wear and read latency are higher than RAM. Cross-node sharing does not happen natively; combine with Nginx `hash` routing for sticky prefixes.
+
+### P2P over ConnectX-7 (Option 3)
+
+LMCache uses NIXL to transfer KV blocks directly between nodes over the ConnectX-7 NIC at 200 Gbps. No central store, no disk I/O, lowest cross-node latency. The downside is both nodes must be running simultaneously, and KV cache is lost if both restart. Firewall rules for NIXL transport ports are required.
+
+## Native deployment steps (no custom code)
+
+The following steps are shared across all three options. LMCache-specific configuration values (exact env var names, config file paths, and vLLM integration flags) should be verified against the LMCache documentation, as they vary by release.
+
+### Step 1: Install LMCache on both DGX Spark nodes
+
+```bash
+# Run on both spark-1 and spark-2
+pip install lmcache
+```
+
+### Step 2: Choose and configure the storage backend
+
+**Valkey cluster:** Install Valkey on both nodes, enable cluster mode, and set `maxmemory` with eviction:
+
+```conf
+# Example Valkey configuration (verify exact directives for your version)
+cluster-enabled yes
+cluster-config-file nodes.conf
+cluster-node-timeout 5000
+appendonly yes
+maxmemory 30gb
+maxmemory-policy allkeys-lru
+```
+
+**Local SSD:** Point LMCache at a directory on each node&#39;s NVMe mount.
+
+**P2P:** Configure NIXL transport endpoints pointing at the peer node&#39;s ConnectX-7 IP.
+
+### Step 3: Launch vLLM with LMCache integration
+
+Start vLLM on both nodes as you normally would, with LMCache enabled so vLLM routes KV cache through the LMCache daemon instead of keeping it GPU-only:
+
+```bash
+# Example — verify exact LMCache integration flags in the LMCache docs
+docker run -d --name vllm-node-1 \
+  --gpus all \
+  --shm-size 16g \
+  -p 8000:8000 \
+  vllm/vllm-openai:latest \
+  --model meta-llama/Llama-3.1-70B-Instruct \
+  --quantization awq \
+  --enable-prefix-caching \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.85 \
+  --tensor-parallel-size 1
+```
+
+Repeat on spark-2. The LMCache daemon runs alongside vLLM on each node.
+
+### Step 4: Verify KV cache sharing
+
+Check that LMCache is running and accepting KV blocks. The exact metrics endpoint and metric names depend on the LMCache version; consult the LMCache documentation for the current Prometheus endpoint.
+
+Example of what to look for (metric names are illustrative — confirm against your installed version):
+
+```bash
+# On each node, check LMCache metrics
+curl -s http://localhost:&lt;lmcache-metrics-port&gt;/metrics | grep -i kv_cache
+
+# Check vLLM KV cache pressure (should decrease if offloading works)
+curl -s http://localhost:8000/metrics | grep vllm:gpu_cache_usage_perc
+```
+
+### Step 5: Route traffic with Nginx
+
+Place Nginx in front of both vLLM instances:
+
+```nginx
+# For even load distribution (works with all three options)
+upstream vllm_cluster {
+    least_conn;
+    server 192.168.1.10:8000;
+    server 192.168.1.11:8000;
+}
+
+# For sticky prefixes with local SSD option only
+# upstream vllm_cluster {
+#     hash $request_body;
+#     server 192.168.1.10:8000;
+#     server 192.168.1.11:8000;
+# }
+
+server {
+    listen 80;
+    location / {
+        proxy_pass http://vllm_cluster;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+Use `least_conn` for Valkey cluster and P2P options (either node can serve any cached KV). Use `hash $request_body` only with the local SSD option, so repeated prompts stick to the node whose SSD holds their KV blocks.
+
+## Metrics to watch
+
+| Metric | What it tells you |
+|--------|-------------------|
+| LMCache KV cache hit rate (prefix) | Repeated prompt prefixes served from shared cache |
+| LMCache KV cache hit rate (non-prefix) | CacheBlend reuse at any prompt position |
+| LMCache offload/store latency | Time to write/read KV blocks to the backend |
+| Cross-node KV transfer latency | P2P or Valkey replication speed over ConnectX-7 |
+| `vllm:gpu_cache_usage_perc` | GPU KV cache pressure; should decrease with successful offload |
+| `vllm:num_requests_waiting` | Queue depth; indicates saturation regardless of cache |
+
+Grafana panel shape (metric names illustrative — verify against installed LMCache version):
+
+```promql
+# LMCache KV cache hit ratio
+sum by (instance) (rate(lmcache_kv_cache_hits_total[5m]))
+  /
+sum by (instance) (rate(lmcache_kv_cache_hits_total[5m]) &#43; rate(lmcache_kv_cache_misses_total[5m]))
+
+# vLLM KV cache pressure
+max by (instance) (vllm:gpu_cache_usage_perc)
+```
+
+## Benchmark plan
+
+Run the same `vllm bench serving` concurrency sweep (1, 4, 8, 16 parallel users) across four configurations:
+
+1. **Baseline** — two vLLM instances, Nginx `least_conn`, no LMCache
+2. **Valkey cluster** — LMCache &#43; Valkey 2 masters
+3. **Local SSD** — LMCache &#43; local NVMe, Nginx `hash`
+4. **P2P** — LMCache &#43; NIXL direct transfer over ConnectX-7
+
+Compare TTFT p95, inter-token latency p95, tokens per second, queue depth, and KV cache hit ratio. Use workloads with repetitive prefixes (chat continuation, FIM autocomplete, document Q&amp;A) to see the largest cache benefit.
+
+## Decision matrix
+
+| Workload pattern | Recommended backend | Reason |
+|------------------|---------------------|--------|
+| Repetitive prefixes, either node | Valkey cluster | Centralized sharing; either node can hit any cached prefix |
+| Repetitive prefixes, sticky sessions | Local SSD | Durable, no extra RAM process, sticky via Nginx hash |
+| Always-up two-node cluster, lowest latency | P2P ConnectX-7 | No central bottleneck, fastest cross-node transfer |
+| Mixed or uncertain | Valkey cluster | Most flexible, easiest to observe and operate |
+
+## Trade-offs and gotchas
+
+**Unified memory pressure.** The 128 GB pool is shared by model weights, vLLM GPU cache, and the KV cache backend. Monitor for out-of-memory conditions on the host, not just inside containers.
+
+**Eviction.** Set `maxmemory` and `allkeys-lru` on Valkey. For local SSD, configure TTL and eviction so old KV blocks do not fill the disk.
+
+**Failover.** A single Valkey master becomes unavailable during failover. Two masters loses cache capacity when one node is down. P2P requires both nodes to be up simultaneously.
+
+**Cache invalidation.** When you swap models, quantization, or max model length, stale KV blocks must be evicted (LMCache TTL or manual flush) before they are reused incorrectly.
+
+**P2P complexity.** Direct node-to-node transfer requires firewall rules for NIXL ports and is harder to debug than a central Valkey instance with standard tooling.
+
+## Conclusion
+
+LMCache gives you a native, code-free way to share KV cache across two DGX Spark units. Valkey cluster is the most flexible starting point for a two-node lab. Local SSD works best when you can pin clients to specific nodes. P2P over ConnectX-7 offers the lowest cross-node latency when both nodes are always co-located.
+
+Start with a baseline benchmark (no LMCache), then add LMCache with your chosen backend and measure TTFT p95, queue depth, and KV cache hit ratio under your real workload. The biggest wins appear with repetitive prefixes — long system prompts, multi-turn conversations, and coding autocomplete — where recomputing the same KV blocks on every request is pure waste.
+
+Which storage backend fits your workload best, and have you measured your baseline KV cache pressure on a single DGX Spark node?
+
